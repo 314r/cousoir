@@ -16,6 +16,7 @@ Rectangle {
     id: page
 
     required property BookLibrary library
+    property ConversionService conversions: null
     property var book: ({})
     property bool detailsVisible: true
     readonly property int coverWidth: Math.round(180 * Theme.spacingScale)
@@ -36,6 +37,8 @@ Rectangle {
     ].filter(action => action.key !== "remove" || page.book.hasCover)
 
     signal failed(string message)
+    // Convert, chosen in the details pane.
+    signal convertRequested(string format)
 
     color: Theme.canvas
 
@@ -289,8 +292,10 @@ Rectangle {
             Layout.fillHeight: true
             visible: page.detailsVisible
             library: page.library
+            conversions: page.conversions
             book: page.book
             onFailed: function(message) { page.failed(message) }
+            onConvertRequested: function(format) { page.convertRequested(format) }
         }
     }
 

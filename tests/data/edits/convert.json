@@ -1,0 +1,6 @@
+[
+    { "convert": { "book": 1, "format": "KEPUB" } },
+    { "convert": { "book": 2, "format": "AZW3" } },
+    { "convert": { "book": 3, "format": "AZW3" } },
+    { "convert": { "book": 5, "format": "KEPUB" } }
+]

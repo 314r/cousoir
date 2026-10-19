@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Compares `reliure-cli list` with `calibredb list --for-machine --fields all`,
 # each on its own copy of the fixture library and, with RELIURE_GOLDEN_REAL=1,
-# of the library Calibre opens; and `reliure-cli read` with Calibre's readers
-# on book files. calibredb can rename files and touches
-# metadata.db even to list it, so neither ever runs on the library itself.
+# of the library Calibre opens; `reliure-cli read` with Calibre's readers on
+# book files; and the libraries Calibre and `reliure-cli apply` leave after
+# the same edits, additions, removals and conversions. calibredb can rename
+# files and touches metadata.db even to list it, so neither ever runs on the
+# library itself.
 #
 #   tests/golden/run.sh build/reliure-cli
 #
@@ -116,10 +118,12 @@ edits() {
     if ! python3 "$root/tests/golden/compare_libraries.py" "$work/edit-calibre" "$work/edit-reliure"; then
         status=1
     fi
+    # last_modified is the time of each side's write, a second apart at times.
     for side in calibre reliure; do
         calibredb check_library --with-library "$work/edit-$side" > "$work/check-$side.txt" 2>&1 || true
         calibredb list --with-library "$work/edit-$side" --for-machine --fields all \
-            | sed "s|$work/edit-$side|@LIBRARY@|g" > "$work/list-$side.json"
+            | sed -e "s|$work/edit-$side|@LIBRARY@|g" -e 's|"last_modified": "[^"]*"|"last_modified": "<now>"|' \
+            > "$work/list-$side.json"
     done
     if ! cmp -s "$work/check-calibre.txt" "$work/check-reliure.txt"; then
         echo "calibredb check_library reports differently:"
@@ -192,6 +196,45 @@ cross() {
 
 cross
 
+# Books converted by Calibre's convert action and by reliure-cli, compared:
+# the files of conversions by their content, without the time each stamps
+# or the ids it draws. `prepare`, if given, runs on each copy first.
+conversions() {
+    local name=$1 source=$2 ops=$3 converted=$4 prepare=${5:-}
+    for side in calibre reliure; do
+        rm -rf "$work/$name-$side"
+        cp -a --reflink=auto "$source" "$work/$name-$side"
+        if [ -n "$prepare" ]; then
+            "$prepare" "$work/$name-$side"
+        fi
+    done
+    oracle "$root/tools/oracle/convert_books.py" -- "$work/$name-calibre" "$ops" || return 0
+    if ! "$cli" apply --force --library "$work/$name-reliure" "$ops" > "$work/$name.log" 2>&1; then
+        echo "$name: reliure-cli apply failed:"
+        tail -20 "$work/$name.log"
+        status=1
+        return 0
+    fi
+    if python3 "$root/tests/golden/compare_libraries.py" --converted "$converted" "$work/$name-calibre" \
+        "$work/$name-reliure" > "$work/$name.txt"; then
+        echo "$name: $(tail -1 "$work/$name.txt")"
+    else
+        echo "$name: Reliure converts differently:"
+        head -40 "$work/$name.txt"
+        status=1
+    fi
+}
+
+# Calibre draws the cover of a book without one in a random style and
+# colours: one of each is left. Conversions start from Calibre's defaults
+# with another output profile, as a user sets it.
+mkdir -p "$work/config/conversion"
+printf '%s' '{"disabled_color_themes": ["Grass", "Water", "Silver"], "disabled_styles": ["The Cross", "Half and Half", "Ornamental", "Blocks"]}' \
+    > "$work/config/cover_generation.json"
+printf 'json:{\n  "output_profile": "tablet"\n}' > "$work/config/conversion/page_setup.py"
+conversions conversions "$root/tests/data/library" "$root/tests/data/edits/convert.json" 1:KEPUB,2:AZW3,3:AZW3,5:KEPUB \
+    "$root/tests/golden/conversion_settings.py"
+
 # The round trip: Calibre writes again the metadata.opf files of the books
 # Reliure changed, as its GUI does when it starts, and finds nothing to
 # change in them; then edits the library itself, which Reliure reads as
@@ -220,6 +263,45 @@ round_trip() {
 
 round_trip
 
+# A few books of the real library converted, with the user's Calibre
+# settings: the two smallest EPUBs to KEPUB and AZW3, the smallest book
+# with a KEPUB to KEPUB again, and the smallest whose only source is an AZW3
+# to AZW3, which keeps its file as ORIGINAL_AZW3; one Calibre converted
+# before, so not locked by DRM.
+real_conversions() {
+    local converted
+    converted=$(python3 - "$work/real-reliure/metadata.db" "$work/convert-real.json" <<'PICK'
+import json, sqlite3, sys
+con = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True)
+formats = {}
+for book, fmt, size in con.execute('SELECT book, format, uncompressed_size FROM data'):
+    formats.setdefault(book, {})[fmt] = size
+converted = {book for (book,) in con.execute("SELECT book FROM conversion_options WHERE format='PIPE'")}
+def smallest(test, key):
+    found = sorted((f[key], book) for book, f in formats.items() if test(f))
+    return [book for _, book in found]
+epubs = smallest(lambda f: 'EPUB' in f, 'EPUB')
+kepubs = smallest(lambda f: 'EPUB' in f and 'KEPUB' in f, 'EPUB')
+azw3s = [book for book in smallest(lambda f: 'AZW3' in f and not ({'EPUB', 'MOBI', 'LIT', 'PRC', 'FB2', 'DOCX'} & set(f)),
+                                   'AZW3') if book in converted]
+picks = []
+for books, fmt in ((epubs[:1], 'KEPUB'), (epubs[1:2], 'AZW3'), (kepubs[:1], 'KEPUB'), (azw3s[:1], 'AZW3')):
+    picks += [(book, fmt) for book in books if (book, fmt) not in picks]
+json.dump([{'convert': {'book': book, 'format': fmt}} for book, fmt in picks], open(sys.argv[2], 'w'))
+print(','.join(f'{book}:{fmt}' for book, fmt in picks))
+PICK
+)
+    # The user's conversion settings, without the rest of Calibre's.
+    rm -rf "$work/config-real"
+    mkdir -p "$work/config-real"
+    cp "$work/config/cover_generation.json" "$work/config-real/"
+    for file in global.py.json tweaks.json conversion; do
+        [ -e "$user_config/$file" ] && cp -a "$user_config/$file" "$work/config-real/"
+    done
+    CALIBRE_CONFIG_DIRECTORY="$work/config-real" conversions real-conversions "$work/real-reliure" \
+        "$work/convert-real.json" "$converted"
+}
+
 if [ "${RELIURE_GOLDEN_REAL:-0}" = 1 ]; then
     real=$(python3 -c "
 import json, sys
@@ -233,6 +315,7 @@ print(json.load(open(sys.argv[1])).get('library_path') or '')" "$user_config/glo
     else
         compare real "$real"
         reads real "$work/real-reliure"
+        real_conversions
     fi
 fi
 

@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QDateTime>
 #include <QList>
+#include <QPair>
 #include <QSet>
 #include <QString>
 
@@ -42,6 +43,9 @@ struct Request
     QList<Restoration> restorations;
     QList<NewBook> newBooks;
     QList<NewFormat> newFormats;
+    // Last, the settings of conversions, for the books' next ones: book and
+    // conversion_options data.
+    QList<QPair<int, QByteArray>> conversionOptions;
     // The software writing the metadata.opf files: name and version, and the
     // short name it files under.
     QString producer;

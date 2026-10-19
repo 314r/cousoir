@@ -15,6 +15,10 @@
 #include "calibre_config.h"
 #include "commit_engine.h"
 
+namespace Conversion {
+struct Outcome;
+}
+
 // A Calibre library: its books and the sections that browse them by author,
 // series, tag, language or publisher. Loading copies metadata.db out of the
 // library and reads the copy on a worker thread; a change to the database
@@ -179,6 +183,10 @@ public:
     Q_INVOKABLE QString moveToTrash(const QVariantList &bookIds);
     // A book, or with `formats` some of its formats, back from the trash.
     Q_INVOKABLE QString restoreFromTrash(int bookId, const QStringList &formats = {});
+
+    // A conversion's file as the book's `format`, as Calibre's convert
+    // action adds it. Same returns as updateBook().
+    QString addConversion(int bookId, const QString &format, const Conversion::Outcome &outcome);
 
 signals:
     void libraryPathChanged();

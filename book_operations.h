@@ -28,6 +28,8 @@ struct NewFormat
 {
     int bookId = 0;
     QString file;
+    // Upper case; empty for the file's extension.
+    QString format;
 };
 
 // Formats of a book moved to the library's trash.
@@ -101,6 +103,10 @@ bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds
                  Result *result, QString *error);
 bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoration, const Context &context,
              FieldWriters::Result *fields, Result *result, QString *error);
+
+// set_conversion_options() of backend.py: the settings of the book's last
+// conversion, `data` as Calibre stores it.
+bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QString *error);
 
 // update_path() of backend.py for one book: its folder and files follow its
 // title and first author, in the database and on disk.

@@ -5,13 +5,13 @@ searched as a table or as covers, the authors, series, tags, languages and
 publishers that browse them, and each book's metadata, description and files,
 which open in the desktop's reader. A book's metadata and cover edit in
 place; books and files are added, moved to the library's trash and restored
-from it.
+from it; Calibre converts books to KEPUB for a Kobo and AZW3 for a Kindle.
 
 Calibre stays the library's owner and keeps working as before. Reliure reads
 and writes Calibre's own `metadata.db` and follows Calibre's rules wherever it
 computes something Calibre computes, so both always agree; the tests compare
-its writes with Calibre's own. Conversion and sending to a Kobo or a Kindle
-come in the next versions.
+its writes with Calibre's own. Sending to a Kobo or a Kindle comes in the
+next versions.
 
 The project structure, theming (system, light, dark and Omarchy) and Settings
 window come from the JolieBulle Qt port, which took them from kbextract.
@@ -44,7 +44,8 @@ toggle (Ctrl+I) shows it anyway. A file's button, or Open in reader (Ctrl+O),
 opens it with the desktop's application for that format; Open in reader picks
 EPUB, KEPUB, AZW3, MOBI or PDF, in that order. Ctrl+O also works on the
 selected row of a list. A row's menu (right click, Menu or Shift+F10) opens
-the book, opens it in the reader, shows its folder or moves it to the trash.
+the book, opens it in the reader, shows its folder, converts it or moves it
+to the trash.
 
 When the library cannot be written right now, the status bar says why with a
 lock: Calibre open on this computer, Calibre writing, Dropbox syncing or not
@@ -188,6 +189,41 @@ Reliure departs from Calibre here too:
 - Page counts are left for Calibre, which counts the pages of the books
   Reliure added or changed the next time it opens the library.
 
+## Converting books
+
+The Convert to buttons of the Files section of a book's details, the row menu
+or Ctrl+Shift+K and Ctrl+Shift+A convert the book to KEPUB, for a Kobo, or
+AZW3, for a Kindle; Reliure asks first when the book has a file of that
+format. Conversions run one after the other, each once the changes before it
+are saved; the status bar and the Files section show how far it got, and Stop
+in the Files section or the × of the status bar stops it. The converted file
+goes into the library as one of the book's formats.
+
+Calibre converts, as its convert action does when a format is picked for a
+book and its settings are kept: Calibre's defaults (Preferences, Common
+options and Output options) under the settings the book's last conversion
+in Calibre saved; the format Calibre would convert from, the one it last
+converted from or else the first of its input format order; the library's
+metadata and cover put into the new file; the conversion in a Calibre worker
+process of its own. The file is added as Calibre adds it, and the settings
+are saved in `conversion_options` for the book's next conversion, as
+Calibre saves them; a format converted to itself keeps its old file as
+`ORIGINAL_AZW3` or `ORIGINAL_KEPUB`, as in Calibre. Converting needs Calibre;
+without it the Convert actions do not show.
+
+Reliure departs from Calibre here too:
+
+- It has no conversion dialog. The settings it uses are the ones set in
+  Calibre: its defaults, or a book's own, saved by converting that book in
+  Calibre.
+- Several books convert one after the other, each with its own settings, as
+  Calibre's "Convert individually" with its dialogs left as they open.
+  Calibre's bulk conversion applies one set of settings to all.
+- The settings are saved only with the converted file; Calibre saves them as
+  its dialog closes, even when the conversion then fails.
+- KEPUB and AZW3 only. The quick KEPUB Calibre makes from an EPUB when it
+  sends it to a Kobo comes with sending, in the next version.
+
 ## Settings
 
 Settings has two sections. Appearance picks the theme and the text size, as
@@ -275,7 +311,15 @@ and `removeCover`. The other changes, after the edits and in this order:
 ```
 
 An `add` makes one book of its files, with the first one's metadata; files
-are relative to the JSON file.
+are relative to the JSON file. Conversions run first, on the books as the
+library has them, and their files are added with the formats added:
+
+```json
+[{ "convert": { "book": 1, "format": "KEPUB" } }]
+```
+
+Calibre's log of a conversion is in its job's folder, in a temporary folder
+removed at the end unless `RELIURE_KEEP_JOBS` is set.
 
 `read` prints, as JSON, the metadata adding each file would read, as
 `tools/oracle/read_oracle.py` prints Calibre's.
@@ -286,8 +330,9 @@ are relative to the JSON file.
 |---|---|
 | Up/Down, arrows in the grid | Move in the list |
 | Enter, Space, double click | Open the book, or the section's item |
-| Menu, Shift+F10, right click | Book actions: open, open in reader, show folder, move to trash |
+| Menu, Shift+F10, right click | Book actions: open, open in reader, show folder, convert, move to trash |
 | Ctrl+N | Add books |
+| Ctrl+Shift+K, Ctrl+Shift+A | Convert the book, or the selected one, to KEPUB or AZW3 |
 | Del | Move the selected book to the trash |
 | Ctrl+O | Open the book, or the selected one, in the reader |
 | Ctrl+G | Show the books as covers or as a table |
@@ -309,6 +354,7 @@ are relative to the JSON file.
 - libzip
 - For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
+- For converting, Calibre
 - CMake 3.21 or later
 - A C++20 compiler
 
@@ -371,7 +417,22 @@ The tests check the port against Calibre itself:
   by table and file by file, the trash included, with page counts and the
   time and uuid of the books added left out; and has Calibre restore what
   Reliure moved to the trash and Reliure what Calibre did, each ending as the
-  other. It is skipped without Calibre.
+  other. Last, it converts books of the fixture with Calibre's convert action
+  (`tools/oracle/convert_books.py`) and with `reliure-cli apply`
+  (`tests/data/edits/convert.json`), some with settings saved by earlier
+  conversions, one to its own format; with `RELIURE_GOLDEN_REAL=1`, books of
+  the real library too, with the user's Calibre settings. The converted
+  files compare by content: an EPUB or KEPUB by its entries, an AZW3 by what
+  Calibre explodes it to, without the time stamped in them, the random ids
+  Calibre gives the anchors it adds, and the order of an AZW3's stylesheets
+  and images and of an element's classes, which change from one Calibre
+  process to the next. Calibre draws a book's missing cover in a random
+  style: the tests leave it one. It is skipped without Calibre.
+- `conversion_tests` checks the OPF a conversion reads against Calibre's
+  (`tests/data/oracle/conversion.json`, from `make oracle`), the job's files,
+  how its outcome is read and added, and, with Calibre installed, converts a
+  book of the fixture to KEPUB. `book_library_tests` and the UI tests drive
+  conversions with `tests/data/fake-calibre-debug` standing in for Calibre.
 - `concurrency_guard_tests` drives the write checks with a fake
   `/proc/net/unix` and a fake Dropbox socket.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%

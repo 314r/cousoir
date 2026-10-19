@@ -169,7 +169,8 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
                      + attribute(QStringLiteral("content"), content) + QStringLiteral("/>"));
     };
 
-    element(QStringLiteral("dc:identifier"), QString::number(book.id),
+    element(QStringLiteral("dc:identifier"),
+            settings.applicationId.isEmpty() ? QString::number(book.id) : settings.applicationId,
             attribute(QStringLiteral("opf:scheme"), QStringLiteral("calibre"))
                 + attribute(QStringLiteral("id"), QStringLiteral("calibre_id")));
     element(QStringLiteral("dc:identifier"), book.uuid,
@@ -224,9 +225,15 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
         "    <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:opf=\"http://www.idpf.org/2007/opf\">\n");
     for (const QString &line : std::as_const(lines))
         opf += QStringLiteral("        ") + line + u'\n';
-    opf += QStringLiteral("    </metadata>\n    <guide>\n        <reference type=\"cover\" title=\"%1\" href=\"cover.jpg\"/>\n"
-                          "    </guide>\n</package>\n")
-               .arg(escapeAttribute(CalibreText::coverText(settings.interfaceLanguage)));
+    opf += QStringLiteral("    </metadata>\n");
+    if (settings.coverReference) {
+        opf += QStringLiteral("    <guide>\n        <reference type=\"cover\" title=\"%1\" href=\"cover.jpg\"/>\n"
+                              "    </guide>\n")
+                   .arg(escapeAttribute(CalibreText::coverText(settings.interfaceLanguage)));
+    } else {
+        opf += QStringLiteral("    <guide/>\n");
+    }
+    opf += QStringLiteral("</package>\n");
     return opf.toUtf8();
 }
 

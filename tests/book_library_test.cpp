@@ -9,6 +9,7 @@
 
 #include "book_library.h"
 #include "calibre_db.h"
+#include "conversion_service.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -93,6 +94,7 @@ private slots:
     void addsBooks();
     void addsAndRemovesFormats();
     void movesBooksToTrash();
+    void convertsBooks();
 
 private:
     std::unique_ptr<BookLibrary> open(const QString &path = fixtureLibrary());
@@ -687,6 +689,76 @@ void BookLibraryTest::movesBooksToTrash()
     QVERIFY(library->trashEntries().isEmpty());
     // A book the library has is not restored over.
     QVERIFY(!library->restoreFromTrash(4).isEmpty());
+}
+
+// The conversions queue, report their progress, add their files and settings
+// to the library, and stop when asked; Calibre is a stand-in here.
+void BookLibraryTest::convertsBooks()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    ConversionService service;
+    service.setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-debug"));
+    service.setLibrary(library.get());
+    QVERIFY(service.available());
+    QCOMPARE(service.formatsFor(1), (QStringList{ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
+    QVERIFY(service.formatsFor(6).isEmpty());
+    // Read-only, nothing is converted.
+    QVERIFY(!service.convert(1, QStringLiteral("KEPUB")).isEmpty());
+    library->setWritable(true);
+    QVERIFY(!service.convert(6, QStringLiteral("KEPUB")).isEmpty());
+    QVERIFY(!service.convert(1, QStringLiteral("PDF")).isEmpty());
+    QVERIFY(!service.convert(99, QStringLiteral("KEPUB")).isEmpty());
+
+    QSignalSpy converted(&service, &ConversionService::converted);
+    double progress = 0;
+    connect(&service, &ConversionService::jobsChanged, this, [&] {
+        if (service.busy())
+            progress = qMax(progress, service.jobs().first().toMap().value(QStringLiteral("progress")).toDouble());
+    });
+    library->setCurrentBookId(1);
+    QCOMPARE(service.convert(1, QStringLiteral("kepub")), QString());
+    // Asked twice, it converts once.
+    QCOMPARE(service.convert(1, QStringLiteral("KEPUB")), QString());
+    QCOMPARE(service.jobs().size(), 1);
+    QVERIFY(service.busy());
+    QVERIFY(converted.wait(10000));
+    QCOMPARE(converted.first().at(1).toString(), QStringLiteral("L'Écume des jours"));
+    QCOMPARE(converted.first().at(2).toString(), QStringLiteral("KEPUB"));
+    QVERIFY(!service.busy());
+    QCOMPARE(progress, 1.0);
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+    QFile file(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.kepub")));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("converted to kepub"));
+    SqliteDb db;
+    QString error;
+    QVERIFY(db.open(copy->filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error));
+    QCOMPARE(db.value(QStringLiteral("SELECT data FROM conversion_options WHERE book=1")).toByteArray(),
+             QByteArray("\x80\x02T\x07\x00\x00\x00json:{}.", 15));
+    db.close();
+    // The job's folder goes once its file is in.
+    const QDir jobs(QDir(BookLibrary::cacheFolder(library->libraryPath())).filePath(QStringLiteral("conversions")));
+    QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+
+    // Stopped, a conversion adds nothing, and the next one runs.
+    qputenv("RELIURE_FAKE_DELAY", "20");
+    QElapsedTimer timer;
+    timer.start();
+    QCOMPARE(service.convert(3, QStringLiteral("AZW3")), QString());
+    QCOMPARE(service.convert(4, QStringLiteral("AZW3")), QString());
+    QTRY_VERIFY(service.jobs().first().toMap().value(QStringLiteral("running")).toBool());
+    service.cancel(3);
+    QCOMPARE(service.jobs().size(), 1);
+    QCOMPARE(service.jobs().first().toMap().value(QStringLiteral("bookId")).toInt(), 4);
+    service.cancel();
+    QVERIFY(!service.busy());
+    QVERIFY(timer.elapsed() < 10000);
+    qunsetenv("RELIURE_FAKE_DELAY");
+    QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.azw3"))));
+    QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 }
 
 QTEST_MAIN(BookLibraryTest)

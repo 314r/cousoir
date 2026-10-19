@@ -624,6 +624,11 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                       [&](SqliteStatement &row) {
                           if (Book *book = bookWithId(row.integer(0)))
                               book->formats.append({ row.text(1).toUpper(), row.text(2), row.integer(3), {} });
+                      }, error)
+        && forEachRow(db, QStringLiteral("SELECT book, data FROM conversion_options WHERE format='PIPE'"),
+                      [&](SqliteStatement &row) {
+                          if (Book *book = bookWithId(row.integer(0)))
+                              book->conversionOptions = row.blob(1);
                       }, error);
     if (!ok)
         return false;

@@ -1,0 +1,85 @@
+#pragma once
+
+#include <QList>
+#include <QObject>
+#include <QPointer>
+#include <QProcess>
+#include <QStringList>
+#include <QTemporaryDir>
+#include <QVariantList>
+
+#include <memory>
+
+class BookLibrary;
+
+// The conversions asked for in the window, one after the other. Each runs
+// Calibre in a process of its own, as Conversion describes, from a folder in
+// the library's cache; its file then goes into the library through the
+// library's changes, after those before it. A conversion reads the book as
+// it starts, once the changes saved before it are in.
+class ConversionService : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
+    // Calibre is there to convert.
+    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
+    // The conversions, the running one first: { bookId, title, format,
+    // running, progress } with progress from 0 to 1.
+    Q_PROPERTY(QVariantList jobs READ jobs NOTIFY jobsChanged)
+    Q_PROPERTY(bool busy READ busy NOTIFY jobsChanged)
+
+public:
+    explicit ConversionService(QObject *parent = nullptr);
+    ~ConversionService() override;
+
+    BookLibrary *library() const;
+    void setLibrary(BookLibrary *library);
+    bool available() const;
+    QVariantList jobs() const;
+    bool busy() const;
+
+    // Reliure's output formats when the book has a format Calibre converts
+    // from; none otherwise.
+    Q_INVOKABLE QStringList formatsFor(int bookId) const;
+    // Converts the book to `format` after the conversions before it.
+    // Returns an error message, empty once the conversion waits its turn.
+    Q_INVOKABLE QString convert(int bookId, const QString &format);
+    // Stops the book's conversions, or all of them for 0.
+    Q_INVOKABLE void cancel(int bookId = 0);
+
+    // For the tests: a program run in place of calibre-debug, with its
+    // arguments; empty to find Calibre again.
+    void setProgram(const QString &program);
+
+signals:
+    void libraryChanged();
+    void availableChanged();
+    void jobsChanged();
+    // A conversion's file is on its way into the library.
+    void converted(int bookId, const QString &title, const QString &format);
+    void failed(const QString &message);
+
+private:
+    struct Job
+    {
+        int bookId = 0;
+        QString title;
+        QString format;
+        double progress = 0;
+    };
+
+    void startNext();
+    void readProgress();
+    void finishJob();
+    void stopProcess();
+    void releaseFolders();
+
+    QPointer<BookLibrary> m_library;
+    QString m_program;
+    // The first one runs while m_process is there.
+    QList<Job> m_jobs;
+    QProcess *m_process = nullptr;
+    std::shared_ptr<QTemporaryDir> m_folder;
+    // The folders of conversions whose files the library has yet to add.
+    QList<std::shared_ptr<QTemporaryDir>> m_handedOver;
+};

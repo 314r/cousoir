@@ -56,6 +56,9 @@ struct Book
     QString comments;
     // Sorted by format, like Calibre.
     QList<BookFormat> formats;
+    // The settings Calibre's last conversion of the book saved for the next
+    // one, its conversion_options row as stored; empty when there is none.
+    QByteArray conversionOptions;
 
     // From the book's folder rather than the database: its cover.jpg, empty
     // when there is none, and the cover's modification time in ms.
