@@ -1,0 +1,5 @@
+[
+    {"restore": 7},
+    {"restore": {"book": 1, "format": "EPUB"}},
+    {"add": "../import/Newer Info - Someone.pdf"}
+]

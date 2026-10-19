@@ -2,10 +2,11 @@
 # Compares two copies of a Calibre library after the same edits, one written
 # by Calibre and one by Reliure:
 #
-#   compare_libraries.py [--files-only] <calibre copy> <reliure copy>
+#   compare_libraries.py [--files-only] [--added-from N] <calibre copy> <reliure copy>
 #
 # - every table of metadata.db but the preferences Calibre updates when it
-#   opens a library, with last_modified, the time of the write, left out;
+#   opens a library, with last_modified, the time of the write, left out, and
+#   for books added, from id N, the time and the random uuid they got;
 # - the files: metadata.opf as parsed XML, without the producer, which names
 #   the program; cover.jpg by its size and pixels, as two JPEG encoders may
 #   differ by a few bits; anything else byte for byte.
@@ -20,7 +21,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 files_only = '--files-only' in sys.argv
-calibre_copy, reliure_copy = [a for a in sys.argv[1:] if not a.startswith('--')][:2]
+added_from = int(sys.argv[sys.argv.index('--added-from') + 1]) if '--added-from' in sys.argv else None
+arguments = [a for i, a in enumerate(sys.argv[1:], 1) if not a.startswith('--') and sys.argv[i - 1] != '--added-from']
+calibre_copy, reliure_copy = arguments[:2]
 problems = []
 
 SKIPPED_TABLES = {'preferences'}
@@ -41,6 +44,12 @@ def tables(path):
             row = list(row)
             if name == 'books':
                 row[columns.index('last_modified')] = '<now>'
+                if added_from is not None and row[columns.index('id')] >= added_from:
+                    row[columns.index('timestamp')] = '<now>'
+                    row[columns.index('uuid')] = '<uuid>'
+            if name == 'books_pages_link':
+                # The row's creation time.
+                row[columns.index('timestamp')] = '<now>'
             if name == 'identifiers':
                 # Calibre inserts a book's identifiers from a set, in no
                 # particular order.
@@ -53,6 +62,21 @@ def tables(path):
 
 a = {} if files_only else tables(os.path.join(calibre_copy, 'metadata.db'))
 b = {} if files_only else tables(os.path.join(reliure_copy, 'metadata.db'))
+if 'books_pages_link' in a and 'books_pages_link' in b:
+    # Calibre counts a book's pages in the background; Reliure leaves the
+    # books it changed for Calibre to count: either is right, on either side.
+    columns = b['books_pages_link'][0]
+    scan = columns.index('needs_scan')
+    to_scan = {row[0] for side in (a, b) for row in side['books_pages_link'][1] if row[scan] == 1}
+
+    def counted(row):
+        if row[0] not in to_scan:
+            return row
+        return (row[0],) + ('<scan>',) * (len(row) - 3) + (row[-2], '<scan>')
+
+    for side in (a, b):
+        cols, rows = side['books_pages_link']
+        side['books_pages_link'] = (cols, sorted((counted(r) for r in rows), key=repr))
 for name in sorted(set(a) | set(b)):
     if name not in a or name not in b:
         problems.append(f'table {name} only in one copy')
@@ -75,8 +99,25 @@ def files(root):
     return found
 
 
+def added_book(path):
+    # A book folder is "Title (id)", its trash entry ".caltrash/b/id".
+    folder = os.path.basename(os.path.dirname(path))
+    parent = os.path.basename(os.path.dirname(os.path.dirname(path)))
+    if added_from is None:
+        return False
+    try:
+        if parent == 'b' and folder.isdigit():
+            return int(folder) >= added_from
+        if folder.endswith(')') and '(' in folder:
+            return int(folder.rpartition('(')[2][:-1]) >= added_from
+    except ValueError:
+        pass
+    return False
+
+
 def opf(path):
     tree = ET.parse(path)
+    masked = added_book(path)
     ns = {'dc': 'http://purl.org/dc/elements/1.1/', 'opf': 'http://www.idpf.org/2007/opf'}
     metadata = tree.getroot().find('opf:metadata', ns)
     items = []
@@ -84,7 +125,13 @@ def opf(path):
     for element in metadata:
         if element.get('{http://www.idpf.org/2007/opf}role') == 'bkp':
             continue
-        item = (element.tag, sorted(element.attrib.items()), (element.text or '').strip())
+        text = (element.text or '').strip()
+        attributes = dict(element.attrib)
+        if masked and element.get('{http://www.idpf.org/2007/opf}scheme') == 'uuid':
+            text = '<uuid>'
+        if masked and element.get('name') == 'calibre:timestamp':
+            attributes['content'] = '<now>'
+        item = (element.tag, sorted(attributes.items()), text)
         # The identifiers come in database order, which differs as above.
         if element.tag.endswith('identifier') and element.get('id') is None:
             identifiers.append(item)

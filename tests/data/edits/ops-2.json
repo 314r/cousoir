@@ -1,0 +1,6 @@
+[
+    {"removeFormats": {"book": 1, "formats": ["EPUB", "MOBI"]}},
+    {"trash": [7]},
+    {"restore": 4},
+    {"restore": {"book": 2, "format": "AZW3"}}
+]

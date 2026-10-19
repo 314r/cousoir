@@ -16,6 +16,13 @@ struct CalibreConfig
     // in Calibre's SQL triggers.
     QString interfaceLanguage;
     CalibreText::Tweaks tweaks = CalibreText::Tweaks::defaults();
+    // Adding books, as set in Calibre's preferences: how a file's name gives
+    // its title and authors, whether the file's own metadata is read, the
+    // tags every new book gets, and whether names read "Last First".
+    QString filenamePattern = QStringLiteral("(?P<title>.+) - (?P<author>[^_]+)");
+    bool readFileMetadata = true;
+    QStringList newBookTags;
+    bool swapAuthorNames = false;
 
     // CALIBRE_CONFIG_DIRECTORY, as Calibre honours it, or Calibre's default
     // folder for this platform.

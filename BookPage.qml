@@ -10,8 +10,8 @@ import Reliure
 
 // A book: its cover, title, authors and description, beside the details
 // pane with the rest of its metadata and its files. While the library may be
-// written, an image dropped on the cover replaces it, and the Cover menu
-// picks, pastes or removes one.
+// written, an image dropped on the page replaces the cover, another file is
+// added as a format, and the Cover menu picks, pastes or removes a cover.
 Rectangle {
     id: page
 
@@ -45,6 +45,15 @@ Rectangle {
             page.failed(error)
     }
 
+    // An image becomes the cover, anything else one of the book's files.
+    function dropFile(url) {
+        const name = url.toString().toLowerCase()
+        if (/\.(jpe?g|png|webp|gif|bmp)$/.test(name))
+            page.setCover(url)
+        else
+            details.addFormat(url)
+    }
+
     function pasteCover() {
         const error = page.library.pasteCover(page.book.id)
         if (error)
@@ -75,6 +84,21 @@ Rectangle {
     onBookChanged: {
         if (!page.library.canRevert)
             confirmingRevert = false
+    }
+
+    // Anywhere on the page; the cover shows that it takes the drop.
+    DropArea {
+        id: pageDrop
+
+        anchors.fill: parent
+        enabled: page.library.writable
+        onEntered: function(drag) {
+            drag.accepted = drag.hasUrls
+        }
+        onDropped: function(drop) {
+            if (drop.hasUrls)
+                page.dropFile(drop.urls[0])
+        }
     }
 
     RowLayout {
@@ -114,9 +138,9 @@ Rectangle {
                             Layout.preferredHeight: cover.status === Image.Ready && cover.implicitWidth > 0
                                 ? Math.round(page.coverWidth * cover.implicitHeight / cover.implicitWidth) + 2
                                 : Math.round(page.coverWidth * 1.5)
-                            color: coverDrop.containsDrag ? Theme.hover : Theme.fill
+                            color: coverDrop.containsDrag || pageDrop.containsDrag ? Theme.hover : Theme.fill
                             border.width: 1
-                            border.color: coverDrop.containsDrag ? Theme.accent : Theme.divider
+                            border.color: coverDrop.containsDrag || pageDrop.containsDrag ? Theme.accent : Theme.divider
 
                             DropArea {
                                 id: coverDrop
@@ -128,7 +152,7 @@ Rectangle {
                                 }
                                 onDropped: function(drop) {
                                     if (drop.hasUrls)
-                                        page.setCover(drop.urls[0])
+                                        page.dropFile(drop.urls[0])
                                 }
                             }
 

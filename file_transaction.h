@@ -5,6 +5,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 // Changes to files in the library that can be undone until the database that
 // matches them is published. Each step goes to a journal, flushed to disk,
 // before it happens; a crash leaves the journal, from which recover() puts
@@ -27,6 +29,9 @@ public:
     bool makeFolder(const QString &folder, QString *error);
     // Writes `contents` to `path`, replacing the file there.
     bool write(const QString &path, const QByteArray &contents, QString *error);
+    // Copies the file `source`, from anywhere, to `path`, replacing the file
+    // there.
+    bool copy(const QString &source, const QString &path, QString *error);
     // Removes the file at `path`, if any.
     bool remove(const QString &path, QString *error);
     // Removes `folder` once the change is final, if nothing but the folder
@@ -64,6 +69,9 @@ private:
     };
 
     bool log(const Step &step, QString *error);
+    // Puts a new file at `path` once `fill` has written it under its
+    // temporary name.
+    bool place(const QString &path, const std::function<bool(const QString &, QString *)> &fill, QString *error);
     static bool undo(const Step &step, QString *error);
     static void cleanUp(const QList<Step> &steps);
     static QString keptName(const QString &path);

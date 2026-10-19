@@ -1,0 +1,13 @@
+[
+    {"removeFormats": {"book": 2, "formats": ["azw3"]}},
+    {"trash": [4]},
+    {"add": "../import/Le Vicomte - Inconnu.epub"},
+    {"add": "../import/relativity.pdf"},
+    {"add": "../import/Black Company 2.epub"},
+    {"add": "../import/Vicomte.azw3"},
+    {"add": "../import/The Lost Title - Anne Onyme & Bob Builder.epub"},
+    {"add": ["../import/manga.epub", "../import/Plain Notes - Jane Doe.txt"]},
+    {"addFormat": {"book": 1, "file": "../import/Vicomte.mobi"}},
+    {"addFormat": {"book": 3, "file": "../import/manga.epub"}},
+    {"book": 5, "set": {"title": "Manuel technique, 2e édition"}}
+]

@@ -8,14 +8,18 @@
 #include <QImage>
 #include <QImageReader>
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QLocale>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QPromise>
+#include <QSet>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 
+#include "book_import.h"
 #include "calibre_db.h"
 #include "calibre_text.h"
 #include "concurrency_guard.h"
@@ -29,7 +33,7 @@ const QStringList &sections()
 {
     static const QStringList names = { QStringLiteral("books"), QStringLiteral("authors"), QStringLiteral("series"),
                                        QStringLiteral("tags"), QStringLiteral("languages"),
-                                       QStringLiteral("publishers") };
+                                       QStringLiteral("publishers"), QStringLiteral("trash") };
     return names;
 }
 
@@ -171,6 +175,57 @@ bool matchesAll(const QString &haystack, const QStringList &words)
     return std::all_of(words.cbegin(), words.cend(), [&](const QString &word) { return haystack.contains(word); });
 }
 
+// BOOK_EXTENSIONS of ebooks/__init__.py: the files of a folder Calibre adds.
+const QSet<QString> &bookExtensions()
+{
+    static const QSet<QString> extensions = [] {
+        QSet<QString> result;
+        for (const char *extension :
+             { "lrf", "rar", "zip", "rtf", "lit", "txt", "txtz", "text", "htm", "xhtm", "html", "htmlz", "xhtml", "pdf",
+               "pdb", "updb", "pdr", "prc", "mobi", "azw", "doc", "epub", "fb2", "fbz", "djv", "djvu", "lrx", "cbr",
+               "cb7", "cbz", "cbc", "oebzip", "rb", "imp", "odt", "chm", "tpz", "azw1", "pml", "pmlz", "mbp", "tan",
+               "snb", "xps", "oxps", "azw4", "book", "zbf", "pobi", "docx", "docm", "md", "textile", "markdown",
+               "ibook", "ibooks", "iba", "azw3", "ps", "kepub", "kfx", "kpf" })
+            result.insert(QString::fromLatin1(extension));
+        return result;
+    }();
+    return extensions;
+}
+
+QString localPath(const QVariant &url)
+{
+    const QUrl parsed = url.toUrl();
+    if (parsed.isLocalFile())
+        return parsed.toLocalFile();
+    const QString text = url.toString();
+    return text.startsWith(QLatin1String("file:")) ? QUrl(text).toLocalFile() : text;
+}
+
+// The files to add: those given, and the book files of the folders given.
+QStringList bookFiles(const QVariantList &urls)
+{
+    QStringList files;
+    for (const QVariant &url : urls) {
+        const QString path = localPath(url);
+        const QFileInfo info(path);
+        if (info.isFile()) {
+            files.append(info.absoluteFilePath());
+        } else if (info.isDir()) {
+            QDirIterator it(path, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+            QStringList found;
+            while (it.hasNext()) {
+                const QFileInfo file(it.next());
+                if (!file.fileName().startsWith(u'.') && bookExtensions().contains(file.suffix().toLower()))
+                    found.append(file.absoluteFilePath());
+            }
+            found.sort();
+            files += found;
+        }
+    }
+    files.removeDuplicates();
+    return files;
+}
+
 } // namespace
 
 BookLibrary::BookLibrary(QObject *parent)
@@ -193,6 +248,8 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_changeTimer, qOverload<>(&QTimer::start));
     connect(&m_loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &BookLibrary::finishLoad);
     connect(&m_commitWatcher, &QFutureWatcher<CommitEngine::Result>::finished, this, &BookLibrary::finishCommit);
+    connect(&m_importWatcher, &QFutureWatcher<ImportResult>::finished, this, &BookLibrary::finishImport);
+    connect(&m_importWatcher, &QFutureWatcher<ImportResult>::progressValueChanged, this, &BookLibrary::importChanged);
     // QML may still set another library; only the last one loads.
     QMetaObject::invokeMethod(this, &BookLibrary::startLoad, Qt::QueuedConnection);
 }
@@ -201,6 +258,7 @@ BookLibrary::~BookLibrary()
 {
     m_loadWatcher.waitForFinished();
     m_commitWatcher.waitForFinished();
+    m_importWatcher.waitForFinished();
 }
 
 QString BookLibrary::cacheFolder(const QString &libraryPath)
@@ -275,6 +333,8 @@ QVariantMap BookLibrary::counts() const
         { QStringLiteral("tags"), m_data.tags.size() },
         { QStringLiteral("languages"), m_data.languages.size() },
         { QStringLiteral("publishers"), m_data.publishers.size() },
+        // Nothing for an empty trash.
+        { QStringLiteral("trash"), m_trashEntries.isEmpty() ? QVariant(QString()) : QVariant(m_trashEntries.size()) },
     };
 }
 
@@ -582,6 +642,7 @@ void BookLibrary::applyData(LibraryData data)
     if (!findBook(m_currentBookId))
         m_currentBookId = 0;
 
+    rebuildTrash();
     emit libraryChanged();
     emit filterChanged();
     rebuildRows();
@@ -843,7 +904,7 @@ void BookLibrary::setWritable(bool writable)
 
 bool BookLibrary::saving() const
 {
-    return m_commitWatcher.isRunning() || !m_pendingEdits.isEmpty();
+    return m_commitWatcher.isRunning() || !m_pending.isEmpty();
 }
 
 bool BookLibrary::canRevert() const
@@ -1040,7 +1101,27 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
 {
     if (edit.isEmpty())
         return {};
-    m_pendingEdits.append(edit);
+    // With the edits just before it, if the last change waiting is edits.
+    const CommitEngine::Request &last = m_pending.isEmpty() ? CommitEngine::Request() : m_pending.last();
+    const bool editsOnly = !m_pending.isEmpty() && last.formatRemovals.isEmpty() && last.trash.isEmpty()
+        && last.restorations.isEmpty() && last.newBooks.isEmpty() && last.newFormats.isEmpty();
+    if (editsOnly) {
+        m_pending.last().edits.append(edit);
+    } else {
+        CommitEngine::Request request;
+        request.edits.append(edit);
+        m_pending.append(request);
+    }
+    emit savingChanged();
+    startCommit();
+    return {};
+}
+
+QString BookLibrary::queueChange(const CommitEngine::Request &change)
+{
+    if (!m_writable)
+        return tr("The library cannot be changed right now.");
+    m_pending.append(change);
     emit savingChanged();
     startCommit();
     return {};
@@ -1049,21 +1130,20 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
 void BookLibrary::startCommit()
 {
     // A load writes the snapshot a save replaces: one at a time.
-    if (m_commitWatcher.isRunning() || m_loadWatcher.isRunning() || m_pendingEdits.isEmpty())
+    if (m_commitWatcher.isRunning() || m_loadWatcher.isRunning() || m_pending.isEmpty())
         return;
     if (!m_writable) {
-        m_pendingEdits.clear();
+        m_pending.clear();
         emit savingChanged();
         emit saveFailed(tr("The library cannot be changed right now."));
         return;
     }
-    CommitEngine::Request request;
+    CommitEngine::Request request = m_pending.takeFirst();
     request.libraryPath = m_libraryPath;
     request.cacheFolder = cacheFolder(m_libraryPath);
     // One copy of the database before the session's first change.
     request.backupFolder = m_backedUp ? QString() : backupFolder();
     request.config = effectiveConfig();
-    request.edits = std::exchange(m_pendingEdits, {});
     const QString version = QCoreApplication::applicationVersion();
     request.producer = version.isEmpty() ? QStringLiteral("Reliure") : QStringLiteral("Reliure (%1)").arg(version);
     request.producerId = QStringLiteral("reliure");
@@ -1076,7 +1156,7 @@ void BookLibrary::finishCommit()
     const CommitEngine::Result result = m_commitWatcher.result();
     if (result.ok) {
         m_backedUp = m_backedUp || !result.backup.isEmpty();
-        if (!result.data.books.isEmpty()) {
+        if (result.written) {
             m_loaded = true;
             m_lastError.clear();
             applyData(result.data);
@@ -1084,10 +1164,16 @@ void BookLibrary::finishCommit()
             emit publishedKeyChanged();
         }
         emit saved();
+        if (!result.added.isEmpty()) {
+            QVariantList added;
+            for (const int id : result.added)
+                added.append(id);
+            emit booksAdded(added);
+        }
     } else {
         // What follows was made on what failed; the library shows what it
         // holds.
-        m_pendingEdits.clear();
+        m_pending.clear();
         emit saveFailed(result.error);
         m_reloadPending = true;
     }
@@ -1095,6 +1181,233 @@ void BookLibrary::finishCommit()
     if (std::exchange(m_reloadPending, false))
         reloadIfChanged();
     startCommit();
+}
+
+QVariantList BookLibrary::trashEntries() const
+{
+    return m_trashEntries;
+}
+
+int BookLibrary::trashExpiryDays() const
+{
+    return int(m_data.trashExpirySeconds / (24 * 3600));
+}
+
+bool BookLibrary::importing() const
+{
+    return m_importWatcher.isRunning();
+}
+
+int BookLibrary::importDone() const
+{
+    return m_importWatcher.isRunning() ? m_importWatcher.progressValue() : 0;
+}
+
+int BookLibrary::importTotal() const
+{
+    return m_importWatcher.isRunning() ? m_importWatcher.progressMaximum() : 0;
+}
+
+QString BookLibrary::addBooks(const QVariantList &urls)
+{
+    if (!m_writable)
+        return tr("The library cannot be changed right now.");
+    if (m_importWatcher.isRunning() || !m_importedBooks.isEmpty())
+        return tr("Books are already being added.");
+    const QStringList files = bookFiles(urls);
+    if (files.isEmpty())
+        return tr("There is no book file to add.");
+    const CalibreConfig config = effectiveConfig();
+    m_importWatcher.setFuture(QtConcurrent::run([files, config](QPromise<ImportResult> &promise) {
+        ImportResult result;
+        promise.setProgressRange(0, int(files.size()));
+        for (qsizetype index = 0; index < files.size(); ++index) {
+            NewBook book;
+            book.files = { files.at(index) };
+            QString warning;
+            book.metadata = BookImport::metadataForAdding(files.at(index), config, &warning);
+            if (!warning.isEmpty())
+                result.warnings.append(warning);
+            result.books.append(book);
+            promise.setProgressValue(int(index) + 1);
+        }
+        promise.addResult(result);
+    }));
+    emit importChanged();
+    return {};
+}
+
+void BookLibrary::finishImport()
+{
+    const ImportResult result = m_importWatcher.future().resultCount() ? m_importWatcher.result() : ImportResult();
+    emit importChanged();
+    if (!result.warnings.isEmpty())
+        emit importWarning(result.warnings.join(u'\n'));
+    if (result.books.isEmpty())
+        return;
+    QStringList titles;
+    m_importedDuplicates.clear();
+    for (const NewBook &book : result.books) {
+        const bool duplicate = !identicalBooks(book.metadata).isEmpty();
+        m_importedDuplicates.append(duplicate);
+        if (duplicate)
+            titles.append(book.metadata.title);
+    }
+    m_importedBooks = result.books;
+    if (titles.isEmpty())
+        addDuplicates(true);
+    else
+        emit duplicatesFound(titles, int(result.books.size()));
+}
+
+void BookLibrary::addDuplicates(bool add)
+{
+    CommitEngine::Request change;
+    for (qsizetype index = 0; index < m_importedBooks.size(); ++index) {
+        if (add || !m_importedDuplicates.value(index))
+            change.newBooks.append(m_importedBooks.at(index));
+    }
+    m_importedBooks.clear();
+    m_importedDuplicates.clear();
+    if (change.newBooks.isEmpty())
+        return;
+    const QString error = queueChange(change);
+    if (!error.isEmpty())
+        emit saveFailed(error);
+}
+
+QList<int> BookLibrary::identicalBooks(const ImportedMetadata &metadata) const
+{
+    const CalibreConfig config = effectiveConfig();
+    const QString unknown = CalibreText::unknownText(config.interfaceLanguage);
+    const QStringList authors = metadata.authors.isEmpty() ? QStringList{ unknown } : metadata.authors;
+    // Books with all the authors, by name without regard to case.
+    std::optional<QSet<int>> found;
+    for (const QString &author : authors) {
+        QSet<int> byAuthor;
+        bool known = false;
+        for (const FacetItem &item : m_data.authors) {
+            if (item.name.toLower() != author.toLower())
+                continue;
+            known = true;
+            for (const Book &book : m_data.books) {
+                if (book.authorIds.contains(item.id))
+                    byAuthor.insert(book.id);
+            }
+        }
+        if (!known)
+            return {};
+        found = found ? found->intersect(byAuthor) : byAuthor;
+        if (found->isEmpty())
+            return {};
+    }
+    const QString title = CalibreText::fuzzyTitle(metadata.title.isEmpty() ? unknown : metadata.title, config.tweaks,
+                                                  config.interfaceLanguage);
+    QStringList languages;
+    for (const QString &language : metadata.languages) {
+        const QString code = CalibreText::canonicalizeLanguage(language);
+        if (!code.isEmpty() && code != QLatin1String("und"))
+            languages.append(code);
+    }
+    QList<int> identical;
+    for (const Book &book : m_data.books) {
+        if (!found->contains(book.id)
+            || CalibreText::fuzzyTitle(book.title, config.tweaks, config.interfaceLanguage) != title)
+            continue;
+        if (languages.isEmpty() || book.languages.isEmpty() || book.languages == languages)
+            identical.append(book.id);
+    }
+    return identical;
+}
+
+QString BookLibrary::addFormat(int bookId, const QString &fileUrl)
+{
+    const QString file = localPath(fileUrl);
+    if (!findBook(bookId))
+        return tr("This book is no longer in the library.");
+    if (!QFileInfo(file).isFile())
+        return tr("%1 cannot be read.").arg(QFileInfo(file).fileName());
+    if (QFileInfo(file).suffix().isEmpty())
+        return tr("%1 has no extension to tell its format.").arg(QFileInfo(file).fileName());
+    CommitEngine::Request change;
+    change.newFormats.append({ bookId, file });
+    return queueChange(change);
+}
+
+QString BookLibrary::removeFormat(int bookId, const QString &format)
+{
+    if (!findBook(bookId))
+        return tr("This book is no longer in the library.");
+    CommitEngine::Request change;
+    change.formatRemovals.append({ bookId, { format } });
+    return queueChange(change);
+}
+
+QString BookLibrary::moveToTrash(const QVariantList &bookIds)
+{
+    CommitEngine::Request change;
+    for (const QVariant &id : bookIds) {
+        if (findBook(id.toInt()) && !change.trash.contains(id.toInt()))
+            change.trash.append(id.toInt());
+    }
+    if (change.trash.isEmpty())
+        return tr("These books are no longer in the library.");
+    return queueChange(change);
+}
+
+QString BookLibrary::restoreFromTrash(int bookId, const QStringList &formats)
+{
+    if (formats.isEmpty() && findBook(bookId))
+        return tr("The library already has a book with this one's number: restore it in Calibre.");
+    if (!formats.isEmpty() && !findBook(bookId))
+        return tr("The book of these files is no longer in the library.");
+    CommitEngine::Request change;
+    if (formats.isEmpty())
+        change.restorations.append(Restoration{ bookId, QString() });
+    for (const QString &format : formats)
+        change.restorations.append(Restoration{ bookId, format });
+    return queueChange(change);
+}
+
+void BookLibrary::rebuildTrash()
+{
+    // A removed book's own cover; for removed files, their book's.
+    const QString coverKey = QFileInfo(cacheFolder(m_libraryPath)).fileName();
+    const auto trashCover = [&](const TrashEntry &entry) {
+        if (!entry.formats.isEmpty()) {
+            const Book *book = findBook(entry.bookId);
+            return book && !book->coverFile.isEmpty() ? CoverCache::url(coverKey, book->id, book->coverModified)
+                                                      : QString();
+        }
+        return QFileInfo(entry.coverFile).isFile() ? QUrl::fromLocalFile(entry.coverFile).toString() : QString();
+    };
+    QList<TrashEntry> entries = m_libraryPath.isEmpty()
+        ? QList<TrashEntry>() : BookOperations::trashEntries(m_libraryPath, effectiveConfig().interfaceLanguage);
+    std::stable_sort(entries.begin(), entries.end(),
+                     [](const TrashEntry &a, const TrashEntry &b) { return a.removed > b.removed; });
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    QVariantList rows;
+    for (const TrashEntry &entry : std::as_const(entries)) {
+        const bool book = entry.formats.isEmpty();
+        const qint64 left = m_data.trashExpirySeconds - entry.removed.secsTo(now);
+        rows.append(QVariantMap{
+            { QStringLiteral("key"), QStringLiteral("%1-%2").arg(book ? u'b' : u'f').arg(entry.bookId) },
+            { QStringLiteral("bookId"), entry.bookId },
+            { QStringLiteral("kind"), book ? QStringLiteral("book") : QStringLiteral("formats") },
+            { QStringLiteral("title"), entry.title },
+            { QStringLiteral("author"), entry.author },
+            { QStringLiteral("cover"), trashCover(entry) },
+            { QStringLiteral("formats"), entry.formats },
+            { QStringLiteral("removed"), QLocale().toString(entry.removed.toLocalTime(), QLocale::ShortFormat) },
+            { QStringLiteral("daysLeft"), int(std::max<qint64>(0, (left + 24 * 3600 - 1) / (24 * 3600))) },
+            // A book comes back under its own number, a file to its book.
+            { QStringLiteral("restorable"), book ? !findBook(entry.bookId) : findBook(entry.bookId) != nullptr },
+        });
+    }
+    if (rows == m_trashEntries)
+        return;
+    m_trashEntries = rows;
+    emit trashChanged();
 }
 
 const Book *BookLibrary::findBook(int bookId) const

@@ -16,7 +16,8 @@ Item {
     property var counts: ({})
     readonly property var groups: [
         { title: qsTr("Library"), items: [
-            { key: "books", title: qsTr("Books"), icon: "book" }
+            { key: "books", title: qsTr("Books"), icon: "book" },
+            { key: "trash", title: qsTr("Trash"), icon: "trash" }
         ] },
         { title: qsTr("Browse"), items: [
             { key: "authors", title: qsTr("Authors"), icon: "user" },

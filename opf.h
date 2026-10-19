@@ -4,6 +4,7 @@
 #include <QString>
 
 #include "book.h"
+#include "calibre_date.h"
 
 // The metadata.opf Calibre keeps beside a book's files, from which its
 // "Restore database" rebuilds a library. Ported from metadata_to_opf() in
@@ -22,10 +23,19 @@ struct Settings
     QString producerId;
 };
 
+// The dates of a book as Calibre holds them in memory, to the microsecond,
+// right after adding or restoring it; read back from the database, they stop
+// at the second.
+struct ExactDates
+{
+    CalibreDate pubdate;
+    CalibreDate timestamp;
+};
+
 // `book` of `data` as an OPF. The calibre: metadata Reliure does not keep,
 // custom columns, annotations and user categories, comes from `previous`,
 // the file it replaces: it cannot have changed, as Reliure never writes it.
 QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settings &settings,
-                         const QByteArray &previous = {});
+                         const QByteArray &previous = {}, const ExactDates *exact = nullptr);
 
 } // namespace Opf

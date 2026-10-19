@@ -12,4 +12,7 @@ namespace CalibreList {
 // Fields without a value are left out, as calibredb leaves them.
 QByteArray machineList(const LibraryData &data);
 
+// A string as Python's json.dumps() writes it, with ensure_ascii.
+QByteArray pythonJsonString(const QString &value);
+
 } // namespace CalibreList

@@ -4,13 +4,14 @@ A Qt/QML ebook manager that works on a Calibre library: the books, sorted and
 searched as a table or as covers, the authors, series, tags, languages and
 publishers that browse them, and each book's metadata, description and files,
 which open in the desktop's reader. A book's metadata and cover edit in
-place.
+place; books and files are added, moved to the library's trash and restored
+from it.
 
 Calibre stays the library's owner and keeps working as before. Reliure reads
 and writes Calibre's own `metadata.db` and follows Calibre's rules wherever it
 computes something Calibre computes, so both always agree; the tests compare
-its writes with Calibre's own. Adding books, conversion and sending to a Kobo
-or a Kindle come in the next versions.
+its writes with Calibre's own. Conversion and sending to a Kobo or a Kindle
+come in the next versions.
 
 The project structure, theming (system, light, dark and Omarchy) and Settings
 window come from the JolieBulle Qt port, which took them from kbextract.
@@ -21,8 +22,8 @@ The interface follows the Omarchy style: the system monospace font, square
 corners, hairline dividers, foreground-tinted hover and selection states
 instead of accent fills, and one accent per screen.
 
-The sidebar has the books, then the browse sections with their sizes:
-authors, series, tags, languages and publishers. A section lists its items
+The sidebar has the books and the trash, then the browse sections with their
+sizes: authors, series, tags, languages and publishers. A section lists its items
 with their number of books; Enter or a double click lists an item's books,
 with the item in the breadcrumb. Esc, Alt+Left or the back button goes back
 up one level.
@@ -43,7 +44,7 @@ toggle (Ctrl+I) shows it anyway. A file's button, or Open in reader (Ctrl+O),
 opens it with the desktop's application for that format; Open in reader picks
 EPUB, KEPUB, AZW3, MOBI or PDF, in that order. Ctrl+O also works on the
 selected row of a list. A row's menu (right click, Menu or Shift+F10) opens
-the book, opens it in the reader or shows its folder.
+the book, opens it in the reader, shows its folder or moves it to the trash.
 
 When the library cannot be written right now, the status bar says why with a
 lock: Calibre open on this computer, Calibre writing, Dropbox syncing or not
@@ -122,6 +123,71 @@ Reliure departs from Calibre on purpose in a few places:
   from other tables, Reliure does not write.
 - The description is not editable yet.
 
+## Adding and removing books
+
+Ctrl+N, or the + button of the toolbar, picks book files to add; files dropped
+on the book list are added too, and a folder dropped there adds the book files
+in it, those with an extension Calibre takes for a book. Each file becomes a
+book. Reliure reads the files on a worker thread, the status bar counting
+them, and reads what `calibredb add` reads:
+
+- the title and authors in the file's name, by Calibre's file name pattern
+  (`Title - Author.epub` by default, or the one set in Calibre's preferences);
+- then the file's own metadata, unless Calibre is set not to read it, merged
+  as Calibre merges it: the file's title and authors unless they are
+  "Unknown", its other fields where it has them, its tags with the name's, its
+  cover. EPUB and KEPUB (OPF 2 and 3), MOBI, AZW, AZW3 and PRC are read by
+  Reliure itself; PDF through poppler's `pdfinfo` and `pdftoppm`, Calibre's
+  own copy when Calibre is installed, its XMP packet merged with its info
+  dictionary as Calibre merges them; any other format, and the cover of an
+  EPUB whose first page must be drawn, through Calibre itself when it is
+  installed.
+
+When books are already in the library by title and authors, as Calibre
+compares them (lower case, without punctuation or a leading article, every
+author found, the languages alike if both have some), Reliure asks whether to
+add them anyway; the other books are added either way. The books then go into
+the library in one change, saved as an edit is, with the tags Calibre gives
+new books, their series number from Calibre's rule for the next one, and their
+files named and filed exactly as Calibre files them. The first one added is
+selected.
+
+On a book's page, the Files section adds a file as one of its formats, after
+asking when the book has a file of that format already, and moves a file to
+the trash. A file dropped on the book's page is added as a format; an image
+dropped there becomes the cover.
+
+Del on the list, the row menu or the toolbar's trash button on a book's page
+moves the book to the library's trash, after asking. As in Calibre, its
+`metadata.opf` is written again first, its folder goes whole to
+`.caltrash/b/<id>`, and the authors, tags, series and publishers no other book
+has are removed; a file goes to `.caltrash/f/<id>/<format>` beside a
+`metadata.json` with the book's title and authors.
+
+The Trash section lists what the library's trash holds, removed books and
+files removed from a book, with the date they were removed and the days left
+before Calibre deletes them. Restore puts a book back under its own number,
+with its metadata from its `metadata.opf`, its files and cover, or puts the
+files back into their book. Reliure restores what Calibre moved to the trash
+and Calibre restores what Reliure did.
+
+Reliure departs from Calibre here too:
+
+- It never empties the trash. Calibre deletes entries older than 14 days, or
+  its library's own setting, when it starts.
+- It does not restore a book in a library with custom columns, whose values
+  it does not write yet, nor a book whose `metadata.opf` holds annotations;
+  and it does not add books to a library whose custom columns give new books
+  a value. Calibre does all three.
+- Calibre's file type plugins do not run: an HTML file is added as HTML where
+  Calibre would zip it with its images.
+- An OPF file named like the added file, beside it, is not read; Calibre
+  would take its metadata.
+- An old MOBI file without an EXTH header keeps the title of its header,
+  where Calibre would also look for metadata in its text.
+- Page counts are left for Calibre, which counts the pages of the books
+  Reliure added or changed the next time it opens the library.
+
 ## Settings
 
 Settings has two sections. Appearance picks the theme and the text size, as
@@ -177,7 +243,8 @@ renames such a file when it finds it; Reliure only reads it.
 ```bash
 reliure-cli list [--library PATH]
 reliure-cli doctor [--library PATH]
-reliure-cli apply [--library PATH] [--force] edits.json
+reliure-cli apply [--library PATH] [--force] changes.json
+reliure-cli read FILE…
 ```
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
@@ -197,7 +264,21 @@ the same checks unless `--force` skips the Dropbox and recent-change ones:
 The keys are the details pane's: `title`, `sort`, `authors`, `authorSort`,
 `series`, `seriesIndex`, `tags`, `rating` (0 to 10), `publisher`, `languages`,
 `identifiers`, `pubdate`, `comments`, `coverFile` (relative to the JSON file)
-and `removeCover`.
+and `removeCover`. The other changes, after the edits and in this order:
+
+```json
+[{ "removeFormats": { "book": 2, "formats": ["AZW3"] } },
+ { "trash": [4] },
+ { "restore": 4 }, { "restore": { "book": 2, "format": "AZW3" } },
+ { "add": "book.epub" }, { "add": ["book.epub", "book.pdf"] },
+ { "addFormat": { "book": 1, "file": "book.mobi" } }]
+```
+
+An `add` makes one book of its files, with the first one's metadata; files
+are relative to the JSON file.
+
+`read` prints, as JSON, the metadata adding each file would read, as
+`tools/oracle/read_oracle.py` prints Calibre's.
 
 ## Keyboard
 
@@ -205,7 +286,9 @@ and `removeCover`.
 |---|---|
 | Up/Down, arrows in the grid | Move in the list |
 | Enter, Space, double click | Open the book, or the section's item |
-| Menu, Shift+F10, right click | Book actions: open, open in reader, show folder |
+| Menu, Shift+F10, right click | Book actions: open, open in reader, show folder, move to trash |
+| Ctrl+N | Add books |
+| Del | Move the selected book to the trash |
 | Ctrl+O | Open the book, or the selected one, in the reader |
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
@@ -215,13 +298,17 @@ and `removeCover`.
 | Enter, Tab, Esc | Save, save and move on, or revert a field |
 | Ctrl+V | Paste the clipboard's image as the cover |
 | Enter, Esc | Revert the book's changes or keep them, once asked |
+| Enter | Restore the selected entry of the trash |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
 
 ## Requirements
 
-- Qt 6.9 or later with QML, Quick, Quick Controls 2, SVG, Network and
+- Qt 6.9 or later with QML, Quick, Quick Controls 2, SVG, Network, Xml and
   Concurrent
 - SQLite 3.31 or later
+- libzip
+- For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
+  formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
 - CMake 3.21 or later
 - A C++20 compiler
 
@@ -254,7 +341,14 @@ The tests check the port against Calibre itself:
 - `commit_engine_tests` saves edits to copies of the fixture: folders moving,
   case changes, cleaned values, dates, covers, the refusals, a change undone
   part way, a change started again over a concurrent one, and the recovery of
-  a change interrupted before or after the database was replaced.
+  a change interrupted before or after the database was replaced; and books
+  added, moved to the trash and restored, a failing change of them undone
+  whole, and a file copied in before a crash removed on recovery.
+- `tests/data/import` holds book files for the corners of Calibre's readers:
+  EPUB package files of both versions, MOBI and AZW3 files made by
+  `ebook-convert`, PDF files with an info dictionary and an XMP packet (one
+  written by Calibre), covers to draw and metadata only in a file's name.
+  `tools/make_import_fixtures.sh` builds them again.
 - `tests/data/library` is a six-book library made by `calibredb`, with
   `tests/data/library-list.json`, its `calibredb list` output; `make fixtures`
   (`tools/make_fixture_library.sh`) builds both again. `calibre_db_tests`
@@ -269,7 +363,15 @@ The tests check the port against Calibre itself:
   pixels; `calibredb check_library` must report both copies alike. Finally
   Calibre writes again the `metadata.opf` files Reliure wrote, and must find
   nothing to change, then edits the copy, which Reliure must read as calibredb
-  lists it. It is skipped without Calibre.
+  lists it. It also compares `reliure-cli read` with Calibre's readers
+  (`tools/oracle/read_oracle.py`) on `tests/data/import` and the fixture's
+  files, and on every file of the real library with
+  `RELIURE_GOLDEN_REAL=1`. Then it adds, removes and restores books and
+  formats in three steps (`tests/data/edits/ops-*.json`), each compared table
+  by table and file by file, the trash included, with page counts and the
+  time and uuid of the books added left out; and has Calibre restore what
+  Reliure moved to the trash and Reliure what Calibre did, each ending as the
+  other. It is skipped without Calibre.
 - `concurrency_guard_tests` drives the write checks with a fake
   `/proc/net/unix` and a fake Dropbox socket.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%

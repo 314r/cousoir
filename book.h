@@ -101,6 +101,9 @@ struct LibraryData
     QList<FacetItem> tags;
     QList<FacetItem> publishers;
     QList<FacetItem> languages;
+    // The age at which Calibre deletes trash entries: the library's
+    // expire_old_trash_after, 14 days unless changed, never under a day.
+    qint64 trashExpirySeconds = 14 * 24 * 3600;
     // metadata.db as it was copied, and the copy's SHA-256.
     FileIdentity source;
     QByteArray sourceSha256;

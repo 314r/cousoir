@@ -20,12 +20,14 @@
 #include <unistd.h>
 #endif
 
+#include "book_operations.h"
 #include "calibre_db.h"
 #include "calibre_lock.h"
 #include "calibre_paths.h"
 #include "field_writers.h"
 #include "file_transaction.h"
 #include "opf.h"
+#include "opf_reader.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -142,136 +144,6 @@ QSet<QPair<QString, int>> readNotes(const QString &libraryPath, const QString &c
     return notes;
 }
 
-// format_abspath() without its rename: the file Calibre expects, or one with
-// the format's extension.
-QString formatFile(const QString &folder, const QString &name, const QString &format)
-{
-    const QString extension = u'.' + format.toLower();
-    const QString expected = QDir(folder).filePath(name + extension);
-    if (QFileInfo(expected).isFile())
-        return expected;
-    const QStringList entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
-    for (const QString &entry : entries) {
-        if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._")))
-            return QDir(folder).filePath(entry);
-    }
-    return {};
-}
-
-// update_path() of backend.py for one book: its folder and files follow its
-// title and first author, in the database and on disk.
-bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath, int bookId,
-                const QString &unknown, QString *error)
-{
-    SqliteStatement book(db, QStringLiteral("SELECT title, path FROM books WHERE id=?"));
-    book.bind(1, qint64(bookId));
-    if (!book.step())
-        return true;
-    const QString title = book.text(0);
-    const QString current = book.text(1);
-    SqliteStatement author(db, QStringLiteral("SELECT authors.name FROM books_authors_link link JOIN authors "
-                                              "ON authors.id = link.author WHERE link.book=? ORDER BY link.id LIMIT 1"));
-    author.bind(1, qint64(bookId));
-    const QString firstAuthor = author.step() ? author.text(0).replace(u'|', u',') : unknown;
-
-    QList<QPair<QString, QString>> formats;
-    SqliteStatement data(db, QStringLiteral("SELECT format, name FROM data WHERE book=?"));
-    data.bind(1, qint64(bookId));
-    int extensionLength = 0;
-    while (data.step()) {
-        formats.append({ data.text(0).toUpper(), data.text(1) });
-        extensionLength = std::max(extensionLength, int(data.text(0).size()) + 1);
-    }
-    if (formats.isEmpty())
-        extensionLength = 10;
-
-    const QString path = CalibrePaths::constructPathName(bookId, title, firstAuthor, unknown);
-    const QString name = CalibrePaths::constructFileName(bookId, title, firstAuthor, extensionLength, unknown);
-    const auto updateDatabase = [&] {
-        SqliteStatement names(db, QStringLiteral("UPDATE data SET name=? WHERE book=? AND format=?"));
-        for (const auto &format : std::as_const(formats)) {
-            names.reset();
-            names.bind(1, name);
-            names.bind(2, qint64(bookId));
-            names.bind(3, format.first);
-            names.step();
-            if (!names.error().isEmpty()) {
-                if (error)
-                    *error = names.error();
-                return false;
-            }
-        }
-        SqliteStatement setPath(db, QStringLiteral("UPDATE books SET path=? WHERE id=?"));
-        setPath.bind(1, path);
-        setPath.bind(2, qint64(bookId));
-        setPath.step();
-        if (!setPath.error().isEmpty()) {
-            if (error)
-                *error = setPath.error();
-            return false;
-        }
-        return true;
-    };
-
-    if (current.isEmpty())
-        return updateDatabase();
-
-    const QDir library(libraryPath);
-    const QString source = library.filePath(current);
-    const QString target = library.filePath(path);
-    if (path == current) {
-        // Only the files' names may have changed.
-        bool changed = false;
-        for (const auto &format : std::as_const(formats))
-            changed = changed || (!format.second.isEmpty() && format.second != name);
-        if (!changed)
-            return true;
-        for (const auto &format : std::as_const(formats)) {
-            const QString file = formatFile(source, format.second, format.first);
-            const QString renamed = QDir(source).filePath(name + u'.' + format.first.toLower());
-            if (!file.isEmpty() && file != renamed && !files.move(file, renamed, error))
-                return false;
-        }
-        return updateDatabase();
-    }
-
-    // Calibre deletes whatever is already at the new place; Reliure only
-    // clears an empty folder and refuses otherwise.
-    if (QFileInfo::exists(target)) {
-        if (!QFileInfo(target).isDir()
-            || !QDir(target).isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot)) {
-            if (error)
-                *error = QObject::tr("The library already has a folder %1, where Calibre would move this book.").arg(path);
-            return false;
-        }
-        if (!files.remove(target, error))
-            return false;
-    }
-
-    if (QFileInfo(source).isDir()) {
-        // Every entry moves; the format files take the new name.
-        QHash<QString, QString> renamedFormats;
-        for (const auto &format : std::as_const(formats)) {
-            const QString file = formatFile(source, format.second, format.first);
-            if (!file.isEmpty())
-                renamedFormats.insert(QFileInfo(file).fileName(), name + u'.' + format.first.toLower());
-        }
-        const QStringList entries = QDir(source).entryList(QDir::AllEntries | QDir::Hidden | QDir::System
-                                                           | QDir::NoDotAndDotDot);
-        for (const QString &entry : entries) {
-            const QString destination = QDir(target).filePath(renamedFormats.value(entry, entry));
-            if (!files.move(QDir(source).filePath(entry), destination, error))
-                return false;
-        }
-        files.removeFolderIfEmpty(source);
-        files.removeFolderIfEmpty(QFileInfo(source).absolutePath());
-    } else if (!files.makeFolder(target, error)) {
-        // Nothing to move: Calibre makes the folder all the same.
-        return false;
-    }
-    return updateDatabase();
-}
-
 // One attempt: false with `retry` when metadata.db changed under it.
 bool attempt(const Request &request, CalibreLock &lock, Result *result, bool backup, bool *retry)
 {
@@ -337,20 +209,67 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     FileTransaction files(journalPath(request.cacheFolder));
     FieldWriters::Result state;
     QSet<int> moved;
+    const auto undo = [&](const QString &message) {
+        db.exec(QStringLiteral("ROLLBACK"), nullptr);
+        files.rollback(nullptr);
+        return fail(message);
+    };
     for (const BookEdit &edit : request.edits) {
         const QSet<int> before = std::exchange(state.dirtied, {});
-        if (!FieldWriters::apply(db, edit, context, &state, &error)) {
-            db.exec(QStringLiteral("ROLLBACK"), nullptr);
-            return fail(error);
-        }
+        if (!FieldWriters::apply(db, edit, context, &state, &error))
+            return undo(error);
         // Cache.set_field() moves the files of every book a title or author
         // change touched.
         if (edit.movesFiles())
             moved.unite(state.dirtied);
         state.dirtied.unite(before);
     }
-    const QSet<int> dirtied = state.dirtied;
-    if (dirtied.isEmpty()) {
+    for (const int book : std::as_const(moved)) {
+        if (!BookOperations::updatePath(db, files, request.libraryPath, book, unknown, &error))
+            return undo(error);
+    }
+
+    // Formats and books removed, restored and added, in that order.
+    const Opf::Settings opf{ request.config.interfaceLanguage, request.producer, request.producerId };
+    BookOperations::Context operations{ request.libraryPath, context, request.config.newBookTags, nullptr, opf };
+    BookOperations::Result done;
+    for (const FormatRemoval &removal : request.formatRemovals) {
+        if (!BookOperations::removeFormats(db, files, removal, operations, &done, &error))
+            return undo(error);
+    }
+    LibraryData trashed;
+    if (!request.trash.isEmpty()) {
+        // The books as they are now, for their metadata.opf.
+        trashed.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
+        if (!CalibreDb::readLibrary(db, &trashed, &error))
+            return undo(error);
+        operations.before = &trashed;
+        if (!BookOperations::removeBooks(db, files, request.trash, operations, &done, &error))
+            return undo(error);
+        operations.before = nullptr;
+    }
+    for (const Restoration &restoration : request.restorations) {
+        if (!BookOperations::restore(db, files, restoration, operations, &state, &done, &error))
+            return undo(error);
+    }
+    for (const NewBook &book : request.newBooks) {
+        if (!BookOperations::addBook(db, files, book, operations, &state, &done, &error))
+            return undo(error);
+    }
+    for (const NewFormat &format : request.newFormats) {
+        if (!BookOperations::addFormat(db, files, format, operations, &done, &error))
+            return undo(error);
+    }
+
+    QSet<int> dirtied = state.dirtied;
+    dirtied.unite(done.dirtied);
+    const QSet<int> touched = done.touched - dirtied;
+    const bool operated = !request.formatRemovals.isEmpty() || !request.trash.isEmpty()
+        || !request.restorations.isEmpty() || !request.newBooks.isEmpty() || !request.newFormats.isEmpty();
+    // Books removed are no longer there to write.
+    for (const int book : request.trash)
+        dirtied.remove(book);
+    if (dirtied.isEmpty() && !operated) {
         // Nothing changed: the library stays as it is, not even rewritten.
         db.exec(QStringLiteral("ROLLBACK"), nullptr);
         db.close();
@@ -358,18 +277,9 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         result->data.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
         return true;
     }
-    for (const int book : std::as_const(moved)) {
-        if (!updatePath(db, files, request.libraryPath, book, unknown, &error)) {
-            db.exec(QStringLiteral("ROLLBACK"), nullptr);
-            files.rollback(nullptr);
-            return fail(error);
-        }
-    }
-    if (!FieldWriters::markDirtied(db, dirtied, now, &error) || !db.exec(QStringLiteral("COMMIT"), &error)) {
-        db.exec(QStringLiteral("ROLLBACK"), nullptr);
-        files.rollback(nullptr);
-        return fail(error);
-    }
+    if (!FieldWriters::markDirtied(db, dirtied, now, &error) || !FieldWriters::touch(db, touched, now, &error)
+        || !db.exec(QStringLiteral("COMMIT"), &error))
+        return undo(error);
     const QString check = db.value(QStringLiteral("PRAGMA quick_check")).toString();
     const bool keysOk = !db.value(QStringLiteral("SELECT count(*) FROM pragma_foreign_key_check")).toLongLong();
     if (check != QLatin1String("ok") || !keysOk) {
@@ -377,12 +287,22 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         return fail(QObject::tr("The changed database fails its checks (%1); nothing was written.").arg(check));
     }
 
-    // The library as written, for the covers and metadata.opf files.
+    // The library as written, for the covers and metadata.opf files; the
+    // dates of the books added and restored as Calibre holds them then.
     LibraryData data;
     data.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
     if (!CalibreDb::readLibrary(db, &data, &error)) {
         files.rollback(nullptr);
         return fail(error);
+    }
+    QHash<int, Opf::ExactDates> exactDates;
+    for (const int id : done.added + done.restored) {
+        SqliteStatement dates(db, QStringLiteral("SELECT pubdate, timestamp FROM books WHERE id=?"));
+        dates.bind(1, qint64(id));
+        if (dates.step()) {
+            exactDates.insert(id, { OpfReader::parseDate(dates.text(0), true).value_or(CalibreDate()),
+                                    OpfReader::parseDate(dates.text(1), true).value_or(CalibreDate()) });
+        }
     }
     db.close();
 
@@ -411,13 +331,14 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
             return fail(error);
         }
     }
-    const Opf::Settings opf{ request.config.interfaceLanguage, request.producer, request.producerId };
     for (const int id : std::as_const(dirtied)) {
         const Book *book = bookWithId(id);
         if (!book || book->path.isEmpty())
             continue;
         const QString path = QDir(library.filePath(book->path)).filePath(QStringLiteral("metadata.opf"));
-        if (!files.write(path, Opf::metadataToOpf(data, *book, opf, readFile(path)), &error)) {
+        const auto exact = exactDates.constFind(id);
+        if (!files.write(path, Opf::metadataToOpf(data, *book, opf, readFile(path),
+                                                  exact != exactDates.cend() ? &*exact : nullptr), &error)) {
             files.rollback(nullptr);
             return fail(error);
         }
@@ -458,7 +379,9 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     data.sourceSha256 = sha256;
     CalibreDb::findFiles(&data);
     result->data = data;
+    result->written = true;
     result->dirtied = dirtied;
+    result->added = done.added;
     return true;
 }
 

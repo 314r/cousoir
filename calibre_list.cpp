@@ -230,4 +230,11 @@ QByteArray machineList(const LibraryData &data)
     return out;
 }
 
+QByteArray pythonJsonString(const QString &value)
+{
+    QByteArray out;
+    writeString(out, value);
+    return out;
+}
+
 } // namespace CalibreList

@@ -44,6 +44,12 @@ private slots:
     void titleSortFollowsTweaks();
     void namesLanguages();
     void foldsForSearch();
+    void splitsAuthors();
+    void joinsAuthors();
+    void checksIsbns();
+    void checksDois();
+    void replacesEntities();
+    void cleansCharacters();
 };
 
 void CalibreTextTest::initTestCase()
@@ -162,6 +168,82 @@ void CalibreTextTest::foldsForSearch()
     QCOMPARE(CalibreText::foldForSearch(QStringLiteral("L'Écume des Jours")), QStringLiteral("l'ecume des jours"));
     QCOMPARE(CalibreText::foldForSearch(QStringLiteral("Bérénice Œuvre STRASSE ß")),
              QStringLiteral("berenice oeuvre strasse ss"));
+}
+
+QStringList strings(const QJsonValue &value)
+{
+    QStringList result;
+    for (const QJsonValue &item : value.toArray())
+        result.append(item.toString());
+    return result;
+}
+
+void CalibreTextTest::splitsAuthors()
+{
+    const QJsonArray tests = cases("string_to_authors");
+    QVERIFY(!tests.isEmpty());
+    for (const QJsonValue &value : tests) {
+        const QJsonObject test = value.toObject();
+        QCOMPARE(CalibreText::stringToAuthors(test.value(QLatin1String("text")).toString()),
+                 strings(test.value(QLatin1String("expected"))));
+    }
+}
+
+void CalibreTextTest::joinsAuthors()
+{
+    const QJsonArray tests = cases("authors_to_string");
+    QVERIFY(!tests.isEmpty());
+    for (const QJsonValue &value : tests) {
+        const QJsonObject test = value.toObject();
+        QCOMPARE(CalibreText::authorsToString(strings(test.value(QLatin1String("authors")))),
+                 test.value(QLatin1String("expected")).toString());
+    }
+}
+
+void CalibreTextTest::checksIsbns()
+{
+    const QJsonArray tests = cases("check_isbn");
+    QVERIFY(!tests.isEmpty());
+    for (const QJsonValue &value : tests) {
+        const QJsonObject test = value.toObject();
+        const QString text = test.value(QLatin1String("text")).toString();
+        QCOMPARE(CalibreText::checkIsbn(text), test.value(QLatin1String("expected")).toString());
+        QCOMPARE(CalibreText::checkIsbn(text, true), test.value(QLatin1String("simple")).toString());
+    }
+}
+
+void CalibreTextTest::checksDois()
+{
+    const QJsonArray tests = cases("check_doi");
+    QVERIFY(!tests.isEmpty());
+    for (const QJsonValue &value : tests) {
+        const QJsonObject test = value.toObject();
+        QCOMPARE(CalibreText::checkDoi(test.value(QLatin1String("text")).toString()),
+                 test.value(QLatin1String("expected")).toString());
+    }
+}
+
+void CalibreTextTest::replacesEntities()
+{
+    const QJsonArray tests = cases("replace_entities");
+    QVERIFY(!tests.isEmpty());
+    for (const QJsonValue &value : tests) {
+        const QJsonObject test = value.toObject();
+        QCOMPARE(CalibreText::replaceEntities(test.value(QLatin1String("text")).toString()),
+                 test.value(QLatin1String("expected")).toString());
+    }
+}
+
+void CalibreTextTest::cleansCharacters()
+{
+    const QJsonArray tests = cases("clean_chars");
+    QVERIFY(!tests.isEmpty());
+    for (const QJsonValue &value : tests) {
+        const QJsonObject test = value.toObject();
+        const QString text = test.value(QLatin1String("text")).toString();
+        QCOMPARE(CalibreText::cleanAsciiChars(text), test.value(QLatin1String("ascii")).toString());
+        QCOMPARE(CalibreText::cleanXmlChars(text), test.value(QLatin1String("xml")).toString());
+    }
 }
 
 QTEST_GUILESS_MAIN(CalibreTextTest)
