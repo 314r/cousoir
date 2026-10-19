@@ -53,7 +53,7 @@ FocusScope {
     readonly property var deviceNames: devices && (book.id || 0) > 0 ? (devices.onDevice[String(book.id)] || []) : []
     readonly property var sending: (devices ? devices.jobs : []).find(job => job.bookIds.includes(book.id)) || null
     readonly property bool sendable: devices !== null && devices.available && devices.writable
-        && devices.devices.length > 0 && (book.id || 0) > 0 && !sending && devices.sendFormat(book.id) !== ""
+        && devices.devices.length > 0 && (book.id || 0) > 0 && !sending
 
     signal failed(string message)
     signal convertRequested(string format)
@@ -484,13 +484,17 @@ FocusScope {
                 wrapMode: Text.Wrap
             }
 
-            // What a Kobo connected now reads of the book, made by Calibre.
+            // What a reader connected now reads of the book, made by Calibre.
             Flow {
+                id: sendFlow
+
                 Layout.fillWidth: true
                 visible: pane.sendable
                 spacing: Theme.gutter
 
                 Label {
+                    id: sendLabel
+
                     height: Theme.rowHeight
                     text: qsTr("Send to")
                     color: Theme.textMuted
@@ -501,19 +505,41 @@ FocusScope {
                     model: pane.devices ? pane.devices.devices : []
 
                     delegate: FlatButton {
+                        id: sendButton
+
                         required property var modelData
                         required property int index
+                        // A book the reader reads, or one Calibre can make
+                        // it a format the reader reads.
+                        readonly property bool reads: pane.devices.sendFormat(pane.book.id, modelData.root) !== ""
+                        readonly property bool convertible: pane.editable && pane.convertFormats.length > 0
+                            && pane.devices.convertFormat(modelData.root) !== ""
 
                         objectName: "sendTo_" + index
+                        enabled: reads || convertible
                         variant: "outline"
-                        text: modelData.name
-                        tip: index === 0 ? qsTr("Send to %1 (Ctrl+D)").arg(modelData.name) : qsTr("Send to %1").arg(modelData.name)
+                        // A long name cut short, to fit beside "Send to"
+                        // once there is room to measure.
+                        text: sendFlow.width > 0 ? nameMetrics.elidedText : modelData.name
+                        tip: !enabled ? qsTr("%1 reads none of its formats").arg(modelData.name)
+                            : index === 0 ? qsTr("Send to %1 (Ctrl+D)").arg(modelData.name)
+                            : qsTr("Send to %1").arg(modelData.name)
                         onClicked: pane.sendRequested(modelData.root)
+
+                        TextMetrics {
+                            id: nameMetrics
+
+                            font: sendButton.font
+                            text: sendButton.modelData.name
+                            elide: Text.ElideRight
+                            elideWidth: Math.max(0, sendFlow.width - sendLabel.width - sendFlow.spacing
+                                - sendButton.leftPadding - sendButton.rightPadding)
+                        }
                     }
                 }
             }
 
-            // Why a Kobo is there but nothing can go to it.
+            // Why a reader is there but nothing can go to it.
             Label {
                 objectName: "cannotSend"
 
@@ -521,7 +547,7 @@ FocusScope {
                 visible: pane.devices !== null && pane.devices.devices.length > 0 && (pane.book.id || 0) > 0
                     && (!pane.devices.available || !pane.devices.writable)
                 text: !pane.devices ? ""
-                    : !pane.devices.available ? qsTr("Sending to a Kobo needs Calibre, which is not installed.")
+                    : !pane.devices.available ? qsTr("Sending books needs Calibre, which is not installed.")
                     : pane.devices.readOnlyReason
                 color: Theme.textMuted
                 wrapMode: Text.Wrap

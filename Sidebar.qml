@@ -14,9 +14,9 @@ Item {
     property bool focusFollows: false
     // Each item's count, by key, shown at the row's end.
     property var counts: ({})
-    // The Kobos connected, { root, name }: each is "device:<root>".
+    // The readers connected, { root, name }: each is "device:<root>".
     property var devices: []
-    readonly property var groups: [
+    readonly property var places: [
         { title: qsTr("Library"), items: [
             { key: "books", title: qsTr("Books"), icon: "book" },
             { key: "trash", title: qsTr("Trash"), icon: "trash" }
@@ -28,7 +28,8 @@ Item {
             { key: "languages", title: qsTr("Languages"), icon: "globe" },
             { key: "publishers", title: qsTr("Publishers"), icon: "building" }
         ] }
-    ].concat(devices.length > 0 ? [
+    ]
+    readonly property var groups: places.concat(devices.length > 0 ? [
         { title: qsTr("Devices"), items: devices.map(device => ({
             key: "device:" + device.root, title: device.name, icon: "ereader"
         })) }
@@ -38,9 +39,11 @@ Item {
 
     signal activated(string key)
 
-    // Wide enough for the longest entry and a count, plus its icon and
-    // paddings.
-    implicitWidth: Math.ceil((items.reduce((longest, item) => Math.max(longest, item.title.length), 0) + 6)
+    // Wide enough for the longest place and a count, plus its icon and
+    // paddings. A reader's name, which may be long, never widens it: it is
+    // cut short.
+    implicitWidth: Math.ceil((places.reduce((all, group) => all.concat(group.items), [])
+        .reduce((longest, item) => Math.max(longest, item.title.length), 0) + 6)
         * Theme.charWidth) + Theme.iconSize + 5 * Theme.gutter
 
     function section(key) {

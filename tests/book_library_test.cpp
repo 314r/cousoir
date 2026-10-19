@@ -114,6 +114,7 @@ private slots:
     void movesBooksToTrash();
     void convertsBooks();
     void sendsToKobos();
+    void sendsToKindles();
 
 private:
     std::unique_ptr<BookLibrary> open(const QString &path = fixtureLibrary());
@@ -821,10 +822,11 @@ void BookLibraryTest::sendsToKobos()
     QTRY_VERIFY(!devices.loading());
     QVERIFY(devices.rows().isEmpty());
 
-    QCOMPARE(devices.sendFormat(1), QStringLiteral("EPUB"));
-    QCOMPARE(devices.sendFormat(5), QStringLiteral("PDF"));
-    QCOMPARE(devices.sendFormat(6), QString());
-    QVERIFY(devices.send({ 6 }, root).contains(QStringLiteral("convert it to KEPUB")));
+    QCOMPARE(devices.sendFormat(1, root), QStringLiteral("EPUB"));
+    QCOMPARE(devices.sendFormat(5, root), QStringLiteral("PDF"));
+    QCOMPARE(devices.sendFormat(6, root), QString());
+    QCOMPARE(devices.convertFormat(root), QStringLiteral("KEPUB"));
+    QVERIFY(devices.send({ 6 }, root).contains(QStringLiteral("none of the formats")));
     QVERIFY(!devices.send({ 1 }, QStringLiteral("/nowhere")).isEmpty());
     QVERIFY(!devices.busy());
 
@@ -889,6 +891,72 @@ void BookLibraryTest::sendsToKobos()
     QTest::qWait(100);
     volumes = { { kobo.path(), QStringLiteral("/dev/sdz") } };
     QTRY_COMPARE(devices.devices().size(), 1);
+}
+
+// A Kindle over MTP, here a folder standing for one: its covers that Amazon
+// blanked come back as it is read, books go to it and come off it, and it
+// needs no ejecting.
+void BookLibraryTest::sendsToKindles()
+{
+    auto library = open();
+    QVERIFY(library);
+    QDir jobs(QDir(BookLibrary::cacheFolder(library->libraryPath())).filePath(QStringLiteral("sends")));
+    QVERIFY(jobs.removeRecursively());
+    QTemporaryDir kindle;
+    const QDir root(kindle.path());
+    QVERIFY(root.mkpath(QStringLiteral("documents")) && root.mkpath(QStringLiteral("system/thumbnails"))
+            && root.mkpath(QStringLiteral("amazon-cover-bug")));
+    const auto write = [&root](const QString &path, const QByteArray &data) {
+        QFile file(root.filePath(path));
+        return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
+    };
+    QVERIFY(write(QStringLiteral("system/thumbnails/thumbnail_a_EBOK_portrait.jpg"), "blank"));
+    QVERIFY(write(QStringLiteral("amazon-cover-bug/thumbnail_a_EBOK_portrait.jpg"), "the cover"));
+    QTemporaryDir config;
+    QList<KindleSlot> kindles;
+    DeviceLibrary devices;
+    devices.setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
+    devices.setConfigDirectory(config.path());
+    devices.setVolumeProvider([] { return QList<Volume>(); }, 20);
+    devices.setKindleProvider([&kindles] { return kindles; });
+    devices.setLibrary(library.get());
+
+    kindles = { { 0, 0, 0x9981, kindle.path() } };
+    QTRY_COMPARE(devices.devices().size(), 1);
+    const QVariantMap device = devices.devices().first().toMap();
+    const QString key = device.value(QStringLiteral("root")).toString();
+    QCOMPARE(device.value(QStringLiteral("kind")).toString(), QStringLiteral("kindle"));
+    QVERIFY(!device.value(QStringLiteral("ejectable")).toBool());
+    devices.setCurrentRoot(key);
+    QTRY_VERIFY(!devices.loading());
+    QCOMPARE(devices.current().value(QStringLiteral("name")).toString(), QStringLiteral("Kindle"));
+    QFile restored(root.filePath(QStringLiteral("system/thumbnails/thumbnail_a_EBOK_portrait.jpg")));
+    QVERIFY(restored.open(QIODevice::ReadOnly));
+    QCOMPARE(restored.readAll(), QByteArray("the cover"));
+
+    QCOMPARE(devices.sendFormat(2, key), QStringLiteral("AZW3"));
+    QCOMPARE(devices.sendFormat(1, key), QString());
+    QCOMPARE(devices.convertFormat(key), QStringLiteral("AZW3"));
+    QVERIFY(devices.send({ 1 }, key).contains(QStringLiteral("none of the formats")));
+    QSignalSpy sent(&devices, &DeviceLibrary::sent);
+    QCOMPARE(devices.send({ 2 }, key), QString());
+    QVERIFY(sent.wait(10000));
+    QCOMPARE(sent.first().at(0).toStringList(), QStringList{ QStringLiteral("The Black Company") });
+    const QString company = QStringLiteral("documents/The Black Company - Glen Cook.azw3");
+    QVERIFY(QFileInfo::exists(root.filePath(company)));
+    QTRY_COMPARE(devices.rows().size(), 1);
+    QCOMPARE(devices.rows().first().toMap().value(QStringLiteral("bookId")).toInt(), 2);
+    QCOMPARE(devices.onDevice().value(QStringLiteral("2")).toStringList(), QStringList{ QStringLiteral("Kindle") });
+    QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+
+    QVERIFY(!devices.eject(key).isEmpty());
+    QCOMPARE(devices.remove({ company }), QString());
+    QTRY_VERIFY(!QFileInfo::exists(root.filePath(company)));
+    QTRY_VERIFY(devices.rows().isEmpty());
+    QVERIFY(!devices.onDevice().contains(QStringLiteral("2")));
+
+    kindles = {};
+    QTRY_VERIFY(devices.devices().isEmpty());
 }
 
 QTEST_MAIN(BookLibraryTest)

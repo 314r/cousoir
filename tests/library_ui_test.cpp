@@ -118,6 +118,8 @@ private slots:
     void asksAboutDuplicates();
     void convertsBooks();
     void sendsToKobo();
+    void sendsToKindle();
+    void keepsLongNamesShort();
 
 private:
     bool loadUi();
@@ -881,7 +883,7 @@ void LibraryUiTest::sendsToKobo()
 
     library()->setProperty("currentBookId", 1);
     QTRY_VERIFY(control("sendTo_0") && control("sendTo_0")->isVisible());
-    QCOMPARE(text("sendTo_0"), QStringLiteral("Kobo eReader"));
+    QTRY_COMPARE(text("sendTo_0"), QStringLiteral("Kobo eReader"));
     QVERIFY(!control("onDevice")->isVisible());
     // Low in the pane, which may need scrolling to it.
     QMetaObject::invokeMethod(control("sendTo_0"), "clicked");
@@ -918,6 +920,93 @@ void LibraryUiTest::sendsToKobo()
     QTRY_COMPARE(text("pageTitle"), QStringLiteral("Books"));
     QVERIFY(!control(entry) || !control(entry)->isVisible());
     devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
+}
+
+// A Kindle, here a folder standing for one: a book it reads sent from its
+// Files, one it does not converted to AZW3 first, after asking, then sent;
+// its page has no Eject.
+void LibraryUiTest::sendsToKindle()
+{
+    auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
+    auto *conversions = qobject_cast<ConversionService *>(m_window->property("conversions").value<QObject *>());
+    QVERIFY(devices && conversions);
+    QTemporaryDir kindle;
+    QVERIFY(QDir(kindle.path()).mkpath(QStringLiteral("documents")));
+    QTemporaryDir config;
+    devices->setConfigDirectory(config.path());
+    devices->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
+    conversions->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-debug"));
+    QList<KindleSlot> kindles{ { 0, 0, 0x9981, kindle.path() } };
+    devices->setKindleProvider([&kindles] { return kindles; });
+    const QString entry = QStringLiteral("sidebar_device:mtpdir:") + QDir::cleanPath(kindle.path());
+    QTRY_VERIFY(control(entry) && control(entry)->isVisible());
+    QTRY_COMPARE(control(entry)->property("text").toString(), QStringLiteral("Kindle"));
+
+    openWritable(2);
+    QTRY_VERIFY(control("sendTo_0") && control("sendTo_0")->isVisible());
+    QMetaObject::invokeMethod(control("sendTo_0"), "clicked");
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("“The Black Company” sent to Kindle."));
+    QVERIFY(QFileInfo::exists(QDir(kindle.path()).filePath(QStringLiteral("documents/The Black Company - Glen Cook.azw3"))));
+
+    // An EPUB only: converted first.
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(control("sendTo_0") && control("sendTo_0")->isVisible() && control("sendTo_0")->isEnabled());
+    QMetaObject::invokeMethod(control("sendTo_0"), "clicked");
+    QTRY_VERIFY(object("convertAndSendDialog")->property("opened").toBool());
+    QCOMPARE(object("convertAndSendDialog")->property("title").toString(),
+             QStringLiteral("Convert “L'Écume des jours” to AZW3 for Kindle?"));
+    clickVisible("confirmAccept");
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(QDir(kindle.path()).filePath(QStringLiteral("documents/L'Écume des jours - Boris Vian.azw3"))),
+                             15000);
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("“L'Écume des jours” sent to Kindle."));
+    QCOMPARE(formatsOf(library()->property("currentBook").toMap()),
+             (QStringList{ QStringLiteral("AZW3"), QStringLiteral("EPUB") }));
+
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(control(entry)->isVisible());
+    click(entry.toLatin1().constData());
+    QTRY_VERIFY(control("devicePage")->isVisible());
+    QTRY_VERIFY(control("deviceRow1"));
+    QVERIFY(!control("ejectButton")->isVisible());
+    devices->setKindleProvider([] { return QList<KindleSlot>(); });
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Books"));
+}
+
+// A reader with a long name: the sidebar keeps its width, and the name is
+// cut short there and on the Send to button, which fits in the details.
+void LibraryUiTest::keepsLongNamesShort()
+{
+    auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
+    QVERIFY(devices);
+    QTemporaryDir kindle;
+    QVERIFY(QDir(kindle.path()).mkpath(QStringLiteral("documents")));
+    const QString name = QStringLiteral("Kindle Paperwhite Signature Edition, the one on the shelf by the window");
+    QFile driveInfo(QDir(kindle.path()).filePath(QStringLiteral("driveinfo.calibre")));
+    QVERIFY(driveInfo.open(QIODevice::WriteOnly));
+    driveInfo.write(QJsonDocument(QJsonObject{ { QStringLiteral("device_name"), name } }).toJson());
+    driveInfo.close();
+    QTemporaryDir config;
+    devices->setConfigDirectory(config.path());
+    QTRY_VERIFY(control("sidebar") && control("sidebar")->width() > 0);
+    const qreal width = control("sidebar")->width();
+
+    QList<KindleSlot> kindles{ { 0, 0, 0x9981, kindle.path() } };
+    devices->setKindleProvider([&kindles] { return kindles; });
+    const QString entry = QStringLiteral("sidebar_device:mtpdir:") + QDir::cleanPath(kindle.path());
+    QTRY_VERIFY(control(entry) && control(entry)->isVisible());
+    QTRY_COMPARE(control(entry)->property("text").toString(), name);
+    QCOMPARE(control("sidebar")->width(), width);
+    auto *label = control(entry)->findChild<QQuickItem *>(QStringLiteral("sidebarItemLabel"));
+    QVERIFY(label);
+    QTRY_VERIFY(label->property("truncated").toBool());
+
+    openWritable(2);
+    QTRY_VERIFY(control("sendTo_0") && control("sendTo_0")->isVisible());
+    QTRY_VERIFY(text("sendTo_0").endsWith(QChar(0x2026)) && text("sendTo_0").size() > 1);
+    QVERIFY(control("sendTo_0")->x() + control("sendTo_0")->width() <= control("sendTo_0")->parentItem()->width());
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    devices->setKindleProvider([] { return QList<KindleSlot>(); });
+    QTRY_VERIFY(!control(entry));
 }
 
 #include "library_ui_test.moc"

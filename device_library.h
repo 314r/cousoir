@@ -7,6 +7,7 @@
 #include <QProcess>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -25,20 +26,33 @@ struct Volume
     QString node;
 };
 
-// The Kobos connected to the computer, each with its books, and the books
-// sent to them. A Kobo shows up while mounted; its books are read once then,
-// and after each change Reliure makes. Sending goes through Calibre as
-// KoboSend describes, one batch at a time; removing and ejecting happen
-// there and then. While Calibre runs on this computer it handles the Kobo
-// itself, which Reliure then leaves alone.
+// A Kindle on USB that speaks MTP, by its place on the bus; or, in the
+// tests, a folder that stands for one.
+struct KindleSlot
+{
+    quint32 bus = 0;
+    quint8 number = 0;
+    quint16 productId = 0;
+    QString folder;
+};
+
+// The readers connected to the computer, each with its books, and the books
+// sent to them: Kobos mounted as folders, and Kindles reached over MTP, which
+// Reliure opens for each thing it does there, one at a time, on a thread of
+// their own. A reader's books are read once it shows up, and after each
+// change Reliure makes. Sending goes through Calibre as KoboSend and
+// KindleSend describe, one batch at a time. While Calibre runs on this
+// computer it handles the readers itself, which Reliure then leaves alone.
 class DeviceLibrary : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
-    // The Kobos: { root, name, freeBytes, free, totalBytes, firmware }, with
-    // free the room left as text.
+    // The readers: { root, name, kind, ejectable, freeBytes, free,
+    // totalBytes }, with root naming the reader here: the folder a Kobo is
+    // mounted on, or "mtp:BUS:NUMBER" for a Kindle; kind "kobo" or
+    // "kindle"; free the room left as text.
     Q_PROPERTY(QVariantList devices READ devices NOTIFY devicesChanged)
-    // The Kobo the device page shows, by its root.
+    // The reader the device page shows, by its root.
     Q_PROPERTY(QString currentRoot READ currentRoot WRITE setCurrentRoot NOTIFY currentChanged)
     Q_PROPERTY(QVariantMap current READ current NOTIFY currentChanged)
     // Its books, by title: { lpath, title, authors, format, size, bookId,
@@ -46,7 +60,7 @@ class DeviceLibrary : public QObject
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY rowsChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY rowsChanged)
-    // The library's books on each Kobo: book id → the Kobos' names.
+    // The library's books on each reader: book id → the readers' names.
     Q_PROPERTY(QVariantMap onDevice READ onDevice NOTIFY rowsChanged)
     // Calibre is there to send with.
     Q_PROPERTY(bool available READ available NOTIFY availableChanged)
@@ -59,6 +73,7 @@ class DeviceLibrary : public QObject
 
 public:
     using VolumeProvider = std::function<QList<Volume>()>;
+    using KindleProvider = std::function<QList<KindleSlot>()>;
     // Ejects the device and calls `done` with an error, empty on success.
     using Ejector = std::function<void(const Kobo::Device &, std::function<void(const QString &)> done)>;
 
@@ -81,26 +96,33 @@ public:
     QVariantList jobs() const;
     bool busy() const;
 
-    // The format of the book Calibre would send, empty for none.
-    Q_INVOKABLE QString sendFormat(int bookId) const;
-    // Sends the books to the Kobo on `root`. Returns an error message, empty
-    // once they wait their turn.
+    // The format of the book Calibre would send to the reader on `root`,
+    // empty for none.
+    Q_INVOKABLE QString sendFormat(int bookId, const QString &root) const;
+    // What Calibre converts a book to before sending it to the reader on
+    // `root`: the first of its driver's formats that Reliure converts to.
+    Q_INVOKABLE QString convertFormat(const QString &root) const;
+    // Sends the books to the reader on `root`. Returns an error message,
+    // empty once they wait their turn.
     Q_INVOKABLE QString send(const QVariantList &bookIds, const QString &root);
-    // Removes books from the current Kobo, by lpath; bought ones stay.
+    // Removes books from the current reader, by lpath; a Kobo's bought ones
+    // stay.
     Q_INVOKABLE QString remove(const QStringList &lpaths);
-    // Unmounts the Kobo and powers it off, so it can be unplugged.
+    // Unmounts a Kobo and powers it off, so it can be unplugged.
     Q_INVOKABLE QString eject(const QString &root);
     // Stops the batches with the book in them, or all of them for 0: those
-    // waiting and Calibre's work on the running one; its copy to the Kobo,
+    // waiting and Calibre's work on the running one; its copy to the reader,
     // once begun, ends.
     Q_INVOKABLE void cancel(int bookId = 0);
-    // Looks for Kobos again and reads their books.
+    // Looks for readers again and reads their books.
     Q_INVOKABLE void refresh();
 
-    // For the tests: where volumes come from and how often to look, the
-    // program run in place of calibre-debug, how ejecting is done, Linux's
-    // /sys and Calibre's configuration folder.
+    // For the tests: where volumes and Kindles come from and how often to
+    // look, the program run in place of calibre-debug, how ejecting is done,
+    // Linux's /sys and Calibre's configuration folder. In QStandardPaths'
+    // test mode, there are no volumes or Kindles until a test gives some.
     void setVolumeProvider(VolumeProvider provider, int intervalMs);
+    void setKindleProvider(KindleProvider provider);
     void setProgram(const QString &program);
     void setEjector(Ejector ejector);
     void setSysRoot(const QString &sysRoot);
@@ -114,29 +136,44 @@ signals:
     void availableChanged();
     void writableChanged();
     void jobsChanged();
-    // Books arrived on a Kobo.
+    // Books arrived on a reader.
     void sent(const QStringList &titles, const QString &deviceName);
     void ejected(const QString &deviceName);
     void failed(const QString &message);
 
 private:
+    enum class Kind { Kobo, Kindle };
+
+    struct Connected
+    {
+        Kind kind = Kind::Kobo;
+        QString root;
+        QString name;
+        qint64 freeBytes = 0;
+        qint64 totalBytes = 0;
+        Kobo::Device kobo;
+        KindleSlot slot;
+        // A Kindle's, once read: Calibre keeps its settings by it.
+        QString serial;
+        QList<DeviceBook> books;
+        QString error;
+        bool loading = false;
+    };
+
+    // A Kindle's MTP connection, from its listing to the end of a send.
+    struct KindleLink;
+
     struct Job
     {
         QList<int> bookIds;
         QStringList titles;
         QString root;
         QString name;
+        Kind kind = Kind::Kobo;
         double progress = 0;
         bool copying = false;
         QStringList unsendable;
-    };
-
-    struct Connected
-    {
-        Kobo::Device device;
-        QList<Kobo::DeviceBook> books;
-        QString error;
-        bool loading = false;
+        std::shared_ptr<KindleLink> link;
     };
 
     void scan();
@@ -145,7 +182,9 @@ private:
     void updateWritable();
     const Connected *find(const QString &root) const;
     Connected *find(const QString &root);
+    QStringList formatMap(const Connected &connected) const;
     void startNext();
+    void startProcess(const QString &folder);
     void readProgress();
     void finishJob();
     void finishCopy(bool ok, const QString &error);
@@ -153,6 +192,7 @@ private:
 
     QPointer<BookLibrary> m_library;
     VolumeProvider m_volumes;
+    KindleProvider m_kindles;
     QTimer m_scanTimer;
     QString m_program;
     Ejector m_ejector;
@@ -167,4 +207,6 @@ private:
     QFutureWatcher<QString> *m_copy = nullptr;
     // Kobos being ejected: they stay out until unplugged.
     QStringList m_ejected;
+    // MTP, one thing at a time.
+    QThreadPool m_kindlePool;
 };

@@ -2,15 +2,18 @@
 # from it, as the GUI does, for the golden test that compares Reliure's
 # sending with Calibre's:
 #
-#   calibre-debug -e tools/oracle/send_books.py -- <library> <kobo> <product> <ops.json>
+#   calibre-debug -e tools/oracle/send_books.py -- <library> <device> <product> <ops.json>
 #
-# <kobo> is a folder made to look like a mounted Kobo, with .kobo/version and
-# .kobo/KoboReader.sqlite; <product> its USB product id. The connection is
-# DeviceManager's open and post_open_callback(), then the GUI's info_read()
-# and metadata_downloaded(): driveinfo.calibre, the books KoboTouch lists and
-# set_books_in_library(). The ops file is an array of:
+# <device> is a folder made to look like a mounted Kobo, with .kobo/version
+# and .kobo/KoboReader.sqlite, or "mtpdir:FOLDER", a folder that stands for a
+# Kindle reached over MTP; <product> its USB product id. A Kobo's connection
+# is DeviceManager's open and post_open_callback(), a Kindle's the MTP
+# driver's open() with libmtp's calls done on the folder; then the GUI's
+# info_read() and metadata_downloaded(): driveinfo.calibre, the books the
+# driver lists and set_books_in_library(). The ops file is an array of:
 #   { "send": [1, 2] }            sync_to_device(), then books_uploaded()
-#   { "remove": ["Vian, Boris/…"] } remove_paths(), then books_deleted()
+#   { "remove": ["Vian, Boris/…"] } remove_paths(), then books_deleted(), the
+#                                 books by their path on the device
 #   { "matches": "out.json" }     the books on the Kobo, as Calibre matches
 #                                 them with the library's: [[lpath, in_library,
 #                                 application_id], …]
@@ -33,9 +36,10 @@ from calibre.gui2.device import DeviceManager, DeviceMixin  # noqa: E402
 from calibre.gui2.library.models import BooksModel  # noqa: E402
 from calibre.library import db as open_library  # noqa: E402
 
-library, kobo, product, ops_path = sys.argv[-4:]
+library, device, product, ops_path = sys.argv[-4:]
 with open(ops_path, encoding='utf-8') as f:
     ops = json.load(f)
+mtp = device.startswith('mtpdir:')
 
 db = open_library(library)
 
@@ -56,12 +60,144 @@ class NoPageCounts:
 db.new_api.maintain_page_counts.shutdown()
 db.new_api.maintain_page_counts = NoPageCounts()
 
-dev = KOBOTOUCH(None)
-dev.startup()
-dev.reset(detected_device=(0x2237, int(product, 0), 0x0110, 'Kobo', 'eReader', ''), report_progress=None)
-dev._main_prefix = os.path.abspath(kobo) + os.sep
-dev.current_library_uuid = db.library_id
-dev.post_open_callback()
+
+
+def kindle(root):
+    # Calibre's MTP driver with libmtp's calls done on a folder, and what
+    # its open() does but for libmtp's part. The Kindle says of itself what
+    # reliure-cli's stand-in for one says.
+    import itertools
+
+    from calibre.devices.mtp.driver import DEFAULT_THUMBNAIL_HEIGHT, MTP_DEVICE
+    from calibre.devices.mtp.filesystem_cache import FilesystemCache
+    from calibre.utils.date import isoformat, utcnow
+
+    ids = itertools.count(1)
+    storage_id = 0x10001
+
+    def entry(parent, name, full):
+        is_folder = os.path.isdir(full)
+        return {'id': next(ids), 'parent_id': 0 if parent.is_storage else parent.object_id, 'storage_id': storage_id,
+                'name': name, 'is_folder': is_folder, 'size': 0 if is_folder else os.path.getsize(full),
+                'modified': os.path.getmtime(full)}
+
+    class FolderDevice(MTP_DEVICE):
+        def full(self, obj):
+            return os.path.join(root, *obj.full_path[1:])
+
+        @property
+        def filesystem_cache(self):
+            if self._filesystem_cache is None:
+                stats = os.statvfs(root)
+                items = []
+
+                # get_filesystem(): every object, the folders not ignored
+                # looked into.
+                def walk(folder, parent_id, path):
+                    for name in sorted(os.listdir(folder)):
+                        full = os.path.join(folder, name)
+                        is_folder = os.path.isdir(full)
+                        item = {'id': next(ids), 'parent_id': parent_id, 'storage_id': storage_id, 'name': name,
+                                'is_folder': is_folder, 'size': 0 if is_folder else os.path.getsize(full),
+                                'modified': os.path.getmtime(full)}
+                        items.append(item)
+                        if is_folder and not self.is_folder_ignored(storage_id, path + (name,)):
+                            walk(full, item['id'], path + (name,))
+
+                walk(root, 0, ())
+                self._filesystem_cache = FilesystemCache([{
+                    'id': storage_id, 'size': stats.f_frsize * stats.f_blocks, 'is_folder': True,
+                    'name': 'Internal Storage', 'can_delete': False, 'is_system': True}], items)
+            return self._filesystem_cache
+
+        @property
+        def is_mtp_device_connected(self):
+            return True
+
+        def get_basic_device_information(self):
+            return (self.current_friendly_name, '', '', '')
+
+        def total_space(self, end_session=True):
+            stats = os.statvfs(root)
+            return (stats.f_frsize * stats.f_blocks, 0, 0)
+
+        def free_space(self, end_session=True):
+            stats = os.statvfs(root)
+            return (stats.f_frsize * stats.f_bavail, 0, 0)
+
+        def create_folder(self, parent, name):
+            found = parent.folder_named(name)
+            if found is not None:
+                return found
+            full = os.path.join(self.full(parent) if not parent.is_storage else root, name)
+            os.mkdir(full)
+            return parent.add_child(entry(parent, name, full))
+
+        def put_file(self, parent, name, stream, size, callback=None, replace=True):
+            existing = parent.file_named(name)
+            if existing is not None:
+                self.delete_file_or_folder(existing)
+            full = os.path.join(self.full(parent) if not parent.is_storage else root, name)
+            with open(full, 'wb') as f:
+                f.write(stream.read())
+            return parent.add_child(entry(parent, name, full))
+
+        def get_mtp_file(self, f, stream=None, callback=None):
+            import io
+
+            set_name = stream is None
+            stream = io.BytesIO() if stream is None else stream
+            with open(self.full(f), 'rb') as src:
+                stream.write(src.read())
+            stream.seek(0)
+            if set_name:
+                stream.name = f.name
+            return stream
+
+        def delete_file_or_folder(self, obj):
+            if obj.deleted:
+                return
+            if obj.files or obj.folders:
+                raise ValueError(f'Cannot delete {obj.full_path} as it is not empty')
+            if obj.is_folder:
+                os.rmdir(self.full(obj))
+            else:
+                os.remove(self.full(obj))
+            parent = obj.parent
+            parent.remove_child(obj)
+            return parent
+
+    dev = FolderDevice(None)
+    dev.startup()
+    dev.current_library_uuid = db.library_id
+    dev.location_paths = None
+    dev.driveinfo = {}
+    dev._main_id = storage_id
+    dev._carda_id = dev._cardb_id = None
+    dev.current_friendly_name = 'Kindle'
+    dev.current_serial_num = 'G000000000000000'
+    h = dev.prefs['history']
+    h[dev.current_serial_num] = (dev.current_friendly_name, isoformat(utcnow()))
+    dev.prefs['history'] = h
+    detected = types.SimpleNamespace(vendor_id=0x1949, product_id=int(product, 0))
+    dev.currently_connected_dev = detected
+    dev.current_device_defaults, dev.current_vid, dev.current_pid = dev.device_defaults(detected, dev)
+    dev.calibre_file_paths = dev.current_device_defaults.get(
+        'calibre_file_paths', {'metadata': dev.METADATA_CACHE, 'driveinfo': dev.DRIVEINFO})
+    dev.THUMBNAIL_HEIGHT = 500 if dev.is_kindle else DEFAULT_THUMBNAIL_HEIGHT
+    dev.sync_kindle_thumbnails()
+    return dev
+
+
+if mtp:
+    dev = kindle(os.path.abspath(device[7:]))
+else:
+    dev = KOBOTOUCH(None)
+    dev.startup()
+    dev.reset(detected_device=(0x2237, int(product, 0), 0x0110, 'Kobo', 'eReader', ''), report_progress=None)
+    dev._main_prefix = os.path.abspath(device) + os.sep
+    dev.current_library_uuid = db.library_id
+    dev.post_open_callback()
 
 
 class Job:
@@ -164,7 +300,11 @@ for op in ops:
         for job in gui.uploads:
             gui.books_uploaded(job)
     elif 'remove' in op:
-        paths = [dev._main_prefix + lpath for lpath in op['remove']]
+        if mtp:
+            removed = {lpath.lower() for lpath in op['remove']}
+            paths = [book.path for book in gui.lists[0] if book.lpath.lower() in removed]
+        else:
+            paths = [dev._main_prefix + lpath for lpath in op['remove']]
         job = gui.remove_paths(paths)
         gui.iactions['Remove Books'].delete_memory[job] = (paths, Model(db))
         gui.books_deleted(job)

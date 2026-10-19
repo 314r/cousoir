@@ -29,6 +29,8 @@ ApplicationWindow {
     // unless noticeIsError says otherwise.
     property string notice: ""
     property bool noticeIsError: true
+    // Books being converted to be sent: { bookId, root }.
+    property var pendingSends: []
 
     visible: true
     width: 1240
@@ -209,17 +211,48 @@ ApplicationWindow {
         return session.bookOpen ? book.id : booksShown ? booksPage.currentBookId() : 0
     }
 
-    // Sends the book to the Kobo mounted on `root`, the first one connected
-    // by default.
+    // Sends the book to the reader on `root`, the first one connected by
+    // default. A book without a format the reader reads is converted first,
+    // after asking, as Calibre offers to.
     function sendBook(bookId, root) {
         const target = root || (devices.devices.length > 0 ? devices.devices[0].root : "")
-        if (!bookId || !target)
+        const device = devices.devices.find(device => device.root === target)
+        if (!bookId || !device)
             return
+        const format = devices.convertFormat(target)
+        if (devices.sendFormat(bookId, target) === "" && format && library.writable && conversions.available
+            && conversions.formatsFor(bookId).length > 0) {
+            const row = bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+            convertAndSendDialog.bookId = bookId
+            convertAndSendDialog.root = target
+            convertAndSendDialog.format = format
+            convertAndSendDialog.title = qsTr("Convert “%1” to %2 for %3?").arg(row ? row.title : "").arg(format)
+                .arg(device.name)
+            convertAndSendDialog.message = qsTr("%1 reads none of its formats. Calibre converts it first, then it is sent.")
+                .arg(device.name)
+            convertAndSendDialog.ask()
+            return
+        }
         const error = devices.send([bookId], target)
         if (error)
             showNotice(error)
         else
             notice = ""
+    }
+
+    // Sends the books converted for a reader once their files are in the
+    // library; drops those whose conversion stopped or failed.
+    function sendConverted() {
+        if (pendingSends.length === 0 || library.saving || library.loading)
+            return
+        const waiting = []
+        for (const pending of pendingSends) {
+            if (devices.sendFormat(pending.bookId, pending.root) !== "")
+                devices.send([pending.bookId], pending.root)
+            else if (conversions.jobs.some(job => job.bookId === pending.bookId))
+                waiting.push(pending)
+        }
+        pendingSends = waiting
     }
 
     // Asks before removing a book from the Kobo the device page shows.
@@ -438,6 +471,14 @@ ApplicationWindow {
         function onSortOptionChanged() {
             layoutSettings.sortOption = window.library.sortOption
         }
+
+        function onSavingChanged() {
+            window.sendConverted()
+        }
+
+        function onLibraryChanged() {
+            window.sendConverted()
+        }
     }
 
     Connections {
@@ -449,6 +490,10 @@ ApplicationWindow {
 
         function onFailed(message) {
             window.showNotice(message)
+        }
+
+        function onJobsChanged() {
+            window.sendConverted()
         }
     }
 
@@ -468,7 +513,7 @@ ApplicationWindow {
             window.showNotice(message)
         }
 
-        // A Kobo unplugged takes its page with it.
+        // A reader unplugged takes its page with it.
         function onDevicesChanged() {
             if (window.deviceSection && !window.devices.devices.some(device => "device:" + device.root === window.section))
                 window.section = "books"
@@ -671,6 +716,21 @@ ApplicationWindow {
 
         acceptText: qsTr("Convert")
         onAccepted: window.startConversion(bookId, format)
+    }
+
+    ConfirmDialog {
+        id: convertAndSendDialog
+        objectName: "convertAndSendDialog"
+
+        property int bookId: 0
+        property string root
+        property string format
+
+        acceptText: qsTr("Convert and send")
+        onAccepted: {
+            window.pendingSends = window.pendingSends.concat([{ bookId: bookId, root: root }])
+            window.startConversion(bookId, format)
+        }
     }
 
     ConfirmDialog {
@@ -1092,12 +1152,12 @@ ApplicationWindow {
                         onClicked: window.openInReader()
                     }
 
-                    // While the Kobo is mounted, Calibre's way of letting it
-                    // go: unmounted and powered off.
+                    // While a Kobo is mounted, Calibre's way of letting it
+                    // go: unmounted and powered off. A Kindle needs none.
                     FlatButton {
                         objectName: "ejectButton"
 
-                        visible: window.deviceShown
+                        visible: window.deviceShown && window.devices.current.ejectable === true
                         enabled: !window.devices.busy
                         variant: "outline"
                         text: qsTr("Eject")

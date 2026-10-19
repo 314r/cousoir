@@ -6,7 +6,7 @@
 #include <QString>
 #include <QStringList>
 
-struct LibraryData;
+#include "device_books.h"
 
 // A Kobo connected over USB, as Calibre 9.16's KoboTouch driver sees it: the
 // folder its storage is mounted on, with Kobo's own .kobo folder in it.
@@ -51,46 +51,12 @@ QString modelName(int productId, const QString &modelId);
 // The firmware version as numbers, (0, 0, 0) when unknown.
 QList<int> firmwareVersion(const Device &device);
 
-struct DeviceBook
-{
-    // Calibre's lpath: the file's path from the root, / separated.
-    QString lpath;
-    QString title;
-    QStringList authors;
-    QString authorSort;
-    // From metadata.calibre: the library book it was sent from.
-    QString uuid;
-    int applicationId = 0;
-    qint64 size = 0;
-    // As the library names formats: KEPUB, EPUB, PDF…
-    QString format;
-    // In metadata.calibre: Calibre or Reliure sent it.
-    bool sent = false;
-    // In the Kobo's database: the Kobo has taken it in.
-    bool imported = false;
-    // Bought from Kobo and kept in .kobo/kepub; not a file one sends or
-    // removes without editing the Kobo's database.
-    bool purchased = false;
-    // The Kobo's id for its cover images, when its database has one.
-    QString imageId;
-    // Set by match(): the library book it is, 0 when none.
-    int bookId = 0;
-};
-
 // The books on the Kobo as KoboTouch's books() lists them: the Kobo's
 // database's, sideloaded or bought, with the metadata Calibre keeps for those
 // it sent, then those sent since the Kobo last looked, whose files are there
 // but not yet in its database.
 QList<DeviceBook> books(const Device &device, QString *error);
 
-// set_books_in_library() of Calibre's GUI: each book is the library's book
-// with its uuid, else the one with its title and its authors, author sort or
-// one of its authors, punctuation and case aside.
-void match(QList<DeviceBook> *books, const LibraryData &data);
-
-// The format Calibre sends of `formats`, the book's: the first of
-// `formatMap`, the driver's ordered formats, the book has. Empty for none.
-QString sendFormat(const QStringList &formats, const QStringList &formatMap);
 // KoboTouch's formats in the order Calibre prefers them, unless changed in
 // its device settings: device_drivers_KOBOTOUCH.py.json in `configDirectory`.
 QStringList formatMap(const QString &configDirectory);

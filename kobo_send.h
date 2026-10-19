@@ -1,14 +1,13 @@
 #pragma once
 
-#include <QByteArray>
 #include <QList>
-#include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
 
 #include <functional>
 
 #include "kobo.h"
+#include "send_job.h"
 
 struct LibraryData;
 
@@ -22,13 +21,8 @@ struct LibraryData;
 // there. Reliure then puts the new files on the Kobo itself, the books
 // first and metadata.calibre last, and leaves the Kobo's own database alone.
 //
-// A job is a folder in the cache: job.json, a copy of metadata.db with the
-// books' cover and file under "library", the copies of the Kobo's files
-// under "device", then log.txt and result.json.
+// A job is SendJob's, with the copies of the Kobo's files under "device".
 namespace KoboSend {
-
-// Calibre's calibre-debug, empty when Calibre is not installed.
-QString program();
 
 // Writes the job sending `bookIds` of `data` to `device` into `folder`,
 // which must exist and be empty. `formatMap` is KoboTouch's order of
@@ -36,23 +30,11 @@ QString program();
 bool prepare(const LibraryData &data, const QList<int> &bookIds, const Kobo::Device &device,
              const QStringList &formatMap, const QString &folder, QString *error);
 
-QStringList arguments(const QString &folder);
-QProcessEnvironment environment(const QString &folder, const QString &interfaceLanguage);
-// The share of Calibre's part done that a line of the job's output reports,
-// from 0 to 1; -1 for a line that reports none.
-double progress(const QByteArray &line);
-
-struct Sent
-{
-    int bookId = 0;
-    QString lpath;
-};
-
 struct Outcome
 {
     bool ok = false;
     QString error;
-    QList<Sent> sent;
+    QList<SendJob::Sent> sent;
     // The titles of the books Calibre found nothing to send of.
     QStringList unsendable;
     // What Calibre wrote for the Kobo, relative to the job's device folder:

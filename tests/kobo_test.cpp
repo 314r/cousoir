@@ -105,18 +105,18 @@ QJsonObject entry(const QString &lpath, const QString &title, const QStringList 
     };
 }
 
-QStringList lpaths(const QList<Kobo::DeviceBook> &books)
+QStringList lpaths(const QList<DeviceBook> &books)
 {
     QStringList list;
-    for (const Kobo::DeviceBook &book : books)
+    for (const DeviceBook &book : books)
         list.append(book.lpath);
     list.sort();
     return list;
 }
 
-const Kobo::DeviceBook *withPath(const QList<Kobo::DeviceBook> &books, const QString &lpath)
+const DeviceBook *withPath(const QList<DeviceBook> &books, const QString &lpath)
 {
-    for (const Kobo::DeviceBook &book : books) {
+    for (const DeviceBook &book : books) {
         if (book.lpath == lpath)
             return &book;
     }
@@ -260,25 +260,25 @@ private slots:
         QVERIFY(writeMetadata(kobo.path(), sent));
 
         const Kobo::Device device = Kobo::describe(kobo.path(), {});
-        QList<Kobo::DeviceBook> books = Kobo::books(device, &error);
+        QList<DeviceBook> books = Kobo::books(device, &error);
         QVERIFY2(error.isEmpty(), qPrintable(error));
         QCOMPARE(lpaths(books), QStringList({ QStringLiteral(".kobo/kepub/abc-123"),
                                               QStringLiteral("Cook, Glen/Shadows Linger - Glen Cook.kepub.epub"),
                                               QStringLiteral("Other/Some Book.epub"), vian }));
-        const Kobo::DeviceBook *taken = withPath(books, vian);
+        const DeviceBook *taken = withPath(books, vian);
         QCOMPARE(taken->title, ecume.title);
         QCOMPARE(taken->uuid, ecume.uuid);
         QVERIFY(taken->sent && taken->imported && !taken->purchased);
         QCOMPARE(taken->format, QStringLiteral("KEPUB"));
         QCOMPARE(taken->size, 5);
-        const Kobo::DeviceBook *copied = withPath(books, QStringLiteral("Other/Some Book.epub"));
+        const DeviceBook *copied = withPath(books, QStringLiteral("Other/Some Book.epub"));
         QCOMPARE(copied->authors, QStringList({ QStringLiteral("Ann Author"), QStringLiteral("Bob Author") }));
         QVERIFY(!copied->sent && copied->imported);
         QCOMPARE(copied->format, QStringLiteral("EPUB"));
-        const Kobo::DeviceBook *bought = withPath(books, QStringLiteral(".kobo/kepub/abc-123"));
+        const DeviceBook *bought = withPath(books, QStringLiteral(".kobo/kepub/abc-123"));
         QVERIFY(bought->purchased);
         QCOMPARE(bought->format, QStringLiteral("KEPUB"));
-        const Kobo::DeviceBook *waiting = withPath(books, QStringLiteral("Cook, Glen/Shadows Linger - Glen Cook.kepub.epub"));
+        const DeviceBook *waiting = withPath(books, QStringLiteral("Cook, Glen/Shadows Linger - Glen Cook.kepub.epub"));
         QVERIFY(waiting->sent && !waiting->imported);
 
         // Without its database, the books Calibre sent.
@@ -293,7 +293,7 @@ private slots:
     {
         const Book &ecume = *bookWithId(m_data, 1);
         const Book &omens = *bookWithId(m_data, 4);
-        QList<Kobo::DeviceBook> books(7);
+        QList<DeviceBook> books(7);
         books[0].title = QStringLiteral("Anything");
         books[0].uuid = ecume.uuid;
         books[1].title = QStringLiteral("l'écume DES jours !");
@@ -310,7 +310,7 @@ private slots:
         // One author matches a book with that author alone.
         books[6].title = QStringLiteral("Shadows Linger");
         books[6].authors = { QStringLiteral("Someone"), QStringLiteral("Glen Cook") };
-        Kobo::match(&books, m_data);
+        DeviceBooks::match(&books, m_data);
         QCOMPARE(books[0].bookId, 1);
         QCOMPARE(books[1].bookId, 1);
         QCOMPARE(books[2].bookId, 3);
@@ -320,7 +320,7 @@ private slots:
         QCOMPARE(books[6].bookId, 3);
         books[6].authors = { QStringLiteral("Someone"), QStringLiteral("Neil Gaiman") };
         books[6].title = omens.title;
-        Kobo::match(&books, m_data);
+        DeviceBooks::match(&books, m_data);
         QCOMPARE(books[6].bookId, 0);
     }
 
@@ -332,15 +332,15 @@ private slots:
         const QStringList defaults = Kobo::formatMap(config.path());
         QCOMPARE(defaults, QStringList({ QStringLiteral("kepub"), QStringLiteral("epub"), QStringLiteral("pdf"),
                                          QStringLiteral("txt"), QStringLiteral("cbz"), QStringLiteral("cbr") }));
-        QCOMPARE(Kobo::sendFormat({ QStringLiteral("AZW3"), QStringLiteral("EPUB") }, defaults), QStringLiteral("EPUB"));
-        QCOMPARE(Kobo::sendFormat({ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }, defaults), QStringLiteral("KEPUB"));
-        QCOMPARE(Kobo::sendFormat({ QStringLiteral("PDF") }, defaults), QStringLiteral("PDF"));
-        QCOMPARE(Kobo::sendFormat({ QStringLiteral("AZW3") }, defaults), QString());
+        QCOMPARE(DeviceBooks::sendFormat({ QStringLiteral("AZW3"), QStringLiteral("EPUB") }, defaults), QStringLiteral("EPUB"));
+        QCOMPARE(DeviceBooks::sendFormat({ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }, defaults), QStringLiteral("KEPUB"));
+        QCOMPARE(DeviceBooks::sendFormat({ QStringLiteral("PDF") }, defaults), QStringLiteral("PDF"));
+        QCOMPARE(DeviceBooks::sendFormat({ QStringLiteral("AZW3") }, defaults), QString());
         QVERIFY(writeAll(QDir(config.path()).filePath(QStringLiteral("device_drivers_KOBOTOUCH.py.json")),
                          "{\"format_map\": [\"pdf\", \"epub\"], \"use_subdirs\": true}"));
         const QStringList changed = Kobo::formatMap(config.path());
         QCOMPARE(changed, QStringList({ QStringLiteral("pdf"), QStringLiteral("epub") }));
-        QCOMPARE(Kobo::sendFormat({ QStringLiteral("EPUB"), QStringLiteral("PDF") }, changed), QStringLiteral("PDF"));
+        QCOMPARE(DeviceBooks::sendFormat({ QStringLiteral("EPUB"), QStringLiteral("PDF") }, changed), QStringLiteral("PDF"));
     }
 
     // images_path() and cover_file_endings() of KoboTouch, as Calibre
@@ -399,8 +399,8 @@ private slots:
                                       "  }";
         QVERIFY(writeAll(root.filePath(QStringLiteral("metadata.calibre")), "[\n  " + ecumeEntry + ",\n  " + shadows + "\n]"));
 
-        QList<Kobo::DeviceBook> books = Kobo::books(device, &error);
-        books.removeIf([](const Kobo::DeviceBook &book) { return book.lpath != vian && !book.purchased; });
+        QList<DeviceBook> books = Kobo::books(device, &error);
+        books.removeIf([](const DeviceBook &book) { return book.lpath != vian && !book.purchased; });
         QCOMPARE(books.size(), 2);
         QVERIFY2(Kobo::removeBooks(device, books, &error), qPrintable(error));
         QVERIFY(!QFileInfo::exists(root.filePath(vian)));
@@ -411,7 +411,7 @@ private slots:
         QCOMPARE(readAll(root.filePath(QStringLiteral("metadata.calibre"))), "[\n  " + shadows + "\n]");
         QCOMPARE(filesUnder(kobo.path()).filter(QStringLiteral(".~")), QStringList());
         books = Kobo::books(device, &error);
-        books.removeIf([](const Kobo::DeviceBook &book) { return book.purchased; });
+        books.removeIf([](const DeviceBook &book) { return book.purchased; });
         QVERIFY2(Kobo::removeBooks(device, books, &error), qPrintable(error));
         QCOMPARE(readAll(root.filePath(QStringLiteral("metadata.calibre"))), QByteArray("[]"));
     }
@@ -449,7 +449,7 @@ private slots:
                  QStringList({ QStringLiteral(".kobo/KoboReader.sqlite"), QStringLiteral(".kobo/version"),
                                QStringLiteral("metadata.calibre") }));
         QVERIFY(readAll(folder.filePath(QStringLiteral("send.py"))).contains("sync_to_device"));
-        QCOMPARE(KoboSend::arguments(folder.path()),
+        QCOMPARE(SendJob::arguments(folder.path()),
                  QStringList({ QStringLiteral("-e"), folder.filePath(QStringLiteral("send.py")), QStringLiteral("--"),
                                folder.path() }));
 
@@ -469,8 +469,8 @@ private slots:
 
     void readsSendOutcomes()
     {
-        QCOMPARE(KoboSend::progress("{\"progress\": 0.25}\n"), 0.25);
-        QCOMPARE(KoboSend::progress("DEBUG: something\n"), -1.0);
+        QCOMPARE(SendJob::progress("{\"progress\": 0.25}\n"), 0.25);
+        QCOMPARE(SendJob::progress("DEBUG: something\n"), -1.0);
         QTemporaryDir folder;
         const QString result = folder.filePath(QStringLiteral("result.json"));
         QVERIFY(writeAll(result, "{\"sent\": [{\"book\": 1, \"lpath\": \"A/B.kepub.epub\"}], \"unsendable\": [\"T\"],"
@@ -553,7 +553,7 @@ private slots:
     // then finds on the Kobo as the library's book.
     void sendsWithCalibre()
     {
-        if (KoboSend::program().isEmpty())
+        if (SendJob::program().isEmpty())
             QSKIP("Calibre is not installed");
         QTemporaryDir config;
         qputenv("CALIBRE_CONFIG_DIRECTORY", QFile::encodeName(config.path()));
@@ -593,8 +593,8 @@ private slots:
                                                         vian, QStringLiteral("driveinfo.calibre"),
                                                         QStringLiteral("metadata.calibre") }));
 
-        QList<Kobo::DeviceBook> books = Kobo::books(Kobo::describe(kobo.path(), {}), &error);
-        Kobo::match(&books, m_data);
+        QList<DeviceBook> books = Kobo::books(Kobo::describe(kobo.path(), {}), &error);
+        DeviceBooks::match(&books, m_data);
         QCOMPARE(books.size(), 1);
         QCOMPARE(books.first().bookId, 1);
     }

@@ -22,6 +22,15 @@ if(UNIX AND NOT APPLE)
     find_package(Qt6 6.9 REQUIRED COMPONENTS DBus)
     set(RELIURE_DBUS Qt6::DBus)
 endif()
+# libmtp, to reach a Kindle Paperwhite; without it, Reliure sees no MTP device.
+find_package(PkgConfig)
+if(PkgConfig_FOUND)
+    pkg_check_modules(LIBMTP IMPORTED_TARGET libmtp)
+endif()
+if(LIBMTP_FOUND)
+    set(RELIURE_MTP PkgConfig::LIBMTP)
+    add_compile_definitions(RELIURE_HAVE_LIBMTP)
+endif()
 # CMake 4 renamed the imported target.
 if(TARGET SQLite3::SQLite3)
     set(RELIURE_SQLITE SQLite3::SQLite3)
@@ -63,12 +72,22 @@ set(RELIURE_LIBRARY_SOURCES
     concurrency_guard.h
     conversion.cpp
     conversion.h
+    device_books.cpp
+    device_books.h
+    device_files.cpp
+    device_files.h
     field_writers.cpp
     field_writers.h
     kobo.cpp
     kobo.h
+    kindle.cpp
+    kindle.h
+    kindle_send.cpp
+    kindle_send.h
     kobo_send.cpp
     kobo_send.h
+    mtp.cpp
+    mtp.h
     file_transaction.cpp
     file_transaction.h
     opf.cpp
@@ -79,10 +98,12 @@ set(RELIURE_LIBRARY_SOURCES
     pdf_reader.h
     reliure_paths.cpp
     reliure_paths.h
+    send_job.cpp
+    send_job.h
     sqlite_db.cpp
     sqlite_db.h
 )
-set(RELIURE_LIBRARY_LINKS Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${RELIURE_SQLITE})
+set(RELIURE_LIBRARY_LINKS Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${RELIURE_SQLITE} ${RELIURE_MTP})
 
 # The models QML uses on top of it.
 set(RELIURE_MODEL_SOURCES
@@ -284,7 +305,7 @@ if(BUILD_TESTING)
     reliure_configure_test_executable(calibre_paths_tests)
     reliure_add_logged_test(calibre_paths_tests calibre_paths_tests)
 
-    foreach(name IN ITEMS opf commit_engine conversion kobo)
+    foreach(name IN ITEMS opf commit_engine conversion kobo kindle)
         qt_add_executable(${name}_tests
             tests/${name}_test.cpp
             ${RELIURE_LIBRARY_SOURCES}

@@ -16,6 +16,7 @@
 #include <QTimer>
 
 #include <cstdio>
+#include <memory>
 
 #include "book_edit.h"
 #include "book_import.h"
@@ -24,8 +25,12 @@
 #include "commit_engine.h"
 #include "concurrency_guard.h"
 #include "conversion.h"
+#include "device_files.h"
+#include "kindle.h"
+#include "kindle_send.h"
 #include "kobo.h"
 #include "kobo_send.h"
+#include "mtp.h"
 #include "reliure_paths.h"
 
 namespace {
@@ -247,79 +252,156 @@ bool convert(const QString &libraryPath, const CalibreConfig &config, const QLis
     return true;
 }
 
-// The Kobo mounted on `root`, or a folder made to look like one.
-bool kobo(const QString &root, Kobo::Device *device)
+// A reader the command line reaches: a Kobo by the folder it is mounted on;
+// a Kindle over MTP, "mtp" for the first one connected or "mtp:SERIAL"; or
+// "mtpdir:FOLDER", a folder that stands for a Kindle over MTP.
+struct Reader
 {
-    if (!Kobo::isKobo(root)) {
-        err() << QStringLiteral("%1 is not a Kobo: it has no .kobo folder.").arg(root) << Qt::endl;
+    QString name;
+    Kobo::Device kobo;
+    std::unique_ptr<Mtp::Session> session;
+    std::unique_ptr<DeviceFiles> files;
+    KindleSend::Device kindle;
+
+    bool isKindle() const { return files != nullptr; }
+};
+
+bool openReader(const QString &spec, Reader *reader)
+{
+    QString error;
+    if (spec.startsWith(QLatin1String("mtpdir:"))) {
+        reader->files = std::make_unique<FolderFiles>(spec.mid(7), true);
+        reader->kindle = KindleSend::standIn();
+    } else if (spec == QLatin1String("mtp") || spec.startsWith(QLatin1String("mtp:"))) {
+        const QString serial = spec.mid(4);
+        for (const Mtp::RawDevice &raw : Mtp::detect(&error)) {
+            if (raw.vendorId != Kindle::VendorId)
+                continue;
+            auto session = std::make_unique<Mtp::Session>();
+            if (!session->open(raw.bus, raw.number, &error) || (!serial.isEmpty() && session->serialNumber() != serial))
+                continue;
+            reader->kindle = { session->friendlyName(), session->modelName(), session->serialNumber(), raw.vendorId,
+                               raw.productId };
+            reader->files = std::make_unique<MtpFiles>(session.get(), true);
+            reader->session = std::move(session);
+            break;
+        }
+        if (!reader->files) {
+            err() << (error.isEmpty() ? QStringLiteral("No Kindle is connected over MTP.") : error) << Qt::endl;
+            return false;
+        }
+    } else {
+        if (!Kobo::isKobo(spec)) {
+            err() << QStringLiteral("%1 is not a Kobo: it has no .kobo folder.").arg(spec) << Qt::endl;
+            return false;
+        }
+        reader->kobo = Kobo::describe(QFileInfo(spec).absoluteFilePath(), QStorageInfo(spec).device());
+        reader->name = reader->kobo.name;
+        return true;
+    }
+    if (!reader->files->scan(&error)) {
+        err() << error << Qt::endl;
         return false;
     }
-    *device = Kobo::describe(QFileInfo(root).absoluteFilePath(), QStorageInfo(root).device());
+    reader->name = Kindle::name(Kindle::readDriveInfo(*reader->files), reader->kindle.friendlyName,
+                                reader->kindle.modelName);
     return true;
 }
 
-// Sends the books to the Kobo on `root` as Calibre's "Send to device" does.
-// With RELIURE_KEEP_JOBS set, the job's folder stays for a look at Calibre's
-// log.
-bool send(const QString &libraryPath, const CalibreConfig &config, const QString &root, const QList<int> &bookIds)
+QList<DeviceBook> booksOn(Reader &reader, QString *error)
+{
+    return reader.isKindle() ? Kindle::books(*reader.files, error) : Kobo::books(reader.kobo, error);
+}
+
+// Sends the books to the reader as Calibre's "Send to device" does. With
+// RELIURE_KEEP_JOBS set, the job's folder stays for a look at Calibre's log.
+bool send(const QString &libraryPath, const CalibreConfig &config, const QString &spec, const QList<int> &bookIds)
 {
     LibraryData data;
-    Kobo::Device device;
-    if (!load(libraryPath, &data) || !kobo(root, &device))
+    Reader reader;
+    if (!load(libraryPath, &data) || !openReader(spec, &reader))
         return false;
     QTemporaryDir job;
     job.setAutoRemove(qEnvironmentVariableIsEmpty("RELIURE_KEEP_JOBS"));
     QString error;
-    if (!job.isValid()
-        || !KoboSend::prepare(data, bookIds, device, Kobo::formatMap(CalibreConfig::configDirectory()), job.path(),
-                              &error)) {
-        err() << (error.isEmpty() ? QStringLiteral("Cannot create a temporary folder.") : error) << Qt::endl;
+    if (!job.isValid()) {
+        err() << QStringLiteral("Cannot create a temporary folder.") << Qt::endl;
         return false;
     }
-    const KoboSend::Outcome outcome = KoboSend::run(job.path(), config.interfaceLanguage);
-    if (!outcome.ok || !KoboSend::apply(job.path(), outcome, device, &error)) {
-        err() << (outcome.ok ? error : outcome.error) << Qt::endl;
-        return false;
+    QList<SendJob::Sent> sent;
+    QStringList unsendable;
+    if (reader.isKindle()) {
+        // What Calibre does as it connects.
+        Kindle::restoreThumbnails(*reader.files, &error);
+        if (!KindleSend::prepare(data, bookIds, *reader.files, reader.kindle,
+                                 Kindle::formatMap(CalibreConfig::configDirectory(), reader.kindle.serial), job.path(),
+                                 &error)) {
+            err() << error << Qt::endl;
+            return false;
+        }
+        const KindleSend::Outcome outcome = KindleSend::run(job.path(), config.interfaceLanguage);
+        if (!outcome.ok || !KindleSend::apply(job.path(), outcome, *reader.files, &error)) {
+            err() << (outcome.ok ? error : outcome.error) << Qt::endl;
+            return false;
+        }
+        sent = outcome.sent;
+        unsendable = outcome.unsendable;
+    } else {
+        if (!KoboSend::prepare(data, bookIds, reader.kobo, Kobo::formatMap(CalibreConfig::configDirectory()),
+                               job.path(), &error)) {
+            err() << error << Qt::endl;
+            return false;
+        }
+        const KoboSend::Outcome outcome = KoboSend::run(job.path(), config.interfaceLanguage);
+        if (!outcome.ok || !KoboSend::apply(job.path(), outcome, reader.kobo, &error)) {
+            err() << (outcome.ok ? error : outcome.error) << Qt::endl;
+            return false;
+        }
+        sent = outcome.sent;
+        unsendable = outcome.unsendable;
     }
-    for (const QString &title : outcome.unsendable)
-        err() << QStringLiteral("Not sent, no format the Kobo reads: %1").arg(title) << Qt::endl;
-    out() << QStringLiteral("Sent %1 book(s) to %2").arg(outcome.sent.size()).arg(device.name) << Qt::endl;
+    for (const QString &title : std::as_const(unsendable))
+        err() << QStringLiteral("Not sent, no format the device reads: %1").arg(title) << Qt::endl;
+    out() << QStringLiteral("Sent %1 book(s) to %2").arg(sent.size()).arg(reader.name) << Qt::endl;
     return true;
 }
 
-bool removeFromDevice(const QString &root, const QStringList &lpaths)
+bool removeFromDevice(const QString &spec, const QStringList &lpaths)
 {
-    Kobo::Device device;
-    if (!kobo(root, &device))
+    Reader reader;
+    if (!openReader(spec, &reader))
         return false;
     QString error;
-    QList<Kobo::DeviceBook> books = Kobo::books(device, &error);
-    books.removeIf([&](const Kobo::DeviceBook &book) { return !lpaths.contains(book.lpath); });
+    if (reader.isKindle())
+        Kindle::restoreThumbnails(*reader.files, &error);
+    QList<DeviceBook> books = booksOn(reader, &error);
+    books.removeIf([&](const DeviceBook &book) { return !lpaths.contains(book.lpath, Qt::CaseInsensitive); });
     if (books.size() != lpaths.size()) {
         err() << QStringLiteral("Not all of these books are on the device.") << Qt::endl;
         return false;
     }
-    if (!Kobo::removeBooks(device, books, &error)) {
+    if (reader.isKindle() ? !Kindle::removeBooks(*reader.files, books, &error)
+                          : !Kobo::removeBooks(reader.kobo, books, &error)) {
         err() << error << Qt::endl;
         return false;
     }
     return true;
 }
 
-// The books on the Kobo mounted on `root`, matched with the library's.
-int device(const QString &libraryPath, const QString &root)
+// The books on the reader, matched with the library's.
+int device(const QString &libraryPath, const QString &spec)
 {
     LibraryData data;
-    Kobo::Device device;
-    if (!load(libraryPath, &data) || !kobo(root, &device))
+    Reader reader;
+    if (!load(libraryPath, &data) || !openReader(spec, &reader))
         return 1;
     QString error;
-    QList<Kobo::DeviceBook> books = Kobo::books(device, &error);
+    QList<DeviceBook> books = booksOn(reader, &error);
     if (!error.isEmpty())
         err() << error << Qt::endl;
-    Kobo::match(&books, data);
+    DeviceBooks::match(&books, data);
     QJsonArray list;
-    for (const Kobo::DeviceBook &book : std::as_const(books)) {
+    for (const DeviceBook &book : std::as_const(books)) {
         list.append(QJsonObject{
             { QStringLiteral("lpath"), book.lpath },
             { QStringLiteral("title"), book.title },
@@ -332,10 +414,20 @@ int device(const QString &libraryPath, const QString &root)
             { QStringLiteral("book"), book.bookId },
         });
     }
-    out() << QJsonDocument(QJsonObject{ { QStringLiteral("name"), device.name },
+    out() << QJsonDocument(QJsonObject{ { QStringLiteral("name"), reader.name },
                                          { QStringLiteral("books"), list } })
                  .toJson();
     return 0;
+}
+
+// A device of an apply file, its folders relative to the file.
+QString deviceSpec(const QDir &base, const QString &device)
+{
+    if (device == QLatin1String("mtp") || device.startsWith(QLatin1String("mtp:")))
+        return device;
+    if (device.startsWith(QLatin1String("mtpdir:")))
+        return QStringLiteral("mtpdir:") + base.absoluteFilePath(device.mid(7));
+    return base.absoluteFilePath(device);
 }
 
 // Saves the library changes of `request`.
@@ -374,6 +466,8 @@ int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine
 //   { "convert": { "book": 1, "format": "KEPUB" } }
 //   { "send": { "books": [1, 2], "device": "/run/media/…/KOBOeReader" } }
 //   { "removeFromDevice": { "device": …, "lpaths": ["Vian, Boris/…"] } }
+// A device is a Kobo's folder, "mtp" or "mtp:SERIAL" for a Kindle, or
+// "mtpdir:FOLDER" for a folder that stands for one.
 // Files are relative to the JSON file. Edits apply first, then the other
 // changes in the order above, as the application saves them. Conversions
 // run first, on the books as the library has them, and add their files
@@ -482,14 +576,14 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             QList<int> books;
             for (const QJsonValue &book : sending.value(QLatin1String("books")).toArray())
                 books.append(book.toInt());
-            if (!send(libraryPath, config, base.absoluteFilePath(sending.value(QLatin1String("device")).toString()), books))
+            if (!send(libraryPath, config, deviceSpec(base, sending.value(QLatin1String("device")).toString()), books))
                 return 1;
         } else {
             const QJsonObject removal = op.value(QLatin1String("removeFromDevice")).toObject();
             QStringList lpaths;
             for (const QJsonValue &lpath : removal.value(QLatin1String("lpaths")).toArray())
                 lpaths.append(lpath.toString());
-            if (!removeFromDevice(base.absoluteFilePath(removal.value(QLatin1String("device")).toString()), lpaths))
+            if (!removeFromDevice(deviceSpec(base, removal.value(QLatin1String("device")).toString()), lpaths))
                 return 1;
         }
     }
@@ -577,7 +671,8 @@ int main(int argc, char *argv[])
         "          formats, restorations, conversions, books sent to or removed from a\n"
         "          Kobo), as the application makes them.\n"
         "  read    Print the metadata adding the given book files would read.\n"
-        "  device  Print the books on the Kobo mounted on the given folder."));
+        "  device  Print the books on a reader: a Kobo by the folder it is mounted on,\n"
+        "          \"mtp\" or \"mtp:SERIAL\" for a Kindle connected over MTP."));
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption libraryOption(QStringList{ QStringLiteral("library"), QStringLiteral("with-library") },
