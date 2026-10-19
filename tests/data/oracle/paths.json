@@ -1,0 +1,1772 @@
+{
+ "calibre_version": "9.16.0",
+ "interface_language": "fr",
+ "ascii_filename": [
+  {
+   "text": "L'Écume des jours",
+   "expected": "L'Ecume des jours"
+  },
+  {
+   "text": "Boris Vian",
+   "expected": "Boris Vian"
+  },
+  {
+   "text": "The Black Company",
+   "expected": "The Black Company"
+  },
+  {
+   "text": "Glen Cook",
+   "expected": "Glen Cook"
+  },
+  {
+   "text": "Rivages/Noir: (French Edition)",
+   "expected": "Rivages_Noir_ (French Edition)"
+  },
+  {
+   "text": "Qu'est-ce que c'est ?",
+   "expected": "Qu'est-ce que c'est _"
+  },
+  {
+   "text": "a*b<c>d|e\"f",
+   "expected": "a_b_c_d_e_f"
+  },
+  {
+   "text": "Antoine de Saint-Exupéry",
+   "expected": "Antoine de Saint-Exupery"
+  },
+  {
+   "text": "Œuvres complètes",
+   "expected": "OEuvres completes"
+  },
+  {
+   "text": "Straße",
+   "expected": "Strasse"
+  },
+  {
+   "text": "北京",
+   "expected": "Bei Jing"
+  },
+  {
+   "text": "東京物語",
+   "expected": "Dong Jing Wu Yu"
+  },
+  {
+   "text": "Москва",
+   "expected": "Moskva"
+  },
+  {
+   "text": "Ελληνικά",
+   "expected": "Ellenika"
+  },
+  {
+   "text": "עברית",
+   "expected": "`bryt"
+  },
+  {
+   "text": "emoji 📚 book",
+   "expected": "emoji _ book"
+  },
+  {
+   "text": "tab\there",
+   "expected": "tab_here"
+  },
+  {
+   "text": "line\nbreak",
+   "expected": "line_break"
+  },
+  {
+   "text": "  leading and trailing  ",
+   "expected": "leading and trailing"
+  },
+  {
+   "text": "...",
+   "expected": "_"
+  },
+  {
+   "text": ".hidden",
+   "expected": "_hidden"
+  },
+  {
+   "text": "ends with dot.",
+   "expected": "ends with dot_"
+  },
+  {
+   "text": "ends with space ",
+   "expected": "ends with space"
+  },
+  {
+   "text": "a..b",
+   "expected": "a..b"
+  },
+  {
+   "text": "CON",
+   "expected": "CON"
+  },
+  {
+   "text": "con",
+   "expected": "con"
+  },
+  {
+   "text": "Lpt1",
+   "expected": "Lpt1"
+  },
+  {
+   "text": "",
+   "expected": ""
+  },
+  {
+   "text": "   ",
+   "expected": ""
+  },
+  {
+   "text": "Unknown",
+   "expected": "Unknown"
+  },
+  {
+   "text": "Inconnu(e)",
+   "expected": "Inconnu(e)"
+  },
+  {
+   "text": "[brackets] and +plus+",
+   "expected": "[brackets] and _plus_"
+  },
+  {
+   "text": "Ł ø đ ß æ",
+   "expected": "L o d ss ae"
+  },
+  {
+   "text": "ﬁ ligature ½",
+   "expected": "fi ligature 1_2"
+  },
+  {
+   "text": "No break",
+   "expected": "No break"
+  },
+  {
+   "text": "Chop Wood, Carry Water: The Yoga of Work",
+   "expected": "Chop Wood, Carry Water_ The Yoga of Work"
+  },
+  {
+   "text": "A very long title that goes on and on well past the limit Calibre puts on folder names in its libraries",
+   "expected": "A very long title that goes on and on well past the limit Calibre puts on folder names in its libraries"
+  },
+  {
+   "text": "Ünïcödé ÀÉÎÕÜ àéîõü çÇ ñÑ",
+   "expected": "Unicode AEIOU aeiou cC nN"
+  },
+  {
+   "text": "trailing dots...",
+   "expected": "trailing dots__"
+  },
+  {
+   "text": "C:\\path\\like",
+   "expected": "C__path_like"
+  },
+  {
+   "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+ ],
+ "paths": [
+  {
+   "id": 1,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 4,
+   "path": "Boris Vian/L'Ecume des jours (1)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 1,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 5,
+   "path": "Boris Vian/L'Ecume des jours (1)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 1,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 10,
+   "path": "Boris Vian/L'Ecume des jours (1)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 1,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 15,
+   "path": "Boris Vian/L'Ecume des jours (1)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 1,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 30,
+   "path": "Boris Vian/L'Ecume des jours (1)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 1,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 4,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (1)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 1,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 5,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (1)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 1,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 10,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (1)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 1,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 15,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (1)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 1,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 30,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (1)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 1,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 4,
+   "path": "Dong Jing Wu Yu/Bei Jing (1)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 1,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 5,
+   "path": "Dong Jing Wu Yu/Bei Jing (1)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 1,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 10,
+   "path": "Dong Jing Wu Yu/Bei Jing (1)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 1,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 15,
+   "path": "Dong Jing Wu Yu/Bei Jing (1)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 1,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 30,
+   "path": "Dong Jing Wu Yu/Bei Jing (1)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 1,
+   "title": "",
+   "author": "",
+   "extlen": 4,
+   "path": "Inconnu(e)/Unknown (1)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 1,
+   "title": "",
+   "author": "",
+   "extlen": 5,
+   "path": "Inconnu(e)/Unknown (1)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 1,
+   "title": "",
+   "author": "",
+   "extlen": 10,
+   "path": "Inconnu(e)/Unknown (1)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 1,
+   "title": "",
+   "author": "",
+   "extlen": 15,
+   "path": "Inconnu(e)/Unknown (1)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 1,
+   "title": "",
+   "author": "",
+   "extlen": 30,
+   "path": "Inconnu(e)/Unknown (1)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 1,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 4,
+   "path": "CONw/Unknown (1)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 1,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 5,
+   "path": "CONw/Unknown (1)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 1,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 10,
+   "path": "CONw/Unknown (1)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 1,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 15,
+   "path": "CONw/Unknown (1)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 1,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 30,
+   "path": "CONw/Unknown (1)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 1,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 4,
+   "path": "C__path_like/trailing dots__ (1)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 1,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 5,
+   "path": "C__path_like/trailing dots__ (1)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 1,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 10,
+   "path": "C__path_like/trailing dots__ (1)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 1,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 15,
+   "path": "C__path_like/trailing dots__ (1)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 1,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 30,
+   "path": "C__path_like/trailing dots__ (1)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 1,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 4,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (1)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 1,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 5,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (1)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 1,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 10,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (1)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 1,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 15,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (1)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 1,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 30,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (1)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 1,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 4,
+   "path": "ends with dot_/_hidden (1)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 1,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 5,
+   "path": "ends with dot_/_hidden (1)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 1,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 10,
+   "path": "ends with dot_/_hidden (1)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 1,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 15,
+   "path": "ends with dot_/_hidden (1)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 1,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 30,
+   "path": "ends with dot_/_hidden (1)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 1,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 4,
+   "path": "a..b/ends with space (1)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 1,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 5,
+   "path": "a..b/ends with space (1)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 1,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 10,
+   "path": "a..b/ends with space (1)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 1,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 15,
+   "path": "a..b/ends with space (1)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 1,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 30,
+   "path": "a..b/ends with space (1)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 1,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 4,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (1)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 1,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 5,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (1)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 1,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 10,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (1)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 1,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 15,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (1)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 1,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 30,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (1)",
+   "file": "Chop Wood, Carry Water_ The Yoga o - Andrew J. Taggart"
+  },
+  {
+   "id": 42,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 4,
+   "path": "Boris Vian/L'Ecume des jours (42)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 42,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 5,
+   "path": "Boris Vian/L'Ecume des jours (42)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 42,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 10,
+   "path": "Boris Vian/L'Ecume des jours (42)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 42,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 15,
+   "path": "Boris Vian/L'Ecume des jours (42)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 42,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 30,
+   "path": "Boris Vian/L'Ecume des jours (42)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 42,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 4,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (42)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 42,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 5,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (42)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 42,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 10,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (42)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 42,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 15,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (42)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 42,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 30,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (42)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 42,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 4,
+   "path": "Dong Jing Wu Yu/Bei Jing (42)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 42,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 5,
+   "path": "Dong Jing Wu Yu/Bei Jing (42)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 42,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 10,
+   "path": "Dong Jing Wu Yu/Bei Jing (42)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 42,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 15,
+   "path": "Dong Jing Wu Yu/Bei Jing (42)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 42,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 30,
+   "path": "Dong Jing Wu Yu/Bei Jing (42)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 42,
+   "title": "",
+   "author": "",
+   "extlen": 4,
+   "path": "Inconnu(e)/Unknown (42)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 42,
+   "title": "",
+   "author": "",
+   "extlen": 5,
+   "path": "Inconnu(e)/Unknown (42)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 42,
+   "title": "",
+   "author": "",
+   "extlen": 10,
+   "path": "Inconnu(e)/Unknown (42)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 42,
+   "title": "",
+   "author": "",
+   "extlen": 15,
+   "path": "Inconnu(e)/Unknown (42)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 42,
+   "title": "",
+   "author": "",
+   "extlen": 30,
+   "path": "Inconnu(e)/Unknown (42)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 42,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 4,
+   "path": "CONw/Unknown (42)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 42,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 5,
+   "path": "CONw/Unknown (42)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 42,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 10,
+   "path": "CONw/Unknown (42)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 42,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 15,
+   "path": "CONw/Unknown (42)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 42,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 30,
+   "path": "CONw/Unknown (42)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 42,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 4,
+   "path": "C__path_like/trailing dots__ (42)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 42,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 5,
+   "path": "C__path_like/trailing dots__ (42)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 42,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 10,
+   "path": "C__path_like/trailing dots__ (42)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 42,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 15,
+   "path": "C__path_like/trailing dots__ (42)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 42,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 30,
+   "path": "C__path_like/trailing dots__ (42)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 42,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 4,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (42)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 42,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 5,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (42)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 42,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 10,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (42)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 42,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 15,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (42)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 42,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 30,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (42)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 42,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 4,
+   "path": "ends with dot_/_hidden (42)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 42,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 5,
+   "path": "ends with dot_/_hidden (42)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 42,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 10,
+   "path": "ends with dot_/_hidden (42)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 42,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 15,
+   "path": "ends with dot_/_hidden (42)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 42,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 30,
+   "path": "ends with dot_/_hidden (42)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 42,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 4,
+   "path": "a..b/ends with space (42)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 42,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 5,
+   "path": "a..b/ends with space (42)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 42,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 10,
+   "path": "a..b/ends with space (42)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 42,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 15,
+   "path": "a..b/ends with space (42)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 42,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 30,
+   "path": "a..b/ends with space (42)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 42,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 4,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (42)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 42,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 5,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (42)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 42,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 10,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (42)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 42,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 15,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (42)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 42,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 30,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (42)",
+   "file": "Chop Wood, Carry Water_ The Yoga o - Andrew J. Taggart"
+  },
+  {
+   "id": 137,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 4,
+   "path": "Boris Vian/L'Ecume des jours (137)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 137,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 5,
+   "path": "Boris Vian/L'Ecume des jours (137)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 137,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 10,
+   "path": "Boris Vian/L'Ecume des jours (137)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 137,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 15,
+   "path": "Boris Vian/L'Ecume des jours (137)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 137,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 30,
+   "path": "Boris Vian/L'Ecume des jours (137)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 137,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 4,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (137)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 137,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 5,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (137)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 137,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 10,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (137)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 137,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 15,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (137)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 137,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 30,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (137)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 137,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 4,
+   "path": "Dong Jing Wu Yu/Bei Jing (137)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 137,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 5,
+   "path": "Dong Jing Wu Yu/Bei Jing (137)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 137,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 10,
+   "path": "Dong Jing Wu Yu/Bei Jing (137)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 137,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 15,
+   "path": "Dong Jing Wu Yu/Bei Jing (137)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 137,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 30,
+   "path": "Dong Jing Wu Yu/Bei Jing (137)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 137,
+   "title": "",
+   "author": "",
+   "extlen": 4,
+   "path": "Inconnu(e)/Unknown (137)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 137,
+   "title": "",
+   "author": "",
+   "extlen": 5,
+   "path": "Inconnu(e)/Unknown (137)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 137,
+   "title": "",
+   "author": "",
+   "extlen": 10,
+   "path": "Inconnu(e)/Unknown (137)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 137,
+   "title": "",
+   "author": "",
+   "extlen": 15,
+   "path": "Inconnu(e)/Unknown (137)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 137,
+   "title": "",
+   "author": "",
+   "extlen": 30,
+   "path": "Inconnu(e)/Unknown (137)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 137,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 4,
+   "path": "CONw/Unknown (137)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 137,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 5,
+   "path": "CONw/Unknown (137)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 137,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 10,
+   "path": "CONw/Unknown (137)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 137,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 15,
+   "path": "CONw/Unknown (137)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 137,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 30,
+   "path": "CONw/Unknown (137)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 137,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 4,
+   "path": "C__path_like/trailing dots__ (137)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 137,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 5,
+   "path": "C__path_like/trailing dots__ (137)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 137,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 10,
+   "path": "C__path_like/trailing dots__ (137)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 137,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 15,
+   "path": "C__path_like/trailing dots__ (137)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 137,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 30,
+   "path": "C__path_like/trailing dots__ (137)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 137,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 4,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (137)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 137,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 5,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (137)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 137,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 10,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (137)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 137,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 15,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (137)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 137,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 30,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (137)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 137,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 4,
+   "path": "ends with dot_/_hidden (137)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 137,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 5,
+   "path": "ends with dot_/_hidden (137)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 137,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 10,
+   "path": "ends with dot_/_hidden (137)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 137,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 15,
+   "path": "ends with dot_/_hidden (137)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 137,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 30,
+   "path": "ends with dot_/_hidden (137)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 137,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 4,
+   "path": "a..b/ends with space (137)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 137,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 5,
+   "path": "a..b/ends with space (137)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 137,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 10,
+   "path": "a..b/ends with space (137)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 137,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 15,
+   "path": "a..b/ends with space (137)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 137,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 30,
+   "path": "a..b/ends with space (137)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 137,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 4,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (137)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 137,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 5,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (137)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 137,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 10,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (137)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 137,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 15,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (137)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 137,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 30,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (137)",
+   "file": "Chop Wood, Carry Water_ The Yoga o - Andrew J. Taggart"
+  },
+  {
+   "id": 123456,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 4,
+   "path": "Boris Vian/L'Ecume des jours (123456)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 123456,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 5,
+   "path": "Boris Vian/L'Ecume des jours (123456)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 123456,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 10,
+   "path": "Boris Vian/L'Ecume des jours (123456)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 123456,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 15,
+   "path": "Boris Vian/L'Ecume des jours (123456)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 123456,
+   "title": "L'Écume des jours",
+   "author": "Boris Vian",
+   "extlen": 30,
+   "path": "Boris Vian/L'Ecume des jours (123456)",
+   "file": "L'Ecume des jours - Boris Vian"
+  },
+  {
+   "id": 123456,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 4,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (123456)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 123456,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 5,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (123456)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 123456,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 10,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (123456)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 123456,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 15,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (123456)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 123456,
+   "title": "Rivages/Noir: (French Edition)",
+   "author": "Glen Cook",
+   "extlen": 30,
+   "path": "Glen Cook/Rivages_Noir_ (French Edition) (123456)",
+   "file": "Rivages_Noir_ (French Edition) - Glen Cook"
+  },
+  {
+   "id": 123456,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 4,
+   "path": "Dong Jing Wu Yu/Bei Jing (123456)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 123456,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 5,
+   "path": "Dong Jing Wu Yu/Bei Jing (123456)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 123456,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 10,
+   "path": "Dong Jing Wu Yu/Bei Jing (123456)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 123456,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 15,
+   "path": "Dong Jing Wu Yu/Bei Jing (123456)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 123456,
+   "title": "北京",
+   "author": "東京物語",
+   "extlen": 30,
+   "path": "Dong Jing Wu Yu/Bei Jing (123456)",
+   "file": "Bei Jing - Dong Jing Wu Yu"
+  },
+  {
+   "id": 123456,
+   "title": "",
+   "author": "",
+   "extlen": 4,
+   "path": "Inconnu(e)/Unknown (123456)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 123456,
+   "title": "",
+   "author": "",
+   "extlen": 5,
+   "path": "Inconnu(e)/Unknown (123456)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 123456,
+   "title": "",
+   "author": "",
+   "extlen": 10,
+   "path": "Inconnu(e)/Unknown (123456)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 123456,
+   "title": "",
+   "author": "",
+   "extlen": 15,
+   "path": "Inconnu(e)/Unknown (123456)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 123456,
+   "title": "",
+   "author": "",
+   "extlen": 30,
+   "path": "Inconnu(e)/Unknown (123456)",
+   "file": "Unknown - "
+  },
+  {
+   "id": 123456,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 4,
+   "path": "CONw/Unknown (123456)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 123456,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 5,
+   "path": "CONw/Unknown (123456)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 123456,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 10,
+   "path": "CONw/Unknown (123456)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 123456,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 15,
+   "path": "CONw/Unknown (123456)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 123456,
+   "title": "   ",
+   "author": "CON",
+   "extlen": 30,
+   "path": "CONw/Unknown (123456)",
+   "file": "Unknown - CON"
+  },
+  {
+   "id": 123456,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 4,
+   "path": "C__path_like/trailing dots__ (123456)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 123456,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 5,
+   "path": "C__path_like/trailing dots__ (123456)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 123456,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 10,
+   "path": "C__path_like/trailing dots__ (123456)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 123456,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 15,
+   "path": "C__path_like/trailing dots__ (123456)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 123456,
+   "title": "trailing dots...",
+   "author": "C:\\path\\like",
+   "extlen": 30,
+   "path": "C__path_like/trailing dots__ (123456)",
+   "file": "trailing dots__ - C__path_like"
+  },
+  {
+   "id": 123456,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 4,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (123456)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 123456,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 5,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (123456)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 123456,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 10,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (123456)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 123456,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 15,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (123456)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 123456,
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "author": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "extlen": 30,
+   "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (123456)",
+   "file": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx - xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "id": 123456,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 4,
+   "path": "ends with dot_/_hidden (123456)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 123456,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 5,
+   "path": "ends with dot_/_hidden (123456)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 123456,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 10,
+   "path": "ends with dot_/_hidden (123456)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 123456,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 15,
+   "path": "ends with dot_/_hidden (123456)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 123456,
+   "title": ".hidden",
+   "author": "ends with dot.",
+   "extlen": 30,
+   "path": "ends with dot_/_hidden (123456)",
+   "file": "_hidden - ends with dot_"
+  },
+  {
+   "id": 123456,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 4,
+   "path": "a..b/ends with space (123456)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 123456,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 5,
+   "path": "a..b/ends with space (123456)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 123456,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 10,
+   "path": "a..b/ends with space (123456)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 123456,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 15,
+   "path": "a..b/ends with space (123456)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 123456,
+   "title": "ends with space ",
+   "author": "a..b",
+   "extlen": 30,
+   "path": "a..b/ends with space (123456)",
+   "file": "ends with space - a..b"
+  },
+  {
+   "id": 123456,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 4,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (123456)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 123456,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 5,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (123456)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 123456,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 10,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (123456)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 123456,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 15,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (123456)",
+   "file": "Chop Wood, Carry Water_ The Yoga of Work - Andrew J. Taggart"
+  },
+  {
+   "id": 123456,
+   "title": "Chop Wood, Carry Water: The Yoga of Work",
+   "author": "Andrew J. Taggart",
+   "extlen": 30,
+   "path": "Andrew J. Taggart/Chop Wood, Carry Water_ The Yoga of Work (123456)",
+   "file": "Chop Wood, Carry Water_ The Yoga o - Andrew J. Taggart"
+  }
+ ]
+}

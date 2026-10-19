@@ -1,0 +1,14 @@
+[
+  { "book": 1, "set": { "title": "L'Écume des jours (édition illustrée)", "tags": ["Roman", "Surréalisme"],
+                        "rating": 9, "pubdate": "1947-03",
+                        "identifiers": { "ISBN": " 978-2-253-14087-0 ", "Amazon": "B00ABC,123", "empty": " " } } },
+  { "book": 3, "set": { "authors": ["glen cook", "Steven  Erikson"],
+                        "series": "The Chronicles of the Black Company [2.5]" } },
+  { "book": 4, "set": { "publisher": "", "languages": "English, French, fr", "sort": "Omens, Good",
+                        "comments": "<p>Line one\n\n  line two</p>", "coverFile": "transparent.png" } },
+  { "book": 5, "set": { "coverFile": "large.jpg", "authorSort": "Dupont, J.-P.", "seriesIndex": 4,
+                        "pubdate": "1984-05-31" } },
+  { "book": 6, "set": { "removeCover": true, "title": "  Le   Petit Prince  ", "pubdate": "",
+                        "tags": "Conte, Jeunesse, conte" } },
+  { "book": 2, "set": { "title": "The Black Company", "rating": 0, "series": "" } }
+]

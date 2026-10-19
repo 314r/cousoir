@@ -10,13 +10,23 @@ QtObject {
     property bool adaptiveTypography: false
     // The library picked in the settings; empty for the one Calibre opens.
     property string libraryPath: ""
+    // Calibre's interface language set in the settings; empty for Calibre's.
+    property string calibreLanguage: ""
     readonly property BookLibrary library: BookLibrary {
         libraryPath: session.libraryPath
+        calibreLanguage: session.calibreLanguage
+        writable: session.guard.writable
+        onSaved: {
+            session.guard.noteWrite()
+            session.guard.refresh()
+        }
     }
     readonly property ConcurrencyGuard guard: ConcurrencyGuard {
         libraryPath: session.library.libraryPath
         libraryReadable: session.library.loaded
         schemaKnown: session.library.schemaKnown
+        libraryUuid: session.library.libraryUuid
+        ownChangeKey: session.library.publishedKey
     }
     readonly property bool bookOpen: library.currentBookId > 0
     readonly property bool filterOpen: library.filter.kind !== undefined

@@ -7,12 +7,22 @@ import QtQuick.Layouts
 import Reliure
 
 // A book's metadata as Calibre keeps it, and its files, each of which opens
-// in the desktop's reader for it.
+// in the desktop's reader for it. While the library may be written the
+// metadata edits in place: a field saves when you leave it, with Enter or
+// Tab; Esc puts the stored value back; a value the field cannot take shows
+// in red and is not saved.
 FocusScope {
     id: pane
 
     required property BookLibrary library
     property var book: ({})
+    readonly property bool editable: library.writable && (book.id || 0) > 0
+    // A field has the focus.
+    readonly property bool editing: activeFocus && Window.activeFocusItem?.detailField === true
+    readonly property var ratingChoices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(rating => ({
+        value: rating,
+        label: rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+    }))
     readonly property var facts: [
         { key: "title", label: qsTr("Title"), value: book.title || "" },
         // The sorts only when they differ from what they sort.
@@ -38,6 +48,95 @@ FocusScope {
             pane.failed(error)
     }
 
+    function save(key, value) {
+        const changes = {}
+        changes[key] = value
+        const error = pane.library.updateBook(pane.book.id, changes)
+        if (error)
+            pane.failed(error)
+    }
+
+    // Leaves the field being edited, saving it.
+    function finishEditing() {
+        if (pane.editing)
+            pane.forceActiveFocus()
+    }
+
+    // A metadata field. `value` is the stored value as the field shows it.
+    component DetailField: RowLayout {
+        id: detail
+
+        property string label
+        property string key
+        property string value
+        property string placeholder
+        property bool number: false
+        property bool allowEmpty: true
+        // A check of the typed text beyond emptiness.
+        property var check: null
+        readonly property bool valid: accepts(field.text)
+
+        function accepts(text) {
+            if (!allowEmpty && text.trim().length === 0)
+                return false
+            if (number)
+                return text.trim().length > 0 && isFinite(Number(text.trim().replace(",", "."))) && Number(text.trim().replace(",", ".")) >= 0
+            return check ? check(text) : true
+        }
+
+        function revert() {
+            field.text = Qt.binding(() => detail.value)
+        }
+
+        function commit() {
+            if (field.text.trim() !== detail.value.trim() && valid)
+                pane.save(detail.key, detail.number ? Number(field.text.trim().replace(",", ".")) : field.text)
+            // The saved value once it is in, or the old one.
+            revert()
+        }
+
+        Layout.fillWidth: true
+        spacing: Theme.rowPadding
+
+        Label {
+            Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+            Layout.minimumWidth: Layout.preferredWidth
+            text: detail.label
+            color: Theme.textMuted
+            elide: Text.ElideRight
+        }
+
+        FormField {
+            id: field
+            objectName: "field_" + detail.key
+            readonly property bool detailField: true
+
+            Layout.fillWidth: !detail.number
+            Layout.preferredWidth: detail.number ? Math.round(8 * Theme.charWidth) : 1
+            text: detail.value
+            placeholderText: detail.placeholder
+            horizontalAlignment: detail.number ? TextInput.AlignRight : TextInput.AlignLeft
+            invalid: !detail.valid
+            enabled: pane.editable
+            Accessible.name: detail.label
+
+            onEditingFinished: detail.commit()
+            // Esc reverts here instead of closing the book.
+            Keys.onShortcutOverride: function(event) {
+                event.accepted = event.key === Qt.Key_Escape
+            }
+            Keys.onEscapePressed: {
+                detail.revert()
+                pane.forceActiveFocus()
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            visible: detail.number
+        }
+    }
+
     ScrollView {
         id: paneScroll
 
@@ -61,6 +160,7 @@ FocusScope {
                 objectName: "bookFacts"
 
                 Layout.fillWidth: true
+                visible: !pane.editable
                 spacing: Math.round(6 * Theme.spacingScale)
 
                 Repeater {
@@ -87,6 +187,132 @@ FocusScope {
                         value: modelData.value
                         link: modelData.url
                     }
+                }
+            }
+
+            ColumnLayout {
+                objectName: "bookFields"
+
+                Layout.fillWidth: true
+                visible: pane.editable
+                spacing: Math.round(6 * Theme.spacingScale)
+
+                DetailField {
+                    key: "title"
+                    label: qsTr("Title")
+                    value: pane.book.title || ""
+                    allowEmpty: false
+                }
+
+                DetailField {
+                    key: "sort"
+                    label: qsTr("Title sort")
+                    value: pane.book.sort || ""
+                    allowEmpty: false
+                }
+
+                DetailField {
+                    key: "authors"
+                    label: qsTr("Authors")
+                    value: pane.book.authorsText || ""
+                    placeholder: qsTr("Name & name")
+                    allowEmpty: false
+                }
+
+                DetailField {
+                    key: "authorSort"
+                    label: qsTr("Author sort")
+                    value: pane.book.authorSort || ""
+                }
+
+                DetailField {
+                    key: "series"
+                    label: qsTr("Series")
+                    value: pane.book.series || ""
+                }
+
+                DetailField {
+                    key: "seriesIndex"
+                    label: qsTr("Number")
+                    value: pane.book.seriesIndexText || "1"
+                    number: true
+                    visible: (pane.book.series || "").length > 0
+                }
+
+                DetailField {
+                    key: "tags"
+                    label: qsTr("Tags")
+                    value: pane.book.tagsText || ""
+                    placeholder: qsTr("tag, tag")
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.rowPadding
+
+                    Label {
+                        Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+                        text: qsTr("Rating")
+                        color: Theme.textMuted
+                    }
+
+                    ChoiceBox {
+                        id: ratingBox
+                        objectName: "field_rating"
+                        readonly property bool detailField: true
+
+                        Layout.preferredWidth: Math.round(14 * Theme.charWidth)
+                        model: pane.ratingChoices
+                        currentIndex: pane.book.ratingValue || 0
+                        enabled: pane.editable
+                        Accessible.name: qsTr("Rating")
+                        onActivated: function(index) {
+                            if (index !== (pane.book.ratingValue || 0))
+                                pane.save("rating", index)
+                            currentIndex = Qt.binding(() => pane.book.ratingValue || 0)
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+                }
+
+                DetailField {
+                    key: "publisher"
+                    label: qsTr("Publisher")
+                    value: pane.book.publisher || ""
+                }
+
+                DetailField {
+                    key: "languages"
+                    label: qsTr("Languages")
+                    value: pane.book.languagesText || ""
+                    placeholder: qsTr("French, English")
+                }
+
+                DetailField {
+                    key: "pubdate"
+                    label: qsTr("Published")
+                    value: pane.book.pubdateText || ""
+                    placeholder: qsTr("YYYY-MM-DD")
+                    check: text => pane.library.isDate(text)
+                }
+
+                DetailField {
+                    key: "identifiers"
+                    label: qsTr("Identifiers")
+                    value: pane.book.identifiersText || ""
+                    placeholder: qsTr("isbn:…, goodreads:…")
+                }
+
+                MetaRow {
+                    Layout.topMargin: Math.round(Theme.gutter / 2)
+                    label: qsTr("Added")
+                    value: pane.book.added || ""
+                }
+
+                MetaRow {
+                    label: qsTr("Modified")
+                    value: pane.book.modified || ""
                 }
             }
 

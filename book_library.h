@@ -10,12 +10,16 @@
 #include <QVariantMap>
 
 #include "book.h"
+#include "book_edit.h"
 #include "calibre_config.h"
+#include "commit_engine.h"
 
-// A Calibre library, read-only: its books and the sections that browse them
-// by author, series, tag, language or publisher. Loading copies metadata.db
-// out of the library and reads the copy on a worker thread; a change to the
-// database reloads it after a moment.
+// A Calibre library: its books and the sections that browse them by author,
+// series, tag, language or publisher. Loading copies metadata.db out of the
+// library and reads the copy on a worker thread; a change to the database
+// reloads it after a moment. Edits are saved one after the other on a
+// worker thread through CommitEngine, while `writable` says the library may
+// be written.
 class BookLibrary : public QObject
 {
     Q_OBJECT
@@ -43,6 +47,19 @@ class BookLibrary : public QObject
     Q_PROPERTY(QString facetSortOption READ facetSortOption WRITE setFacetSortOption NOTIFY facetSortOptionChanged)
     Q_PROPERTY(int currentBookId READ currentBookId WRITE setCurrentBookId NOTIFY currentBookChanged)
     Q_PROPERTY(QVariantMap currentBook READ currentBook NOTIFY currentBookChanged)
+    // Set by the session from the guard: edits are refused otherwise.
+    Q_PROPERTY(bool writable READ writable WRITE setWritable NOTIFY writableChanged)
+    Q_PROPERTY(bool saving READ saving NOTIFY savingChanged)
+    // The current book has changed since it was opened.
+    Q_PROPERTY(bool canRevert READ canRevert NOTIFY canRevertChanged)
+    // The metadata.db Reliure last wrote, for the guard's ownChangeKey.
+    Q_PROPERTY(QString publishedKey READ publishedKey NOTIFY publishedKeyChanged)
+    // Calibre's interface language as set here, empty for Calibre's own; and
+    // the one in effect. It decides title sorts, the "Unknown" of a book
+    // without author, and names in other scripts.
+    Q_PROPERTY(QString calibreLanguage READ calibreLanguage WRITE setCalibreLanguage NOTIFY calibreLanguageChanged)
+    Q_PROPERTY(QString interfaceLanguage READ interfaceLanguage NOTIFY calibreLanguageChanged)
+    Q_PROPERTY(QString backupFolder READ backupFolder NOTIFY libraryPathChanged)
 
 public:
     explicit BookLibrary(QObject *parent = nullptr);
@@ -87,6 +104,15 @@ public:
     void setCurrentBookId(int bookId);
     QVariantMap currentBook() const;
     const LibraryData &data() const;
+    bool writable() const;
+    void setWritable(bool writable);
+    bool saving() const;
+    bool canRevert() const;
+    QString publishedKey() const;
+    QString calibreLanguage() const;
+    void setCalibreLanguage(const QString &language);
+    QString interfaceLanguage() const;
+    QString backupFolder() const;
 
     // Narrows the books to the item with `id` of the current browse section,
     // clearing the search.
@@ -103,6 +129,24 @@ public:
     // Reads the library again now.
     Q_INVOKABLE void reload();
 
+    // Saves `changes` to the book, BookEdit's keys, after the edits before
+    // it. The title sort and author sort follow the title and authors when
+    // they followed them before, as in Calibre's editor; the title sort uses
+    // the book's language. Returns an error message for a value it refuses,
+    // empty once the edit is on its way: saved() or saveFailed() follows.
+    Q_INVOKABLE QString updateBook(int bookId, const QVariantMap &changes);
+    // The book's cover from an image file, from the image on the clipboard,
+    // or none. Same returns as updateBook().
+    Q_INVOKABLE QString setCover(int bookId, const QString &fileUrl);
+    Q_INVOKABLE QString pasteCover(int bookId);
+    Q_INVOKABLE QString removeCover(int bookId);
+    // Puts the current book back as it was when it was opened.
+    Q_INVOKABLE void revertCurrentBook();
+    // Whether `text` is a date updateBook() takes for pubdate.
+    Q_INVOKABLE bool isDate(const QString &text) const;
+    // Shows the folder of backups in the file manager.
+    Q_INVOKABLE void openBackupFolder();
+
 signals:
     void libraryPathChanged();
     void libraryChanged();
@@ -117,6 +161,17 @@ signals:
     void currentBookChanged();
     // A reload failed while the books read before stay shown.
     void loadFailed(const QString &message);
+    void writableChanged();
+    void savingChanged();
+    void canRevertChanged();
+    void publishedKeyChanged();
+    void calibreLanguageChanged();
+    // An edit went into the library.
+    void saved();
+    // An edit could not be saved; the books show what the library holds.
+    void saveFailed(const QString &message);
+    // Something left by an interrupted change was put right.
+    void recovered(const QString &message);
 
 private:
     struct LoadResult
@@ -124,11 +179,21 @@ private:
         QString path;
         LibraryData data;
         QString error;
+        QString recovered;
         bool ok = false;
     };
 
     void startLoad();
     void finishLoad();
+    QString queueEdit(const BookEdit &edit);
+    void startCommit();
+    void finishCommit();
+    void applyData(LibraryData data);
+    // What the current book's fields hold, as updateBook() takes them.
+    QVariantMap editableValues(const Book &book) const;
+    // Keeps the current book as it is before its first change.
+    void keepOriginal(const Book &book);
+    CalibreConfig effectiveConfig() const;
     void watchLibrary();
     void reloadIfChanged();
     void rebuildRows();
@@ -161,4 +226,15 @@ private:
     QString m_facetSortOption = QStringLiteral("name");
     int m_currentBookId = 0;
     QVariantMap m_currentBook;
+
+    bool m_writable = false;
+    QFutureWatcher<CommitEngine::Result> m_commitWatcher;
+    QList<BookEdit> m_pendingEdits;
+    bool m_backedUp = false;
+    QString m_publishedKey;
+    QString m_calibreLanguage;
+    // The current book as it was opened, kept at its first change.
+    int m_originalBookId = 0;
+    QVariantMap m_original;
+    QByteArray m_originalCover;
 };

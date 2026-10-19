@@ -34,6 +34,8 @@ public:
     // The first column of the first row of `sql`, or an invalid QVariant.
     QVariant value(const QString &sql, QString *error = nullptr);
     QString lastError() const;
+    // The rowid of the last row an INSERT added.
+    qint64 lastInsertRowId() const;
 
 private:
     sqlite3 *m_db = nullptr;

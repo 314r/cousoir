@@ -3,6 +3,9 @@
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -10,9 +13,12 @@
 
 #include <cstdio>
 
+#include "book_edit.h"
 #include "calibre_db.h"
 #include "calibre_list.h"
+#include "commit_engine.h"
 #include "concurrency_guard.h"
+#include "reliure_paths.h"
 
 namespace {
 
@@ -174,6 +180,82 @@ int doctor(const QString &libraryPath)
     return problems.isEmpty() ? 0 : 1;
 }
 
+// The checks the application makes before writing, Dropbox's answer
+// included; empty when the library could be written now.
+QString readOnlyReason(const QString &libraryPath)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return QStringLiteral("the library cannot be read");
+    ConcurrencyGuard guard;
+    guard.setLibraryReadable(true);
+    guard.setSchemaKnown(data.schemaKnown);
+    guard.setLibraryPath(data.libraryPath);
+    if (guard.state() == QLatin1String("dropbox")) {
+        QEventLoop loop;
+        QObject::connect(&guard, &ConcurrencyGuard::stateChanged, &loop, [&] {
+            if (!guard.dropboxStatus().isEmpty())
+                loop.quit();
+        });
+        QTimer::singleShot(3500, &loop, &QEventLoop::quit);
+        loop.exec();
+    }
+    return guard.writable() ? QString() : guard.readOnlyReason();
+}
+
+// Applies the edits of a JSON file: [{ "book": 1, "set": { "title": …, … } }].
+// The keys are BookEdit's; a coverFile is relative to the JSON file.
+int apply(const QString &libraryPath, const QString &opsPath, bool force)
+{
+    QFile file(opsPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        err() << QStringLiteral("Cannot read %1: %2").arg(opsPath, file.errorString()) << Qt::endl;
+        return 2;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (!document.isArray()) {
+        err() << QStringLiteral("%1 is not a JSON array: %2").arg(opsPath, parseError.errorString()) << Qt::endl;
+        return 2;
+    }
+    CommitEngine::Request request;
+    for (const QJsonValue &value : document.array()) {
+        const QJsonObject op = value.toObject();
+        QVariantMap changes = op.value(QLatin1String("set")).toObject().toVariantMap();
+        if (changes.contains(QStringLiteral("coverFile"))) {
+            changes.insert(QStringLiteral("coverFile"), QFileInfo(opsPath).absoluteDir().absoluteFilePath(
+                                                            changes.value(QStringLiteral("coverFile")).toString()));
+        }
+        BookEdit edit;
+        QString error;
+        if (!BookEdit::fromVariantMap(op.value(QLatin1String("book")).toInt(), changes, &edit, &error)) {
+            err() << error << Qt::endl;
+            return 2;
+        }
+        request.edits.append(edit);
+    }
+    if (!force) {
+        const QString reason = readOnlyReason(libraryPath);
+        if (!reason.isEmpty()) {
+            err() << reason << Qt::endl;
+            return 1;
+        }
+    }
+    request.libraryPath = libraryPath;
+    request.cacheFolder = ReliurePaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
+    request.backupFolder = ReliurePaths::backupFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
+    request.config = CalibreConfig::load();
+    request.producer = QStringLiteral("Reliure (%1)").arg(QStringLiteral(RELIURE_VERSION));
+    request.producerId = QStringLiteral("reliure");
+    const CommitEngine::Result result = CommitEngine::commit(request);
+    if (!result.ok) {
+        err() << result.error << Qt::endl;
+        return 1;
+    }
+    out() << QStringLiteral("Changed %1 book(s); backup %2").arg(result.dirtied.size()).arg(result.backup) << Qt::endl;
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -188,20 +270,24 @@ int main(int argc, char *argv[])
         "Reads a Calibre library without changing it.\n\n"
         "Commands:\n"
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
-        "  doctor  Report missing files, conflict copies and whether the library could be written now."));
+        "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
+        "  apply   Apply the edits of a JSON file, as the application saves them."));
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption libraryOption(QStringList{ QStringLiteral("library"), QStringLiteral("with-library") },
                                            QStringLiteral("The library folder; by default the one Calibre opens."),
                                            QStringLiteral("path"));
     parser.addOption(libraryOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list or doctor"));
+    const QCommandLineOption forceOption(QStringLiteral("force"),
+                                         QStringLiteral("apply: skip the Dropbox and recent-change checks."));
+    parser.addOption(forceOption);
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor or apply"));
+    parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.process(app);
 
     const QStringList arguments = parser.positionalArguments();
-    if (arguments.size() != 1) {
+    if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != (arguments.first() == QLatin1String("apply")))
         parser.showHelp(2);
-    }
     const QString libraryPath = parser.isSet(libraryOption) ? parser.value(libraryOption)
                                                             : CalibreConfig::defaultLibraryPath();
     if (libraryPath.isEmpty()) {
@@ -212,6 +298,8 @@ int main(int argc, char *argv[])
         return list(libraryPath);
     if (arguments.first() == QLatin1String("doctor"))
         return doctor(libraryPath);
+    if (arguments.first() == QLatin1String("apply"))
+        return apply(libraryPath, arguments.at(1), parser.isSet(forceOption));
     err() << QStringLiteral("Unknown command “%1”.").arg(arguments.first()) << Qt::endl;
     return 2;
 }

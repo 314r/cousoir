@@ -73,6 +73,8 @@ private slots:
     void readOnlyWithoutDropbox();
     void readOnlyAfterRecentChange();
     void readOnlyUntilConflictSeen();
+    void ownChangeIsNoReasonToWait();
+    void readOnlyWhileEditedElsewhere();
 
 private:
     ConcurrencyGuard::Environment environment() const;
@@ -274,6 +276,66 @@ void ConcurrencyGuardTest::readOnlyUntilConflictSeen()
     QVERIFY(writeFile(QDir(m_library).filePath(copy), "newer"));
     checks->refresh();
     QCOMPARE(checks->state(), QStringLiteral("conflict"));
+}
+
+void ConcurrencyGuardTest::ownChangeIsNoReasonToWait()
+{
+    FakeDropbox dropbox(environment().dropboxSocket);
+    const QString database = QDir(m_library).filePath(QStringLiteral("metadata.db"));
+    age(database, 10);
+    auto checks = guard();
+    QTRY_COMPARE(checks->state(), QStringLiteral("recent"));
+    // The file Reliure wrote itself.
+    checks->setOwnChangeKey(ConcurrencyGuard::changeKey(database));
+    QCOMPARE(checks->state(), QStringLiteral("writable"));
+    // Dropbox sending it is no reason either.
+    dropbox.status = "syncing";
+    checks->refresh();
+    QTRY_COMPARE(checks->dropboxStatus(), QStringLiteral("syncing"));
+    QCOMPARE(checks->state(), QStringLiteral("writable"));
+    // Another change after it counts again.
+    QVERIFY(writeFile(database, "changed elsewhere"));
+    checks->refresh();
+    QCOMPARE(checks->state(), QStringLiteral("dropbox"));
+    dropbox.status = "up to date";
+    checks->refresh();
+    QTRY_COMPARE(checks->state(), QStringLiteral("recent"));
+}
+
+void ConcurrencyGuardTest::readOnlyWhileEditedElsewhere()
+{
+    FakeDropbox dropbox(environment().dropboxSocket);
+    ConcurrencyGuard::Environment here = environment();
+    here.host = QStringLiteral("laptop");
+    ConcurrencyGuard::Environment there = environment();
+    there.host = QStringLiteral("desktop");
+    ConcurrencyGuard laptop(here);
+    ConcurrencyGuard desktop(there);
+    for (ConcurrencyGuard *checks : { &laptop, &desktop }) {
+        checks->setLibraryReadable(true);
+        checks->setSchemaKnown(true);
+        checks->setLibraryUuid(QStringLiteral("library-id"));
+        checks->setLibraryPath(m_library);
+    }
+    QTRY_COMPARE(laptop.state(), QStringLiteral("writable"));
+
+    // The desktop's heartbeat after a change keeps the laptop read-only.
+    desktop.noteWrite();
+    const QString folder = ConcurrencyGuard::heartbeatFolder(m_root->filePath(QStringLiteral("Dropbox")),
+                                                             QStringLiteral("library-id"));
+    QVERIFY(QFileInfo::exists(QDir(folder).filePath(QStringLiteral("desktop.json"))));
+    laptop.refresh();
+    QCOMPARE(laptop.state(), QStringLiteral("elsewhere"));
+    QCOMPARE(laptop.readOnlyReason(), QStringLiteral("Read-only: Reliure is editing on desktop"));
+    // Not the desktop itself.
+    desktop.refresh();
+    QTRY_COMPARE(desktop.state(), QStringLiteral("writable"));
+
+    // An old heartbeat does not count.
+    QVERIFY(writeFile(QDir(folder).filePath(QStringLiteral("desktop.json")),
+                      R"({"host":"desktop","updated":"2020-01-01T00:00:00Z","lastWrite":"2020-01-01T00:00:00Z"})"));
+    laptop.refresh();
+    QCOMPARE(laptop.state(), QStringLiteral("writable"));
 }
 
 QTEST_GUILESS_MAIN(ConcurrencyGuardTest)
