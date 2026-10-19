@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-# Compares two fake Kobos after the same books were sent to or removed from
-# them, one by Calibre and one by Reliure:
+# Compares two fake readers, Kobos or Kindles, after the same books were sent
+# to or removed from them, one by Calibre and one by Reliure:
 #
 #   compare_devices.py [--lpaths-only] <calibre kobo> <reliure kobo>
 #
-# - every file but the Kobo's database, which Calibre edits and Reliure
-#   leaves alone;
+# - every file but a Kobo's database, which Calibre edits and Reliure leaves
+#   alone;
 # - the book files by their content, without the time Calibre stamps in
 #   each: an EPUB's entries, in any order, without its dcterms:modified, a
-#   PDF without its XMP MetadataDate;
+#   PDF without its XMP MetadataDate; an APNX without the id Calibre draws;
 # - metadata.calibre as parsed JSON, book by book, without the temporary
 #   file each book's cover was read from, whose path Calibre keeps, or the
 #   size of an EPUB, which its time changes; with --lpaths-only, only which
 #   books it has;
 # - driveinfo.calibre without the time of the connection, the uuid drawn for
-#   a new device or the folder it is mounted on.
+#   a new device or the folder a Kobo is mounted on.
 #
 # Prints each difference and exits with 1 when there is one.
 
@@ -55,6 +55,8 @@ def content(path):
         return entries[:1] + sorted(entries[1:])
     if raw.startswith(b'%PDF'):
         raw = re.sub(rb'(<xmp:MetadataDate>)[^<]*', rb'\1<now>', raw)
+    if path.endswith('.apnx'):
+        raw = re.sub(rb'("contentGuid":")[0-9a-f]+', rb'\1<id>', raw)
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -76,14 +78,15 @@ def driveinfo(path, root):
         info = json.load(f)
     info['date_last_connected'] = '<now>'
     info['device_store_uuid'] = '<uuid>'
-    info['prefix'] = info['prefix'].replace(os.path.abspath(root), '@KOBO@')
+    if 'prefix' in info:
+        info['prefix'] = info['prefix'].replace(os.path.abspath(root), '@DEVICE@')
     return info
 
 
 fa, fb = files(calibre_kobo), files(reliure_kobo)
 for rel in sorted(set(fa) | set(fb)):
     if rel not in fa or rel not in fb:
-        problems.append(f'{rel} only on the {"Calibre" if rel in fa else "Reliure"} Kobo')
+        problems.append(f'{rel} only on the {"Calibre" if rel in fa else "Reliure"} device')
     elif rel == 'metadata.calibre':
         ma, mb = metadata(fa[rel], calibre_kobo), metadata(fb[rel], reliure_kobo)
         for lpath in sorted(set(ma) | set(mb)):

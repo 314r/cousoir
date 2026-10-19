@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
+#include <QStandardPaths>
 #include <QStorageInfo>
 #include <QtConcurrent>
 
@@ -26,7 +27,12 @@
 #include "calibre_config.h"
 #include "calibre_lock.h"
 #include "concurrency_guard.h"
+#include "conversion.h"
+#include "device_files.h"
+#include "kindle.h"
+#include "kindle_send.h"
 #include "kobo_send.h"
+#include "mtp.h"
 
 namespace {
 
@@ -139,15 +145,87 @@ QStringList formatsOf(const Book &book)
     return formats;
 }
 
+QString readText(const QString &path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? QString::fromLatin1(file.readAll()).trimmed() : QString();
+}
+
+// The Kindles on USB that MTP reaches, from Linux's list of USB devices:
+// Amazon's, but those that come as a disk.
+QList<KindleSlot> connectedKindles()
+{
+    QList<KindleSlot> kindles;
+    const QDir usb(QStringLiteral("/sys/bus/usb/devices"));
+    for (const QString &name : usb.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (name.contains(u':'))
+            continue;
+        const QDir device(usb.filePath(name));
+        bool ok = false;
+        if (readText(device.filePath(QStringLiteral("idVendor"))).toUShort(&ok, 16) != Kindle::VendorId || !ok)
+            continue;
+        bool disk = false;
+        for (const QString &interface : device.entryList({ name + QStringLiteral(":*") }, QDir::Dirs))
+            disk = disk || readText(device.filePath(interface + QStringLiteral("/bInterfaceClass"))) == QLatin1String("08");
+        if (disk)
+            continue;
+        kindles.append({ readText(device.filePath(QStringLiteral("busnum"))).toUInt(),
+                       quint8(readText(device.filePath(QStringLiteral("devnum"))).toUInt()),
+                         readText(device.filePath(QStringLiteral("idProduct"))).toUShort(nullptr, 16), {} });
+    }
+    return kindles;
+}
+
+QString keyOf(const KindleSlot &slot)
+{
+    return slot.folder.isEmpty() ? QStringLiteral("mtp:%1:%2").arg(slot.bus).arg(slot.number)
+                                 : QStringLiteral("mtpdir:") + QDir::cleanPath(slot.folder);
+}
+
 } // namespace
+
+struct DeviceLibrary::KindleLink
+{
+    std::unique_ptr<Mtp::Session> session;
+    std::unique_ptr<DeviceFiles> files;
+    KindleSend::Device device;
+
+    // Opens the Kindle at `slot` and lists its files.
+    static std::shared_ptr<KindleLink> open(const KindleSlot &slot, QString *error)
+    {
+        auto link = std::make_shared<KindleLink>();
+        if (!slot.folder.isEmpty()) {
+            link->files = std::make_unique<FolderFiles>(slot.folder, true);
+            link->device = KindleSend::standIn();
+        } else {
+            link->session = std::make_unique<Mtp::Session>();
+            if (!link->session->open(slot.bus, slot.number, error))
+                return nullptr;
+            link->device = { link->session->friendlyName(), link->session->modelName(), link->session->serialNumber(),
+                             Kindle::VendorId, slot.productId };
+            link->files = std::make_unique<MtpFiles>(link->session.get(), true);
+        }
+        if (!link->files->scan(error))
+            return nullptr;
+        return link;
+    }
+};
 
 DeviceLibrary::DeviceLibrary(QObject *parent)
     : QObject(parent)
     , m_volumes(mountedVolumes)
-    , m_program(KoboSend::program())
+    , m_kindles(connectedKindles)
+    , m_program(SendJob::program())
     , m_ejector(udisksEject)
     , m_configDirectory(CalibreConfig::configDirectory())
 {
+    // Under test, only the readers a test makes up: never those plugged in,
+    // which a test would otherwise read, write to and send books to.
+    if (QStandardPaths::isTestModeEnabled()) {
+        m_volumes = [] { return QList<Volume>(); };
+        m_kindles = [] { return QList<KindleSlot>(); };
+    }
+    m_kindlePool.setMaxThreadCount(1);
     connect(&m_scanTimer, &QTimer::timeout, this, &DeviceLibrary::scan);
     m_scanTimer.start(2000);
     QTimer::singleShot(0, this, &DeviceLibrary::scan);
@@ -158,6 +236,7 @@ DeviceLibrary::~DeviceLibrary()
     stopProcess();
     if (m_copy)
         m_copy->waitForFinished();
+    m_kindlePool.waitForDone();
 }
 
 BookLibrary *DeviceLibrary::library() const
@@ -188,14 +267,14 @@ QVariantList DeviceLibrary::devices() const
 {
     QVariantList list;
     for (const Connected &connected : m_devices) {
-        const Kobo::Device &device = connected.device;
         list.append(QVariantMap{
-            { QStringLiteral("root"), device.root },
-            { QStringLiteral("name"), device.name },
-            { QStringLiteral("freeBytes"), device.freeBytes },
-            { QStringLiteral("free"), sizeText(device.freeBytes) },
-            { QStringLiteral("totalBytes"), device.totalBytes },
-            { QStringLiteral("firmware"), device.firmware },
+            { QStringLiteral("root"), connected.root },
+            { QStringLiteral("name"), connected.name },
+            { QStringLiteral("kind"), connected.kind == Kind::Kobo ? QStringLiteral("kobo") : QStringLiteral("kindle") },
+            { QStringLiteral("ejectable"), connected.kind == Kind::Kobo },
+            { QStringLiteral("freeBytes"), connected.freeBytes },
+            { QStringLiteral("free"), sizeText(connected.freeBytes) },
+            { QStringLiteral("totalBytes"), connected.totalBytes },
         });
     }
     return list;
@@ -229,15 +308,15 @@ QVariantList DeviceLibrary::rows() const
     const Connected *connected = find(m_currentRoot);
     if (!connected)
         return {};
-    QList<Kobo::DeviceBook> books = connected->books;
+    QList<DeviceBook> books = connected->books;
     QCollator collator;
     collator.setNumericMode(true);
     collator.setCaseSensitivity(Qt::CaseInsensitive);
-    std::stable_sort(books.begin(), books.end(), [&collator](const Kobo::DeviceBook &a, const Kobo::DeviceBook &b) {
+    std::stable_sort(books.begin(), books.end(), [&collator](const DeviceBook &a, const DeviceBook &b) {
         return collator.compare(a.title, b.title) < 0;
     });
     QVariantList rows;
-    for (const Kobo::DeviceBook &book : std::as_const(books)) {
+    for (const DeviceBook &book : std::as_const(books)) {
         rows.append(QVariantMap{
             { QStringLiteral("lpath"), book.lpath },
             { QStringLiteral("title"), book.title },
@@ -268,13 +347,13 @@ QVariantMap DeviceLibrary::onDevice() const
 {
     QVariantMap map;
     for (const Connected &connected : m_devices) {
-        for (const Kobo::DeviceBook &book : connected.books) {
+        for (const DeviceBook &book : connected.books) {
             if (!book.bookId)
                 continue;
             const QString key = QString::number(book.bookId);
             QStringList names = map.value(key).toStringList();
-            if (!names.contains(connected.device.name))
-                names.append(connected.device.name);
+            if (!names.contains(connected.name))
+                names.append(connected.name);
             map.insert(key, names);
         }
     }
@@ -293,7 +372,7 @@ bool DeviceLibrary::writable() const
 
 QString DeviceLibrary::readOnlyReason() const
 {
-    return m_writable ? QString() : tr("Calibre is open on this computer: it handles the Kobo meanwhile.");
+    return m_writable ? QString() : tr("Calibre is open on this computer: it handles the readers meanwhile.");
 }
 
 QVariantList DeviceLibrary::jobs() const
@@ -321,12 +400,34 @@ bool DeviceLibrary::busy() const
     return !m_jobs.isEmpty();
 }
 
-QString DeviceLibrary::sendFormat(int bookId) const
+QStringList DeviceLibrary::formatMap(const Connected &connected) const
 {
-    if (!m_library)
+    return connected.kind == Kind::Kobo ? Kobo::formatMap(m_configDirectory)
+                                        : Kindle::formatMap(m_configDirectory, connected.serial);
+}
+
+QString DeviceLibrary::sendFormat(int bookId, const QString &root) const
+{
+    const Connected *connected = find(root);
+    if (!m_library || !connected)
         return {};
     const Book *book = bookIn(m_library->data(), bookId);
-    return book ? Kobo::sendFormat(formatsOf(*book), Kobo::formatMap(m_configDirectory)) : QString();
+    return book ? DeviceBooks::sendFormat(formatsOf(*book), formatMap(*connected)) : QString();
+}
+
+QString DeviceLibrary::convertFormat(const QString &root) const
+{
+    const Connected *connected = find(root);
+    if (!connected)
+        return {};
+    // auto_convert of Calibre's sync_to_device(): the first of the driver's
+    // formats it converts to.
+    const QStringList outputs = Conversion::outputFormats();
+    for (const QString &format : formatMap(*connected)) {
+        if (outputs.contains(format.toUpper()))
+            return format.toUpper();
+    }
+    return {};
 }
 
 QString DeviceLibrary::send(const QVariantList &bookIds, const QString &root)
@@ -340,14 +441,18 @@ QString DeviceLibrary::send(const QVariantList &bookIds, const QString &root)
     const Connected *connected = find(root);
     if (!connected)
         return tr("The device is no longer connected.");
-    Job job{ {}, {}, root, connected->device.name };
-    const QStringList formatMap = Kobo::formatMap(m_configDirectory);
+    if (connected->kind == Kind::Kindle && connected->loading)
+        return tr("Wait until %1 is read.").arg(connected->name);
+    if (connected->kind == Kind::Kindle && !connected->error.isEmpty())
+        return connected->error;
+    Job job{ {}, {}, root, connected->name, connected->kind };
+    const QStringList formats = formatMap(*connected);
     for (const QVariant &value : bookIds) {
         const Book *book = bookIn(m_library->data(), value.toInt());
         if (!book)
             return tr("This book is no longer in the library.");
-        if (Kobo::sendFormat(formatsOf(*book), formatMap).isEmpty())
-            return tr("“%1” has none of the formats %2 reads: convert it to KEPUB first.").arg(book->title, job.name);
+        if (DeviceBooks::sendFormat(formatsOf(*book), formats).isEmpty())
+            return tr("“%1” has none of the formats %2 reads.").arg(book->title, job.name);
         if (!job.bookIds.contains(book->id)) {
             job.bookIds.append(book->id);
             job.titles.append(book->title);
@@ -365,26 +470,46 @@ QString DeviceLibrary::remove(const QStringList &lpaths)
 {
     if (!m_writable)
         return readOnlyReason();
-    const Connected *connected = find(m_currentRoot);
+    Connected *connected = find(m_currentRoot);
     if (!connected)
         return tr("The device is no longer connected.");
     for (const Job &job : std::as_const(m_jobs)) {
         if (job.root == m_currentRoot)
-            return tr("Wait until the books being sent to %1 are there.").arg(connected->device.name);
+            return tr("Wait until the books being sent to %1 are there.").arg(connected->name);
     }
-    QList<Kobo::DeviceBook> books;
-    for (const Kobo::DeviceBook &book : connected->books) {
+    QList<DeviceBook> books;
+    for (const DeviceBook &book : connected->books) {
         if (lpaths.contains(book.lpath)) {
             if (book.purchased)
                 return tr("“%1” was bought from Kobo: remove it on the Kobo.").arg(book.title);
             books.append(book);
         }
     }
-    QString error;
-    const Kobo::Device device = connected->device;
-    if (!Kobo::removeBooks(device, books, &error))
+    const QString root = connected->root;
+    if (connected->kind == Kind::Kobo) {
+        QString error;
+        if (!Kobo::removeBooks(connected->kobo, books, &error))
+            return error;
+        load(root);
+        return {};
+    }
+    // Over MTP, on its thread.
+    connected->loading = true;
+    emit rowsChanged();
+    auto *watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, root] {
+        watcher->deleteLater();
+        if (!watcher->result().isEmpty())
+            emit failed(watcher->result());
+        load(root);
+    });
+    watcher->setFuture(QtConcurrent::run(&m_kindlePool, [slot = connected->slot, books] {
+        QString error;
+        const std::shared_ptr<KindleLink> link = KindleLink::open(slot, &error);
+        if (link)
+            Kindle::removeBooks(*link->files, books, &error);
         return error;
-    load(device.root);
+    }));
     return {};
 }
 
@@ -393,14 +518,16 @@ QString DeviceLibrary::eject(const QString &root)
     const Connected *connected = find(root);
     if (!connected)
         return tr("The device is no longer connected.");
+    if (connected->kind == Kind::Kindle)
+        return tr("%1 needs no ejecting: unplug it once nothing is being sent to it.").arg(connected->name);
     for (const Job &job : std::as_const(m_jobs)) {
         if (job.root == root)
-            return tr("Wait until the books being sent to %1 are there.").arg(connected->device.name);
+            return tr("Wait until the books being sent to %1 are there.").arg(connected->name);
     }
-    const Kobo::Device device = connected->device;
+    const Kobo::Device device = connected->kobo;
     // Out of sight at once, back if ejecting fails.
     m_ejected.append(root);
-    m_devices.removeIf([&root](const Connected &candidate) { return candidate.device.root == root; });
+    m_devices.removeIf([&root](const Connected &candidate) { return candidate.root == root; });
     emit devicesChanged();
     emit rowsChanged();
     if (m_currentRoot == root)
@@ -424,10 +551,11 @@ void DeviceLibrary::cancel(int bookId)
 {
     const auto matches = [bookId](const Job &job) { return bookId == 0 || job.bookIds.contains(bookId); };
     // A copy under way ends; a batch being made ready is dropped with its
-    // folder.
+    // folder, and a Kindle's connection with it.
     if ((m_process || m_folder) && !m_copy && matches(m_jobs.first())) {
         stopProcess();
         m_folder.reset();
+        m_jobs.first().link.reset();
     }
     const qsizetype from = m_process || m_folder ? 1 : 0;
     const qsizetype before = m_jobs.size();
@@ -440,7 +568,7 @@ void DeviceLibrary::cancel(int bookId)
 void DeviceLibrary::refresh()
 {
     for (const Connected &connected : std::as_const(m_devices))
-        load(connected.device.root);
+        load(connected.root);
     scan();
 }
 
@@ -451,10 +579,16 @@ void DeviceLibrary::setVolumeProvider(VolumeProvider provider, int intervalMs)
     scan();
 }
 
+void DeviceLibrary::setKindleProvider(KindleProvider provider)
+{
+    m_kindles = std::move(provider);
+    scan();
+}
+
 void DeviceLibrary::setProgram(const QString &program)
 {
     const bool wasAvailable = available();
-    m_program = program.isEmpty() ? KoboSend::program() : program;
+    m_program = program.isEmpty() ? SendJob::program() : program;
     if (available() != wasAvailable)
         emit availableChanged();
 }
@@ -486,26 +620,46 @@ void DeviceLibrary::scan()
             roots.append(root);
         }
     }
+    const QList<KindleSlot> kindles = m_kindles();
+    for (const KindleSlot &slot : kindles)
+        roots.append(keyOf(slot));
     // An ejected Kobo comes back once plugged in again.
     m_ejected.removeIf([&roots](const QString &root) { return !roots.contains(root); });
-    bool changed = false;
     const qsizetype before = m_devices.size();
-    m_devices.removeIf([&roots](const Connected &connected) { return !roots.contains(connected.device.root); });
-    changed = m_devices.size() != before;
+    m_devices.removeIf([&roots](const Connected &connected) { return !roots.contains(connected.root); });
+    bool changed = m_devices.size() != before;
     for (const Volume &volume : std::as_const(kobos)) {
         if (m_ejected.contains(volume.root))
             continue;
         if (Connected *known = find(volume.root)) {
-            const QStorageInfo storage(volume.root);
-            if (storage.bytesAvailable() != known->device.freeBytes) {
-                known->device.freeBytes = storage.bytesAvailable();
+            const qint64 free = QStorageInfo(volume.root).bytesAvailable();
+            if (free != known->freeBytes) {
+                known->freeBytes = free;
                 changed = true;
             }
             continue;
         }
-        m_devices.append({ Kobo::describe(volume.root, volume.node, m_sysRoot), {}, {}, true });
+        Connected connected;
+        connected.root = volume.root;
+        connected.kobo = Kobo::describe(volume.root, volume.node, m_sysRoot);
+        connected.name = connected.kobo.name;
+        connected.freeBytes = connected.kobo.freeBytes;
+        connected.totalBytes = connected.kobo.totalBytes;
+        m_devices.append(connected);
         changed = true;
         load(volume.root);
+    }
+    for (const KindleSlot &slot : kindles) {
+        if (find(keyOf(slot)))
+            continue;
+        Connected connected;
+        connected.kind = Kind::Kindle;
+        connected.root = keyOf(slot);
+        connected.name = tr("Kindle");
+        connected.slot = slot;
+        m_devices.append(connected);
+        changed = true;
+        load(connected.root);
     }
     if (!changed)
         return;
@@ -520,28 +674,87 @@ void DeviceLibrary::load(const QString &root)
     Connected *connected = find(root);
     if (!connected)
         return;
+    if (connected->kind == Kind::Kobo) {
+        connected->loading = true;
+        const Kobo::Device device = connected->kobo;
+        auto *watcher = new QFutureWatcher<std::pair<QList<DeviceBook>, QString>>(this);
+        connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, root] {
+            watcher->deleteLater();
+            Connected *loaded = find(root);
+            if (!loaded)
+                return;
+            const auto [books, error] = watcher->result();
+            loaded->books = books;
+            loaded->error = error;
+            loaded->loading = false;
+            loaded->freeBytes = QStorageInfo(root).bytesAvailable();
+            if (m_library)
+                DeviceBooks::match(&loaded->books, m_library->data());
+            emit devicesChanged();
+            emit rowsChanged();
+        });
+        watcher->setFuture(QtConcurrent::run([device] {
+            QString error;
+            QList<DeviceBook> books = Kobo::books(device, &error);
+            return std::pair{ books, error };
+        }));
+        return;
+    }
+
+    // Calibre, open on the computer, has the Kindle's one MTP connection.
+    if (!m_writable) {
+        connected->books.clear();
+        connected->error = readOnlyReason();
+        emit rowsChanged();
+        return;
+    }
+    struct Read
+    {
+        QList<DeviceBook> books;
+        QString error;
+        bool opened = false;
+        QString name;
+        QString serial;
+        qint64 freeBytes = 0;
+        qint64 totalBytes = 0;
+    };
     connected->loading = true;
-    const Kobo::Device device = connected->device;
-    auto *watcher = new QFutureWatcher<std::pair<QList<Kobo::DeviceBook>, QString>>(this);
+    auto *watcher = new QFutureWatcher<Read>(this);
     connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, root] {
         watcher->deleteLater();
         Connected *loaded = find(root);
         if (!loaded)
             return;
-        const auto [books, error] = watcher->result();
-        loaded->books = books;
-        loaded->error = error;
+        const Read read = watcher->result();
+        loaded->books = read.books;
+        loaded->error = read.error;
         loaded->loading = false;
-        loaded->device.freeBytes = QStorageInfo(root).bytesAvailable();
+        if (read.opened) {
+            loaded->name = read.name;
+            loaded->serial = read.serial;
+            loaded->freeBytes = read.freeBytes;
+            loaded->totalBytes = read.totalBytes;
+        }
         if (m_library)
-            Kobo::match(&loaded->books, m_library->data());
+            DeviceBooks::match(&loaded->books, m_library->data());
         emit devicesChanged();
         emit rowsChanged();
     });
-    watcher->setFuture(QtConcurrent::run([device] {
-        QString error;
-        QList<Kobo::DeviceBook> books = Kobo::books(device, &error);
-        return std::pair{ books, error };
+    watcher->setFuture(QtConcurrent::run(&m_kindlePool, [slot = connected->slot] {
+        Read read;
+        const std::shared_ptr<KindleLink> link = KindleLink::open(slot, &read.error);
+        if (!link)
+            return read;
+        read.opened = true;
+        // As Calibre does whenever it connects: the covers Amazon blanked
+        // come back.
+        Kindle::restoreThumbnails(*link->files, &read.error);
+        read.books = Kindle::books(*link->files, &read.error);
+        read.name = Kindle::name(Kindle::readDriveInfo(*link->files), link->device.friendlyName, link->device.modelName);
+        read.serial = link->device.serial;
+        read.freeBytes = link->files->freeBytes();
+        read.totalBytes = link->files->totalBytes();
+        return read;
     }));
 }
 
@@ -550,7 +763,7 @@ void DeviceLibrary::rematch()
     if (!m_library)
         return;
     for (Connected &connected : m_devices)
-        Kobo::match(&connected.books, m_library->data());
+        DeviceBooks::match(&connected.books, m_library->data());
     emit rowsChanged();
 }
 
@@ -561,12 +774,17 @@ void DeviceLibrary::updateWritable()
         return;
     m_writable = writable;
     emit writableChanged();
+    // Calibre gone, the Kindles can be read.
+    for (const Connected &connected : std::as_const(m_devices)) {
+        if (connected.kind == Kind::Kindle)
+            load(connected.root);
+    }
 }
 
 const DeviceLibrary::Connected *DeviceLibrary::find(const QString &root) const
 {
     for (const Connected &connected : m_devices) {
-        if (connected.device.root == root)
+        if (connected.root == root)
             return &connected;
     }
     return nullptr;
@@ -604,54 +822,73 @@ void DeviceLibrary::startNext()
         return;
     }
     emit jobsChanged();
-    // Copying the library's database and the Kobo's takes a moment.
+    // Copying the library's database and the device's files takes a moment.
+    using Prepared = std::pair<QString, std::shared_ptr<KindleLink>>;
     const LibraryData data = m_library->data();
-    const Kobo::Device device = connected->device;
-    const QStringList formatMap = Kobo::formatMap(m_configDirectory);
+    const QStringList formats = formatMap(*connected);
     const QString folder = m_folder->path();
-    auto *watcher = new QFutureWatcher<QString>(this);
+    auto *watcher = new QFutureWatcher<Prepared>(this);
     // A batch stopped meanwhile keeps its folder until it is ready, then
     // drops it.
     connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, kept = m_folder, folder]() mutable {
         watcher->deleteLater();
-        const QString error = watcher->result();
+        Prepared prepared = watcher->result();
         const bool current = m_folder == kept && !m_jobs.isEmpty();
         kept.reset();
         if (!current)
             return;
-        if (!error.isEmpty()) {
+        if (!prepared.first.isEmpty()) {
             const Job job = m_jobs.takeFirst();
             m_folder.reset();
             emit jobsChanged();
-            emit failed(tr("“%1” was not sent to %2: %3").arg(job.titles.join(QLatin1String("”, “")), job.name, error));
+            emit failed(tr("“%1” was not sent to %2: %3").arg(job.titles.join(QLatin1String("”, “")), job.name,
+                                                              prepared.first));
             startNext();
             return;
         }
-        m_process = new QProcess(this);
-        m_process->setProcessEnvironment(KoboSend::environment(folder, m_library ? m_library->interfaceLanguage() : QString()));
-        m_process->setStandardErrorFile(QProcess::nullDevice());
-        // A session of its own: stopping it stops Calibre's workers with it.
-        m_process->setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
-        connect(m_process, &QProcess::readyReadStandardOutput, this, &DeviceLibrary::readProgress);
-        connect(m_process, &QProcess::finished, this, &DeviceLibrary::finishJob);
-        connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError processError) {
-            if (processError != QProcess::FailedToStart)
-                return;
-            const Job job = m_jobs.takeFirst();
-            m_process->deleteLater();
-            m_process = nullptr;
-            m_folder.reset();
-            emit jobsChanged();
-            emit failed(tr("Cannot run Calibre to send “%1”.").arg(job.titles.join(QLatin1String("”, “"))));
-            startNext();
-        });
-        m_process->start(m_program, KoboSend::arguments(folder));
+        m_jobs.first().link = std::move(prepared.second);
+        startProcess(folder);
     });
-    watcher->setFuture(QtConcurrent::run([data, bookIds = job.bookIds, device, formatMap, folder] {
-        QString error;
-        KoboSend::prepare(data, bookIds, device, formatMap, folder, &error);
-        return error;
-    }));
+    if (job.kind == Kind::Kobo) {
+        watcher->setFuture(QtConcurrent::run([data, bookIds = job.bookIds, device = connected->kobo, formats, folder] {
+            QString error;
+            KoboSend::prepare(data, bookIds, device, formats, folder, &error);
+            return Prepared{ error, nullptr };
+        }));
+    } else {
+        // The Kindle's connection stays open until its files are there.
+        watcher->setFuture(QtConcurrent::run(&m_kindlePool, [data, bookIds = job.bookIds, slot = connected->slot, formats,
+                                                             folder] {
+            QString error;
+            std::shared_ptr<KindleLink> link = KindleLink::open(slot, &error);
+            if (link && !KindleSend::prepare(data, bookIds, *link->files, link->device, formats, folder, &error))
+                link.reset();
+            return Prepared{ error, link };
+        }));
+    }
+}
+
+void DeviceLibrary::startProcess(const QString &folder)
+{
+    m_process = new QProcess(this);
+    m_process->setProcessEnvironment(SendJob::environment(folder, m_library ? m_library->interfaceLanguage() : QString()));
+    m_process->setStandardErrorFile(QProcess::nullDevice());
+    // A session of its own: stopping it stops Calibre's workers with it.
+    m_process->setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
+    connect(m_process, &QProcess::readyReadStandardOutput, this, &DeviceLibrary::readProgress);
+    connect(m_process, &QProcess::finished, this, &DeviceLibrary::finishJob);
+    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError processError) {
+        if (processError != QProcess::FailedToStart)
+            return;
+        const Job job = m_jobs.takeFirst();
+        m_process->deleteLater();
+        m_process = nullptr;
+        m_folder.reset();
+        emit jobsChanged();
+        emit failed(tr("Cannot run Calibre to send “%1”.").arg(job.titles.join(QLatin1String("”, “"))));
+        startNext();
+    });
+    m_process->start(m_program, SendJob::arguments(folder));
 }
 
 void DeviceLibrary::readProgress()
@@ -660,7 +897,7 @@ void DeviceLibrary::readProgress()
         return;
     bool changed = false;
     while (m_process->canReadLine()) {
-        const double fraction = KoboSend::progress(m_process->readLine());
+        const double fraction = SendJob::progress(m_process->readLine());
         if (fraction >= 0 && !m_jobs.isEmpty()) {
             // Calibre's part, then the copy.
             m_jobs.first().progress = 0.8 * fraction;
@@ -677,26 +914,58 @@ void DeviceLibrary::finishJob()
     const int exitCode = m_process->exitStatus() == QProcess::NormalExit ? m_process->exitCode() : -1;
     m_process->deleteLater();
     m_process = nullptr;
-    const KoboSend::Outcome outcome = KoboSend::outcome(m_folder->path(), exitCode);
-    const Job job = m_jobs.first();
-    const Connected *connected = find(job.root);
-    if (!outcome.ok || !connected) {
-        finishCopy(false, outcome.ok ? tr("%1 is no longer connected.").arg(job.name) : outcome.error);
-        return;
-    }
-    // The books Calibre found nothing to send of are told apart.
     Job &running = m_jobs.first();
-    running.copying = true;
-    running.unsendable = outcome.unsendable;
-    QStringList titles;
-    for (const KoboSend::Sent &sent : outcome.sent) {
-        const qsizetype index = running.bookIds.indexOf(sent.bookId);
-        if (index >= 0)
-            titles.append(running.titles.at(index));
-    }
-    running.titles = titles;
-    const Kobo::Device device = connected->device;
     const QString folder = m_folder->path();
+    const Connected *connected = find(running.root);
+    // The books Calibre found nothing to send of are told apart.
+    const auto keepSent = [&running](const QList<SendJob::Sent> &sent, const QStringList &unsendable) {
+        running.copying = true;
+        running.unsendable = unsendable;
+        QStringList titles;
+        for (const SendJob::Sent &book : sent) {
+            const qsizetype index = running.bookIds.indexOf(book.bookId);
+            if (index >= 0)
+                titles.append(running.titles.at(index));
+        }
+        running.titles = titles;
+    };
+    const auto progress = [self = QPointer<DeviceLibrary>(this)](double fraction) {
+        QMetaObject::invokeMethod(self, [self, fraction] {
+            if (self && !self->m_jobs.isEmpty()) {
+                self->m_jobs.first().progress = 0.8 + 0.2 * fraction;
+                emit self->jobsChanged();
+            }
+        }, Qt::QueuedConnection);
+    };
+    QFuture<QString> copying;
+    if (running.kind == Kind::Kobo) {
+        const KoboSend::Outcome outcome = KoboSend::outcome(folder, exitCode);
+        if (!outcome.ok || !connected) {
+            finishCopy(false, outcome.ok ? tr("%1 is no longer connected.").arg(running.name) : outcome.error);
+            return;
+        }
+        keepSent(outcome.sent, outcome.unsendable);
+        copying = QtConcurrent::run([folder, outcome, device = connected->kobo, progress] {
+            QString error;
+            KoboSend::apply(folder, outcome, device, &error, progress);
+            return error;
+        });
+    } else {
+        const KindleSend::Outcome outcome = KindleSend::outcome(folder, exitCode);
+        std::shared_ptr<KindleLink> link = std::exchange(running.link, nullptr);
+        if (!outcome.ok || !link) {
+            finishCopy(false, outcome.ok ? tr("%1 is no longer connected.").arg(running.name) : outcome.error);
+            return;
+        }
+        keepSent(outcome.sent, outcome.unsendable);
+        // The connection closes on MTP's thread once the files are there.
+        copying = QtConcurrent::run(&m_kindlePool, [folder, outcome, link, progress]() mutable {
+            QString error;
+            KindleSend::apply(folder, outcome, *link->files, &error, progress);
+            link.reset();
+            return error;
+        });
+    }
     m_copy = new QFutureWatcher<QString>(this);
     connect(m_copy, &QFutureWatcherBase::finished, this, [this] {
         const QString error = m_copy->result();
@@ -704,19 +973,7 @@ void DeviceLibrary::finishJob()
         m_copy = nullptr;
         finishCopy(error.isEmpty(), error);
     });
-    QPointer<DeviceLibrary> self(this);
-    m_copy->setFuture(QtConcurrent::run([folder, outcome, device, self] {
-        QString error;
-        KoboSend::apply(folder, outcome, device, &error, [self](double fraction) {
-            QMetaObject::invokeMethod(self, [self, fraction] {
-                if (self && !self->m_jobs.isEmpty()) {
-                    self->m_jobs.first().progress = 0.8 + 0.2 * fraction;
-                    emit self->jobsChanged();
-                }
-            }, Qt::QueuedConnection);
-        });
-        return error;
-    }));
+    m_copy->setFuture(copying);
 }
 
 void DeviceLibrary::finishCopy(bool ok, const QString &error)
