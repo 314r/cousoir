@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+        <dc:identifier opf:scheme="calibre" id="calibre_id">1</dc:identifier>
+        <dc:identifier opf:scheme="uuid" id="uuid_id">94357bfe-c867-4007-956a-4c125dd8ad7e</dc:identifier>
+        <dc:title>L'Écume des jours</dc:title>
+        <dc:creator opf:file-as="Vian, Boris" opf:role="aut">Boris Vian</dc:creator>
+        <dc:contributor opf:file-as="calibre" opf:role="bkp">calibre (9.16.0) [https://calibre-ebook.com]</dc:contributor>
+        <dc:date>1947-03-20T00:00:00+00:00</dc:date>
+        <dc:description>&lt;div&gt;&lt;p style="color:#000000"&gt;Un roman d’amour &lt;font face="Arial"&gt;fou&lt;/font&gt;.&lt;/p&gt;&lt;p&gt;Paris, &lt;em&gt;1946&lt;/em&gt;.&lt;/p&gt;&lt;/div&gt;</dc:description>
+        <dc:publisher>Gallimard</dc:publisher>
+        <dc:identifier opf:scheme="ISBN">9782253140870</dc:identifier>
+        <dc:language>fra</dc:language>
+        <dc:subject>Roman</dc:subject>
+        <dc:subject>Classique</dc:subject>
+        <meta name="calibre:rating" content="8"/>
+        <meta name="calibre:timestamp" content="2026-10-19T08:38:26+00:00"/>
+        <meta name="calibre:title_sort" content="Écume des jours, L'"/>
+    </metadata>
+    <guide>
+        <reference type="cover" title="Couverture" href="cover.jpg"/>
+    </guide>
+</package>

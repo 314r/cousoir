@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github._314r.reliure</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>Reliure</name>
+  <summary>Browse your Calibre ebook library</summary>
+  <description>
+    <p>
+      Reliure reads the library of the Calibre ebook manager and lists its
+      books by title, author, series, tag, language and publisher, as a table
+      or as covers, with each book's metadata, description and files.
+    </p>
+  </description>
+  <developer id="io.github._314r">
+    <name>314r</name>
+  </developer>
+  <launchable type="desktop-id">io.github._314r.reliure.desktop</launchable>
+  <provides>
+    <binary>reliure</binary>
+    <binary>reliure-cli</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+</component>

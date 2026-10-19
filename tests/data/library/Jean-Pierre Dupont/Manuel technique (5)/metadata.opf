@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+        <dc:identifier opf:scheme="calibre" id="calibre_id">5</dc:identifier>
+        <dc:identifier opf:scheme="uuid" id="uuid_id">e8c0dee8-4c98-45e1-a408-f0f4133c3698</dc:identifier>
+        <dc:title>Manuel technique</dc:title>
+        <dc:creator opf:file-as="Dupont, Jean-Pierre" opf:role="aut">Jean-Pierre Dupont</dc:creator>
+        <dc:contributor opf:file-as="calibre" opf:role="bkp">calibre (9.16.0) [https://calibre-ebook.com]</dc:contributor>
+        <dc:date>0101-01-01T00:00:00+00:00</dc:date>
+        <dc:language>fra</dc:language>
+        <dc:subject>Technique</dc:subject>
+        <meta name="calibre:timestamp" content="2026-10-19T08:38:29+00:00"/>
+        <meta name="calibre:title_sort" content="Manuel technique"/>
+    </metadata>
+    <guide>
+        <reference type="cover" title="Couverture" href="cover.jpg"/>
+    </guide>
+</package>

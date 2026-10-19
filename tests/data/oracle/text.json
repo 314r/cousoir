@@ -1,0 +1,5892 @@
+{
+ "calibre_version": "9.16.0",
+ "interface_language": "fr",
+ "title_sort": [
+  {
+   "title": "The Black Company",
+   "lang": null,
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": null,
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": null,
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": null,
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": null,
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": null,
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": null,
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": null,
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": null,
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": null,
+   "expected": "Petit Prince, Le"
+  },
+  {
+   "title": "La Peste",
+   "lang": null,
+   "expected": "Peste, La"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": null,
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": null,
+   "expected": "Écume des jours, L’"
+  },
+  {
+   "title": "L´Accent",
+   "lang": null,
+   "expected": "Accent, L´"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": null,
+   "expected": "Misérables, Les"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": null,
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": null,
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": null,
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": null,
+   "expected": "amour de Swann, Un"
+  },
+  {
+   "title": "Une vie",
+   "lang": null,
+   "expected": "vie, Une"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": null,
+   "expected": "souris et des hommes, Des"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": null,
+   "expected": "démocratie en Amérique, De la"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": null,
+   "expected": "Terre à la Lune, De La"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": null,
+   "expected": "Gaulle, De"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": null,
+   "expected": "Artagnan, D'"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": null,
+   "expected": "Artagnan, D’"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": null,
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": null,
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": null,
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": null,
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": null,
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": null,
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": null,
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": null,
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": null,
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": null,
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": null,
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": null,
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": null,
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": null,
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": null,
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": null,
+   "expected": "Insécable, Le"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": null,
+   "expected": "Tab, Le"
+  },
+  {
+   "title": "Les",
+   "lang": null,
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": null,
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": null,
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": null,
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": null,
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": null,
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": null,
+   "expected": "Coqs cubains chantent à minuit, Les"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": null,
+   "expected": "Étoile, Une"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": null,
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": null,
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": null,
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": null,
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": null,
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": null,
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": null,
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "eng",
+   "expected": "Black Company, The"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "eng",
+   "expected": "Tale of Two Cities, A"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "eng",
+   "expected": "Apple a Day, An"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "eng",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "eng",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "eng",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "eng",
+   "expected": "CAPS, THE"
+  },
+  {
+   "title": "the lower case",
+   "lang": "eng",
+   "expected": "lower case, the"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "eng",
+   "expected": "Double  Spaces, The"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "eng",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "eng",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "eng",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "eng",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "eng",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "eng",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "eng",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "eng",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "eng",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "eng",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "eng",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "eng",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "eng",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "eng",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "eng",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "eng",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "eng",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "eng",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "eng",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "eng",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "eng",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "eng",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "eng",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "eng",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "eng",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "eng",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "eng",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "eng",
+   "expected": "Quoted, The"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "eng",
+   "expected": "Curly, The"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "eng",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "eng",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "eng",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "eng",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "eng",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "eng",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "eng",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "eng",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "eng",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "eng",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "eng",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "eng",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "eng",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "eng",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "eng",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "eng",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "eng",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "eng",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "eng",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "eng",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "fra",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "fra",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "fra",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "fra",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "fra",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "fra",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "fra",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "fra",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "fra",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "fra",
+   "expected": "Petit Prince, Le"
+  },
+  {
+   "title": "La Peste",
+   "lang": "fra",
+   "expected": "Peste, La"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "fra",
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "fra",
+   "expected": "Écume des jours, L’"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "fra",
+   "expected": "Accent, L´"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "fra",
+   "expected": "Misérables, Les"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "fra",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "fra",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "fra",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "fra",
+   "expected": "amour de Swann, Un"
+  },
+  {
+   "title": "Une vie",
+   "lang": "fra",
+   "expected": "vie, Une"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "fra",
+   "expected": "souris et des hommes, Des"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "fra",
+   "expected": "démocratie en Amérique, De la"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "fra",
+   "expected": "Terre à la Lune, De La"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "fra",
+   "expected": "Gaulle, De"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "fra",
+   "expected": "Artagnan, D'"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "fra",
+   "expected": "Artagnan, D’"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "fra",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "fra",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "fra",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "fra",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "fra",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "fra",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "fra",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "fra",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "fra",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "fra",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "fra",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "fra",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "fra",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "fra",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "fra",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "fra",
+   "expected": "Insécable, Le"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "fra",
+   "expected": "Tab, Le"
+  },
+  {
+   "title": "Les",
+   "lang": "fra",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "fra",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "fra",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "fra",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "fra",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "fra",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "fra",
+   "expected": "Coqs cubains chantent à minuit, Les"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "fra",
+   "expected": "Étoile, Une"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "fra",
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "fra",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "fra",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "fra",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "fra",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "fra",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "fra",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "deu",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "deu",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "deu",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "deu",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "deu",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "deu",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "deu",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "deu",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "deu",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "deu",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "deu",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "deu",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "deu",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "deu",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "deu",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "deu",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "deu",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "deu",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "deu",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "deu",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "deu",
+   "expected": "souris et des hommes, Des"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "deu",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "deu",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "deu",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "deu",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "deu",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "deu",
+   "expected": "Prozess, Der"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "deu",
+   "expected": "Verwandlung, Die"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "deu",
+   "expected": "Boot, Das"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "deu",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "deu",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "deu",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "deu",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "deu",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "deu",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "deu",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "deu",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "deu",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "deu",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "deu",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "deu",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "deu",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "deu",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "deu",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "deu",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "deu",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "deu",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "deu",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "deu",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "deu",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "deu",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "deu",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "deu",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "deu",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "deu",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "deu",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "deu",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "deu",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "spa",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "spa",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "spa",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "spa",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "spa",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "spa",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "spa",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "spa",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "spa",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "spa",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "spa",
+   "expected": "Peste, La"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "spa",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "spa",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "spa",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "spa",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "spa",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "spa",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "spa",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "spa",
+   "expected": "amour de Swann, Un"
+  },
+  {
+   "title": "Une vie",
+   "lang": "spa",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "spa",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "spa",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "spa",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "spa",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "spa",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "spa",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "spa",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "spa",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "spa",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "spa",
+   "expected": "Aleph, El"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "spa",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "spa",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "spa",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "spa",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "spa",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "spa",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "spa",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "spa",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "spa",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "spa",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "spa",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "spa",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "spa",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "spa",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "spa",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "spa",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "spa",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "spa",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "spa",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "spa",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "spa",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "spa",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "spa",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "spa",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "spa",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "spa",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "spa",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "spa",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "ita",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "ita",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "ita",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "ita",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "ita",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "ita",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "ita",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "ita",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "ita",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "ita",
+   "expected": "Petit Prince, Le"
+  },
+  {
+   "title": "La Peste",
+   "lang": "ita",
+   "expected": "Peste, La"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "ita",
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "ita",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "ita",
+   "expected": "Accent, L´"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "ita",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "ita",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "ita",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "ita",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "ita",
+   "expected": "amour de Swann, Un"
+  },
+  {
+   "title": "Une vie",
+   "lang": "ita",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "ita",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "ita",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "ita",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "ita",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "ita",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "ita",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "ita",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "ita",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "ita",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "ita",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "ita",
+   "expected": "nome della rosa, Il"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "ita",
+   "expected": "amore, Dell'"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "ita",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "ita",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "ita",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "ita",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "ita",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "ita",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "ita",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "ita",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "ita",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "ita",
+   "expected": "Insécable, Le"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "ita",
+   "expected": "Tab, Le"
+  },
+  {
+   "title": "Les",
+   "lang": "ita",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "ita",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "ita",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "ita",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "ita",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "ita",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "ita",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "ita",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "ita",
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "ita",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "ita",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "ita",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "ita",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "ita",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "ita",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "nld",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "nld",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "nld",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "nld",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "nld",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "nld",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "nld",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "nld",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "nld",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "nld",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "nld",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "nld",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "nld",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "nld",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "nld",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "nld",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "nld",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "nld",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "nld",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "nld",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "nld",
+   "expected": "souris et des hommes, Des"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "nld",
+   "expected": "la démocratie en Amérique, De"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "nld",
+   "expected": "La Terre à la Lune, De"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "nld",
+   "expected": "Gaulle, De"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "nld",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "nld",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "nld",
+   "expected": "Prozess, Der"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "nld",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "nld",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "nld",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "nld",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "nld",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "nld",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "nld",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "nld",
+   "expected": "Achterhuis, Het"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "nld",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "nld",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "nld",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "nld",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "nld",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "nld",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "nld",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "nld",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "nld",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "nld",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "nld",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "nld",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "nld",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "nld",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "nld",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "nld",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "nld",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "nld",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "nld",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "nld",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "nld",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "nld",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "nld",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "por",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "por",
+   "expected": "Tale of Two Cities, A"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "por",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "por",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "por",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "por",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "por",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "por",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "por",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "por",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "por",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "por",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "por",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "por",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "por",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "por",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "por",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "por",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "por",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "por",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "por",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "por",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "por",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "por",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "por",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "por",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "por",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "por",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "por",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "por",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "por",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "por",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "por",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "por",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "por",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "por",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "por",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "por",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "por",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "por",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "por",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "por",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "por",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "por",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "por",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "por",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "por",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "por",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "por",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "por",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "por",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "por",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "por",
+   "expected": "Alquimista, O"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "por",
+   "expected": "Lusíadas, Os"
+  },
+  {
+   "title": "Ett år",
+   "lang": "por",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "por",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "por",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "por",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "swe",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "swe",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "swe",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "swe",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "swe",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "swe",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "swe",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "swe",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "swe",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "swe",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "swe",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "swe",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "swe",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "swe",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "swe",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "swe",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "swe",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "swe",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "swe",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "swe",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "swe",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "swe",
+   "expected": "la démocratie en Amérique, De"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "swe",
+   "expected": "La Terre à la Lune, De"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "swe",
+   "expected": "Gaulle, De"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "swe",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "swe",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "swe",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "swe",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "swe",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "swe",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "swe",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "swe",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "swe",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "swe",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "swe",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "swe",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "swe",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "swe",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "swe",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "swe",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "swe",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "swe",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "swe",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "swe",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "swe",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "swe",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "swe",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "swe",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "swe",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "swe",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "swe",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "swe",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "swe",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "swe",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "swe",
+   "expected": "år, Ett"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "swe",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "swe",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "swe",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "tur",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "tur",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "tur",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "tur",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "tur",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "tur",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "tur",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "tur",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "tur",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "tur",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "tur",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "tur",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "tur",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "tur",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "tur",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "tur",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "tur",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "tur",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "tur",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "tur",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "tur",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "tur",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "tur",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "tur",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "tur",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "tur",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "tur",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "tur",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "tur",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "tur",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "tur",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "tur",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "tur",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "tur",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "tur",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "tur",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "tur",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "tur",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "tur",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "tur",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "tur",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "tur",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "tur",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "tur",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "tur",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "tur",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "tur",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "tur",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "tur",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "tur",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "tur",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "tur",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "tur",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "tur",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "tur",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "tur",
+   "expected": "Gün, Bir"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "tur",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "tur",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "hun",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "hun",
+   "expected": "Tale of Two Cities, A"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "hun",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "hun",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "hun",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "hun",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "hun",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "hun",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "hun",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "hun",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "hun",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "hun",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "hun",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "hun",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "hun",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "hun",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "hun",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "hun",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "hun",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "hun",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "hun",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "hun",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "hun",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "hun",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "hun",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "hun",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "hun",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "hun",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "hun",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "hun",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "hun",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "hun",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "hun",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "hun",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "hun",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "hun",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "hun",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "hun",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "hun",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "hun",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "hun",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "hun",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "hun",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "hun",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "hun",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "hun",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "hun",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "hun",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "hun",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "hun",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "hun",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "hun",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "hun",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "hun",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "hun",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "hun",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "hun",
+   "expected": "nap, Egy"
+  },
+  {
+   "title": "Az ember",
+   "lang": "hun",
+   "expected": "ember, Az"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "pol",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "pol",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "pol",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "pol",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "pol",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "pol",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "pol",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "pol",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "pol",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "pol",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "pol",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "pol",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "pol",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "pol",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "pol",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "pol",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "pol",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "pol",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "pol",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "pol",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "pol",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "pol",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "pol",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "pol",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "pol",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "pol",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "pol",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "pol",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "pol",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "pol",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "pol",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "pol",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "pol",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "pol",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "pol",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "pol",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "pol",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "pol",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "pol",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "pol",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "pol",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "pol",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "pol",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "pol",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "pol",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "pol",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "pol",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "pol",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "pol",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "pol",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "pol",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "pol",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "pol",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "pol",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "pol",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "pol",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "pol",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "pol",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "zzz",
+   "expected": "Black Company, The"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "zzz",
+   "expected": "Tale of Two Cities, A"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "zzz",
+   "expected": "Apple a Day, An"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "zzz",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "zzz",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "zzz",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "zzz",
+   "expected": "CAPS, THE"
+  },
+  {
+   "title": "the lower case",
+   "lang": "zzz",
+   "expected": "lower case, the"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "zzz",
+   "expected": "Double  Spaces, The"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "zzz",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "zzz",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "zzz",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "zzz",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "zzz",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "zzz",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "zzz",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "zzz",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "zzz",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "zzz",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "zzz",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "zzz",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "zzz",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "zzz",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "zzz",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "zzz",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "zzz",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "zzz",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "zzz",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "zzz",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "zzz",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "zzz",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "zzz",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "zzz",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "zzz",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "zzz",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "zzz",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "zzz",
+   "expected": "Quoted, The"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "zzz",
+   "expected": "Curly, The"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "zzz",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "zzz",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "zzz",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "zzz",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "zzz",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "zzz",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "zzz",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "zzz",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "zzz",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "zzz",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "zzz",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "zzz",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "zzz",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "zzz",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "zzz",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "zzz",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "zzz",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "zzz",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "zzz",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "zzz",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "fr",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "fr",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "fr",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "fr",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "fr",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "fr",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "fr",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "fr",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "fr",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "fr",
+   "expected": "Petit Prince, Le"
+  },
+  {
+   "title": "La Peste",
+   "lang": "fr",
+   "expected": "Peste, La"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "fr",
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "fr",
+   "expected": "Écume des jours, L’"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "fr",
+   "expected": "Accent, L´"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "fr",
+   "expected": "Misérables, Les"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "fr",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "fr",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "fr",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "fr",
+   "expected": "amour de Swann, Un"
+  },
+  {
+   "title": "Une vie",
+   "lang": "fr",
+   "expected": "vie, Une"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "fr",
+   "expected": "souris et des hommes, Des"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "fr",
+   "expected": "démocratie en Amérique, De la"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "fr",
+   "expected": "Terre à la Lune, De La"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "fr",
+   "expected": "Gaulle, De"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "fr",
+   "expected": "Artagnan, D'"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "fr",
+   "expected": "Artagnan, D’"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "fr",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "fr",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "fr",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "fr",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "fr",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "fr",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "fr",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "fr",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "fr",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "fr",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "fr",
+   "expected": "The Quoted"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "fr",
+   "expected": "The Curly"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "fr",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "fr",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "fr",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "fr",
+   "expected": "Insécable, Le"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "fr",
+   "expected": "Tab, Le"
+  },
+  {
+   "title": "Les",
+   "lang": "fr",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "fr",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "fr",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "fr",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "fr",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "fr",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "fr",
+   "expected": "Coqs cubains chantent à minuit, Les"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "fr",
+   "expected": "Étoile, Une"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "fr",
+   "expected": "Étranger, L'"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "fr",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "fr",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "fr",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "fr",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "fr",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "fr",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "en",
+   "expected": "Black Company, The"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "en",
+   "expected": "Tale of Two Cities, A"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "en",
+   "expected": "Apple a Day, An"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "en",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "en",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "en",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "en",
+   "expected": "CAPS, THE"
+  },
+  {
+   "title": "the lower case",
+   "lang": "en",
+   "expected": "lower case, the"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "en",
+   "expected": "Double  Spaces, The"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "en",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "en",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "en",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "L’Écume des jours",
+   "lang": "en",
+   "expected": "L’Écume des jours"
+  },
+  {
+   "title": "L´Accent",
+   "lang": "en",
+   "expected": "L´Accent"
+  },
+  {
+   "title": "Les Misérables",
+   "lang": "en",
+   "expected": "Les Misérables"
+  },
+  {
+   "title": "Lest We Forget",
+   "lang": "en",
+   "expected": "Lest We Forget"
+  },
+  {
+   "title": "Lettres persanes",
+   "lang": "en",
+   "expected": "Lettres persanes"
+  },
+  {
+   "title": "Leçons",
+   "lang": "en",
+   "expected": "Leçons"
+  },
+  {
+   "title": "Un amour de Swann",
+   "lang": "en",
+   "expected": "Un amour de Swann"
+  },
+  {
+   "title": "Une vie",
+   "lang": "en",
+   "expected": "Une vie"
+  },
+  {
+   "title": "Des souris et des hommes",
+   "lang": "en",
+   "expected": "Des souris et des hommes"
+  },
+  {
+   "title": "De la démocratie en Amérique",
+   "lang": "en",
+   "expected": "De la démocratie en Amérique"
+  },
+  {
+   "title": "De La Terre à la Lune",
+   "lang": "en",
+   "expected": "De La Terre à la Lune"
+  },
+  {
+   "title": "De Gaulle",
+   "lang": "en",
+   "expected": "De Gaulle"
+  },
+  {
+   "title": "D'Artagnan",
+   "lang": "en",
+   "expected": "D'Artagnan"
+  },
+  {
+   "title": "D’Artagnan",
+   "lang": "en",
+   "expected": "D’Artagnan"
+  },
+  {
+   "title": "Der Prozess",
+   "lang": "en",
+   "expected": "Der Prozess"
+  },
+  {
+   "title": "Die Verwandlung",
+   "lang": "en",
+   "expected": "Die Verwandlung"
+  },
+  {
+   "title": "Das Boot",
+   "lang": "en",
+   "expected": "Das Boot"
+  },
+  {
+   "title": "El Aleph",
+   "lang": "en",
+   "expected": "El Aleph"
+  },
+  {
+   "title": "Il nome della rosa",
+   "lang": "en",
+   "expected": "Il nome della rosa"
+  },
+  {
+   "title": "Dell'amore",
+   "lang": "en",
+   "expected": "Dell'amore"
+  },
+  {
+   "title": "'s Avonds",
+   "lang": "en",
+   "expected": "s Avonds"
+  },
+  {
+   "title": "'t Hooft",
+   "lang": "en",
+   "expected": "t Hooft"
+  },
+  {
+   "title": "Het Achterhuis",
+   "lang": "en",
+   "expected": "Het Achterhuis"
+  },
+  {
+   "title": "\"Quoted Title\"",
+   "lang": "en",
+   "expected": "Quoted Title"
+  },
+  {
+   "title": "\"The Quoted\"",
+   "lang": "en",
+   "expected": "Quoted, The"
+  },
+  {
+   "title": "“The Curly”",
+   "lang": "en",
+   "expected": "Curly, The"
+  },
+  {
+   "title": "« Le Titre »",
+   "lang": "en",
+   "expected": "Le Titre"
+  },
+  {
+   "title": "‘Single’",
+   "lang": "en",
+   "expected": "Single"
+  },
+  {
+   "title": "'Apostrophes'",
+   "lang": "en",
+   "expected": "Apostrophes"
+  },
+  {
+   "title": "Le Insécable",
+   "lang": "en",
+   "expected": "Le Insécable"
+  },
+  {
+   "title": "Le\tTab",
+   "lang": "en",
+   "expected": "Le\tTab"
+  },
+  {
+   "title": "Les",
+   "lang": "en",
+   "expected": "Les"
+  },
+  {
+   "title": "Un",
+   "lang": "en",
+   "expected": "Un"
+  },
+  {
+   "title": "",
+   "lang": "en",
+   "expected": ""
+  },
+  {
+   "title": "   ",
+   "lang": "en",
+   "expected": ""
+  },
+  {
+   "title": "Glen Cook",
+   "lang": "en",
+   "expected": "Glen Cook"
+  },
+  {
+   "title": "American Tabloid (Rivages/Noir) (French Edition)",
+   "lang": "en",
+   "expected": "American Tabloid (Rivages/Noir) (French Edition)"
+  },
+  {
+   "title": "Les Coqs cubains chantent à minuit",
+   "lang": "en",
+   "expected": "Les Coqs cubains chantent à minuit"
+  },
+  {
+   "title": "Une Étoile",
+   "lang": "en",
+   "expected": "Une Étoile"
+  },
+  {
+   "title": "\"L'Étranger\"",
+   "lang": "en",
+   "expected": "L'Étranger"
+  },
+  {
+   "title": "O Alquimista",
+   "lang": "en",
+   "expected": "O Alquimista"
+  },
+  {
+   "title": "Os Lusíadas",
+   "lang": "en",
+   "expected": "Os Lusíadas"
+  },
+  {
+   "title": "Ett år",
+   "lang": "en",
+   "expected": "Ett år"
+  },
+  {
+   "title": "Bir Gün",
+   "lang": "en",
+   "expected": "Bir Gün"
+  },
+  {
+   "title": "Egy nap",
+   "lang": "en",
+   "expected": "Egy nap"
+  },
+  {
+   "title": "Az ember",
+   "lang": "en",
+   "expected": "Az ember"
+  },
+  {
+   "title": "The Black Company",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "The Black Company"
+  },
+  {
+   "title": "A Tale of Two Cities",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "A Tale of Two Cities"
+  },
+  {
+   "title": "An Apple a Day",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "An Apple a Day"
+  },
+  {
+   "title": "Thermodynamics",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "Thermodynamics"
+  },
+  {
+   "title": "Theo",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "Theo"
+  },
+  {
+   "title": "The",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "The"
+  },
+  {
+   "title": "THE CAPS",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "THE CAPS"
+  },
+  {
+   "title": "the lower case",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "the lower case"
+  },
+  {
+   "title": "  The  Double  Spaces  ",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "The  Double  Spaces"
+  },
+  {
+   "title": "Le Petit Prince",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "Le Petit Prince"
+  },
+  {
+   "title": "La Peste",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "La Peste"
+  },
+  {
+   "title": "L'Étranger",
+   "lang": "eng",
+   "order": "strictly_alphabetic",
+   "expected": "L'Étranger"
+  }
+ ],
+ "author_sort": [
+  {
+   "author": "Glen Cook",
+   "method": "comma",
+   "expected": "Cook, Glen"
+  },
+  {
+   "author": "John Schember",
+   "method": "comma",
+   "expected": "Schember, John"
+  },
+  {
+   "author": "Boris Vian",
+   "method": "comma",
+   "expected": "Vian, Boris"
+  },
+  {
+   "author": "Antoine de Saint-Exupéry",
+   "method": "comma",
+   "expected": "Saint-Exupéry, Antoine de"
+  },
+  {
+   "author": "Jean-Paul Sartre",
+   "method": "comma",
+   "expected": "Sartre, Jean-Paul"
+  },
+  {
+   "author": "J. R. R. Tolkien",
+   "method": "comma",
+   "expected": "Tolkien, J. R. R."
+  },
+  {
+   "author": "Martin Luther King Jr.",
+   "method": "comma",
+   "expected": "King, Martin Luther Jr."
+  },
+  {
+   "author": "Martin Luther King Jr",
+   "method": "comma",
+   "expected": "King, Martin Luther Jr"
+  },
+  {
+   "author": "Dr. Martin Luther King, Jr.",
+   "method": "comma",
+   "expected": "Dr. Martin Luther King, Jr."
+  },
+  {
+   "author": "Ursula K. Le Guin",
+   "method": "comma",
+   "expected": "Guin, Ursula K. Le"
+  },
+  {
+   "author": "Madonna",
+   "method": "comma",
+   "expected": "Madonna"
+  },
+  {
+   "author": "Microsoft Corporation",
+   "method": "comma",
+   "expected": "Microsoft Corporation"
+  },
+  {
+   "author": "Clarke, Arthur C.",
+   "method": "comma",
+   "expected": "Clarke, Arthur C."
+  },
+  {
+   "author": "Browne, Harry, 1933-2006",
+   "method": "comma",
+   "expected": "Browne, Harry, 1933-2006"
+  },
+  {
+   "author": "Edward Jentz III",
+   "method": "comma",
+   "expected": "Jentz, Edward III"
+  },
+  {
+   "author": "Prof. Dr. Hans Müller",
+   "method": "comma",
+   "expected": "Müller, Hans"
+  },
+  {
+   "author": "Mr. Smith",
+   "method": "comma",
+   "expected": "Smith"
+  },
+  {
+   "author": "Smith Jr",
+   "method": "comma",
+   "expected": "Smith Jr"
+  },
+  {
+   "author": "Jr",
+   "method": "comma",
+   "expected": "Jr"
+  },
+  {
+   "author": "Mrs",
+   "method": "comma",
+   "expected": "Mrs"
+  },
+  {
+   "author": "Mr Dr",
+   "method": "comma",
+   "expected": "Mr Dr"
+  },
+  {
+   "author": "Mr. Dr.",
+   "method": "comma",
+   "expected": "Mr. Dr."
+  },
+  {
+   "author": "Gabriel García Márquez",
+   "method": "comma",
+   "expected": "Márquez, Gabriel García"
+  },
+  {
+   "author": "Ludwig van Beethoven",
+   "method": "comma",
+   "expected": "Beethoven, Ludwig van"
+  },
+  {
+   "author": "Vincent van Gogh",
+   "method": "comma",
+   "expected": "Gogh, Vincent van"
+  },
+  {
+   "author": "van Gogh",
+   "method": "comma",
+   "expected": "Gogh, van"
+  },
+  {
+   "author": "Le Guin",
+   "method": "comma",
+   "expected": "Guin, Le"
+  },
+  {
+   "author": "  John   Doe  ",
+   "method": "comma",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "John (Jack) Doe",
+   "method": "comma",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "[Editor] John Doe",
+   "method": "comma",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "John Doe (ed.)",
+   "method": "comma",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "(Anonymous)",
+   "method": "comma",
+   "expected": "(Anonymous)"
+  },
+  {
+   "author": "Hugh Amano",
+   "method": "comma",
+   "expected": "Amano, Hugh"
+  },
+  {
+   "author": "Card Orson Scott",
+   "method": "comma",
+   "expected": "Scott, Card Orson"
+  },
+  {
+   "author": "BLOCH, Marc",
+   "method": "comma",
+   "expected": "BLOCH, Marc"
+  },
+  {
+   "author": "Celine",
+   "method": "comma",
+   "expected": "Celine"
+  },
+  {
+   "author": "Unknown",
+   "method": "comma",
+   "expected": "Unknown"
+  },
+  {
+   "author": "Inconnu(e)",
+   "method": "comma",
+   "expected": "Inconnu(e)"
+  },
+  {
+   "author": "",
+   "method": "comma",
+   "expected": ""
+  },
+  {
+   "author": "The Pierre Team",
+   "method": "comma",
+   "expected": "The Pierre Team"
+  },
+  {
+   "author": "Acme Software Inc.",
+   "method": "comma",
+   "expected": "Acme Software Inc."
+  },
+  {
+   "author": "Anne-Marie de la Tour",
+   "method": "comma",
+   "expected": "Tour, Anne-Marie de la"
+  },
+  {
+   "author": "Nassim Nicholas Taleb",
+   "method": "comma",
+   "expected": "Taleb, Nassim Nicholas"
+  },
+  {
+   "author": "Alba De Cespedes",
+   "method": "comma",
+   "expected": "Cespedes, Alba De"
+  },
+  {
+   "author": "King III Jr.",
+   "method": "comma",
+   "expected": "King III Jr."
+  },
+  {
+   "author": "Ph.D John",
+   "method": "comma",
+   "expected": "John, Ph.D"
+  },
+  {
+   "author": "John Smith Ph.D",
+   "method": "comma",
+   "expected": "Smith, John Ph.D"
+  },
+  {
+   "author": "John Smith PhD.",
+   "method": "comma",
+   "expected": "Smith, John PhD."
+  },
+  {
+   "author": "Société Nationale",
+   "method": "comma",
+   "expected": "Nationale, Société"
+  },
+  {
+   "author": "Jean Dupont",
+   "method": "comma",
+   "expected": "Dupont, Jean"
+  },
+  {
+   "author": "José Saramago",
+   "method": "comma",
+   "expected": "Saramago, José"
+  },
+  {
+   "author": "Lao Tzu",
+   "method": "comma",
+   "expected": "Tzu, Lao"
+  },
+  {
+   "author": "Charles Matthews, Seong-June Kim",
+   "method": "comma",
+   "expected": "Charles Matthews, Seong-June Kim"
+  },
+  {
+   "author": "Glen Cook",
+   "method": "nocomma",
+   "expected": "Cook Glen"
+  },
+  {
+   "author": "John Schember",
+   "method": "nocomma",
+   "expected": "Schember John"
+  },
+  {
+   "author": "Boris Vian",
+   "method": "nocomma",
+   "expected": "Vian Boris"
+  },
+  {
+   "author": "Antoine de Saint-Exupéry",
+   "method": "nocomma",
+   "expected": "Saint-Exupéry Antoine de"
+  },
+  {
+   "author": "Jean-Paul Sartre",
+   "method": "nocomma",
+   "expected": "Sartre Jean-Paul"
+  },
+  {
+   "author": "J. R. R. Tolkien",
+   "method": "nocomma",
+   "expected": "Tolkien J. R. R."
+  },
+  {
+   "author": "Martin Luther King Jr.",
+   "method": "nocomma",
+   "expected": "King Martin Luther Jr."
+  },
+  {
+   "author": "Martin Luther King Jr",
+   "method": "nocomma",
+   "expected": "King Martin Luther Jr"
+  },
+  {
+   "author": "Dr. Martin Luther King, Jr.",
+   "method": "nocomma",
+   "expected": "King, Martin Luther Jr."
+  },
+  {
+   "author": "Ursula K. Le Guin",
+   "method": "nocomma",
+   "expected": "Guin Ursula K. Le"
+  },
+  {
+   "author": "Madonna",
+   "method": "nocomma",
+   "expected": "Madonna"
+  },
+  {
+   "author": "Microsoft Corporation",
+   "method": "nocomma",
+   "expected": "Microsoft Corporation"
+  },
+  {
+   "author": "Clarke, Arthur C.",
+   "method": "nocomma",
+   "expected": "C. Clarke, Arthur"
+  },
+  {
+   "author": "Browne, Harry, 1933-2006",
+   "method": "nocomma",
+   "expected": "1933-2006 Browne, Harry,"
+  },
+  {
+   "author": "Edward Jentz III",
+   "method": "nocomma",
+   "expected": "Jentz Edward III"
+  },
+  {
+   "author": "Prof. Dr. Hans Müller",
+   "method": "nocomma",
+   "expected": "Müller Hans"
+  },
+  {
+   "author": "Mr. Smith",
+   "method": "nocomma",
+   "expected": "Smith"
+  },
+  {
+   "author": "Smith Jr",
+   "method": "nocomma",
+   "expected": "Smith Jr"
+  },
+  {
+   "author": "Jr",
+   "method": "nocomma",
+   "expected": "Jr"
+  },
+  {
+   "author": "Mrs",
+   "method": "nocomma",
+   "expected": "Mrs"
+  },
+  {
+   "author": "Mr Dr",
+   "method": "nocomma",
+   "expected": "Mr Dr"
+  },
+  {
+   "author": "Mr. Dr.",
+   "method": "nocomma",
+   "expected": "Mr. Dr."
+  },
+  {
+   "author": "Gabriel García Márquez",
+   "method": "nocomma",
+   "expected": "Márquez Gabriel García"
+  },
+  {
+   "author": "Ludwig van Beethoven",
+   "method": "nocomma",
+   "expected": "Beethoven Ludwig van"
+  },
+  {
+   "author": "Vincent van Gogh",
+   "method": "nocomma",
+   "expected": "Gogh Vincent van"
+  },
+  {
+   "author": "van Gogh",
+   "method": "nocomma",
+   "expected": "Gogh van"
+  },
+  {
+   "author": "Le Guin",
+   "method": "nocomma",
+   "expected": "Guin Le"
+  },
+  {
+   "author": "  John   Doe  ",
+   "method": "nocomma",
+   "expected": "Doe John"
+  },
+  {
+   "author": "John (Jack) Doe",
+   "method": "nocomma",
+   "expected": "Doe John"
+  },
+  {
+   "author": "[Editor] John Doe",
+   "method": "nocomma",
+   "expected": "Doe John"
+  },
+  {
+   "author": "John Doe (ed.)",
+   "method": "nocomma",
+   "expected": "Doe John"
+  },
+  {
+   "author": "(Anonymous)",
+   "method": "nocomma",
+   "expected": "(Anonymous)"
+  },
+  {
+   "author": "Hugh Amano",
+   "method": "nocomma",
+   "expected": "Amano Hugh"
+  },
+  {
+   "author": "Card Orson Scott",
+   "method": "nocomma",
+   "expected": "Scott Card Orson"
+  },
+  {
+   "author": "BLOCH, Marc",
+   "method": "nocomma",
+   "expected": "Marc BLOCH,"
+  },
+  {
+   "author": "Celine",
+   "method": "nocomma",
+   "expected": "Celine"
+  },
+  {
+   "author": "Unknown",
+   "method": "nocomma",
+   "expected": "Unknown"
+  },
+  {
+   "author": "Inconnu(e)",
+   "method": "nocomma",
+   "expected": "Inconnu(e)"
+  },
+  {
+   "author": "",
+   "method": "nocomma",
+   "expected": ""
+  },
+  {
+   "author": "The Pierre Team",
+   "method": "nocomma",
+   "expected": "The Pierre Team"
+  },
+  {
+   "author": "Acme Software Inc.",
+   "method": "nocomma",
+   "expected": "Acme Software Inc."
+  },
+  {
+   "author": "Anne-Marie de la Tour",
+   "method": "nocomma",
+   "expected": "Tour Anne-Marie de la"
+  },
+  {
+   "author": "Nassim Nicholas Taleb",
+   "method": "nocomma",
+   "expected": "Taleb Nassim Nicholas"
+  },
+  {
+   "author": "Alba De Cespedes",
+   "method": "nocomma",
+   "expected": "Cespedes Alba De"
+  },
+  {
+   "author": "King III Jr.",
+   "method": "nocomma",
+   "expected": "King III Jr."
+  },
+  {
+   "author": "Ph.D John",
+   "method": "nocomma",
+   "expected": "John Ph.D"
+  },
+  {
+   "author": "John Smith Ph.D",
+   "method": "nocomma",
+   "expected": "Smith John Ph.D"
+  },
+  {
+   "author": "John Smith PhD.",
+   "method": "nocomma",
+   "expected": "Smith John PhD."
+  },
+  {
+   "author": "Société Nationale",
+   "method": "nocomma",
+   "expected": "Nationale Société"
+  },
+  {
+   "author": "Jean Dupont",
+   "method": "nocomma",
+   "expected": "Dupont Jean"
+  },
+  {
+   "author": "José Saramago",
+   "method": "nocomma",
+   "expected": "Saramago José"
+  },
+  {
+   "author": "Lao Tzu",
+   "method": "nocomma",
+   "expected": "Tzu Lao"
+  },
+  {
+   "author": "Charles Matthews, Seong-June Kim",
+   "method": "nocomma",
+   "expected": "Kim Charles Matthews, Seong-June"
+  },
+  {
+   "author": "Glen Cook",
+   "method": "invert",
+   "expected": "Cook, Glen"
+  },
+  {
+   "author": "John Schember",
+   "method": "invert",
+   "expected": "Schember, John"
+  },
+  {
+   "author": "Boris Vian",
+   "method": "invert",
+   "expected": "Vian, Boris"
+  },
+  {
+   "author": "Antoine de Saint-Exupéry",
+   "method": "invert",
+   "expected": "Saint-Exupéry, Antoine de"
+  },
+  {
+   "author": "Jean-Paul Sartre",
+   "method": "invert",
+   "expected": "Sartre, Jean-Paul"
+  },
+  {
+   "author": "J. R. R. Tolkien",
+   "method": "invert",
+   "expected": "Tolkien, J. R. R."
+  },
+  {
+   "author": "Martin Luther King Jr.",
+   "method": "invert",
+   "expected": "King, Martin Luther Jr."
+  },
+  {
+   "author": "Martin Luther King Jr",
+   "method": "invert",
+   "expected": "King, Martin Luther Jr"
+  },
+  {
+   "author": "Dr. Martin Luther King, Jr.",
+   "method": "invert",
+   "expected": "King,, Martin Luther Jr."
+  },
+  {
+   "author": "Ursula K. Le Guin",
+   "method": "invert",
+   "expected": "Guin, Ursula K. Le"
+  },
+  {
+   "author": "Madonna",
+   "method": "invert",
+   "expected": "Madonna"
+  },
+  {
+   "author": "Microsoft Corporation",
+   "method": "invert",
+   "expected": "Microsoft Corporation"
+  },
+  {
+   "author": "Clarke, Arthur C.",
+   "method": "invert",
+   "expected": "C., Clarke, Arthur"
+  },
+  {
+   "author": "Browne, Harry, 1933-2006",
+   "method": "invert",
+   "expected": "1933-2006, Browne, Harry,"
+  },
+  {
+   "author": "Edward Jentz III",
+   "method": "invert",
+   "expected": "Jentz, Edward III"
+  },
+  {
+   "author": "Prof. Dr. Hans Müller",
+   "method": "invert",
+   "expected": "Müller, Hans"
+  },
+  {
+   "author": "Mr. Smith",
+   "method": "invert",
+   "expected": "Smith"
+  },
+  {
+   "author": "Smith Jr",
+   "method": "invert",
+   "expected": "Smith Jr"
+  },
+  {
+   "author": "Jr",
+   "method": "invert",
+   "expected": "Jr"
+  },
+  {
+   "author": "Mrs",
+   "method": "invert",
+   "expected": "Mrs"
+  },
+  {
+   "author": "Mr Dr",
+   "method": "invert",
+   "expected": "Mr Dr"
+  },
+  {
+   "author": "Mr. Dr.",
+   "method": "invert",
+   "expected": "Mr. Dr."
+  },
+  {
+   "author": "Gabriel García Márquez",
+   "method": "invert",
+   "expected": "Márquez, Gabriel García"
+  },
+  {
+   "author": "Ludwig van Beethoven",
+   "method": "invert",
+   "expected": "Beethoven, Ludwig van"
+  },
+  {
+   "author": "Vincent van Gogh",
+   "method": "invert",
+   "expected": "Gogh, Vincent van"
+  },
+  {
+   "author": "van Gogh",
+   "method": "invert",
+   "expected": "Gogh, van"
+  },
+  {
+   "author": "Le Guin",
+   "method": "invert",
+   "expected": "Guin, Le"
+  },
+  {
+   "author": "  John   Doe  ",
+   "method": "invert",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "John (Jack) Doe",
+   "method": "invert",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "[Editor] John Doe",
+   "method": "invert",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "John Doe (ed.)",
+   "method": "invert",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "(Anonymous)",
+   "method": "invert",
+   "expected": "(Anonymous)"
+  },
+  {
+   "author": "Hugh Amano",
+   "method": "invert",
+   "expected": "Amano, Hugh"
+  },
+  {
+   "author": "Card Orson Scott",
+   "method": "invert",
+   "expected": "Scott, Card Orson"
+  },
+  {
+   "author": "BLOCH, Marc",
+   "method": "invert",
+   "expected": "Marc, BLOCH,"
+  },
+  {
+   "author": "Celine",
+   "method": "invert",
+   "expected": "Celine"
+  },
+  {
+   "author": "Unknown",
+   "method": "invert",
+   "expected": "Unknown"
+  },
+  {
+   "author": "Inconnu(e)",
+   "method": "invert",
+   "expected": "Inconnu(e)"
+  },
+  {
+   "author": "",
+   "method": "invert",
+   "expected": ""
+  },
+  {
+   "author": "The Pierre Team",
+   "method": "invert",
+   "expected": "The Pierre Team"
+  },
+  {
+   "author": "Acme Software Inc.",
+   "method": "invert",
+   "expected": "Acme Software Inc."
+  },
+  {
+   "author": "Anne-Marie de la Tour",
+   "method": "invert",
+   "expected": "Tour, Anne-Marie de la"
+  },
+  {
+   "author": "Nassim Nicholas Taleb",
+   "method": "invert",
+   "expected": "Taleb, Nassim Nicholas"
+  },
+  {
+   "author": "Alba De Cespedes",
+   "method": "invert",
+   "expected": "Cespedes, Alba De"
+  },
+  {
+   "author": "King III Jr.",
+   "method": "invert",
+   "expected": "King III Jr."
+  },
+  {
+   "author": "Ph.D John",
+   "method": "invert",
+   "expected": "John, Ph.D"
+  },
+  {
+   "author": "John Smith Ph.D",
+   "method": "invert",
+   "expected": "Smith, John Ph.D"
+  },
+  {
+   "author": "John Smith PhD.",
+   "method": "invert",
+   "expected": "Smith, John PhD."
+  },
+  {
+   "author": "Société Nationale",
+   "method": "invert",
+   "expected": "Nationale, Société"
+  },
+  {
+   "author": "Jean Dupont",
+   "method": "invert",
+   "expected": "Dupont, Jean"
+  },
+  {
+   "author": "José Saramago",
+   "method": "invert",
+   "expected": "Saramago, José"
+  },
+  {
+   "author": "Lao Tzu",
+   "method": "invert",
+   "expected": "Tzu, Lao"
+  },
+  {
+   "author": "Charles Matthews, Seong-June Kim",
+   "method": "invert",
+   "expected": "Kim, Charles Matthews, Seong-June"
+  },
+  {
+   "author": "Glen Cook",
+   "method": "copy",
+   "expected": "Glen Cook"
+  },
+  {
+   "author": "John Schember",
+   "method": "copy",
+   "expected": "John Schember"
+  },
+  {
+   "author": "Boris Vian",
+   "method": "copy",
+   "expected": "Boris Vian"
+  },
+  {
+   "author": "Antoine de Saint-Exupéry",
+   "method": "copy",
+   "expected": "Antoine de Saint-Exupéry"
+  },
+  {
+   "author": "Jean-Paul Sartre",
+   "method": "copy",
+   "expected": "Jean-Paul Sartre"
+  },
+  {
+   "author": "J. R. R. Tolkien",
+   "method": "copy",
+   "expected": "J. R. R. Tolkien"
+  },
+  {
+   "author": "Martin Luther King Jr.",
+   "method": "copy",
+   "expected": "Martin Luther King Jr."
+  },
+  {
+   "author": "Martin Luther King Jr",
+   "method": "copy",
+   "expected": "Martin Luther King Jr"
+  },
+  {
+   "author": "Dr. Martin Luther King, Jr.",
+   "method": "copy",
+   "expected": "Dr. Martin Luther King, Jr."
+  },
+  {
+   "author": "Ursula K. Le Guin",
+   "method": "copy",
+   "expected": "Ursula K. Le Guin"
+  },
+  {
+   "author": "Madonna",
+   "method": "copy",
+   "expected": "Madonna"
+  },
+  {
+   "author": "Microsoft Corporation",
+   "method": "copy",
+   "expected": "Microsoft Corporation"
+  },
+  {
+   "author": "Clarke, Arthur C.",
+   "method": "copy",
+   "expected": "Clarke, Arthur C."
+  },
+  {
+   "author": "Browne, Harry, 1933-2006",
+   "method": "copy",
+   "expected": "Browne, Harry, 1933-2006"
+  },
+  {
+   "author": "Edward Jentz III",
+   "method": "copy",
+   "expected": "Edward Jentz III"
+  },
+  {
+   "author": "Prof. Dr. Hans Müller",
+   "method": "copy",
+   "expected": "Prof. Dr. Hans Müller"
+  },
+  {
+   "author": "Mr. Smith",
+   "method": "copy",
+   "expected": "Mr. Smith"
+  },
+  {
+   "author": "Smith Jr",
+   "method": "copy",
+   "expected": "Smith Jr"
+  },
+  {
+   "author": "Jr",
+   "method": "copy",
+   "expected": "Jr"
+  },
+  {
+   "author": "Mrs",
+   "method": "copy",
+   "expected": "Mrs"
+  },
+  {
+   "author": "Mr Dr",
+   "method": "copy",
+   "expected": "Mr Dr"
+  },
+  {
+   "author": "Mr. Dr.",
+   "method": "copy",
+   "expected": "Mr. Dr."
+  },
+  {
+   "author": "Gabriel García Márquez",
+   "method": "copy",
+   "expected": "Gabriel García Márquez"
+  },
+  {
+   "author": "Ludwig van Beethoven",
+   "method": "copy",
+   "expected": "Ludwig van Beethoven"
+  },
+  {
+   "author": "Vincent van Gogh",
+   "method": "copy",
+   "expected": "Vincent van Gogh"
+  },
+  {
+   "author": "van Gogh",
+   "method": "copy",
+   "expected": "van Gogh"
+  },
+  {
+   "author": "Le Guin",
+   "method": "copy",
+   "expected": "Le Guin"
+  },
+  {
+   "author": "  John   Doe  ",
+   "method": "copy",
+   "expected": "  John   Doe  "
+  },
+  {
+   "author": "John (Jack) Doe",
+   "method": "copy",
+   "expected": "John (Jack) Doe"
+  },
+  {
+   "author": "[Editor] John Doe",
+   "method": "copy",
+   "expected": "[Editor] John Doe"
+  },
+  {
+   "author": "John Doe (ed.)",
+   "method": "copy",
+   "expected": "John Doe (ed.)"
+  },
+  {
+   "author": "(Anonymous)",
+   "method": "copy",
+   "expected": "(Anonymous)"
+  },
+  {
+   "author": "Hugh Amano",
+   "method": "copy",
+   "expected": "Hugh Amano"
+  },
+  {
+   "author": "Card Orson Scott",
+   "method": "copy",
+   "expected": "Card Orson Scott"
+  },
+  {
+   "author": "BLOCH, Marc",
+   "method": "copy",
+   "expected": "BLOCH, Marc"
+  },
+  {
+   "author": "Celine",
+   "method": "copy",
+   "expected": "Celine"
+  },
+  {
+   "author": "Unknown",
+   "method": "copy",
+   "expected": "Unknown"
+  },
+  {
+   "author": "Inconnu(e)",
+   "method": "copy",
+   "expected": "Inconnu(e)"
+  },
+  {
+   "author": "",
+   "method": "copy",
+   "expected": ""
+  },
+  {
+   "author": "The Pierre Team",
+   "method": "copy",
+   "expected": "The Pierre Team"
+  },
+  {
+   "author": "Acme Software Inc.",
+   "method": "copy",
+   "expected": "Acme Software Inc."
+  },
+  {
+   "author": "Anne-Marie de la Tour",
+   "method": "copy",
+   "expected": "Anne-Marie de la Tour"
+  },
+  {
+   "author": "Nassim Nicholas Taleb",
+   "method": "copy",
+   "expected": "Nassim Nicholas Taleb"
+  },
+  {
+   "author": "Alba De Cespedes",
+   "method": "copy",
+   "expected": "Alba De Cespedes"
+  },
+  {
+   "author": "King III Jr.",
+   "method": "copy",
+   "expected": "King III Jr."
+  },
+  {
+   "author": "Ph.D John",
+   "method": "copy",
+   "expected": "Ph.D John"
+  },
+  {
+   "author": "John Smith Ph.D",
+   "method": "copy",
+   "expected": "John Smith Ph.D"
+  },
+  {
+   "author": "John Smith PhD.",
+   "method": "copy",
+   "expected": "John Smith PhD."
+  },
+  {
+   "author": "Société Nationale",
+   "method": "copy",
+   "expected": "Société Nationale"
+  },
+  {
+   "author": "Jean Dupont",
+   "method": "copy",
+   "expected": "Jean Dupont"
+  },
+  {
+   "author": "José Saramago",
+   "method": "copy",
+   "expected": "José Saramago"
+  },
+  {
+   "author": "Lao Tzu",
+   "method": "copy",
+   "expected": "Lao Tzu"
+  },
+  {
+   "author": "Charles Matthews, Seong-June Kim",
+   "method": "copy",
+   "expected": "Charles Matthews, Seong-June Kim"
+  },
+  {
+   "author": "Glen Cook",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Cook, Glen"
+  },
+  {
+   "author": "John Schember",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Schember, John"
+  },
+  {
+   "author": "Boris Vian",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Vian, Boris"
+  },
+  {
+   "author": "Antoine de Saint-Exupéry",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "de Saint-Exupéry, Antoine"
+  },
+  {
+   "author": "Jean-Paul Sartre",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Sartre, Jean-Paul"
+  },
+  {
+   "author": "J. R. R. Tolkien",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Tolkien, J. R. R."
+  },
+  {
+   "author": "Martin Luther King Jr.",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "King, Martin Luther Jr."
+  },
+  {
+   "author": "Martin Luther King Jr",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "King, Martin Luther Jr"
+  },
+  {
+   "author": "Dr. Martin Luther King, Jr.",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Dr. Martin Luther King, Jr."
+  },
+  {
+   "author": "Ursula K. Le Guin",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Le Guin, Ursula K."
+  },
+  {
+   "author": "Madonna",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Madonna"
+  },
+  {
+   "author": "Microsoft Corporation",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Microsoft Corporation"
+  },
+  {
+   "author": "Clarke, Arthur C.",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Clarke, Arthur C."
+  },
+  {
+   "author": "Browne, Harry, 1933-2006",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Browne, Harry, 1933-2006"
+  },
+  {
+   "author": "Edward Jentz III",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Jentz, Edward III"
+  },
+  {
+   "author": "Prof. Dr. Hans Müller",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Müller, Hans"
+  },
+  {
+   "author": "Mr. Smith",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Smith"
+  },
+  {
+   "author": "Smith Jr",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Smith Jr"
+  },
+  {
+   "author": "Jr",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Jr"
+  },
+  {
+   "author": "Mrs",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Mrs"
+  },
+  {
+   "author": "Mr Dr",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Mr Dr"
+  },
+  {
+   "author": "Mr. Dr.",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Mr. Dr."
+  },
+  {
+   "author": "Gabriel García Márquez",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Márquez, Gabriel García"
+  },
+  {
+   "author": "Ludwig van Beethoven",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "van Beethoven, Ludwig"
+  },
+  {
+   "author": "Vincent van Gogh",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "van Gogh, Vincent"
+  },
+  {
+   "author": "van Gogh",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "van Gogh"
+  },
+  {
+   "author": "Le Guin",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Le Guin"
+  },
+  {
+   "author": "  John   Doe  ",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Doe, John"
+  },
+  {
+   "author": "John (Jack) Doe",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Doe, John"
+  },
+  {
+   "author": "[Editor] John Doe",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Doe, John"
+  },
+  {
+   "author": "John Doe (ed.)",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Doe, John"
+  },
+  {
+   "author": "(Anonymous)",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "(Anonymous)"
+  },
+  {
+   "author": "Hugh Amano",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Amano, Hugh"
+  },
+  {
+   "author": "Card Orson Scott",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Scott, Card Orson"
+  },
+  {
+   "author": "BLOCH, Marc",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "BLOCH, Marc"
+  },
+  {
+   "author": "Celine",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Celine"
+  },
+  {
+   "author": "Unknown",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Unknown"
+  },
+  {
+   "author": "Inconnu(e)",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Inconnu(e)"
+  },
+  {
+   "author": "",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": ""
+  },
+  {
+   "author": "The Pierre Team",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "The Pierre Team"
+  },
+  {
+   "author": "Acme Software Inc.",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Acme Software Inc."
+  },
+  {
+   "author": "Anne-Marie de la Tour",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "la Tour, Anne-Marie de"
+  },
+  {
+   "author": "Nassim Nicholas Taleb",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Taleb, Nassim Nicholas"
+  },
+  {
+   "author": "Alba De Cespedes",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "De Cespedes, Alba"
+  },
+  {
+   "author": "King III Jr.",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "King III Jr."
+  },
+  {
+   "author": "Ph.D John",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "John, Ph.D"
+  },
+  {
+   "author": "John Smith Ph.D",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Smith, John Ph.D"
+  },
+  {
+   "author": "John Smith PhD.",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Smith, John PhD."
+  },
+  {
+   "author": "Société Nationale",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Nationale, Société"
+  },
+  {
+   "author": "Jean Dupont",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Dupont, Jean"
+  },
+  {
+   "author": "José Saramago",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Saramago, José"
+  },
+  {
+   "author": "Lao Tzu",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Tzu, Lao"
+  },
+  {
+   "author": "Charles Matthews, Seong-June Kim",
+   "method": "comma",
+   "surname_prefixes": true,
+   "expected": "Charles Matthews, Seong-June Kim"
+  }
+ ],
+ "sql_author_sort": [
+  {
+   "author": "Doe| John",
+   "expected": "Doe, John"
+  },
+  {
+   "author": "Glen Cook",
+   "expected": "Cook, Glen"
+  },
+  {
+   "author": "",
+   "expected": ""
+  },
+  {
+   "author": "Doe|John|Jr",
+   "expected": "Doe,John,Jr"
+  }
+ ],
+ "canonicalize_lang": [
+  {
+   "raw": "fr",
+   "expected": "fra"
+  },
+  {
+   "raw": "FR",
+   "expected": "fra"
+  },
+  {
+   "raw": "fr_FR",
+   "expected": "fra"
+  },
+  {
+   "raw": "fr-FR",
+   "expected": "fra"
+  },
+  {
+   "raw": "fr_FR.UTF-8",
+   "expected": "fra"
+  },
+  {
+   "raw": "sr@latin",
+   "expected": "srp"
+  },
+  {
+   "raw": "fra",
+   "expected": "fra"
+  },
+  {
+   "raw": "eng",
+   "expected": "eng"
+  },
+  {
+   "raw": "en",
+   "expected": "eng"
+  },
+  {
+   "raw": "de",
+   "expected": "deu"
+  },
+  {
+   "raw": "pt_BR",
+   "expected": "por"
+  },
+  {
+   "raw": "zh_CN",
+   "expected": "zho"
+  },
+  {
+   "raw": "nl",
+   "expected": "nld"
+  },
+  {
+   "raw": "xx",
+   "expected": null
+  },
+  {
+   "raw": "",
+   "expected": null
+  },
+  {
+   "raw": "zzz",
+   "expected": null
+  }
+ ]
+}

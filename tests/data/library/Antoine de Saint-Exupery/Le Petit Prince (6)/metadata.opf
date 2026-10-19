@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+        <dc:identifier opf:scheme="calibre" id="calibre_id">6</dc:identifier>
+        <dc:identifier opf:scheme="uuid" id="uuid_id">d5c43c81-6a3a-49df-a7e3-a2c1d03632a0</dc:identifier>
+        <dc:title>Le Petit Prince</dc:title>
+        <dc:creator opf:file-as="Saint-Exupéry, Antoine de" opf:role="aut">Antoine de Saint-Exupéry</dc:creator>
+        <dc:contributor opf:file-as="calibre" opf:role="bkp">calibre (9.16.0) [https://calibre-ebook.com]</dc:contributor>
+        <dc:date>0101-01-01T00:00:00+00:00</dc:date>
+        <dc:language>fra</dc:language>
+        <meta name="calibre:series" content="Contes"/>
+        <meta name="calibre:series_index" content="1.5"/>
+        <meta name="calibre:timestamp" content="2026-10-19T08:38:30+00:00"/>
+        <meta name="calibre:title_sort" content="Petit Prince, Le"/>
+    </metadata>
+    <guide>
+        <reference type="cover" title="Couverture" href="cover.jpg"/>
+    </guide>
+</package>

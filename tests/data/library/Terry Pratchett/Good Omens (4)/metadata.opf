@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+        <dc:identifier opf:scheme="calibre" id="calibre_id">4</dc:identifier>
+        <dc:identifier opf:scheme="uuid" id="uuid_id">b8d2ba40-ea4b-4aad-a57a-4c9cca6e1ead</dc:identifier>
+        <dc:title>Good Omens</dc:title>
+        <dc:creator opf:file-as="Pratchett, Terry &amp; Gaiman, Neil" opf:role="aut">Terry Pratchett</dc:creator>
+        <dc:creator opf:file-as="Pratchett, Terry &amp; Gaiman, Neil" opf:role="aut">Neil Gaiman</dc:creator>
+        <dc:contributor opf:file-as="calibre" opf:role="bkp">calibre (9.16.0) [https://calibre-ebook.com]</dc:contributor>
+        <dc:date>0101-01-01T00:00:00+00:00</dc:date>
+        <dc:description>The world will end next Saturday.</dc:description>
+        <dc:publisher>Gollancz</dc:publisher>
+        <dc:identifier opf:scheme="ISBN">9780060853983</dc:identifier>
+        <dc:identifier opf:scheme="GOODREADS">12067</dc:identifier>
+        <dc:language>eng</dc:language>
+        <dc:subject>Fantasy</dc:subject>
+        <dc:subject>Humour</dc:subject>
+        <meta name="calibre:rating" content="7"/>
+        <meta name="calibre:timestamp" content="2026-10-19T08:38:29+00:00"/>
+        <meta name="calibre:title_sort" content="Good Omens"/>
+    </metadata>
+    <guide>
+        <reference type="cover" title="Couverture" href="cover.jpg"/>
+    </guide>
+</package>

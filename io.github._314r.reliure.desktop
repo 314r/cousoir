@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Reliure
+Comment=Browse your Calibre ebook library
+Exec=reliure
+Icon=io.github._314r.reliure
+Terminal=false
+Categories=Office;Viewer;
+Keywords=ebook;calibre;library;epub;kobo;kindle;
+StartupNotify=true
+StartupWMClass=reliure
