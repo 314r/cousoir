@@ -10,6 +10,7 @@
 
 #include "book.h"
 #include "book_edit.h"
+#include "book_operations.h"
 #include "calibre_config.h"
 
 // Writes edits to a library as Calibre would, without the library ever
@@ -33,6 +34,14 @@ struct Request
     QString backupFolder;
     CalibreConfig config;
     QList<BookEdit> edits;
+    // After the edits, in this order: formats moved to the trash, books moved
+    // to the trash, books and formats restored from it, books added and
+    // formats added.
+    QList<FormatRemoval> formatRemovals;
+    QList<int> trash;
+    QList<Restoration> restorations;
+    QList<NewBook> newBooks;
+    QList<NewFormat> newFormats;
     // The software writing the metadata.opf files: name and version, and the
     // short name it files under.
     QString producer;
@@ -47,11 +56,15 @@ struct Request
 struct Result
 {
     bool ok = false;
+    // Whether the library changed: false when there was nothing to write.
+    bool written = false;
     QString error;
     // The library as it now is, read from the database written; without
     // books when nothing changed and nothing was written.
     LibraryData data;
     QSet<int> dirtied;
+    // The ids of the books added, in order.
+    QList<int> added;
     // The backup made, if any.
     QString backup;
 };

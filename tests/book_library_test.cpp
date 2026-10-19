@@ -90,6 +90,9 @@ private slots:
     void followsSortsLikeCalibre();
     void refusesWhileReadOnly();
     void revertsCurrentBook();
+    void addsBooks();
+    void addsAndRemovesFormats();
+    void movesBooksToTrash();
 
 private:
     std::unique_ptr<BookLibrary> open(const QString &path = fixtureLibrary());
@@ -544,6 +547,146 @@ void BookLibraryTest::revertsCurrentBook()
     QVERIFY(restored.open(QIODevice::ReadOnly));
     QCOMPARE(restored.readAll(), cover);
     QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.epub"))));
+}
+
+namespace {
+
+QString importFile(const QString &name)
+{
+    return QStringLiteral(RELIURE_TEST_DATA_DIR "/import/") + name;
+}
+
+QStringList formatsOf(const QVariantMap &book)
+{
+    QStringList formats;
+    for (const QVariant &format : book.value(QStringLiteral("formats")).toList())
+        formats.append(format.toMap().value(QStringLiteral("format")).toString());
+    return formats;
+}
+
+QStringList trashKeys(BookLibrary *library)
+{
+    QStringList keys;
+    for (const QVariant &entry : library->trashEntries())
+        keys.append(entry.toMap().value(QStringLiteral("key")).toString());
+    return keys;
+}
+
+} // namespace
+
+void BookLibraryTest::addsBooks()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QVERIFY(!library->addBooks({}).isEmpty());
+    QVERIFY(!library->addBooks({ QUrl::fromLocalFile(copy->filePath(QStringLiteral("nothing.epub"))) }).isEmpty());
+
+    // The fixture's own EPUB is a book the library has: Calibre would ask.
+    QSignalSpy duplicates(library.get(), &BookLibrary::duplicatesFound);
+    QSignalSpy added(library.get(), &BookLibrary::booksAdded);
+    const QString existing = copy->filePath(QStringLiteral("Glen Cook/The Black Company (2)/The Black Company - Glen Cook.epub"));
+    QCOMPARE(library->addBooks({ QUrl::fromLocalFile(importFile(QStringLiteral("Le Vicomte - Inconnu.epub"))),
+                                 QUrl::fromLocalFile(existing) }), QString());
+    QVERIFY(library->importing());
+    QVERIFY(duplicates.wait(15000));
+    QCOMPARE(duplicates.first().first().toStringList(), QStringList{ QStringLiteral("The Black Company") });
+    QCOMPARE(duplicates.first().at(1).toInt(), 2);
+    QVERIFY(!library->addBooks({ QUrl::fromLocalFile(existing) }).isEmpty());
+    library->addDuplicates(false);
+    QVERIFY(added.wait(15000));
+    QCOMPARE(added.first().first().toList(), QVariantList{ 7 });
+    QCOMPARE(library->counts().value(QStringLiteral("books")).toInt(), 7);
+
+    library->setCurrentBookId(7);
+    const QVariantMap book = library->currentBook();
+    QCOMPARE(book.value(QStringLiteral("title")).toString(), QStringLiteral("Le Vicomte de Bragelonne: Tome premier"));
+    QCOMPARE(book.value(QStringLiteral("authors")).toStringList(),
+             (QStringList{ QStringLiteral("Auguste Maquet"), QStringLiteral("Alexandre Dumas") }));
+    QCOMPARE(book.value(QStringLiteral("series")).toString(), QStringLiteral("Les Mousquetaires"));
+    QVERIFY(!book.value(QStringLiteral("cover")).toString().isEmpty());
+    QCOMPARE(formatsOf(book), QStringList{ QStringLiteral("EPUB") });
+    const QString folder = copy->filePath(QStringLiteral("Auguste Maquet/Le Vicomte de Bragelonne_ Tome premier (7)"));
+    QVERIFY(QFileInfo::exists(folder + QStringLiteral("/Le Vicomte de Bragelonne_ Tome premier - Auguste Maquet.epub")));
+    QVERIFY(QFileInfo::exists(folder + QStringLiteral("/metadata.opf")));
+
+    // A folder adds its book files.
+    QTemporaryDir drop;
+    QVERIFY(QFile::copy(importFile(QStringLiteral("manga.epub")), drop.filePath(QStringLiteral("manga.epub"))));
+    QVERIFY(QFile::copy(importFile(QStringLiteral("data.xyz")), drop.filePath(QStringLiteral("data.xyz"))));
+    added.clear();
+    QCOMPARE(library->addBooks({ QUrl::fromLocalFile(drop.path()) }), QString());
+    QVERIFY(added.wait(15000));
+    QCOMPARE(added.first().first().toList(), QVariantList{ 8 });
+}
+
+void BookLibraryTest::addsAndRemovesFormats()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    library->setCurrentBookId(1);
+    QVERIFY(!library->addFormat(1, copy->filePath(QStringLiteral("missing.mobi"))).isEmpty());
+    QVERIFY(!library->addFormat(99, importFile(QStringLiteral("Vicomte.mobi"))).isEmpty());
+
+    QCOMPARE(library->addFormat(1, QUrl::fromLocalFile(importFile(QStringLiteral("Vicomte.mobi"))).toString()), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("EPUB"), QStringLiteral("MOBI") }));
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.mobi"))));
+
+    QCOMPARE(library->removeFormat(1, QStringLiteral("MOBI")), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(formatsOf(library->currentBook()), QStringList{ QStringLiteral("EPUB") });
+    QCOMPARE(trashKeys(library.get()), QStringList{ QStringLiteral("f-1") });
+    const QVariantMap entry = library->trashEntries().first().toMap();
+    QCOMPARE(entry.value(QStringLiteral("formats")).toStringList(), QStringList{ QStringLiteral("MOBI") });
+    QCOMPARE(entry.value(QStringLiteral("title")).toString(), QStringLiteral("L'Écume des jours"));
+    QVERIFY(entry.value(QStringLiteral("restorable")).toBool());
+    QCOMPARE(entry.value(QStringLiteral("daysLeft")).toInt(), 14);
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral(".caltrash/f/1/mobi"))));
+
+    QCOMPARE(library->restoreFromTrash(1, { QStringLiteral("MOBI") }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("EPUB"), QStringLiteral("MOBI") }));
+    QVERIFY(library->trashEntries().isEmpty());
+    QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral(".caltrash/f/1"))));
+}
+
+void BookLibraryTest::movesBooksToTrash()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QCOMPARE(library->trashExpiryDays(), 14);
+    QVERIFY(!library->moveToTrash({ 99 }).isEmpty());
+
+    QCOMPARE(library->moveToTrash({ 4 }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->counts().value(QStringLiteral("books")).toInt(), 5);
+    QVERIFY(!ids(library->rows()).contains(4));
+    QCOMPARE(trashKeys(library.get()), QStringList{ QStringLiteral("b-4") });
+    QCOMPARE(library->counts().value(QStringLiteral("trash")).toInt(), 1);
+    const QVariantMap entry = library->trashEntries().first().toMap();
+    QCOMPARE(entry.value(QStringLiteral("title")).toString(), QStringLiteral("Good Omens"));
+    QCOMPARE(entry.value(QStringLiteral("author")).toString(), QStringLiteral("Terry Pratchett"));
+    QVERIFY(!entry.value(QStringLiteral("cover")).toString().isEmpty());
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral(".caltrash/b/4/Good Omens - Terry Pratchett.epub"))));
+    QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral("Terry Pratchett"))));
+
+    QCOMPARE(library->restoreFromTrash(4), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->counts().value(QStringLiteral("books")).toInt(), 6);
+    library->setCurrentBookId(4);
+    QCOMPARE(title(library.get()), QStringLiteral("Good Omens"));
+    QCOMPARE(library->currentBook().value(QStringLiteral("authors")).toStringList(),
+             (QStringList{ QStringLiteral("Terry Pratchett"), QStringLiteral("Neil Gaiman") }));
+    QCOMPARE(formatsOf(library->currentBook()), QStringList{ QStringLiteral("EPUB") });
+    QVERIFY(library->trashEntries().isEmpty());
+    // A book the library has is not restored over.
+    QVERIFY(!library->restoreFromTrash(4).isEmpty());
 }
 
 QTEST_MAIN(BookLibraryTest)

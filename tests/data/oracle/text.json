@@ -5888,5 +5888,409 @@
    "raw": "zzz",
    "expected": null
   }
+ ],
+ "string_to_authors": [
+  {
+   "text": "Glen Cook",
+   "expected": [
+    "Glen Cook"
+   ]
+  },
+  {
+   "text": "A & B",
+   "expected": [
+    "A",
+    "B"
+   ]
+  },
+  {
+   "text": "A and B",
+   "expected": [
+    "A",
+    "B"
+   ]
+  },
+  {
+   "text": "A AND B",
+   "expected": [
+    "A",
+    "B"
+   ]
+  },
+  {
+   "text": "A, and B",
+   "expected": [
+    "A",
+    "B"
+   ]
+  },
+  {
+   "text": "A with B",
+   "expected": [
+    "A",
+    "B"
+   ]
+  },
+  {
+   "text": "Andrew Anderson",
+   "expected": [
+    "Andrew Anderson"
+   ]
+  },
+  {
+   "text": "Withers Bob",
+   "expected": [
+    "Withers Bob"
+   ]
+  },
+  {
+   "text": "A&&B & C",
+   "expected": [
+    "A&B",
+    "C"
+   ]
+  },
+  {
+   "text": " A  &  B ",
+   "expected": [
+    "A",
+    "B"
+   ]
+  },
+  {
+   "text": "&",
+   "expected": []
+  },
+  {
+   "text": "",
+   "expected": []
+  },
+  {
+   "text": "A & ",
+   "expected": [
+    "A"
+   ]
+  },
+  {
+   "text": "Smith, John and Doe, Jane",
+   "expected": [
+    "Smith, John",
+    "Doe, Jane"
+   ]
+  },
+  {
+   "text": "Rock and Roll band",
+   "expected": [
+    "Rock",
+    "Roll band"
+   ]
+  },
+  {
+   "text": "A and B",
+   "expected": [
+    "A",
+    "B"
+   ]
+  },
+  {
+   "text": "A andB",
+   "expected": [
+    "A andB"
+   ]
+  }
+ ],
+ "authors_to_string": [
+  {
+   "authors": [
+    "A",
+    "B"
+   ],
+   "expected": "A & B"
+  },
+  {
+   "authors": [
+    "A&B",
+    "C"
+   ],
+   "expected": "A&&B & C"
+  },
+  {
+   "authors": [
+    "Smith, John"
+   ],
+   "expected": "Smith, John"
+  },
+  {
+   "authors": [],
+   "expected": ""
+  }
+ ],
+ "check_isbn": [
+  {
+   "text": "978-2-07-036024-5",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "9782070360246",
+   "expected": "9782070360246",
+   "simple": "9782070360246"
+  },
+  {
+   "text": "2-07-036024-6",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "207036024X",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "0-306-40615-2",
+   "expected": "0306406152",
+   "simple": "0306406152"
+  },
+  {
+   "text": "0306406152",
+   "expected": "0306406152",
+   "simple": "0306406152"
+  },
+  {
+   "text": "ISBN 978-0-306-40615-7",
+   "expected": "9780306406157",
+   "simple": ""
+  },
+  {
+   "text": "978 0 306 40615 7",
+   "expected": "9780306406157",
+   "simple": "9780306406157"
+  },
+  {
+   "text": "9780306406158",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "1111111111",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "0000000000000",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "urn:isbn:9780306406157",
+   "expected": "9780306406157",
+   "simple": ""
+  },
+  {
+   "text": "0-8044-2957-x",
+   "expected": "080442957X",
+   "simple": "080442957X"
+  },
+  {
+   "text": "abc",
+   "expected": "",
+   "simple": ""
+  },
+  {
+   "text": "978-0-306-40615-7 and more 1",
+   "expected": "",
+   "simple": ""
+  }
+ ],
+ "check_doi": [
+  {
+   "text": "10.1000/182",
+   "expected": "10.1000/182"
+  },
+  {
+   "text": "doi:10.1234/rel.2019",
+   "expected": "10.1234/rel.2019"
+  },
+  {
+   "text": "https://doi.org/10.1038/nphys1170 x",
+   "expected": "10.1038/nphys1170"
+  },
+  {
+   "text": "10.12/abc",
+   "expected": ""
+  },
+  {
+   "text": "",
+   "expected": ""
+  },
+  {
+   "text": "none",
+   "expected": ""
+  }
+ ],
+ "replace_entities": [
+  {
+   "text": "Tom &amp; Jerry",
+   "expected": "Tom & Jerry"
+  },
+  {
+   "text": "&lt;b&gt;",
+   "expected": "<b>"
+  },
+  {
+   "text": "&eacute;t&eacute;",
+   "expected": "été"
+  },
+  {
+   "text": "&#233;",
+   "expected": "é"
+  },
+  {
+   "text": "&#xE9;",
+   "expected": "é"
+  },
+  {
+   "text": "&#XE9;",
+   "expected": "é"
+  },
+  {
+   "text": "&#0;",
+   "expected": "&#0;"
+  },
+  {
+   "text": "&#;",
+   "expected": "&#;"
+  },
+  {
+   "text": "&#x;",
+   "expected": "&#x;"
+  },
+  {
+   "text": "&unknown;",
+   "expected": "&unknown;"
+  },
+  {
+   "text": "&amp",
+   "expected": "&amp"
+  },
+  {
+   "text": "& amp;",
+   "expected": "& amp;"
+  },
+  {
+   "text": "&&amp;",
+   "expected": "&&amp;"
+  },
+  {
+   "text": "&a&amp;",
+   "expected": "&a&amp;"
+  },
+  {
+   "text": "AT&T",
+   "expected": "AT&T"
+  },
+  {
+   "text": "&nbsp;x",
+   "expected": " x"
+  },
+  {
+   "text": "&#128512;",
+   "expected": "😀"
+  },
+  {
+   "text": "&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;",
+   "expected": "&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;"
+  },
+  {
+   "text": "&AMP;",
+   "expected": "&"
+  },
+  {
+   "text": "&squot;",
+   "expected": "'"
+  },
+  {
+   "text": "&hellips;",
+   "expected": "…"
+  },
+  {
+   "text": "&#12a;",
+   "expected": "&#12a;"
+  },
+  {
+   "text": "Fish &chips; &amp; peas",
+   "expected": "Fish &chips; & peas"
+  },
+  {
+   "text": "",
+   "expected": ""
+  }
+ ],
+ "clean_chars": [
+  {
+   "text": "plain",
+   "ascii": "plain",
+   "xml": "plain"
+  },
+  {
+   "text": "tab\there",
+   "ascii": "tab\there",
+   "xml": "tab\there"
+  },
+  {
+   "text": "bell\u0007x",
+   "ascii": "bellx",
+   "xml": "bellx"
+  },
+  {
+   "text": "delx",
+   "ascii": "delx",
+   "xml": "delx"
+  },
+  {
+   "text": "nelx",
+   "ascii": "nelx",
+   "xml": "nelx"
+  },
+  {
+   "text": "c1x",
+   "ascii": "c1x",
+   "xml": "c1x"
+  },
+  {
+   "text": "ok�x",
+   "ascii": "ok�x",
+   "xml": "ok�x"
+  },
+  {
+   "text": "nonchar￾x",
+   "ascii": "nonchar￾x",
+   "xml": "noncharx"
+  },
+  {
+   "text": "arabic﷐x",
+   "ascii": "arabic﷐x",
+   "xml": "arabicx"
+  },
+  {
+   "text": "emoji😀x",
+   "ascii": "emoji😀x",
+   "xml": "emoji😀x"
+  },
+  {
+   "text": "cr\r\nlf",
+   "ascii": "cr\r\nlf",
+   "xml": "cr\r\nlf"
+  },
+  {
+   "text": "sep\u001cx",
+   "ascii": "sepx",
+   "xml": "sepx"
+  }
  ]
 }

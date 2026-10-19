@@ -99,9 +99,13 @@ private slots:
     void rebasesOnConcurrentChange();
     void recoversInterruptedChange();
     void finishesPublishedChange();
+    void addsAndTrashesBooks();
+    void undoesFailedOperations();
+    void recoversInterruptedCopy();
 
 private:
     CommitEngine::Result commit(const QList<BookEdit> &edits);
+    CommitEngine::Result commit(CommitEngine::Request request);
     QVariant value(const QString &sql);
     QString book(int id, const QString &column);
 
@@ -131,6 +135,18 @@ CommitEngine::Result CommitEngineTest::commit(const QList<BookEdit> &edits)
     request.backupFolder = m_backups;
     request.config.interfaceLanguage = QStringLiteral("fr");
     request.edits = edits;
+    request.producer = QStringLiteral("Reliure (test)");
+    request.producerId = QStringLiteral("reliure");
+    request.now = m_now;
+    return CommitEngine::commit(request);
+}
+
+CommitEngine::Result CommitEngineTest::commit(CommitEngine::Request request)
+{
+    request.libraryPath = m_library;
+    request.cacheFolder = m_cache;
+    request.backupFolder = m_backups;
+    request.config.interfaceLanguage = QStringLiteral("fr");
     request.producer = QStringLiteral("Reliure (test)");
     request.producerId = QStringLiteral("reliure");
     request.now = m_now;
@@ -471,6 +487,107 @@ void CommitEngineTest::finishesPublishedChange()
     QVERIFY(done.contains(QStringLiteral("finished")));
     QCOMPARE(readAll(opf), QByteArray("<new/>"));
     QVERIFY(!tree(m_library).join(u'\n').contains(QStringLiteral(".~reliure")));
+}
+
+namespace {
+
+NewBook newBook(const QString &title, const QStringList &authors, const QString &file)
+{
+    NewBook book;
+    book.metadata.title = title;
+    book.metadata.authors = authors;
+    book.metadata.tags = { QStringLiteral("fantasy") };
+    book.metadata.pubdate = CalibreDate{ QDateTime(QDate(1984, 5, 1), QTime(12, 0), QTimeZone::UTC), 123456 };
+    book.files = { file };
+    return book;
+}
+
+} // namespace
+
+void CommitEngineTest::addsAndTrashesBooks()
+{
+    // A book added from a file: its row, its folder named as Calibre names
+    // it, the file, and items matched without changing their case.
+    const QString file = QStringLiteral(RELIURE_TEST_DATA_DIR "/import/manga.epub");
+    CommitEngine::Request request;
+    request.newBooks = { newBook(QStringLiteral("Bleak  House"), { QStringLiteral("glen cook") }, file) };
+    const CommitEngine::Result added = commit(request);
+    QVERIFY2(added.ok, qPrintable(added.error));
+    QCOMPARE(added.added, QList<int>{ 7 });
+    QVERIFY(added.dirtied.contains(7));
+    QCOMPARE(book(7, QStringLiteral("title")), QStringLiteral("Bleak House"));
+    QCOMPARE(book(7, QStringLiteral("path")), QStringLiteral("Glen Cook/Bleak House (7)"));
+    QCOMPARE(book(7, QStringLiteral("pubdate")), QStringLiteral("1984-05-01 12:00:00.123456+00:00"));
+    QCOMPARE(book(7, QStringLiteral("author_sort")), QStringLiteral("Cook, Glen"));
+    QCOMPARE(value(QStringLiteral("SELECT name FROM authors WHERE id=(SELECT author FROM books_authors_link WHERE book=7)"))
+                 .toString(), QStringLiteral("Glen Cook"));
+    QCOMPARE(value(QStringLiteral("SELECT name FROM tags WHERE id=(SELECT tag FROM books_tags_link WHERE book=7)"))
+                 .toString(), QStringLiteral("Fantasy"));
+    QCOMPARE(value(QStringLiteral("SELECT name FROM data WHERE book=7 AND format='EPUB'")).toString(),
+             QStringLiteral("Bleak House - Glen Cook"));
+    QCOMPARE(value(QStringLiteral("SELECT needs_scan FROM books_pages_link WHERE book=7")).toInt(), 1);
+    const QDir folder(QDir(m_library).filePath(QStringLiteral("Glen Cook/Bleak House (7)")));
+    QCOMPARE(readAll(folder.filePath(QStringLiteral("Bleak House - Glen Cook.epub"))), readAll(file));
+    QVERIFY(readAll(folder.filePath(QStringLiteral("metadata.opf"))).contains("1984-05-01T12:00:00.123456+00:00"));
+
+    // To the trash: the folder moves whole, the author stays for book 2.
+    CommitEngine::Request trash;
+    trash.trash = { 7, 4 };
+    const CommitEngine::Result trashed = commit(trash);
+    QVERIFY2(trashed.ok, qPrintable(trashed.error));
+    QVERIFY(!folder.exists());
+    QVERIFY(QFileInfo(QDir(m_library).filePath(QStringLiteral(".caltrash/b/7/Bleak House - Glen Cook.epub"))).isFile());
+    QVERIFY(QFileInfo(QDir(m_library).filePath(QStringLiteral(".caltrash/b/4/metadata.opf"))).isFile());
+    QVERIFY(!QFileInfo::exists(QDir(m_library).filePath(QStringLiteral("Terry Pratchett"))));
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM books WHERE id IN (4, 7)")).toInt(), 0);
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM authors WHERE name='Neil Gaiman'")).toInt(), 0);
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM authors WHERE name='Glen Cook'")).toInt(), 1);
+    QVERIFY(!tree(m_library).join(u'\n').contains(QStringLiteral(".~reliure")));
+
+    // And back, under its number.
+    CommitEngine::Request restore;
+    restore.restorations = { { 7, {} } };
+    const CommitEngine::Result restored = commit(restore);
+    QVERIFY2(restored.ok, qPrintable(restored.error));
+    QCOMPARE(book(7, QStringLiteral("title")), QStringLiteral("Bleak House"));
+    QVERIFY(QFileInfo(folder.filePath(QStringLiteral("Bleak House - Glen Cook.epub"))).isFile());
+    QVERIFY(!QFileInfo::exists(QDir(m_library).filePath(QStringLiteral(".caltrash/b/7"))));
+}
+
+void CommitEngineTest::undoesFailedOperations()
+{
+    // A format for a book that is gone fails the whole change, after a book
+    // was added and another moved to the trash: nothing of it stays.
+    const QStringList before = tree(m_library);
+    CommitEngine::Request request;
+    request.trash = { 4 };
+    request.newBooks = { newBook(QStringLiteral("Bleak House"), { QStringLiteral("Charles Dickens") },
+                                 QStringLiteral(RELIURE_TEST_DATA_DIR "/import/manga.epub")) };
+    request.newFormats = { { 42, QStringLiteral(RELIURE_TEST_DATA_DIR "/import/Vicomte.mobi") } };
+    const CommitEngine::Result result = commit(request);
+    QVERIFY(!result.ok);
+    QVERIFY2(result.error.contains(QStringLiteral("no longer in the library")), qPrintable(result.error));
+    QCOMPARE(tree(m_library), before);
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM books")).toInt(), 6);
+}
+
+void CommitEngineTest::recoversInterruptedCopy()
+{
+    // A file copied in before a crash goes on recovery.
+    const QStringList before = tree(m_library);
+    const QString journal = QDir(m_cache).filePath(QStringLiteral("ops.journal"));
+    const QString copy = QDir(m_library).filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.mobi"));
+    {
+        FileTransaction files(journal);
+        QString error;
+        QVERIFY(files.copy(QStringLiteral(RELIURE_TEST_DATA_DIR "/import/Vicomte.mobi"), copy, &error));
+        QVERIFY(QFileInfo(copy).isFile());
+        files.abandon();
+    }
+    QString done;
+    QString error;
+    QVERIFY2(CommitEngine::recover(m_library, m_cache, &done, &error), qPrintable(error));
+    QCOMPARE(tree(m_library), before);
 }
 
 QTEST_GUILESS_MAIN(CommitEngineTest)

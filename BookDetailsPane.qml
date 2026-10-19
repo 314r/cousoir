@@ -2,12 +2,14 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import Reliure
 
 // A book's metadata as Calibre keeps it, and its files, each of which opens
-// in the desktop's reader for it. While the library may be written the
+// in the desktop's reader for it, goes to the library's trash, or is added
+// from a file. While the library may be written the
 // metadata edits in place: a field saves when you leave it, with Enter or
 // Tab; Esc puts the stored value back; a value the field cannot take shows
 // in red and is not saved.
@@ -46,6 +48,28 @@ FocusScope {
         const error = pane.library.openFormat(pane.book.id, format)
         if (error)
             pane.failed(error)
+    }
+
+    // A file as the book's format of its extension, after asking when the
+    // book has one already.
+    function addFormat(url) {
+        const name = decodeURIComponent(url.toString().split("/").pop())
+        const format = name.includes(".") ? name.split(".").pop().toUpperCase() : ""
+        if ((pane.book.formats || []).some(existing => existing.format === format)) {
+            replaceDialog.url = url
+            replaceDialog.title = qsTr("Replace the book's %1 file?").arg(format)
+            replaceDialog.ask()
+            return
+        }
+        const error = pane.library.addFormat(pane.book.id, url.toString())
+        if (error)
+            pane.failed(error)
+    }
+
+    function removeFormat(format) {
+        removeDialog.format = format
+        removeDialog.title = qsTr("Move the %1 file to the trash?").arg(format)
+        removeDialog.ask()
     }
 
     function save(key, value) {
@@ -363,8 +387,30 @@ FocusScope {
                             horizontalAlignment: Text.AlignRight
                             elide: Text.ElideRight
                         }
+
+                        FlatButton {
+                            objectName: "removeFormat_" + formatRow.modelData.format
+
+                            visible: pane.editable
+                            iconOnly: true
+                            text: qsTr("Move the %1 file to the trash").arg(formatRow.modelData.format)
+                            icon.source: "assets/icons/trash.svg"
+                            icon.width: Math.round(Theme.iconSize * 0.85)
+                            icon.height: Math.round(Theme.iconSize * 0.85)
+                            onClicked: pane.removeFormat(formatRow.modelData.format)
+                        }
                     }
                 }
+            }
+
+            FlatButton {
+                objectName: "addFormatButton"
+
+                visible: pane.editable
+                variant: "outline"
+                text: qsTr("Add file…")
+                icon.source: "assets/icons/plus.svg"
+                onClicked: formatDialog.open()
             }
 
             FlatButton {
@@ -391,6 +437,47 @@ FocusScope {
             }
 
             Item { Layout.preferredHeight: Theme.panePadding }
+        }
+    }
+
+    FileDialog {
+        id: formatDialog
+
+        title: qsTr("Add a file to the book")
+        nameFilters: [qsTr("Books (*.epub *.kepub *.azw3 *.azw *.mobi *.prc *.pdf *.fb2 *.cbz *.cbr *.djvu *.docx *.rtf *.txt)"),
+                      qsTr("All files (*)")]
+        onAccepted: pane.addFormat(selectedFile)
+    }
+
+    ConfirmDialog {
+        id: replaceDialog
+        objectName: "replaceFormatDialog"
+
+        property url url
+
+        message: qsTr("The file it has now goes away.")
+        acceptText: qsTr("Replace")
+        acceptVariant: "danger"
+        onAccepted: {
+            const error = pane.library.addFormat(pane.book.id, url.toString())
+            if (error)
+                pane.failed(error)
+        }
+    }
+
+    ConfirmDialog {
+        id: removeDialog
+        objectName: "removeFormatDialog"
+
+        property string format
+
+        message: qsTr("Reliure and Calibre can restore it from the library's trash.")
+        acceptText: qsTr("Move to Trash")
+        acceptVariant: "danger"
+        onAccepted: {
+            const error = pane.library.removeFormat(pane.book.id, format)
+            if (error)
+                pane.failed(error)
         }
     }
 }

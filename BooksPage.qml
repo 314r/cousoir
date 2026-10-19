@@ -25,14 +25,17 @@ Rectangle {
     readonly property var actions: [
         { key: "open", title: qsTr("Open") },
         { key: "read", title: qsTr("Open in reader") },
-        { key: "folder", title: qsTr("Show in folder") }
-    ]
+        { key: "folder", title: qsTr("Show in folder") },
+        { key: "trash", title: qsTr("Move to Trash") }
+    ].filter(action => action.key !== "trash" || page.library.writable)
     readonly property var view: gridMode ? coverGrid : bookTable
     readonly property int currentIndex: view.currentIndex
     // The row whose menu is open.
     property int menuIndex: -1
 
     signal bookActivated(int bookId)
+    // Move to Trash, chosen in a row's menu.
+    signal trashRequested(int bookId)
     signal reloadRequested()
     signal settingsRequested()
     // Opening a book's file failed; `message` says why.
@@ -53,6 +56,16 @@ Rectangle {
 
     function moveCurrent(delta) {
         page.view.moveCurrent(delta)
+    }
+
+    // Makes the book's row current, when it is shown.
+    function select(bookId) {
+        const index = page.library.rows.findIndex(row => row.id === bookId)
+        if (index < 0)
+            return
+        bookTable.currentIndex = index
+        coverGrid.currentIndex = index
+        page.view.focusList()
     }
 
     function activate(index) {
@@ -80,6 +93,10 @@ Rectangle {
             return
         if (key === "open") {
             page.activate(index)
+            return
+        }
+        if (key === "trash") {
+            page.trashRequested(row.id)
             return
         }
         const error = key === "read" ? page.library.openFormat(row.id, "") : page.library.openFolder(row.id)
@@ -162,7 +179,7 @@ Rectangle {
                 text: !page.library.loaded
                     ? (page.library.loading ? "" : page.library.lastError)
                     : page.library.scopeCount === 0
-                        ? qsTr("Books you add to the library in Calibre appear here.")
+                        ? qsTr("Add books with Ctrl+N, or drop their files here.")
                         : qsTr("Esc clears the search.")
                 color: Theme.textMuted
                 horizontalAlignment: Text.AlignHCenter

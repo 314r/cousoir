@@ -93,17 +93,27 @@ private slots:
     void refusesInvalidValues();
     void changesRating();
     void changesCovers();
+    void movesBooksToTrashAndBack();
+    void addsAndRemovesFiles();
+    void asksAboutDuplicates();
 
 private:
     bool loadUi();
     QQuickItem *control(const QString &name) const;
     QQuickItem *control(const char *name) const { return control(QString::fromLatin1(name)); }
+    // A popup or another object that is no item.
+    QObject *object(const char *name) const { return m_window->findChild<QObject *>(QString::fromLatin1(name)); }
     QObject *library() const;
     QObject *guard() const;
     QString text(const char *name) const;
     void typeText(const QString &text);
     void click(const char *name);
-    // Makes the copy old enough to be written, and opens `bookId`.
+    // Clicks the visible one of the controls named `name`: each dialog has
+    // its own buttons of the same names.
+    void clickVisible(const char *name);
+    // Makes the copy old enough to be written.
+    void makeWritable();
+    // Makes the copy writable and opens `bookId`.
     void openWritable(int bookId);
     // Clicks a field of the details pane and types over its text.
     void retype(const char *field, const QString &text);
@@ -125,9 +135,9 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<ConcurrencyGuard>("Reliure", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<SystemAppearance>("Reliure", 1, 0, "SystemAppearance");
     for (const char *type : { "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
-                              "BooksPage", "ChoiceBox", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
+                              "BooksPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
                               "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
-                              "SettingsWindow", "Sidebar", "SidebarItem", "StatTile", "ThinScrollBar" }) {
+                              "SettingsWindow", "Sidebar", "SidebarItem", "StatTile", "ThinScrollBar", "TrashPage" }) {
         qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Reliure/%1.qml").arg(QLatin1String(type))),
                         "Reliure", 1, 0, type);
     }
@@ -202,7 +212,7 @@ QString LibraryUiTest::text(const char *name) const
     return item ? item->property("text").toString() : QString();
 }
 
-void LibraryUiTest::openWritable(int bookId)
+void LibraryUiTest::makeWritable()
 {
     QFile database(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")));
     QVERIFY(database.open(QIODevice::ReadWrite));
@@ -211,6 +221,11 @@ void LibraryUiTest::openWritable(int bookId)
     QMetaObject::invokeMethod(guard(), "refresh");
     QTRY_VERIFY2(guard()->property("writable").toBool(), qPrintable(guard()->property("readOnlyReason").toString()));
     QTRY_VERIFY(library()->property("writable").toBool());
+}
+
+void LibraryUiTest::openWritable(int bookId)
+{
+    makeWritable();
     library()->setProperty("currentBookId", bookId);
     QTRY_VERIFY(control("bookFields") && control("bookFields")->isVisible());
     QVERIFY(QQuickTest::qWaitForPolish(m_window));
@@ -241,6 +256,22 @@ void LibraryUiTest::click(const char *name)
     QQuickItem *item = control(name);
     QVERIFY2(item, name);
     QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(item));
+}
+
+void LibraryUiTest::clickVisible(const char *name)
+{
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
+    QQuickItem *found = nullptr;
+    QTRY_VERIFY([&] {
+        const QList<QQuickItem *> items = m_window->findChildren<QQuickItem *>(QString::fromLatin1(name));
+        const auto visible = std::find_if(items.cbegin(), items.cend(), [](QQuickItem *item) {
+            return item->isVisible() && item->window() && item->opacity() > 0.99;
+        });
+        found = visible != items.cend() ? *visible : nullptr;
+        return found != nullptr;
+    }());
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
+    QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(found));
 }
 
 void LibraryUiTest::typeText(const QString &text)
@@ -654,6 +685,118 @@ int main(int argc, char **argv)
     app.setApplicationName(QStringLiteral("library-ui"));
     LibraryUiTest test;
     return QTest::qExec(&test, argc, argv);
+}
+
+
+namespace {
+
+QStringList formatsOf(const QVariantMap &book)
+{
+    QStringList formats;
+    for (const QVariant &format : book.value(QStringLiteral("formats")).toList())
+        formats.append(format.toMap().value(QStringLiteral("format")).toString());
+    return formats;
+}
+
+} // namespace
+
+void LibraryUiTest::movesBooksToTrashAndBack()
+{
+    makeWritable();
+    // Del on the list asks before moving the current book.
+    QMetaObject::invokeMethod(m_window, "focusCurrentList");
+    QTRY_VERIFY(m_window->activeFocusItem());
+    const QVariantList rows = library()->property("rows").toList();
+    QVERIFY(!rows.isEmpty());
+    const QVariantMap first = rows.first().toMap();
+    QVERIFY(text("keyHints").endsWith(QStringLiteral("Del trash")));
+    QTest::keyClick(m_window, Qt::Key_Delete);
+    QVERIFY(object("trashDialog"));
+    QTRY_VERIFY(object("trashDialog")->property("opened").toBool());
+    QCOMPARE(object("trashDialog")->property("title").toString(),
+             QStringLiteral("Move “%1” to the trash?").arg(first.value(QStringLiteral("title")).toString()));
+    clickVisible("confirmAccept");
+    waitForSave();
+    QTRY_COMPARE(library()->property("rows").toList().size(), rows.size() - 1);
+
+    // The Trash section lists it, and Restore puts it back.
+    click("sidebar_trash");
+    QTRY_VERIFY(control("trashPage")->isVisible());
+    const QString key = QStringLiteral("b-%1").arg(first.value(QStringLiteral("id")).toInt());
+    QTRY_VERIFY(control(QStringLiteral("trash_") + key));
+    QCOMPARE(text("trashExpiry"), QStringLiteral("Calibre deletes books from the trash after 14 days."));
+    QCOMPARE(text("bookCount"), QStringLiteral("1 item"));
+    QVERIFY(!control("trashEmpty")->isVisible());
+    QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(control(QStringLiteral("restore_") + key)));
+    waitForSave();
+    QTRY_VERIFY(control("trashEmpty")->isVisible());
+    QCOMPARE(library()->property("counts").toMap().value(QStringLiteral("books")).toInt(), rows.size());
+
+    // From the book page too.
+    click("sidebar_books");
+    library()->setProperty("currentBookId", 2);
+    QTRY_VERIFY(control("trashBookButton") && control("trashBookButton")->isVisible());
+    click("trashBookButton");
+    QTRY_VERIFY(object("trashDialog")->property("opened").toBool());
+    clickVisible("confirmAccept");
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+    QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("trash")).toInt(), 1);
+}
+
+void LibraryUiTest::addsAndRemovesFiles()
+{
+    openWritable(1);
+    // A file goes to the trash after a question.
+    click("removeFormat_EPUB");
+    QTRY_VERIFY(object("removeFormatDialog")->property("opened").toBool());
+    QCOMPARE(object("removeFormatDialog")->property("title").toString(), QStringLiteral("Move the EPUB file to the trash?"));
+    clickVisible("confirmAccept");
+    waitForSave();
+    QTRY_VERIFY(formatsOf(library()->property("currentBook").toMap()).isEmpty());
+    QVERIFY(QFileInfo::exists(QDir(m_libraryPath).filePath(QStringLiteral(".caltrash/f/1/epub"))));
+
+    // A file added; the same format again asks before replacing it.
+    const QUrl mobi = QUrl::fromLocalFile(QStringLiteral(RELIURE_TEST_DATA_DIR "/import/Vicomte.mobi"));
+    QMetaObject::invokeMethod(control("detailsPane"), "addFormat", Q_ARG(QVariant, mobi));
+    waitForSave();
+    QTRY_COMPARE(formatsOf(library()->property("currentBook").toMap()), QStringList{ QStringLiteral("MOBI") });
+    QMetaObject::invokeMethod(control("detailsPane"), "addFormat", Q_ARG(QVariant, mobi));
+    QTRY_VERIFY(object("replaceFormatDialog")->property("opened").toBool());
+    QCOMPARE(object("replaceFormatDialog")->property("title").toString(), QStringLiteral("Replace the book's MOBI file?"));
+    clickVisible("confirmAccept");
+    waitForSave();
+    QCOMPARE(formatsOf(library()->property("currentBook").toMap()), QStringList{ QStringLiteral("MOBI") });
+}
+
+void LibraryUiTest::asksAboutDuplicates()
+{
+    makeWritable();
+    const int books = library()->property("counts").toMap().value(QStringLiteral("books")).toInt();
+    const QString existing = QDir(m_libraryPath).filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.epub"));
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(existing) }));
+    QCOMPARE(error, QString());
+    QTRY_VERIFY_WITH_TIMEOUT(object("duplicatesDialog")->property("opened").toBool(), 15000);
+    QCOMPARE(object("duplicatesDialog")->property("title").toString(),
+             QStringLiteral("“Shadows Linger” is already in the library"));
+    QCOMPARE(object("duplicatesDialog")->property("message").toString(), QString());
+    QCOMPARE(object("duplicatesDialog")->property("rejectText").toString(), QStringLiteral("Skip it"));
+    clickVisible("confirmReject");
+    QTRY_VERIFY(!object("duplicatesDialog")->property("opened").toBool());
+    QTest::qWait(200);
+    QVERIFY(!library()->property("saving").toBool());
+    QCOMPARE(library()->property("counts").toMap().value(QStringLiteral("books")).toInt(), books);
+
+    // Added anyway, it is a new book.
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(existing) }));
+    QTRY_VERIFY_WITH_TIMEOUT(object("duplicatesDialog")->property("opened").toBool(), 15000);
+    clickVisible("confirmAccept");
+    waitForSave();
+    QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("books")).toInt(), books + 1);
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("Added 1 book."));
 }
 
 #include "library_ui_test.moc"

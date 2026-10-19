@@ -150,7 +150,8 @@ QList<QPair<QString, QString>> keptMetadata(const QByteArray &previous)
 
 namespace Opf {
 
-QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settings &settings, const QByteArray &previous)
+QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settings &settings, const QByteArray &previous,
+                         const ExactDates *exact)
 {
     QStringList lines;
     // factory(): an element of the metadata, its text stripped.
@@ -182,7 +183,7 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
     element(QStringLiteral("dc:contributor"), settings.producer,
             attribute(QStringLiteral("opf:file-as"), settings.producerId)
                 + attribute(QStringLiteral("opf:role"), QStringLiteral("bkp")));
-    element(QStringLiteral("dc:date"), CalibreDb::isoFormat(book.pubdate));
+    element(QStringLiteral("dc:date"), exact ? exact->pubdate.isoFormat() : CalibreDb::isoFormat(book.pubdate));
     if (!book.comments.isEmpty())
         element(QStringLiteral("dc:description"), book.comments);
     if (!book.publisher.isEmpty())
@@ -210,7 +211,8 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
     }
     if (book.rating > 0)
         meta(QStringLiteral("calibre:rating"), QString::number(book.rating));
-    meta(QStringLiteral("calibre:timestamp"), CalibreDb::isoFormat(book.timestamp));
+    meta(QStringLiteral("calibre:timestamp"),
+         exact ? exact->timestamp.isoFormat() : CalibreDb::isoFormat(book.timestamp));
     if (!book.sort.isEmpty())
         meta(QStringLiteral("calibre:title_sort"), book.sort);
     for (const auto &kept : keptMetadata(previous))

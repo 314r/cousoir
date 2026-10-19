@@ -4,6 +4,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 // Calibre's text rules, ported from src/calibre/ebooks/metadata/__init__.py
 // and src/calibre/utils/localization.py of Calibre 9.16. Calibre's own output
 // for the same names is checked by tests/calibre_text_test.cpp.
@@ -29,6 +31,10 @@ struct Tweaks
     QStringList authorNameCopywords;
     bool authorUseSurnamePrefixes = false;
     QStringList authorSurnamePrefixes;
+    // The series index of a book added to a series without one: "next",
+    // "first_free", "next_free", "last_free", or a number.
+    QString seriesIndexAutoIncrement = QStringLiteral("next");
+    std::optional<double> seriesIndexAutoIncrementNumber;
 
     static Tweaks defaults();
 };
@@ -55,6 +61,38 @@ QString sqlAuthorToAuthorSort(const QString &author, const Tweaks &tweaks);
 // "fra" or "French"; empty when it knows no such language.
 QString canonicalizeLanguage(const QString &raw);
 
+// string_to_authors(): "A & B", "A and B" or "A with B" as names; "&&" is
+// an "&" in a name.
+QStringList stringToAuthors(const QString &text);
+// authors_to_string(): the names joined by " & ", an "&" in one doubled.
+QString authorsToString(const QStringList &authors);
+
+// check_isbn(): the ISBN-10 or ISBN-13 in `text`, without its separators,
+// if its check digit is right; empty otherwise. `simple` only drops dashes
+// and spaces, rejecting any other character.
+QString checkIsbn(const QString &text, bool simple = false);
+
+// str.strip(): `text` without Python's leading and trailing whitespace,
+// Qt's and the four information separators.
+QString strip(const QString &text);
+// Python's \s in a str pattern as a QRegularExpression class, and \S: Qt's
+// are ASCII without Unicode properties, and miss the information separators
+// with them.
+extern const QString pythonSpace;
+extern const QString pythonNonSpace;
+
+// check_doi(): the first "10.NNNN/…" in `text`, empty for none.
+QString checkDoi(const QString &text);
+
+// fuzzy_title() of db/utils.py: a title as Calibre compares it to find a
+// book already in the library: lower case, without punctuation or a leading
+// article.
+QString fuzzyTitle(const QString &title, const Tweaks &tweaks, const QString &interfaceLanguage);
+
+// _get_next_series_num_for_list(): the index a book added to a series takes,
+// after the indices its books have.
+double nextSeriesIndex(QList<double> indices, const Tweaks &tweaks);
+
 // The English name of an ISO 639 code, or the code itself.
 QString languageName(const QString &code);
 
@@ -77,5 +115,17 @@ QString asciiFilename(const QString &text);
 // "Cover", in its interface language.
 QString unknownText(const QString &interfaceLanguage);
 QString coverText(const QString &interfaceLanguage);
+// The ISO 639-2 code of a MOBI header's language code, empty for none.
+QString mobiLanguage(int code);
+
+// clean_ascii_chars(): no ASCII control characters but tab, line feed and
+// carriage return.
+QString cleanAsciiChars(const QString &text);
+// clean_xml_chars(): only the characters XML allows, as Calibre's native
+// version keeps them.
+QString cleanXmlChars(const QString &text);
+// replace_entities(): HTML's named and numeric character references
+// replaced, as Calibre's fast_html_entities does it.
+QString replaceEntities(const QString &text);
 
 } // namespace CalibreText

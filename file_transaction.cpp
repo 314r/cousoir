@@ -143,29 +143,54 @@ bool FileTransaction::move(const QString &from, const QString &to, QString *erro
         && rename(from, to, error);
 }
 
-bool FileTransaction::write(const QString &path, const QByteArray &contents, QString *error)
+bool FileTransaction::place(const QString &path, const std::function<bool(const QString &, QString *)> &fill,
+                            QString *error)
 {
     const QString kept = QFileInfo::exists(path) ? keptName(path) : QString();
     const QString fresh = newName(kept.isEmpty() ? keptName(path) : kept);
     if (!makeFolder(QFileInfo(path).absolutePath(), error)
-        || !log({ QStringLiteral("write"), path, kept.isEmpty() ? fresh : kept }, error))
+        || !log({ QStringLiteral("write"), path, kept.isEmpty() ? fresh : kept }, error) || !fill(fresh, error))
         return false;
-    QFile file(fresh);
-    if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size() || !file.flush()) {
-        if (error)
-            *error = QObject::tr("Cannot write %1: %2").arg(fresh, file.errorString());
-        return false;
-    }
-#ifdef Q_OS_UNIX
-    ::fsync(file.handle());
-#endif
-    file.close();
     // Keep the file's permissions.
     if (!kept.isEmpty())
         QFile::setPermissions(fresh, QFileInfo(path).permissions());
     if (!kept.isEmpty() && !rename(path, kept, error))
         return false;
     return rename(fresh, path, error);
+}
+
+bool FileTransaction::write(const QString &path, const QByteArray &contents, QString *error)
+{
+    return place(path, [&contents](const QString &fresh, QString *error) {
+        QFile file(fresh);
+        if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size() || !file.flush()) {
+            if (error)
+                *error = QObject::tr("Cannot write %1: %2").arg(fresh, file.errorString());
+            return false;
+        }
+#ifdef Q_OS_UNIX
+        ::fsync(file.handle());
+#endif
+        return true;
+    }, error);
+}
+
+bool FileTransaction::copy(const QString &source, const QString &path, QString *error)
+{
+    return place(path, [&source](const QString &fresh, QString *error) {
+        // QFile::copy() clones the file where the filesystem can.
+        QFile file(source);
+        if (!file.copy(fresh)) {
+            if (error)
+                *error = QObject::tr("Cannot copy %1: %2").arg(source, file.errorString());
+            return false;
+        }
+        // A new file of the library, whatever the source's permissions.
+        QFile::setPermissions(fresh, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup
+                                         | QFileDevice::ReadOther);
+        sync(fresh);
+        return true;
+    }, error);
 }
 
 bool FileTransaction::remove(const QString &path, QString *error)

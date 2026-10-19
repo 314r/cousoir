@@ -27,9 +27,11 @@ run: build
 test: build
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
 
-# Rebuilds tests/data/library and its calibredb listing with Calibre.
+# Rebuilds tests/data/library and its calibredb listing, and the book files of
+# tests/data/import, with Calibre.
 fixtures:
 	tools/make_fixture_library.sh
+	tools/make_import_fixtures.sh
 
 # Records what Calibre computes, for the tests and the tables Reliure takes
 # from it: title and author sorts, folder and file names, the transliteration

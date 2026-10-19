@@ -5,7 +5,8 @@
 #   folder names with Unihandecode's default (Chinese and others) table;
 # - calibre_strings.inc: Calibre's translations of "Unknown", the title and
 #   author of a book without one, and "Cover", the title of an OPF's cover
-#   reference.
+#   reference; the language of a MOBI file by its header's code; and the
+#   named character references replace_entities() knows.
 #
 #   calibre-debug -e tools/oracle/tables_oracle.py -- <source folder>
 
@@ -13,8 +14,10 @@ import os
 import sys
 
 from calibre.constants import __version__
+from calibre.ebooks.html_entities import html5_entities
+from calibre.ebooks.mobi.langcodes import mobi2iana
 from calibre.ebooks.unihandecode.unidecoder import Unidecoder
-from calibre.utils.localization import get_all_translators
+from calibre.utils.localization import canonicalize_lang, get_all_translators
 
 out = sys.argv[-1]
 
@@ -67,4 +70,19 @@ with open(os.path.join(out, 'calibre_strings.inc'), 'w', encoding='utf-8') as f:
     for lang in sorted(translations):
         unknown, cover = translations[lang]
         f.write('    { %s, %s, %s },\n' % (c_string(lang), c_string(unknown), c_string(cover)))
+    f.write('};\n\n')
+    f.write('// mobi2iana() of a MOBI header\'s language code, as canonicalize_lang() keeps it.\n')
+    f.write('static const struct { int code; const char *language; } mobiLanguages[] = {\n')
+    for code in range(256):
+        try:
+            language = canonicalize_lang(mobi2iana(code, 0))
+        except Exception:
+            language = None
+        if language:
+            f.write('    { %d, %s },\n' % (code, c_string(language)))
+    f.write('};\n')
+    f.write('\n// replace_entities()\'s named references, sorted by name.\n')
+    f.write('static const struct { const char *name; const char *value; } htmlEntities[] = {\n')
+    for name in sorted(html5_entities):
+        f.write('    { %s, %s },\n' % (c_string(name), c_string(html5_entities[name])))
     f.write('};\n')

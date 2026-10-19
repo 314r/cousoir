@@ -14,8 +14,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(GNUInstallDirs)
 include(CTest)
 
-find_package(Qt6 6.9 REQUIRED COMPONENTS Core Concurrent Gui Network Qml Quick QuickControls2 Svg)
+find_package(Qt6 6.9 REQUIRED COMPONENTS Core Concurrent Gui Network Qml Quick QuickControls2 Svg Xml)
 find_package(SQLite3 REQUIRED)
+find_package(libzip REQUIRED)
 # CMake 4 renamed the imported target.
 if(TARGET SQLite3::SQLite3)
     set(RELIURE_SQLITE SQLite3::SQLite3)
@@ -26,13 +27,19 @@ endif()
 qt_standard_project_setup(REQUIRES 6.9)
 
 # Reading and writing the library, shared by the application, reliure-cli
-# and the tests. Qt Gui only for QImage, which covers need.
+# and the tests. Qt Gui only for QImage, which covers need; Qt Xml and libzip
+# to read the metadata of the books added.
 set(RELIURE_LIBRARY_SOURCES
     book.h
     book_edit.cpp
+    book_import.cpp
+    book_import.h
+    book_operations.cpp
+    book_operations.h
     book_edit.h
     calibre_config.cpp
     calibre_config.h
+    calibre_date.h
     calibre_db.cpp
     calibre_db.h
     calibre_list.cpp
@@ -55,12 +62,16 @@ set(RELIURE_LIBRARY_SOURCES
     file_transaction.h
     opf.cpp
     opf.h
+    opf_reader.cpp
+    opf_reader.h
+    pdf_reader.cpp
+    pdf_reader.h
     reliure_paths.cpp
     reliure_paths.h
     sqlite_db.cpp
     sqlite_db.h
 )
-set(RELIURE_LIBRARY_LINKS Qt6::Core Qt6::Gui Qt6::Network ${RELIURE_SQLITE})
+set(RELIURE_LIBRARY_LINKS Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${RELIURE_SQLITE})
 
 # The models QML uses on top of it.
 set(RELIURE_MODEL_SOURCES
@@ -91,6 +102,7 @@ set(RELIURE_QML_FILES
     BookPage.qml
     BooksPage.qml
     ChoiceBox.qml
+    ConfirmDialog.qml
     CoverGrid.qml
     Divider.qml
     FacetPage.qml
@@ -108,6 +120,7 @@ set(RELIURE_QML_FILES
     StatTile.qml
     Theme.qml
     ThinScrollBar.qml
+    TrashPage.qml
 )
 
 set(RELIURE_ICON_FILES

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Compares `reliure-cli list` with `calibredb list --for-machine --fields all`,
 # each on its own copy of the fixture library and, with RELIURE_GOLDEN_REAL=1,
-# of the library Calibre opens. calibredb can rename files and touches
+# of the library Calibre opens; and `reliure-cli read` with Calibre's readers
+# on book files. calibredb can rename files and touches
 # metadata.db even to list it, so neither ever runs on the library itself.
 #
 #   tests/golden/run.sh build/reliure-cli
@@ -30,6 +31,18 @@ export XDG_CACHE_HOME="$work/cache" XDG_DATA_HOME="$work/data"
 export CALIBRE_OVERRIDE_LANG=fr
 
 status=0
+
+# Runs a Calibre oracle; a failure is reported with its output, not hidden.
+oracle() {
+    local log="$work/oracle.log"
+    if ! calibre-debug -e "$@" > "$log" 2>&1; then
+        echo "calibre-debug -e $(basename "$1") failed:"
+        tail -20 "$log"
+        status=1
+        return 1
+    fi
+}
+
 compare() {
     local name=$1 source=$2
     for side in calibre reliure; do
@@ -53,6 +66,39 @@ compare() {
 
 compare fixture "$root/tests/data/library"
 
+# What adding a file reads from it, Calibre's readers against Reliure's, on
+# the book files of folders: the fixture library's and tests/data/import.
+reads() {
+    local name=$1 files=()
+    shift
+    while IFS= read -r -d '' file; do
+        files+=("$file")
+    done < <(find "$@" -mindepth 1 -name '.*' -prune -o -type f ! -name '*.db' ! -name 'metadata.opf' \
+        ! -name 'cover.jpg' ! -iname '*conflicted copy*' ! -iname '*copie en conflit*' -print0 | sort -z)
+    if [ ${#files[@]} -eq 0 ]; then
+        echo "$name reads: no book files"
+        status=1
+        return
+    fi
+    oracle "$root/tools/oracle/read_oracle.py" -- "$work/$name-read-calibre.json" "${files[@]}" || return 0
+    if ! "$cli" read "${files[@]}" > "$work/$name-read-reliure.json" 2> "$work/$name-read.log"; then
+        echo "$name reads: reliure-cli read failed:"
+        tail -20 "$work/$name-read.log"
+        status=1
+        return 0
+    fi
+    if python3 "$root/tests/golden/compare_reads.py" "$work/$name-read-calibre.json" "$work/$name-read-reliure.json" \
+        > "$work/$name-reads.txt"; then
+        echo "$name reads: $(tail -1 "$work/$name-reads.txt")"
+    else
+        echo "$name reads: Reliure reads files differently:"
+        head -60 "$work/$name-reads.txt"
+        status=1
+    fi
+}
+
+reads fixture "$root/tests/data/import" "$root/tests/data/library"
+
 # The same edits written by Calibre and by Reliure, then compared table by
 # table and file by file; calibredb then checks Reliure's copy and lists it as
 # it lists Calibre's.
@@ -62,8 +108,11 @@ edits() {
         rm -rf "$work/edit-$side"
         cp -a --reflink=auto "$root/tests/data/library" "$work/edit-$side"
     done
-    calibre-debug -e "$root/tools/oracle/apply_edits.py" -- "$work/edit-calibre" "$edits" >/dev/null
-    "$cli" apply --force --library "$work/edit-reliure" "$edits" >/dev/null
+    oracle "$root/tools/oracle/apply_edits.py" -- "$work/edit-calibre" "$edits" || return 0
+    if ! "$cli" apply --force --library "$work/edit-reliure" "$edits" >/dev/null; then
+        status=1
+        return 0
+    fi
     if ! python3 "$root/tests/golden/compare_libraries.py" "$work/edit-calibre" "$work/edit-reliure"; then
         status=1
     fi
@@ -87,6 +136,61 @@ edits() {
 }
 
 edits "$root/tests/data/edits/edits.json"
+
+# Books and formats added, moved to the trash and restored, step by step on
+# both copies, each step compared.
+operations() {
+    for side in calibre reliure; do
+        rm -rf "$work/ops-$side"
+        cp -a --reflink=auto "$root/tests/data/library" "$work/ops-$side"
+    done
+    local ops
+    for ops in "$@"; do
+        echo "$(basename "$ops"):"
+        oracle "$root/tools/oracle/apply_edits.py" -- "$work/ops-calibre" "$ops" || return 0
+        if ! "$cli" apply --force --library "$work/ops-reliure" "$ops" >/dev/null; then
+            status=1
+            return
+        fi
+        if ! python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/ops-calibre" "$work/ops-reliure"; then
+            status=1
+        fi
+        for side in calibre reliure; do
+            calibredb check_library --with-library "$work/ops-$side" > "$work/ops-check-$side.txt" 2>&1 || true
+        done
+        if ! cmp -s "$work/ops-check-calibre.txt" "$work/ops-check-reliure.txt"; then
+            echo "calibredb check_library reports differently:"
+            diff -u "$work/ops-check-calibre.txt" "$work/ops-check-reliure.txt" | head -30
+            status=1
+        fi
+        for side in calibre reliure; do
+            cp -a --reflink=auto "$work/ops-$side" "$work/after-$(basename "$ops" .json)-$side"
+        done
+    done
+}
+
+operations "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" "$root/tests/data/edits/ops-3.json"
+
+# Each restores what the other moved to the trash: the second step applied by
+# Calibre to Reliure's copy, and by Reliure to Calibre's, ends as the other.
+cross() {
+    rm -rf "$work/cross-calibre" "$work/cross-reliure"
+    cp -a --reflink=auto "$work/after-ops-1-reliure" "$work/cross-calibre"
+    cp -a --reflink=auto "$work/after-ops-1-calibre" "$work/cross-reliure"
+    oracle "$root/tools/oracle/apply_edits.py" -- "$work/cross-calibre" "$root/tests/data/edits/ops-2.json" || return 0
+    if ! "$cli" apply --force --library "$work/cross-reliure" "$root/tests/data/edits/ops-2.json" >/dev/null; then
+        status=1
+        return 0
+    fi
+    echo "Calibre restoring Reliure's trash:"
+    python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/after-ops-2-calibre" "$work/cross-calibre" \
+        || status=1
+    echo "Reliure restoring Calibre's trash:"
+    python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/after-ops-2-reliure" "$work/cross-reliure" \
+        || status=1
+}
+
+cross
 
 # The round trip: Calibre writes again the metadata.opf files of the books
 # Reliure changed, as its GUI does when it starts, and finds nothing to
@@ -128,6 +232,7 @@ print(json.load(open(sys.argv[1])).get('library_path') or '')" "$user_config/glo
         status=1
     else
         compare real "$real"
+        reads real "$work/real-reliure"
     fi
 fi
 

@@ -9,6 +9,8 @@
 
 #include <optional>
 
+#include "calibre_date.h"
+
 // A change to one book's metadata, a value per Calibre field. A field left
 // unset keeps its value; the values are the user's, Calibre's writers clean
 // them up.
@@ -37,6 +39,8 @@ struct BookEdit
     std::optional<QString> comments;
     // An image file's contents; empty removes the cover.
     std::optional<QByteArray> cover;
+    // When the book was added: only for books Reliure adds or restores.
+    std::optional<CalibreDate> timestamp;
 
     bool isEmpty() const;
     // Whether the book's folder and file names may change.

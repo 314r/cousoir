@@ -489,6 +489,10 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
     data->schemaFingerprint = schemaFingerprint(db);
     data->schemaKnown = isKnownSchema(data->userVersion, data->schemaFingerprint);
     data->uuid = db.value(QStringLiteral("SELECT uuid FROM library_id")).toString();
+    bool expiryOk = false;
+    const double expiry = db.value(QStringLiteral("SELECT val FROM preferences WHERE key='expire_old_trash_after'"))
+                              .toString().toDouble(&expiryOk);
+    data->trashExpirySeconds = expiryOk ? std::max<qint64>(24 * 3600, qint64(expiry)) : 14 * 24 * 3600;
 
     QList<Book> books;
     QHash<int, qsizetype> rows;

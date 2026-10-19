@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "calibre_db.h"
+#include "opf_reader.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -224,7 +225,7 @@ bool itemId(SqliteDb &db, const ItemTable &table, const QVariant &value, const C
     const auto found = items->ids.constFind(key);
     if (found != items->ids.cend()) {
         *id = *found;
-        if (text != items->values.value(*id))
+        if (context.allowCaseChange && text != items->values.value(*id))
             caseChanges->insert(*id, text);
         return true;
     }
@@ -510,6 +511,9 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
     }
     if (edit.seriesIndex && !setBookColumn(db, book, QStringLiteral("series_index"), *edit.seriesIndex, result, error))
         return false;
+    if (edit.timestamp
+        && !setBookColumn(db, book, QStringLiteral("timestamp"), edit.timestamp->isoFormat(u' '), result, error))
+        return false;
     if (edit.authorSort
         && !setBookColumn(db, book, QStringLiteral("author_sort"), singleText(*edit.authorSort).value_or(QString()),
                           result, error))
@@ -545,11 +549,13 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
     if (edit.pubdate) {
         // Cleared, it is Calibre's undefined date, as its editor's clear
         // button leaves it.
-        QDateTime date = CalibreDb::undefinedDate();
+        CalibreDate date = CalibreDate::fromDateTime(CalibreDb::undefinedDate());
         if (!pythonStrip(*edit.pubdate).isEmpty()) {
-            std::optional<QDateTime> parsed = parseExactDate(*edit.pubdate);
-            if (!parsed)
-                parsed = parseOnlyDate(*edit.pubdate, context.now);
+            std::optional<CalibreDate> parsed = parseExactDate(*edit.pubdate);
+            if (!parsed) {
+                if (const std::optional<QDateTime> only = parseOnlyDate(*edit.pubdate, context.now))
+                    parsed = CalibreDate::fromDateTime(*only);
+            }
             if (!parsed) {
                 if (error)
                     *error = QObject::tr("“%1” is not a date.").arg(*edit.pubdate);
@@ -557,11 +563,12 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
             }
             date = *parsed;
         }
-        const QDateTime stored = CalibreDb::parseDate(rows(db, QStringLiteral("SELECT pubdate FROM books WHERE id=?"),
-                                                           { book }).value(0).value(0));
-        if (stored != date) {
+        // Compared with the date as Calibre holds it, without its fraction.
+        const CalibreDate stored = CalibreDate::fromDateTime(CalibreDb::parseDate(
+            rows(db, QStringLiteral("SELECT pubdate FROM books WHERE id=?"), { book }).value(0).value(0)));
+        if (!(stored == date)) {
             result->dirtied.insert(book);
-            if (!run(db, QStringLiteral("UPDATE books SET pubdate=? WHERE id=?"), { sqliteDate(date), book }, error))
+            if (!run(db, QStringLiteral("UPDATE books SET pubdate=? WHERE id=?"), { date.isoFormat(u' '), book }, error))
                 return false;
         }
     }
@@ -596,6 +603,17 @@ bool markDirtied(SqliteDb &db, const QSet<int> &books, const QDateTime &now, QSt
     return true;
 }
 
+bool touch(SqliteDb &db, const QSet<int> &books, const QDateTime &now, QString *error)
+{
+    QList<int> sorted(books.cbegin(), books.cend());
+    std::sort(sorted.begin(), sorted.end());
+    for (const int book : std::as_const(sorted)) {
+        if (!run(db, QStringLiteral("UPDATE books SET last_modified=? WHERE id=?"), { sqliteDate(now), book }, error))
+            return false;
+    }
+    return true;
+}
+
 QString sqliteDate(const QDateTime &date)
 {
     const QDateTime utc = date.toUTC();
@@ -609,13 +627,15 @@ QString sqliteDate(const QDateTime &date)
     return text + QStringLiteral("+00:00");
 }
 
-std::optional<QDateTime> parseExactDate(const QString &text)
+std::optional<CalibreDate> parseExactDate(const QString &text)
 {
     static const QRegularExpression pattern(QStringLiteral("^\\s*\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}"));
     if (!pattern.match(text).hasMatch())
         return std::nullopt;
-    const QDateTime date = CalibreDb::parseDate(text);
-    return CalibreDb::isUndefinedDate(date) ? std::nullopt : std::optional<QDateTime>(date);
+    const std::optional<CalibreDate> date = OpfReader::parseDate(text, true);
+    if (!date || CalibreDb::isUndefinedDate(date->dateTime))
+        return std::nullopt;
+    return date;
 }
 
 std::optional<QDateTime> parseOnlyDate(const QString &text, const QDateTime &now)

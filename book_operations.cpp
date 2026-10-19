@@ -1,0 +1,776 @@
+#include "book_operations.h"
+
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QObject>
+
+#include <algorithm>
+
+#include "calibre_db.h"
+#include "calibre_list.h"
+#include "calibre_paths.h"
+#include "calibre_text.h"
+#include "commit_engine.h"
+#include "file_transaction.h"
+#include "sqlite_db.h"
+
+namespace {
+
+using BookOperations::Context;
+using BookOperations::Result;
+
+const QString trashFolder = QStringLiteral(".caltrash");
+
+void bind(SqliteStatement &statement, const QVariantList &values)
+{
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QVariant &value = values.at(index);
+        const int position = int(index) + 1;
+        if (value.isNull())
+            statement.bindNull(position);
+        else if (value.typeId() == QMetaType::Int || value.typeId() == QMetaType::LongLong)
+            statement.bind(position, value.toLongLong());
+        else if (value.typeId() == QMetaType::Double)
+            statement.bind(position, value.toDouble());
+        else
+            statement.bind(position, value.toString());
+    }
+}
+
+bool run(SqliteDb &db, const QString &sql, const QVariantList &values, QString *error)
+{
+    SqliteStatement statement(db, sql);
+    bind(statement, values);
+    statement.step();
+    if (!statement.error().isEmpty()) {
+        if (error)
+            *error = statement.error();
+        return false;
+    }
+    return true;
+}
+
+QList<QVariantList> rows(SqliteDb &db, const QString &sql, const QVariantList &values = {})
+{
+    SqliteStatement statement(db, sql);
+    bind(statement, values);
+    QList<QVariantList> result;
+    while (statement.step()) {
+        QVariantList row;
+        for (int column = 0; column < statement.columnCount(); ++column)
+            row.append(statement.value(column));
+        result.append(row);
+    }
+    return result;
+}
+
+QByteArray readFile(const QString &path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+bool fail(QString *error, const QString &message)
+{
+    if (error)
+        *error = message;
+    return false;
+}
+
+bool bookExists(SqliteDb &db, int bookId)
+{
+    return !rows(db, QStringLiteral("SELECT id FROM books WHERE id=?"), { bookId }).isEmpty();
+}
+
+QString titleOf(SqliteDb &db, int bookId, const QString &unknown)
+{
+    const QString title = rows(db, QStringLiteral("SELECT title FROM books WHERE id=?"), { bookId })
+                              .value(0).value(0).toString();
+    return title.isEmpty() ? unknown : title;
+}
+
+// _field_for('authors'): the names in link order, with their commas.
+QStringList authorsOf(SqliteDb &db, int bookId)
+{
+    QStringList authors;
+    for (const QVariantList &row : rows(db, QStringLiteral("SELECT authors.name FROM books_authors_link link JOIN "
+                                                           "authors ON authors.id = link.author WHERE link.book=? "
+                                                           "ORDER BY link.id"), { bookId }))
+        authors.append(row.at(0).toString().replace(u'|', u','));
+    return authors;
+}
+
+QString pathOf(SqliteDb &db, int bookId)
+{
+    return rows(db, QStringLiteral("SELECT path FROM books WHERE id=?"), { bookId }).value(0).value(0).toString();
+}
+
+QString trashPath(const Context &context, const QString &category, int bookId)
+{
+    return QDir(context.libraryPath).filePath(QStringLiteral("%1/%2/%3").arg(trashFolder, category).arg(bookId));
+}
+
+// ensure_trash_dir(): .caltrash/b for books, .caltrash/f for formats.
+bool ensureTrash(FileTransaction &files, const Context &context, QString *error)
+{
+    const QDir library(context.libraryPath);
+    return files.makeFolder(library.filePath(trashFolder + QStringLiteral("/b")), error)
+        && files.makeFolder(library.filePath(trashFolder + QStringLiteral("/f")), error);
+}
+
+// Moves `from` to `to`, replacing what is there, as os.replace() does.
+bool replaceWith(FileTransaction &files, const QString &from, const QString &to, QString *error)
+{
+    if (QFileInfo::exists(to) && !files.remove(to, error))
+        return false;
+    return files.move(from, to, error);
+}
+
+// A folder's entries, but for the files the change keeps on their way in or
+// out, which stay where its journal expects them.
+QStringList folderEntries(const QString &folder)
+{
+    QStringList entries = QDir(folder).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                                                 QDir::Name);
+    entries.removeIf([](const QString &entry) { return entry.startsWith(QLatin1String(".~reliure-")); });
+    return entries;
+}
+
+// The custom columns, which Reliure does not write.
+bool hasCustomColumns(SqliteDb &db)
+{
+    return rows(db, QStringLiteral("SELECT count(*) FROM custom_columns")).value(0).value(0).toInt() > 0;
+}
+
+// _add_default_custom_column_values(): whether a custom column gives new
+// books a value.
+bool hasCustomColumnDefaults(SqliteDb &db)
+{
+    for (const QVariantList &row : rows(db, QStringLiteral("SELECT display FROM custom_columns"))) {
+        const QJsonObject display = QJsonDocument::fromJson(row.at(0).toString().toUtf8()).object();
+        if (display.contains(QLatin1String("default_value")) && !display.value(QLatin1String("default_value")).isNull())
+            return true;
+    }
+    return false;
+}
+
+// author_sort_from_authors(): each author's sort in the library, else the
+// one Calibre computes, joined by " & ".
+QString authorSortFromAuthors(SqliteDb &db, const QStringList &authors, const CalibreText::Tweaks &tweaks)
+{
+    QHash<QString, QString> sorts;
+    for (const QVariantList &row : rows(db, QStringLiteral("SELECT name, sort FROM authors")))
+        sorts.insert(row.at(0).toString().replace(u'|', u',').toLower(), row.at(1).toString());
+    QStringList result;
+    for (const QString &author : authors) {
+        const auto found = sorts.constFind(author.toLower());
+        const QString sort = found != sorts.cend() ? *found : CalibreText::authorToAuthorSort(author, tweaks);
+        if (!sort.isEmpty())
+            result.append(sort);
+    }
+    return result.join(QStringLiteral(" & "));
+}
+
+// get_next_series_num_for(): after the indices of the series' books.
+double nextSeriesIndexFor(SqliteDb &db, const QString &series, const CalibreText::Tweaks &tweaks)
+{
+    QList<double> indices;
+    if (!series.isEmpty()) {
+        for (const QVariantList &row : rows(db, QStringLiteral("SELECT id, name FROM series"))) {
+            if (row.at(1).toString().toLower() != series.toLower())
+                continue;
+            for (const QVariantList &book : rows(db, QStringLiteral("SELECT books.series_index FROM books_series_link "
+                                                                    "link JOIN books ON books.id = link.book "
+                                                                    "WHERE link.series=?"), { row.at(0) }))
+                indices.append(book.at(0).isNull() ? 1.0 : book.at(0).toDouble());
+            break;
+        }
+    }
+    return CalibreText::nextSeriesIndex(indices, tweaks);
+}
+
+bool queuePagesScan(SqliteDb &db, int bookId, QString *error)
+{
+    return run(db, QStringLiteral("UPDATE books_pages_link SET needs_scan=1 WHERE book=?"), { bookId }, error);
+}
+
+// create_book_entry() and the set_metadata() it calls: the book's row, its
+// fields as a new book's, and its cover.
+bool createBookEntry(SqliteDb &db, FileTransaction &files, const ImportedMetadata &mi, int forceId,
+                     bool applyImportTags, bool preserveUuid, const Context &context, FieldWriters::Result *fields,
+                     Result *result, int *bookId, QString *error)
+{
+    const CalibreText::Tweaks &tweaks = context.fields.tweaks;
+    const QString unknown = CalibreText::unknownText(context.fields.interfaceLanguage);
+    QStringList tags = mi.tags;
+    if (applyImportTags) {
+        // _add_newbook_tag()
+        for (const QString &raw : context.newBookTags) {
+            const QString tag = CalibreText::strip(raw);
+            if (!tag.isEmpty() && !tags.contains(tag))
+                tags.append(tag);
+        }
+    }
+    const double seriesIndex = mi.seriesIndex ? *mi.seriesIndex : nextSeriesIndexFor(db, mi.series, tweaks);
+    const QStringList authors = mi.authors.isEmpty() ? QStringList{ unknown } : mi.authors;
+    const bool authorSortNull = mi.authorSort.isEmpty() || mi.authorSort == unknown;
+    const QString authorSort = authorSortNull ? authorSortFromAuthors(db, authors, tweaks) : mi.authorSort;
+    const QString title = mi.title.isEmpty() ? unknown : mi.title;
+    const QString titleSort = !mi.titleSort.isEmpty()
+        ? mi.titleSort
+        : CalibreText::titleSort(title, mi.languages.value(0), tweaks, context.fields.interfaceLanguage);
+
+    const bool inserted = forceId > 0
+        ? run(db, QStringLiteral("INSERT INTO books(id, title, series_index, author_sort) VALUES (?, ?, ?, ?)"),
+              { forceId, title, seriesIndex, authorSort }, error)
+        : run(db, QStringLiteral("INSERT INTO books(title, series_index, author_sort) VALUES (?, ?, ?)"),
+              { title, seriesIndex, authorSort }, error);
+    if (!inserted)
+        return false;
+    *bookId = forceId > 0 ? forceId : int(db.lastInsertRowId());
+
+    // A cover Calibre cannot read is left out, as set_metadata() ignores the
+    // error.
+    QString coverError;
+    const QByteArray cover = mi.cover.isEmpty() ? QByteArray() : CommitEngine::coverData(mi.cover, &coverError);
+
+    BookEdit edit;
+    edit.bookId = *bookId;
+    edit.title = title;
+    QStringList split;
+    for (const QString &author : authors)
+        split += CalibreText::stringToAuthors(author);
+    edit.authors = split;
+    if (!cover.isEmpty())
+        edit.cover = cover;
+    if (mi.rating)
+        edit.rating = std::clamp(int(*mi.rating), 0, 10);
+    if (mi.seriesIndex)
+        edit.seriesIndex = *mi.seriesIndex;
+    edit.timestamp = mi.timestamp && !CalibreDb::isUndefinedDate(mi.timestamp->dateTime)
+        ? *mi.timestamp : CalibreDate::fromDateTime(context.fields.now);
+    edit.authorSort = authorSort;
+    if (!mi.publisher.isEmpty())
+        edit.publisher = mi.publisher;
+    if (!mi.series.isEmpty())
+        edit.series = mi.series;
+    if (!tags.isEmpty())
+        edit.tags = tags;
+    if (!mi.comments.isEmpty())
+        edit.comments = mi.comments;
+    if (!mi.languages.isEmpty())
+        edit.languages = mi.languages;
+    // A book without a date has Calibre's undefined one.
+    edit.pubdate = mi.pubdate && !CalibreDb::isUndefinedDate(mi.pubdate->dateTime) ? mi.pubdate->isoFormat() : QString();
+    edit.sort = titleSort;
+    QList<QPair<QString, QString>> identifiers;
+    for (const auto &identifier : mi.identifiers) {
+        if (!CalibreText::strip(identifier.second).isEmpty())
+            identifiers.append({ identifier.first.toLower(), identifier.second });
+    }
+    if (!identifiers.isEmpty())
+        edit.identifiers = identifiers;
+
+    FieldWriters::Context fieldContext = context.fields;
+    fieldContext.allowCaseChange = false;
+    if (!FieldWriters::apply(db, edit, fieldContext, fields, error)
+        || !BookOperations::updatePath(db, files, context.libraryPath, *bookId, unknown, error))
+        return false;
+    if (preserveUuid && !mi.uuid.isEmpty()
+        && !run(db, QStringLiteral("UPDATE books SET uuid=? WHERE id=?"), { mi.uuid, *bookId }, error))
+        return false;
+    result->dirtied.insert(*bookId);
+    fields->dirtied.insert(*bookId);
+    if (!cover.isEmpty()) {
+        const QString folder = QDir(context.libraryPath).filePath(pathOf(db, *bookId));
+        if (!files.write(QDir(folder).filePath(QStringLiteral("cover.jpg")), cover, error))
+            return false;
+    }
+    return true;
+}
+
+// add_format() of backend.py and the formats table: the file under the
+// book's name for this format, the old one of that format moved there
+// first, and its row in data. The file is copied in, or moved from the
+// trash.
+bool addFormatFile(SqliteDb &db, FileTransaction &files, int bookId, const QString &format, const QString &source,
+                   bool move, const Context &context, QString *error)
+{
+    const QString unknown = CalibreText::unknownText(context.fields.interfaceLanguage);
+    const QString extension = u'.' + format.toLower();
+    const QString title = titleOf(db, bookId, unknown);
+    const QString author = authorsOf(db, bookId).value(0, unknown);
+    const QString name = CalibrePaths::constructFileName(bookId, title, author, int(extension.size()), unknown);
+    const QList<QVariantList> current = rows(db, QStringLiteral("SELECT name FROM data WHERE book=? AND format=?"),
+                                             { bookId, format });
+    QString path = pathOf(db, bookId);
+    if (path.isEmpty()) {
+        if (!BookOperations::updatePath(db, files, context.libraryPath, bookId, unknown, error))
+            return false;
+        path = pathOf(db, bookId);
+    }
+    const QDir folder(QDir(context.libraryPath).filePath(path));
+    const QString destination = folder.filePath(name + extension);
+    if (!current.isEmpty()) {
+        // The file of the old name is not left behind.
+        const QString old = folder.filePath(current.first().first().toString() + extension);
+        if (old != destination && QFileInfo::exists(old) && !replaceWith(files, old, destination, error))
+            return false;
+    }
+    const qint64 size = QFileInfo(source).size();
+    if (move ? !replaceWith(files, source, destination, error) : !files.copy(source, destination, error))
+        return false;
+    return run(db, QStringLiteral("INSERT OR REPLACE INTO data (book,format,uncompressed_size,name) VALUES (?,?,?,?)"),
+               { bookId, format, size, name }, error)
+        && queuePagesScan(db, bookId, error);
+}
+
+// The item tables remove_books() cleans: the built-in ones and the custom
+// columns' own.
+struct ItemTable
+{
+    QString field;
+    QString table;
+    QString linkTable;
+    QString linkColumn;
+};
+
+QList<ItemTable> itemTables(SqliteDb &db)
+{
+    QList<ItemTable> tables{
+        { QStringLiteral("authors"), QStringLiteral("authors"), QStringLiteral("books_authors_link"), QStringLiteral("author") },
+        { QStringLiteral("tags"), QStringLiteral("tags"), QStringLiteral("books_tags_link"), QStringLiteral("tag") },
+        { QStringLiteral("languages"), QStringLiteral("languages"), QStringLiteral("books_languages_link"),
+          QStringLiteral("lang_code") },
+        { QStringLiteral("series"), QStringLiteral("series"), QStringLiteral("books_series_link"), QStringLiteral("series") },
+        { QStringLiteral("publisher"), QStringLiteral("publishers"), QStringLiteral("books_publishers_link"),
+          QStringLiteral("publisher") },
+        { QStringLiteral("rating"), QStringLiteral("ratings"), QStringLiteral("books_ratings_link"), QStringLiteral("rating") },
+    };
+    for (const QVariantList &row : rows(db, QStringLiteral("SELECT id, label FROM custom_columns WHERE normalized"))) {
+        const QString id = row.at(0).toString();
+        tables.append({ u'#' + row.at(1).toString(), QStringLiteral("custom_column_") + id,
+                        QStringLiteral("books_custom_column_%1_link").arg(id), QStringLiteral("value") });
+    }
+    return tables;
+}
+
+QString pythonJson(const QString &title, const QStringList &authors)
+{
+    // json.dumps({'title': …, 'authors': […]})
+    QStringList names;
+    for (const QString &author : authors)
+        names.append(QString::fromLatin1(CalibreList::pythonJsonString(author)));
+    return QStringLiteral("{\"title\": %1, \"authors\": [%2]}")
+        .arg(QString::fromLatin1(CalibreList::pythonJsonString(title)), names.join(QStringLiteral(", ")));
+}
+
+} // namespace
+
+namespace BookOperations {
+
+QString formatFile(const QString &folder, const QString &name, const QString &format)
+{
+    const QString extension = u'.' + format.toLower();
+    const QString expected = QDir(folder).filePath(name + extension);
+    if (QFileInfo(expected).isFile())
+        return expected;
+    const QStringList entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
+    for (const QString &entry : entries) {
+        if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._")))
+            return QDir(folder).filePath(entry);
+    }
+    return {};
+}
+
+bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath, int bookId, const QString &unknown,
+                QString *error)
+{
+    SqliteStatement book(db, QStringLiteral("SELECT title, path FROM books WHERE id=?"));
+    book.bind(1, qint64(bookId));
+    if (!book.step())
+        return true;
+    const QString title = book.text(0);
+    const QString current = book.text(1);
+    SqliteStatement author(db, QStringLiteral("SELECT authors.name FROM books_authors_link link JOIN authors "
+                                              "ON authors.id = link.author WHERE link.book=? ORDER BY link.id LIMIT 1"));
+    author.bind(1, qint64(bookId));
+    const QString firstAuthor = author.step() ? author.text(0).replace(u'|', u',') : unknown;
+
+    QList<QPair<QString, QString>> formats;
+    SqliteStatement data(db, QStringLiteral("SELECT format, name FROM data WHERE book=?"));
+    data.bind(1, qint64(bookId));
+    int extensionLength = 0;
+    while (data.step()) {
+        formats.append({ data.text(0).toUpper(), data.text(1) });
+        extensionLength = std::max(extensionLength, int(data.text(0).size()) + 1);
+    }
+    if (formats.isEmpty())
+        extensionLength = 10;
+
+    const QString path = CalibrePaths::constructPathName(bookId, title, firstAuthor, unknown);
+    const QString name = CalibrePaths::constructFileName(bookId, title, firstAuthor, extensionLength, unknown);
+    const auto updateDatabase = [&] {
+        for (const auto &format : std::as_const(formats)) {
+            if (!run(db, QStringLiteral("UPDATE data SET name=? WHERE book=? AND format=?"), { name, bookId, format.first },
+                     error))
+                return false;
+        }
+        return run(db, QStringLiteral("UPDATE books SET path=? WHERE id=?"), { path, bookId }, error);
+    };
+
+    if (current.isEmpty())
+        return updateDatabase();
+
+    const QDir library(libraryPath);
+    const QString source = library.filePath(current);
+    const QString target = library.filePath(path);
+    if (path == current) {
+        // Only the files' names may have changed.
+        bool changed = false;
+        for (const auto &format : std::as_const(formats))
+            changed = changed || (!format.second.isEmpty() && format.second != name);
+        if (!changed)
+            return true;
+        for (const auto &format : std::as_const(formats)) {
+            const QString file = formatFile(source, format.second, format.first);
+            const QString renamed = QDir(source).filePath(name + u'.' + format.first.toLower());
+            if (!file.isEmpty() && file != renamed && !files.move(file, renamed, error))
+                return false;
+        }
+        return updateDatabase();
+    }
+
+    // Calibre deletes whatever is already at the new place; Reliure only
+    // clears an empty folder and refuses otherwise.
+    if (QFileInfo::exists(target)) {
+        if (!QFileInfo(target).isDir()
+            || !QDir(target).isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot))
+            return fail(error, QObject::tr("The library already has a folder %1, where Calibre would move this book.")
+                                   .arg(path));
+        if (!files.remove(target, error))
+            return false;
+    }
+
+    if (QFileInfo(source).isDir()) {
+        // Every entry moves; the format files take the new name.
+        QHash<QString, QString> renamedFormats;
+        for (const auto &format : std::as_const(formats)) {
+            const QString file = formatFile(source, format.second, format.first);
+            if (!file.isEmpty())
+                renamedFormats.insert(QFileInfo(file).fileName(), name + u'.' + format.first.toLower());
+        }
+        for (const QString &entry : folderEntries(source)) {
+            const QString destination = QDir(target).filePath(renamedFormats.value(entry, entry));
+            if (!files.move(QDir(source).filePath(entry), destination, error))
+                return false;
+        }
+        files.removeFolderIfEmpty(source);
+        files.removeFolderIfEmpty(QFileInfo(source).absolutePath());
+    } else if (!files.makeFolder(target, error)) {
+        // Nothing to move: Calibre makes the folder all the same.
+        return false;
+    }
+    return updateDatabase();
+}
+
+bool addBook(SqliteDb &db, FileTransaction &files, const NewBook &book, const Context &context,
+             FieldWriters::Result *fields, Result *result, QString *error)
+{
+    if (hasCustomColumnDefaults(db))
+        return fail(error, QObject::tr("This library's custom columns give new books values Reliure cannot set yet: "
+                                       "add the book in Calibre."));
+    // format_map: one file per format, the last one given.
+    QStringList formats;
+    QHash<QString, QString> fileOf;
+    for (const QString &file : book.files) {
+        const QString format = QFileInfo(file).suffix().toUpper();
+        if (format.isEmpty())
+            return fail(error, QObject::tr("%1 has no extension to tell its format.").arg(QFileInfo(file).fileName()));
+        if (!QFileInfo(file).isFile())
+            return fail(error, QObject::tr("%1 cannot be read.").arg(file));
+        if (!formats.contains(format))
+            formats.append(format);
+        fileOf.insert(format, file);
+    }
+    int bookId = 0;
+    if (!createBookEntry(db, files, book.metadata, 0, true, false, context, fields, result, &bookId, error))
+        return false;
+    for (const QString &format : std::as_const(formats)) {
+        if (!addFormatFile(db, files, bookId, format, fileOf.value(format), false, context, error))
+            return false;
+    }
+    result->added.append(bookId);
+    return true;
+}
+
+bool addFormat(SqliteDb &db, FileTransaction &files, const NewFormat &format, const Context &context, Result *result,
+               QString *error)
+{
+    if (!bookExists(db, format.bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(format.bookId));
+    const QString extension = QFileInfo(format.file).suffix().toUpper();
+    if (extension.isEmpty())
+        return fail(error, QObject::tr("%1 has no extension to tell its format.").arg(QFileInfo(format.file).fileName()));
+    if (!QFileInfo(format.file).isFile())
+        return fail(error, QObject::tr("%1 cannot be read.").arg(format.file));
+    if (!addFormatFile(db, files, format.bookId, extension, format.file, false, context, error))
+        return false;
+    result->touched.insert(format.bookId);
+    return true;
+}
+
+bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &removal, const Context &context,
+                   Result *result, QString *error)
+{
+    const int bookId = removal.bookId;
+    if (!bookExists(db, bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    QStringList formats;
+    for (const QString &format : removal.formats) {
+        if (!formats.contains(format.toUpper()))
+            formats.append(format.toUpper());
+    }
+    const QString path = pathOf(db, bookId);
+    const QString folder = QDir(context.libraryPath).filePath(path);
+    QStringList removed;
+    for (const QString &format : std::as_const(formats)) {
+        const QList<QVariantList> name = rows(db, QStringLiteral("SELECT name FROM data WHERE book=? AND format=?"),
+                                              { bookId, format });
+        if (name.isEmpty() || name.first().first().toString().isEmpty() || path.isEmpty())
+            continue;
+        const QString file = formatFile(folder, name.first().first().toString(), format);
+        if (!file.isEmpty())
+            removed.append(file);
+    }
+    if (!removed.isEmpty()) {
+        // move_book_files_to_trash(): f/<id>/<extension>, beside the title
+        // and authors the book had.
+        const QString unknown = CalibreText::unknownText(context.fields.interfaceLanguage);
+        const QString destination = trashPath(context, QStringLiteral("f"), bookId);
+        if (!ensureTrash(files, context, error) || !files.makeFolder(destination, error)
+            || !files.write(QDir(destination).filePath(QStringLiteral("metadata.json")),
+                            pythonJson(titleOf(db, bookId, unknown), authorsOf(db, bookId)).toUtf8(), error))
+            return false;
+        for (const QString &file : std::as_const(removed)) {
+            const QString extension = file.section(u'.', -1).toLower();
+            if (!replaceWith(files, file, QDir(destination).filePath(extension), error))
+                return false;
+        }
+    }
+    for (const QString &format : std::as_const(formats)) {
+        if (!run(db, QStringLiteral("DELETE FROM data WHERE book=? AND format=?"), { bookId, format }, error))
+            return false;
+    }
+    result->touched.insert(bookId);
+    return queuePagesScan(db, bookId, error);
+}
+
+bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds, const Context &context,
+                 Result *result, QString *error)
+{
+    Q_UNUSED(result);
+    const QList<ItemTable> tables = itemTables(db);
+    // The items of the books, which go when no other book has them.
+    QList<QSet<int>> items(tables.size());
+    QList<QPair<int, QString>> folders;
+    for (const int bookId : bookIds) {
+        if (!bookExists(db, bookId))
+            return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+        for (qsizetype index = 0; index < tables.size(); ++index) {
+            for (const QVariantList &row : rows(db, QStringLiteral("SELECT %1 FROM %2 WHERE book=?")
+                                                        .arg(tables.at(index).linkColumn, tables.at(index).linkTable),
+                                                { bookId }))
+                items[index].insert(row.at(0).toInt());
+        }
+        const QString path = pathOf(db, bookId);
+        if (path.isEmpty())
+            continue;
+        // A metadata.opf up to date, so that the book can be restored.
+        const QString folder = QDir(context.libraryPath).filePath(path);
+        if (context.before) {
+            for (const Book &book : context.before->books) {
+                if (book.id != bookId)
+                    continue;
+                const QString opf = QDir(folder).filePath(QStringLiteral("metadata.opf"));
+                if (!files.write(opf, Opf::metadataToOpf(*context.before, book, context.opf, readFile(opf)), error))
+                    return false;
+                break;
+            }
+        }
+        folders.append({ bookId, folder });
+    }
+    for (const int bookId : bookIds) {
+        if (!run(db, QStringLiteral("DELETE FROM books WHERE id=?"), { bookId }, error))
+            return false;
+    }
+    if (!folders.isEmpty() && !ensureTrash(files, context, error))
+        return false;
+    for (const auto &[bookId, folder] : std::as_const(folders)) {
+        if (!QFileInfo(folder).isDir())
+            continue;
+        // move_book_to_trash(): a new b/<id>, an older one replaced, the
+        // book's entries moved into it.
+        const QString destination = trashPath(context, QStringLiteral("b"), bookId);
+        if (QFileInfo::exists(destination) && !files.remove(destination, error))
+            return false;
+        if (!files.makeFolder(destination, error))
+            return false;
+        for (const QString &entry : folderEntries(folder)) {
+            if (!files.move(QDir(folder).filePath(entry), QDir(destination).filePath(entry), error))
+                return false;
+        }
+        files.removeFolderIfEmpty(folder);
+        files.removeFolderIfEmpty(QFileInfo(folder).absolutePath());
+    }
+    for (qsizetype index = 0; index < tables.size(); ++index) {
+        const ItemTable &table = tables.at(index);
+        for (const int item : std::as_const(items.at(index))) {
+            if (context.fields.notes.contains({ table.field, item }))
+                continue;
+            const bool used = !rows(db, QStringLiteral("SELECT 1 FROM %1 WHERE %2=? LIMIT 1")
+                                            .arg(table.linkTable, table.linkColumn), { item }).isEmpty();
+            if (!used && !run(db, QStringLiteral("DELETE FROM %1 WHERE id=?").arg(table.table), { item }, error))
+                return false;
+        }
+    }
+    return true;
+}
+
+bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoration, const Context &context,
+             FieldWriters::Result *fields, Result *result, QString *error)
+{
+    const int bookId = restoration.bookId;
+    if (!restoration.format.isEmpty()) {
+        // move_format_from_trash()
+        if (!bookExists(db, bookId))
+            return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+        const QString format = restoration.format.toUpper();
+        const QString folder = trashPath(context, QStringLiteral("f"), bookId);
+        const QString file = QDir(folder).filePath(format.toLower());
+        if (!QFileInfo(file).isFile())
+            return fail(error, QObject::tr("The trash has no %1 file for book %2.").arg(format).arg(bookId));
+        if (!addFormatFile(db, files, bookId, format, file, true, context, error))
+            return false;
+        // The folder goes with its last format; metadata.json does not count.
+        if (folderEntries(folder).size() <= 1 && !files.remove(folder, error))
+            return false;
+        return true;
+    }
+
+    // move_book_from_trash()
+    const QString folder = trashPath(context, QStringLiteral("b"), bookId);
+    if (!QFileInfo(folder).isDir())
+        return fail(error, QObject::tr("Book %1 is not in the trash.").arg(bookId));
+    if (bookExists(db, bookId))
+        return fail(error, QObject::tr("The library already has a book %1.").arg(bookId));
+    if (hasCustomColumns(db))
+        return fail(error, QObject::tr("This library has custom columns, whose values Reliure cannot restore yet: "
+                                       "restore the book in Calibre."));
+    const QByteArray raw = readFile(QDir(folder).filePath(QStringLiteral("metadata.opf")));
+    if (raw.contains("calibre:annotation"))
+        return fail(error, QObject::tr("The book has annotations, which Reliure cannot restore yet: restore it in "
+                                       "Calibre."));
+    OpfReader::Package package;
+    if (!OpfReader::read(raw, &package, error))
+        return false;
+    ImportedMetadata mi = package.metadata;
+    mi.cover.clear();
+    // get_metadata_for_trash_book(): the files with an extension, but for
+    // the cover and metadata.opf.
+    struct Format
+    {
+        QString format;
+        qint64 size;
+        QString name;
+    };
+    QList<Format> formats;
+    for (const QFileInfo &entry : QDir(folder).entryInfoList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot,
+                                                             QDir::Name)) {
+        const QString name = entry.fileName();
+        if (name == QLatin1String("cover.jpg") || name == QLatin1String("metadata.opf") || !name.contains(u'.'))
+            continue;
+        // os.path.splitext(): a leading dot is no extension's.
+        const qsizetype dot = name.lastIndexOf(u'.');
+        if (dot <= 0 || name.left(dot).count(u'.') == dot)
+            continue;
+        formats.append({ name.mid(dot + 1).toUpper(), entry.size(), name.left(dot) });
+    }
+
+    int restored = 0;
+    if (!createBookEntry(db, files, mi, bookId, false, true, context, fields, result, &restored, error))
+        return false;
+    const QString destination = QDir(context.libraryPath).filePath(pathOf(db, bookId));
+    if (!files.makeFolder(destination, error))
+        return false;
+    for (const QString &entry : folderEntries(folder)) {
+        if (!replaceWith(files, QDir(folder).filePath(entry), QDir(destination).filePath(entry), error))
+            return false;
+    }
+    files.removeFolderIfEmpty(folder);
+    for (const Format &format : std::as_const(formats)) {
+        if (!run(db, QStringLiteral("INSERT OR REPLACE INTO data (book,format,uncompressed_size,name) VALUES (?,?,?,?)"),
+                 { bookId, format.format, format.size, format.name }, error))
+            return false;
+    }
+    if (QFileInfo(QDir(destination).filePath(QStringLiteral("cover.jpg"))).isFile()
+        && !run(db, QStringLiteral("UPDATE books SET has_cover=1 WHERE id=?"), { bookId }, error))
+        return false;
+    result->restored.append(bookId);
+    return queuePagesScan(db, bookId, error);
+}
+
+QList<TrashEntry> trashEntries(const QString &libraryPath, const QString &interfaceLanguage)
+{
+    const QString unknown = CalibreText::unknownText(interfaceLanguage);
+    const QDir trash(QDir(libraryPath).filePath(trashFolder));
+    QList<TrashEntry> entries;
+    const auto numbered = [](const QFileInfo &info, int *id) {
+        bool ok = false;
+        *id = info.fileName().toInt(&ok);
+        return ok && info.isDir() && !info.isSymLink();
+    };
+    for (const QFileInfo &info : QDir(trash.filePath(QStringLiteral("b"))).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        TrashEntry entry;
+        OpfReader::Package package;
+        if (!numbered(info, &entry.bookId)
+            || !OpfReader::read(readFile(QDir(info.filePath()).filePath(QStringLiteral("metadata.opf"))), &package, nullptr))
+            continue;
+        entry.title = package.metadata.title.isEmpty() ? unknown : package.metadata.title;
+        entry.author = package.metadata.authors.value(0, unknown);
+        entry.coverFile = QDir(info.filePath()).filePath(QStringLiteral("cover.jpg"));
+        entry.removed = info.lastModified(QTimeZone::UTC);
+        entries.append(entry);
+    }
+    for (const QFileInfo &info : QDir(trash.filePath(QStringLiteral("f"))).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        TrashEntry entry;
+        if (!numbered(info, &entry.bookId))
+            continue;
+        entry.title = unknown;
+        entry.author = unknown;
+        for (const QFileInfo &file : QDir(info.filePath()).entryInfoList(QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot)) {
+            if (file.isSymLink())
+                continue;
+            if (file.fileName() == QLatin1String("metadata.json")) {
+                const QJsonObject metadata = QJsonDocument::fromJson(readFile(file.filePath())).object();
+                if (!metadata.value(QLatin1String("title")).toString().isEmpty())
+                    entry.title = metadata.value(QLatin1String("title")).toString();
+                const QJsonArray authors = metadata.value(QLatin1String("authors")).toArray();
+                if (!authors.isEmpty() && !authors.first().toString().isEmpty())
+                    entry.author = authors.first().toString();
+            } else {
+                entry.formats.append(file.fileName().toUpper());
+            }
+        }
+        entry.removed = info.lastModified(QTimeZone::UTC);
+        if (!entry.formats.isEmpty())
+            entries.append(entry);
+    }
+    return entries;
+}
+
+} // namespace BookOperations

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Controls.impl
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtCore
 
@@ -18,10 +19,14 @@ ApplicationWindow {
     // The section picked in the sidebar; a browse section's item and a book
     // open over it.
     property string section: "books"
-    readonly property bool facetShown: section !== "books" && !session.filterOpen && !session.bookOpen
-    readonly property bool booksShown: !facetShown && !session.bookOpen
-    // An error to show in place of the key hints for a while.
+    readonly property bool facetShown: section !== "books" && section !== "trash" && !session.filterOpen
+        && !session.bookOpen
+    readonly property bool trashShown: section === "trash" && !session.bookOpen
+    readonly property bool booksShown: !facetShown && !trashShown && !session.bookOpen
+    // A message to show in place of the key hints for a while: an error,
+    // unless noticeIsError says otherwise.
     property string notice: ""
+    property bool noticeIsError: true
 
     visible: true
     width: 1240
@@ -141,6 +146,8 @@ ApplicationWindow {
     function focusCurrentList() {
         if (facetShown)
             facetPage.focusList(0)
+        else if (trashShown)
+            trashPage.focusList()
         else
             booksPage.focusList()
     }
@@ -155,7 +162,25 @@ ApplicationWindow {
     function pageIndex() {
         if (session.bookOpen)
             return 2
+        if (trashShown)
+            return 3
         return facetShown ? 1 : 0
+    }
+
+    function addBooks(urls) {
+        const error = library.addBooks(urls)
+        if (error)
+            showNotice(error)
+    }
+
+    // Asks before moving a book to the trash.
+    function trashBook(bookId) {
+        const row = bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+        if (!row || !library.writable)
+            return
+        trashDialog.bookId = bookId
+        trashDialog.title = qsTr("Move “%1” to the trash?").arg(row.title)
+        trashDialog.ask()
     }
 
     // Opens the open book, or the current row's, in the desktop's reader.
@@ -172,8 +197,9 @@ ApplicationWindow {
         layoutSettings.gridMode = !layoutSettings.gridMode
     }
 
-    function showNotice(message) {
+    function showNotice(message, isError = true) {
         notice = message
+        noticeIsError = isError
         noticeTimer.restart()
     }
 
@@ -207,6 +233,8 @@ ApplicationWindow {
             return ""
         if (session.bookOpen)
             return (book.formats || []).map(format => format.format).join(" · ")
+        if (section === "trash")
+            return plural(library.trashEntries.length, qsTr("%1 item"), qsTr("%1 items"))
         // From the section itself rather than facetShown, which may not have
         // followed a section change yet.
         const nouns = facetNouns(section)
@@ -223,6 +251,8 @@ ApplicationWindow {
     }
 
     function hintText() {
+        if (library.importing)
+            return qsTr("Reading %1 of %2 files…").arg(library.importDone).arg(library.importTotal)
         if (library.saving)
             return qsTr("Saving…")
         if (session.bookOpen && bookPage.confirmingRevert)
@@ -233,14 +263,18 @@ ApplicationWindow {
             return qsTr("Esc back · Ctrl+O open in reader · Ctrl+V paste cover · Ctrl+I details")
         if (session.bookOpen)
             return qsTr("Esc back · Ctrl+O open in reader · Ctrl+I details")
+        if (trashShown)
+            return library.trashEntries.length > 0 ? qsTr("↑↓ move · Enter restore") : qsTr("F5 reload")
         if (facetShown)
             return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search")
                                                 : qsTr("Ctrl+F search · F5 reload")
         if (library.rows.length === 0)
             return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · F5 reload")
         const back = session.filterOpen ? qsTr("Esc back · ") : ""
-        return back + qsTr("↑↓ move · Enter open · Ctrl+O read · Ctrl+G %1")
-            .arg(layoutSettings.gridMode ? qsTr("list") : qsTr("covers"))
+        const trash = library.writable ? qsTr(" · Del trash") : ""
+        return back + qsTr("↑↓ move · Enter open · Ctrl+O read · Ctrl+G %1").arg(layoutSettings.gridMode ? qsTr("list")
+                                                                                                   : qsTr("covers"))
+            + trash
     }
 
     AppSession {
@@ -271,6 +305,30 @@ ApplicationWindow {
 
         function onRecovered(message) {
             window.showNotice(qsTr("Reliure %1.").arg(message))
+        }
+
+        function onBooksAdded(bookIds) {
+            window.showNotice(plural(bookIds.length, qsTr("Added %1 book."), qsTr("Added %1 books.")), false)
+            if (window.booksShown)
+                booksPage.select(bookIds[0])
+        }
+
+        function onDuplicatesFound(titles, total) {
+            const one = titles.length === 1
+            const shown = titles.slice(0, 4).map(title => "“" + title + "”").join(", ")
+            duplicatesDialog.title = one ? qsTr("“%1” is already in the library").arg(titles[0])
+                                         : qsTr("%1 of these books are already in the library").arg(titles.length)
+            duplicatesDialog.message = (one ? "" : titles.length > 4 ? qsTr("%1 and %2 more.").arg(shown).arg(titles.length - 4)
+                                                                     : shown + ".")
+                + (total > titles.length ? (one ? "" : " ") + plural(total - titles.length,
+                    qsTr("The other book is added either way."), qsTr("The %1 other books are added either way.")) : "")
+            duplicatesDialog.acceptText = one ? qsTr("Add it anyway") : qsTr("Add them anyway")
+            duplicatesDialog.rejectText = one ? qsTr("Skip it") : qsTr("Skip them")
+            duplicatesDialog.ask()
+        }
+
+        function onImportWarning(message) {
+            window.showNotice(message)
         }
 
         function onSortOptionChanged() {
@@ -406,6 +464,56 @@ ApplicationWindow {
         onActivated: window.toggleGrid()
     }
 
+    Shortcut {
+        sequences: [StandardKey.New]
+        enabled: library.writable && !library.importing
+        onActivated: addBooksDialog.open()
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Delete]
+        enabled: window.booksShown && library.writable
+        onActivated: window.trashBook(booksPage.currentBookId())
+    }
+
+    FileDialog {
+        id: addBooksDialog
+
+        title: qsTr("Add books")
+        fileMode: FileDialog.OpenFiles
+        nameFilters: [qsTr("Books (*.epub *.kepub *.azw3 *.azw *.mobi *.prc *.pdf *.fb2 *.cbz *.cbr *.djvu *.docx *.rtf *.txt)"),
+                      qsTr("All files (*)")]
+        onAccepted: window.addBooks(selectedFiles)
+    }
+
+    ConfirmDialog {
+        id: trashDialog
+        objectName: "trashDialog"
+
+        property int bookId: 0
+
+        message: qsTr("Its files go to the library's trash, where Reliure and Calibre can restore it.")
+        acceptText: qsTr("Move to Trash")
+        acceptVariant: "danger"
+        onAccepted: {
+            const error = window.library.moveToTrash([bookId])
+            if (error)
+                window.showNotice(error)
+            else if (session.bookOpen && window.book.id === bookId)
+                window.closeBook()
+        }
+    }
+
+    ConfirmDialog {
+        id: duplicatesDialog
+        objectName: "duplicatesDialog"
+
+        onAccepted: window.library.addDuplicates(true)
+        // Closed otherwise, the duplicates are left out; after Add, there is
+        // nothing left to skip.
+        onClosed: Qt.callLater(() => window.library.addDuplicates(false))
+    }
+
     Component.onCompleted: {
         applyOmarchyTheme()
         setThemeMode(appearanceSettings.colorMode)
@@ -474,7 +582,7 @@ ApplicationWindow {
 
                 Layout.fillWidth: true
                 text: window.notice || window.hintText()
-                color: window.notice ? Theme.danger : Theme.textMuted
+                color: window.notice && window.noticeIsError ? Theme.danger : window.notice ? Theme.text : Theme.textMuted
                 font.pointSize: Theme.fontPointSizeCaption
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
@@ -735,6 +843,16 @@ ApplicationWindow {
                     }
 
                     FlatButton {
+                        objectName: "trashBookButton"
+
+                        visible: session.bookOpen && !bookPage.confirmingRevert && window.library.writable
+                        iconOnly: true
+                        text: qsTr("Move to Trash")
+                        icon.source: "assets/icons/trash.svg"
+                        onClicked: window.trashBook(window.book.id)
+                    }
+
+                    FlatButton {
                         objectName: "openInReaderButton"
 
                         visible: session.bookOpen && !bookPage.confirmingRevert
@@ -744,6 +862,18 @@ ApplicationWindow {
                         tip: qsTr("Open in reader (Ctrl+O)")
                         icon.source: "assets/icons/external.svg"
                         onClicked: window.openInReader()
+                    }
+
+                    FlatButton {
+                        objectName: "addBooksButton"
+
+                        visible: !session.bookOpen
+                        enabled: window.library.writable && !window.library.importing
+                        iconOnly: true
+                        text: qsTr("Add books")
+                        tip: qsTr("Add books (Ctrl+N)")
+                        icon.source: "assets/icons/plus.svg"
+                        onClicked: addBooksDialog.open()
                     }
 
                     FlatButton {
@@ -820,41 +950,87 @@ ApplicationWindow {
                 }
             }
 
-            StackLayout {
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: window.pageIndex()
 
-                BooksPage {
-                    id: booksPage
-                    objectName: "booksPage"
-                    library: window.library
-                    gridMode: layoutSettings.gridMode
-                    onBookActivated: function(bookId) {
-                        window.openBook(bookId)
+                StackLayout {
+                    id: pages
+
+                    anchors.fill: parent
+                    currentIndex: window.pageIndex()
+
+                    BooksPage {
+                        id: booksPage
+                        objectName: "booksPage"
+                        library: window.library
+                        gridMode: layoutSettings.gridMode
+                        onBookActivated: function(bookId) {
+                            window.openBook(bookId)
+                        }
+                        onTrashRequested: function(bookId) { window.trashBook(bookId) }
+                        onReloadRequested: session.reload()
+                        onSettingsRequested: window.openSettings("library")
+                        onFailed: function(message) { window.showNotice(message) }
                     }
-                    onReloadRequested: session.reload()
-                    onSettingsRequested: window.openSettings("library")
-                    onFailed: function(message) { window.showNotice(message) }
+
+                    FacetPage {
+                        id: facetPage
+                        objectName: "facetPage"
+                        library: window.library
+                        onItemActivated: function(id) {
+                            window.library.openFacetItem(id)
+                            booksPage.focusList()
+                        }
+                    }
+
+                    BookPage {
+                        id: bookPage
+                        objectName: "bookPage"
+                        library: window.library
+                        book: window.book
+                        detailsVisible: window.detailsVisible
+                        onFailed: function(message) { window.showNotice(message) }
+                    }
+
+                    TrashPage {
+                        id: trashPage
+                        objectName: "trashPage"
+                        library: window.library
+                        onFailed: function(message) { window.showNotice(message) }
+                    }
                 }
 
-                FacetPage {
-                    id: facetPage
-                    objectName: "facetPage"
-                    library: window.library
-                    onItemActivated: function(id) {
-                        window.library.openFacetItem(id)
-                        booksPage.focusList()
-                    }
-                }
+                // Files dropped on the lists are added as books; the book
+                // page takes them itself.
+                DropArea {
+                    id: bookDrop
+                    objectName: "bookDrop"
 
-                BookPage {
-                    id: bookPage
-                    objectName: "bookPage"
-                    library: window.library
-                    book: window.book
-                    detailsVisible: window.detailsVisible
-                    onFailed: function(message) { window.showNotice(message) }
+                    anchors.fill: parent
+                    enabled: !session.bookOpen && window.library.writable
+                    onEntered: function(drag) {
+                        drag.accepted = drag.hasUrls
+                    }
+                    onDropped: function(drop) {
+                        if (drop.hasUrls)
+                            window.addBooks(drop.urls)
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: bookDrop.containsDrag
+                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
+                        border.width: 2
+                        border.color: Theme.accent
+
+                        Label {
+                            anchors.centerIn: parent
+                            text: qsTr("Drop to add to the library")
+                            color: Theme.accent
+                            font.weight: Font.Bold
+                        }
+                    }
                 }
             }
         }

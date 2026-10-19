@@ -1,8 +1,11 @@
+#include <QBuffer>
 #include <QCommandLineParser>
+#include <QCryptographicHash>
 #include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -14,6 +17,7 @@
 #include <cstdio>
 
 #include "book_edit.h"
+#include "book_import.h"
 #include "calibre_db.h"
 #include "calibre_list.h"
 #include "commit_engine.h"
@@ -203,8 +207,16 @@ QString readOnlyReason(const QString &libraryPath)
     return guard.writable() ? QString() : guard.readOnlyReason();
 }
 
-// Applies the edits of a JSON file: [{ "book": 1, "set": { "title": …, … } }].
-// The keys are BookEdit's; a coverFile is relative to the JSON file.
+// Applies the changes of a JSON file, an array of:
+//   { "book": 1, "set": { "title": …, … } }   BookEdit's keys; a coverFile
+//                                               is relative to the JSON file
+//   { "removeFormats": { "book": 2, "formats": ["AZW3"] } }
+//   { "trash": [3, 4] }
+//   { "restore": 3 } or { "restore": { "book": 2, "format": "AZW3" } }
+//   { "add": "book.epub" } or { "add": ["book.epub", "book.pdf"] }
+//   { "addFormat": { "book": 2, "file": "book.azw3" } }
+// Files are relative to the JSON file. Edits apply first, then the other
+// changes in the order above, as the application saves them.
 int apply(const QString &libraryPath, const QString &opsPath, bool force)
 {
     QFile file(opsPath);
@@ -218,14 +230,57 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
         err() << QStringLiteral("%1 is not a JSON array: %2").arg(opsPath, parseError.errorString()) << Qt::endl;
         return 2;
     }
+    const QDir base = QFileInfo(opsPath).absoluteDir();
+    const CalibreConfig config = CalibreConfig::load();
     CommitEngine::Request request;
     for (const QJsonValue &value : document.array()) {
         const QJsonObject op = value.toObject();
-        QVariantMap changes = op.value(QLatin1String("set")).toObject().toVariantMap();
-        if (changes.contains(QStringLiteral("coverFile"))) {
-            changes.insert(QStringLiteral("coverFile"), QFileInfo(opsPath).absoluteDir().absoluteFilePath(
-                                                            changes.value(QStringLiteral("coverFile")).toString()));
+        if (op.contains(QLatin1String("removeFormats"))) {
+            const QJsonObject removal = op.value(QLatin1String("removeFormats")).toObject();
+            FormatRemoval formats{ removal.value(QLatin1String("book")).toInt(), {} };
+            for (const QJsonValue &format : removal.value(QLatin1String("formats")).toArray())
+                formats.formats.append(format.toString());
+            request.formatRemovals.append(formats);
+            continue;
         }
+        if (op.contains(QLatin1String("trash"))) {
+            for (const QJsonValue &book : op.value(QLatin1String("trash")).toArray())
+                request.trash.append(book.toInt());
+            continue;
+        }
+        if (op.contains(QLatin1String("restore"))) {
+            const QJsonValue restore = op.value(QLatin1String("restore"));
+            request.restorations.append(restore.isObject()
+                                            ? Restoration{ restore.toObject().value(QLatin1String("book")).toInt(),
+                                                           restore.toObject().value(QLatin1String("format")).toString() }
+                                            : Restoration{ restore.toInt(), {} });
+            continue;
+        }
+        if (op.contains(QLatin1String("add"))) {
+            const QJsonValue add = op.value(QLatin1String("add"));
+            NewBook book;
+            for (const QJsonValue &path : add.isArray() ? add.toArray() : QJsonArray{ add })
+                book.files.append(base.absoluteFilePath(path.toString()));
+            if (book.files.isEmpty()) {
+                err() << QStringLiteral("An add names no file.") << Qt::endl;
+                return 2;
+            }
+            QString warning;
+            book.metadata = BookImport::metadataForAdding(book.files.first(), config, &warning);
+            if (!warning.isEmpty())
+                err() << book.files.first() << QStringLiteral(": ") << warning << Qt::endl;
+            request.newBooks.append(book);
+            continue;
+        }
+        if (op.contains(QLatin1String("addFormat"))) {
+            const QJsonObject format = op.value(QLatin1String("addFormat")).toObject();
+            request.newFormats.append({ format.value(QLatin1String("book")).toInt(),
+                                        base.absoluteFilePath(format.value(QLatin1String("file")).toString()) });
+            continue;
+        }
+        QVariantMap changes = op.value(QLatin1String("set")).toObject().toVariantMap();
+        if (changes.contains(QStringLiteral("coverFile")))
+            changes.insert(QStringLiteral("coverFile"), base.absoluteFilePath(changes.value(QStringLiteral("coverFile")).toString()));
         BookEdit edit;
         QString error;
         if (!BookEdit::fromVariantMap(op.value(QLatin1String("book")).toInt(), changes, &edit, &error)) {
@@ -244,7 +299,7 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
     request.libraryPath = libraryPath;
     request.cacheFolder = ReliurePaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
     request.backupFolder = ReliurePaths::backupFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
-    request.config = CalibreConfig::load();
+    request.config = config;
     request.producer = QStringLiteral("Reliure (%1)").arg(QStringLiteral(RELIURE_VERSION));
     request.producerId = QStringLiteral("reliure");
     const CommitEngine::Result result = CommitEngine::commit(request);
@@ -252,8 +307,77 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
         err() << result.error << Qt::endl;
         return 1;
     }
-    out() << QStringLiteral("Changed %1 book(s); backup %2").arg(result.dirtied.size()).arg(result.backup) << Qt::endl;
+    QStringList added;
+    for (const int id : std::as_const(result.added))
+        added.append(QString::number(id));
+    out() << QStringLiteral("Changed %1 book(s)%2; backup %3")
+                 .arg(result.dirtied.size())
+                 .arg(added.isEmpty() ? QString() : QStringLiteral(", added %1").arg(added.join(QStringLiteral(", "))))
+                 .arg(result.backup)
+          << Qt::endl;
     return 0;
+}
+
+// What adding each file would read, as tools/oracle/read_oracle.py prints
+// Calibre's: [{ "file": …, "title": …, … }].
+int read(const QStringList &paths)
+{
+    const CalibreConfig config = CalibreConfig::load();
+    const auto date = [](const std::optional<CalibreDate> &value) {
+        if (!value || CalibreDb::isUndefinedDate(value->dateTime))
+            return QJsonValue();
+        return QJsonValue(value->isoFormat().replace(QStringLiteral("+00:00"), QStringLiteral("Z")));
+    };
+    QJsonArray books;
+    int status = 0;
+    for (const QString &path : paths) {
+        if (!QFileInfo(path).isFile()) {
+            err() << QStringLiteral("%1 is not a file.").arg(path) << Qt::endl;
+            status = 2;
+            continue;
+        }
+        QString warning;
+        const ImportedMetadata mi = BookImport::metadataForAdding(path, config, &warning);
+        if (!warning.isEmpty())
+            err() << path << QStringLiteral(": ") << warning << Qt::endl;
+        QJsonObject identifiers;
+        for (const auto &identifier : mi.identifiers)
+            identifiers.insert(identifier.first, identifier.second);
+        QJsonValue cover;
+        if (!mi.cover.isEmpty()) {
+            QBuffer buffer;
+            buffer.setData(mi.cover);
+            buffer.open(QIODevice::ReadOnly);
+            const QSize size = QImageReader(&buffer).size();
+            cover = QJsonObject{ { QStringLiteral("size"), mi.cover.size() },
+                                 { QStringLiteral("sha1"), QString::fromLatin1(QCryptographicHash::hash(mi.cover, QCryptographicHash::Sha1).toHex()) },
+                                 { QStringLiteral("width"), size.width() },
+                                 { QStringLiteral("height"), size.height() } };
+        }
+        books.append(QJsonObject{
+            { QStringLiteral("file"), QFileInfo(path).fileName() },
+            { QStringLiteral("title"), mi.title },
+            { QStringLiteral("title_sort"), mi.titleSort },
+            { QStringLiteral("authors"), QJsonArray::fromStringList(mi.authors) },
+            { QStringLiteral("author_sort"), mi.authorSort },
+            { QStringLiteral("series"), mi.series },
+            { QStringLiteral("series_index"), mi.seriesIndex ? QJsonValue(*mi.seriesIndex) : QJsonValue() },
+            { QStringLiteral("tags"), QJsonArray::fromStringList(mi.tags) },
+            { QStringLiteral("publisher"), mi.publisher },
+            { QStringLiteral("pubdate"), date(mi.pubdate) },
+            { QStringLiteral("timestamp"), date(mi.timestamp) },
+            { QStringLiteral("uuid"), mi.uuid },
+            { QStringLiteral("comments"), mi.comments },
+            { QStringLiteral("languages"), QJsonArray::fromStringList(mi.languages) },
+            { QStringLiteral("identifiers"), identifiers },
+            { QStringLiteral("rating"), mi.rating ? QJsonValue(*mi.rating) : QJsonValue() },
+            { QStringLiteral("book_producer"), mi.bookProducer },
+            { QStringLiteral("cover"), cover },
+        });
+    }
+    const QByteArray json = QJsonDocument(books).toJson(QJsonDocument::Indented);
+    std::fwrite(json.constData(), 1, size_t(json.size()), stdout);
+    return status;
 }
 
 } // namespace
@@ -271,7 +395,9 @@ int main(int argc, char *argv[])
         "Commands:\n"
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
         "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
-        "  apply   Apply the edits of a JSON file, as the application saves them."));
+        "  apply   Apply the changes of a JSON file (edits, added and removed books and\n"
+        "          formats, restorations), as the application saves them.\n"
+        "  read    Print the metadata adding the given book files would read."));
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption libraryOption(QStringList{ QStringLiteral("library"), QStringLiteral("with-library") },
@@ -281,11 +407,14 @@ int main(int argc, char *argv[])
     const QCommandLineOption forceOption(QStringLiteral("force"),
                                          QStringLiteral("apply: skip the Dropbox and recent-change checks."));
     parser.addOption(forceOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor or apply"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor, apply or read"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
+    parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
 
     const QStringList arguments = parser.positionalArguments();
+    if (arguments.value(0) == QLatin1String("read") && arguments.size() > 1)
+        return read(arguments.mid(1));
     if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != (arguments.first() == QLatin1String("apply")))
         parser.showHelp(2);
     const QString libraryPath = parser.isSet(libraryOption) ? parser.value(libraryOption)

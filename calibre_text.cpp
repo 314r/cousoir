@@ -6,6 +6,10 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
+#include <cmath>
+#include <optional>
+
 namespace {
 
 #include "calibre_strings.inc"
@@ -172,6 +176,16 @@ QString isoCode(QLocale::Language language)
 } // namespace
 
 namespace CalibreText {
+
+#define PYTHON_SPACES "\\t\\n\\x0b\\f\\r\\x1c-\\x20\\x85\\xa0\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}"
+const QString pythonSpace = QStringLiteral("[" PYTHON_SPACES "]");
+const QString pythonNonSpace = QStringLiteral("[^" PYTHON_SPACES "]");
+#undef PYTHON_SPACES
+
+QString strip(const QString &text)
+{
+    return pythonStrip(text);
+}
 
 Tweaks Tweaks::defaults()
 {
@@ -354,6 +368,125 @@ QString canonicalizeLanguage(const QString &raw)
     return isoCode(languagesByName().value(code, QLocale::AnyLanguage));
 }
 
+QStringList stringToAuthors(const QString &text)
+{
+    if (text.isEmpty())
+        return {};
+    static const QRegularExpression split(QStringLiteral("(?i),?") + pythonSpace + QStringLiteral("+(and|with)")
+                                          + pythonSpace + u'+');
+    QString raw = text;
+    raw.replace(QStringLiteral("&&"), QString(QChar(0xffff)));
+    raw.replace(split, QStringLiteral("&"));
+    QStringList authors;
+    for (QString author : raw.split(u'&')) {
+        author = pythonStrip(author).replace(QChar(0xffff), u'&');
+        if (!author.isEmpty())
+            authors.append(author);
+    }
+    return authors;
+}
+
+QString authorsToString(const QStringList &authors)
+{
+    QStringList escaped;
+    for (const QString &author : authors) {
+        if (!author.isEmpty())
+            escaped.append(QString(author).replace(u'&', QStringLiteral("&&")));
+    }
+    return escaped.join(QStringLiteral(" & "));
+}
+
+QString checkIsbn(const QString &text, bool simple)
+{
+    QString isbn = text.toUpper();
+    if (simple) {
+        isbn = isbn.remove(u'-').trimmed().remove(u' ');
+    } else {
+        static const QRegularExpression other(QStringLiteral("[^0-9X]"));
+        isbn.remove(other);
+    }
+    if (isbn.size() != 10 && isbn.size() != 13)
+        return {};
+    static const QRegularExpression same(QStringLiteral("^(\\d)\\1{9,12}$"));
+    if (same.match(isbn).hasMatch())
+        return {};
+    const auto digit = [&isbn](qsizetype i) { return isbn.at(i).digitValue(); };
+    if (isbn.size() == 10) {
+        // check_digit_for_isbn10()
+        int sum = 0;
+        for (int i = 0; i < 9; ++i) {
+            if (digit(i) < 0)
+                return {};
+            sum += (i + 1) * digit(i);
+        }
+        const int check = sum % 11;
+        const QChar expected = check == 10 ? QChar(u'X') : QChar(u'0' + check);
+        return isbn.at(9) == expected ? isbn : QString();
+    }
+    // check_digit_for_isbn13()
+    int sum = 0;
+    for (int i = 0; i < 12; ++i) {
+        if (digit(i) < 0)
+            return {};
+        sum += (i % 2 ? 3 : 1) * digit(i);
+    }
+    const int check = (10 - sum % 10) % 10;
+    return isbn.at(12) == QChar(u'0' + check) ? isbn : QString();
+}
+
+QString fuzzyTitle(const QString &title, const Tweaks &tweaks, const QString &interfaceLanguage)
+{
+    static const QRegularExpression punctuation(QStringLiteral("[\\[\\](){}<>'\";,:#]"));
+    static const QRegularExpression separators(QStringLiteral("[-._]"));
+    static const QRegularExpression spaces(pythonSpace + u'+');
+    QString result = pythonStrip(title).toLower();
+    result.remove(punctuation);
+    // get_title_sort_pat() without a language: the tweak's, else Calibre's.
+    const QString language = tweaks.defaultLanguageForTitleSort.isEmpty() ? interfaceLanguage
+                                                                          : tweaks.defaultLanguageForTitleSort;
+    result.remove(titleSortPattern(canonicalizeLanguage(language), tweaks));
+    result.replace(separators, QStringLiteral(" "));
+    result.replace(spaces, QStringLiteral(" "));
+    return result;
+}
+
+double nextSeriesIndex(QList<double> indices, const Tweaks &tweaks)
+{
+    const QString &rule = tweaks.seriesIndexAutoIncrement;
+    const double fallback = tweaks.seriesIndexAutoIncrementNumber.value_or(1.0);
+    if (indices.isEmpty())
+        return fallback;
+    std::sort(indices.begin(), indices.end());
+    if (rule == QLatin1String("next"))
+        return std::floor(indices.last()) + 1;
+    if (rule == QLatin1String("first_free")) {
+        for (int i = 1; i < 10000; ++i) {
+            if (!indices.contains(i))
+                return i;
+        }
+    }
+    if (rule == QLatin1String("next_free")) {
+        for (int i = int(std::ceil(indices.first())); i < 10000; ++i) {
+            if (!indices.contains(i))
+                return i;
+        }
+    }
+    if (rule == QLatin1String("last_free")) {
+        for (int i = int(std::ceil(indices.last())); i > 0; --i) {
+            if (!indices.contains(i))
+                return i;
+        }
+        return indices.last() + 1;
+    }
+    return fallback;
+}
+
+QString checkDoi(const QString &text)
+{
+    static const QRegularExpression doi(QStringLiteral("10\\.\\d{4}/\\S+"), QRegularExpression::UseUnicodePropertiesOption);
+    return doi.match(text).captured(0);
+}
+
 QString languageName(const QString &code)
 {
     const QLocale::Language language = QLocale::codeToLanguage(code, QLocale::AnyLanguageCode);
@@ -478,6 +611,133 @@ QString unknownText(const QString &interfaceLanguage)
 QString coverText(const QString &interfaceLanguage)
 {
     return QString::fromUtf8(calibreStringsFor(interfaceLanguage).cover);
+}
+
+QString mobiLanguage(int code)
+{
+    for (const auto &entry : mobiLanguages) {
+        if (entry.code == code)
+            return QString::fromLatin1(entry.language) == QLatin1String("und") ? QString()
+                                                                              : QString::fromLatin1(entry.language);
+    }
+    return {};
+}
+
+QString cleanAsciiChars(const QString &text)
+{
+    QString result;
+    result.reserve(text.size());
+    for (const QChar character : text) {
+        const char16_t code = character.unicode();
+        if ((code < 32 && code != u'\t' && code != u'\n' && code != u'\r') || code == 127)
+            continue;
+        result.append(character);
+    }
+    return result;
+}
+
+QString cleanXmlChars(const QString &text)
+{
+    const auto allowed = [](char32_t code) {
+        return (code >= 0x20 && code <= 0x7e) || code == 0x9 || code == 0xa || code == 0xd || code == 0x85
+            || (code >= 0xa0 && code <= 0xd7ff) || (code >= 0xe000 && code <= 0xfdcf)
+            || (code >= 0xfdf0 && code <= 0xfffd) || (code > 0xffff && code <= 0x10ffff);
+    };
+    QString result;
+    result.reserve(text.size());
+    for (qsizetype index = 0; index < text.size(); ++index) {
+        const QChar character = text.at(index);
+        // A pair is one character beyond the BMP; a lone surrogate is none.
+        if (character.isHighSurrogate() && index + 1 < text.size() && text.at(index + 1).isLowSurrogate()) {
+            result.append(character);
+            result.append(text.at(++index));
+        } else if (!character.isSurrogate() && allowed(character.unicode())) {
+            result.append(character);
+        }
+    }
+    return result;
+}
+
+namespace {
+
+// convert_entity(): the text of the reference between "&" and ";", or
+// nothing when it is none.
+std::optional<QString> convertEntity(QStringView name)
+{
+    if (name.startsWith(u'#')) {
+        if (name.size() < 2)
+            return std::nullopt;
+        const bool hex = name.at(1) == u'x' || name.at(1) == u'X';
+        QStringView digits = name.mid(hex ? 2 : 1);
+        if (digits.isEmpty())
+            return std::nullopt;
+        quint32 code = 0;
+        for (const QChar character : digits) {
+            const char16_t c = character.unicode();
+            quint32 digit;
+            if (c >= u'0' && c <= u'9')
+                digit = c - u'0';
+            else if (hex && c >= u'a' && c <= u'f')
+                digit = 10 + c - u'a';
+            else if (hex && c >= u'A' && c <= u'F')
+                digit = 10 + c - u'A';
+            else
+                return std::nullopt;
+            code = code * (hex ? 16 : 10) + digit;
+        }
+        if (code == 0 || code >= 0x110000)
+            return QString();
+        if (code >= 0xd800 && code <= 0xdfff)
+            return QString(QChar::ReplacementCharacter);
+        const char32_t point = code;
+        return QString::fromUcs4(&point, 1);
+    }
+    const QByteArray key = name.toLatin1();
+    const auto end = std::end(htmlEntities);
+    const auto found = std::lower_bound(std::begin(htmlEntities), end, key, [](const auto &entry, const QByteArray &k) {
+        return qstrcmp(entry.name, k.constData()) < 0;
+    });
+    if (found == end || qstrcmp(found->name, key.constData()) != 0)
+        return std::nullopt;
+    return QString::fromUtf8(found->value);
+}
+
+} // namespace
+
+QString replaceEntities(const QString &text)
+{
+    QString result;
+    result.reserve(text.size());
+    qsizetype position = 0;
+    while (position < text.size()) {
+        const qsizetype amp = text.indexOf(u'&', position);
+        if (amp < 0) {
+            result += QStringView(text).mid(position);
+            break;
+        }
+        result += QStringView(text).mid(position, amp - position);
+        // process_entity(): letters and digits, a "#" first, up to ";". The
+        // character that ends a run that is no reference is kept with it.
+        qsizetype scan = amp + 1;
+        bool closed = false;
+        while (scan < text.size()) {
+            const QChar c = text.at(scan++);
+            const char16_t code = c.unicode();
+            if ((code >= u'a' && code <= u'z') || (code >= u'A' && code <= u'Z') || (code >= u'0' && code <= u'9')
+                || (code == u'#' && scan == amp + 2))
+                continue;
+            closed = code == u';';
+            break;
+        }
+        const qsizetype length = scan - amp;
+        std::optional<QString> converted;
+        if (closed && length >= 3 && length <= 64)
+            converted = convertEntity(QStringView(text).mid(amp + 1, length - 2));
+        result += converted ? *converted : QStringView(text).mid(amp, length).toString();
+        position = scan;
+    }
+    // Calibre gives back its input for an empty result.
+    return result.isEmpty() ? text : result;
 }
 
 QString foldForSearch(const QString &text)

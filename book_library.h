@@ -11,6 +11,7 @@
 
 #include "book.h"
 #include "book_edit.h"
+#include "book_operations.h"
 #include "calibre_config.h"
 #include "commit_engine.h"
 
@@ -60,6 +61,16 @@ class BookLibrary : public QObject
     Q_PROPERTY(QString calibreLanguage READ calibreLanguage WRITE setCalibreLanguage NOTIFY calibreLanguageChanged)
     Q_PROPERTY(QString interfaceLanguage READ interfaceLanguage NOTIFY calibreLanguageChanged)
     Q_PROPERTY(QString backupFolder READ backupFolder NOTIFY libraryPathChanged)
+    // The library's trash, newest first: { key, bookId, kind ("book" or
+    // "formats"), title, author, cover, formats, removed, daysLeft,
+    // restorable }.
+    Q_PROPERTY(QVariantList trashEntries READ trashEntries NOTIFY trashChanged)
+    // The days Calibre keeps an entry in the trash.
+    Q_PROPERTY(int trashExpiryDays READ trashExpiryDays NOTIFY trashChanged)
+    // Files being read to add them: how many of how many.
+    Q_PROPERTY(bool importing READ importing NOTIFY importChanged)
+    Q_PROPERTY(int importDone READ importDone NOTIFY importChanged)
+    Q_PROPERTY(int importTotal READ importTotal NOTIFY importChanged)
 
 public:
     explicit BookLibrary(QObject *parent = nullptr);
@@ -113,6 +124,11 @@ public:
     void setCalibreLanguage(const QString &language);
     QString interfaceLanguage() const;
     QString backupFolder() const;
+    QVariantList trashEntries() const;
+    int trashExpiryDays() const;
+    bool importing() const;
+    int importDone() const;
+    int importTotal() const;
 
     // Narrows the books to the item with `id` of the current browse section,
     // clearing the search.
@@ -147,6 +163,23 @@ public:
     // Shows the folder of backups in the file manager.
     Q_INVOKABLE void openBackupFolder();
 
+    // Adds a book for each file, or each book file in a folder, with the
+    // metadata Calibre would read from it. The files are read first, on a
+    // worker thread; books already in the library by title and authors are
+    // then announced by duplicatesFound(), and added or not by
+    // addDuplicates(). Returns an error message, empty once the files are
+    // being read.
+    Q_INVOKABLE QString addBooks(const QVariantList &urls);
+    Q_INVOKABLE void addDuplicates(bool add);
+    // The file as the book's format of its extension, replacing the book's
+    // file of that format. Same returns as updateBook().
+    Q_INVOKABLE QString addFormat(int bookId, const QString &fileUrl);
+    // The book's file of `format`, or the books, to the library's trash.
+    Q_INVOKABLE QString removeFormat(int bookId, const QString &format);
+    Q_INVOKABLE QString moveToTrash(const QVariantList &bookIds);
+    // A book, or with `formats` some of its formats, back from the trash.
+    Q_INVOKABLE QString restoreFromTrash(int bookId, const QStringList &formats = {});
+
 signals:
     void libraryPathChanged();
     void libraryChanged();
@@ -172,6 +205,16 @@ signals:
     void saveFailed(const QString &message);
     // Something left by an interrupted change was put right.
     void recovered(const QString &message);
+    void trashChanged();
+    void importChanged();
+    // Books read to be added are already in the library: their titles,
+    // among `total` books read.
+    void duplicatesFound(const QStringList &titles, int total);
+    // Books went into the library, by id in the order they were added.
+    void booksAdded(const QVariantList &bookIds);
+    // Files whose own metadata could not be read: they go in with what their
+    // names say.
+    void importWarning(const QString &message);
 
 private:
     struct LoadResult
@@ -183,9 +226,22 @@ private:
         bool ok = false;
     };
 
+    struct ImportResult
+    {
+        QList<NewBook> books;
+        QStringList warnings;
+    };
+
     void startLoad();
     void finishLoad();
     QString queueEdit(const BookEdit &edit);
+    // A change other than an edit, saved after the ones before it.
+    QString queueChange(const CommitEngine::Request &change);
+    void finishImport();
+    // find_identical_books(): the books with the authors and the title, as
+    // Calibre fuzzily compares it, and the languages if any.
+    QList<int> identicalBooks(const ImportedMetadata &metadata) const;
+    void rebuildTrash();
     void startCommit();
     void finishCommit();
     void applyData(LibraryData data);
@@ -229,7 +285,13 @@ private:
 
     bool m_writable = false;
     QFutureWatcher<CommitEngine::Result> m_commitWatcher;
-    QList<BookEdit> m_pendingEdits;
+    // The changes waiting, in order; edits in a row go together.
+    QList<CommitEngine::Request> m_pending;
+    QFutureWatcher<ImportResult> m_importWatcher;
+    // Books read while some are duplicates, until addDuplicates().
+    QList<NewBook> m_importedBooks;
+    QList<bool> m_importedDuplicates;
+    QVariantList m_trashEntries;
     bool m_backedUp = false;
     QString m_publishedKey;
     QString m_calibreLanguage;

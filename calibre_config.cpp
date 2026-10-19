@@ -53,6 +53,14 @@ void readTweaks(const QJsonObject &json, CalibreText::Tweaks *tweaks)
     const QJsonValue useSurnamePrefixes = json.value(QLatin1String("author_use_surname_prefixes"));
     if (useSurnamePrefixes.isBool())
         tweaks->authorUseSurnamePrefixes = useSurnamePrefixes.toBool();
+    const QJsonValue increment = json.value(QLatin1String("series_index_auto_increment"));
+    if (increment.isString()) {
+        tweaks->seriesIndexAutoIncrement = increment.toString();
+        tweaks->seriesIndexAutoIncrementNumber.reset();
+    } else if (increment.isDouble()) {
+        tweaks->seriesIndexAutoIncrement.clear();
+        tweaks->seriesIndexAutoIncrementNumber = increment.toDouble();
+    }
     const QJsonValue articles = json.value(QLatin1String("per_language_title_sort_articles"));
     if (articles.isObject()) {
         tweaks->perLanguageTitleSortArticles.clear();
@@ -97,6 +105,14 @@ CalibreConfig CalibreConfig::load(const QString &directory)
         config.interfaceLanguage = global.value(QLatin1String("language")).toString();
     if (config.interfaceLanguage.isEmpty())
         config.interfaceLanguage = QLocale::system().name();
+
+    if (global.value(QLatin1String("filename_pattern")).isString())
+        config.filenamePattern = global.value(QLatin1String("filename_pattern")).toString();
+    if (global.value(QLatin1String("read_file_metadata")).isBool())
+        config.readFileMetadata = global.value(QLatin1String("read_file_metadata")).toBool();
+    if (global.value(QLatin1String("swap_author_names")).isBool())
+        config.swapAuthorNames = global.value(QLatin1String("swap_author_names")).toBool();
+    config.newBookTags = strings(global.value(QLatin1String("new_book_tags")));
 
     readTweaks(readObject(dir.filePath(QStringLiteral("tweaks.json"))), &config.tweaks);
     return config;

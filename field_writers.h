@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "book_edit.h"
+#include "calibre_date.h"
 #include "calibre_text.h"
 
 class SqliteDb;
@@ -30,6 +31,9 @@ struct Context
     // Items with a note in .calnotes, as (field, id): Reliure keeps them when
     // no book uses them any more, where Calibre would retire the note.
     QSet<QPair<QString, int>> notes;
+    // Whether a value differing from an item only by case renames the item,
+    // as the editor does; set_metadata() for a new book keeps the item's.
+    bool allowCaseChange = true;
 };
 
 struct Result
@@ -52,6 +56,10 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
 // to write their metadata.opf again.
 bool markDirtied(SqliteDb &db, const QSet<int> &books, const QDateTime &now, QString *error);
 
+// update_last_modified(): last_modified to `now`, for books whose formats
+// changed, which Calibre does not mark dirty.
+bool touch(SqliteDb &db, const QSet<int> &books, const QDateTime &now, QString *error);
+
 // sqlite_datetime(): "2015-07-07 18:41:43.605980+00:00", without the
 // fraction when it is 0.
 QString sqliteDate(const QDateTime &date);
@@ -62,7 +70,8 @@ QString sqliteDate(const QDateTime &date);
 // Empty for text that is no date.
 std::optional<QDateTime> parseOnlyDate(const QString &text, const QDateTime &now);
 // A date with its time, "1947-03-20T22:00:00+00:00" as the library stores
-// it: taken as it is, for putting a date back. Empty for any other text.
-std::optional<QDateTime> parseExactDate(const QString &text);
+// it: taken as it is, to the microsecond, for putting a date back or adding
+// a book. Empty for any other text.
+std::optional<CalibreDate> parseExactDate(const QString &text);
 
 } // namespace FieldWriters
