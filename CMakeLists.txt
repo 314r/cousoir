@@ -17,6 +17,11 @@ include(CTest)
 find_package(Qt6 6.9 REQUIRED COMPONENTS Core Concurrent Gui Network Qml Quick QuickControls2 Svg Xml)
 find_package(SQLite3 REQUIRED)
 find_package(libzip REQUIRED)
+# UDisks2, to eject a Kobo.
+if(UNIX AND NOT APPLE)
+    find_package(Qt6 6.9 REQUIRED COMPONENTS DBus)
+    set(RELIURE_DBUS Qt6::DBus)
+endif()
 # CMake 4 renamed the imported target.
 if(TARGET SQLite3::SQLite3)
     set(RELIURE_SQLITE SQLite3::SQLite3)
@@ -60,6 +65,10 @@ set(RELIURE_LIBRARY_SOURCES
     conversion.h
     field_writers.cpp
     field_writers.h
+    kobo.cpp
+    kobo.h
+    kobo_send.cpp
+    kobo_send.h
     file_transaction.cpp
     file_transaction.h
     opf.cpp
@@ -84,8 +93,10 @@ set(RELIURE_MODEL_SOURCES
     conversion_service.h
     cover_cache.cpp
     cover_cache.h
+    device_library.cpp
+    device_library.h
 )
-set(RELIURE_MODEL_LINKS ${RELIURE_LIBRARY_LINKS} Qt6::Concurrent Qt6::Quick)
+set(RELIURE_MODEL_LINKS ${RELIURE_LIBRARY_LINKS} Qt6::Concurrent Qt6::Quick ${RELIURE_DBUS})
 
 qt_add_executable(reliure
     main.cpp
@@ -108,6 +119,7 @@ set(RELIURE_QML_FILES
     ChoiceBox.qml
     ConfirmDialog.qml
     CoverGrid.qml
+    DevicePage.qml
     Divider.qml
     FacetPage.qml
     FlatButton.qml
@@ -133,6 +145,8 @@ set(RELIURE_ICON_FILES
     assets/icons/building.svg
     assets/icons/chevron-down.svg
     assets/icons/close.svg
+    assets/icons/eject.svg
+    assets/icons/ereader.svg
     assets/icons/external.svg
     assets/icons/folder.svg
     assets/icons/globe.svg
@@ -270,7 +284,7 @@ if(BUILD_TESTING)
     reliure_configure_test_executable(calibre_paths_tests)
     reliure_add_logged_test(calibre_paths_tests calibre_paths_tests)
 
-    foreach(name IN ITEMS opf commit_engine conversion)
+    foreach(name IN ITEMS opf commit_engine conversion kobo)
         qt_add_executable(${name}_tests
             tests/${name}_test.cpp
             ${RELIURE_LIBRARY_SOURCES}

@@ -17,6 +17,7 @@ Rectangle {
 
     required property BookLibrary library
     property ConversionService conversions: null
+    property DeviceLibrary devices: null
     property var book: ({})
     property bool detailsVisible: true
     readonly property int coverWidth: Math.round(180 * Theme.spacingScale)
@@ -39,6 +40,8 @@ Rectangle {
     signal failed(string message)
     // Convert, chosen in the details pane.
     signal convertRequested(string format)
+    // Send to a Kobo, chosen in the details pane.
+    signal sendRequested(string root)
 
     color: Theme.canvas
 
@@ -293,9 +296,11 @@ Rectangle {
             visible: page.detailsVisible
             library: page.library
             conversions: page.conversions
+            devices: page.devices
             book: page.book
             onFailed: function(message) { page.failed(message) }
             onConvertRequested: function(format) { page.convertRequested(format) }
+            onSendRequested: function(root) { page.sendRequested(root) }
         }
     }
 

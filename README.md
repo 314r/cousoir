@@ -5,13 +5,13 @@ searched as a table or as covers, the authors, series, tags, languages and
 publishers that browse them, and each book's metadata, description and files,
 which open in the desktop's reader. A book's metadata and cover edit in
 place; books and files are added, moved to the library's trash and restored
-from it; Calibre converts books to KEPUB for a Kobo and AZW3 for a Kindle.
+from it; Calibre converts books to KEPUB for a Kobo and AZW3 for a Kindle;
+books go to a Kobo plugged in, and come off it.
 
 Calibre stays the library's owner and keeps working as before. Reliure reads
 and writes Calibre's own `metadata.db` and follows Calibre's rules wherever it
 computes something Calibre computes, so both always agree; the tests compare
-its writes with Calibre's own. Sending to a Kobo or a Kindle comes in the
-next versions.
+its writes with Calibre's own. Sending to a Kindle comes in the next version.
 
 The project structure, theming (system, light, dark and Omarchy) and Settings
 window come from the JolieBulle Qt port, which took them from kbextract.
@@ -23,7 +23,8 @@ corners, hairline dividers, foreground-tinted hover and selection states
 instead of accent fills, and one accent per screen.
 
 The sidebar has the books and the trash, then the browse sections with their
-sizes: authors, series, tags, languages and publishers. A section lists its items
+sizes: authors, series, tags, languages and publishers, then the Kobos
+plugged in. A section lists its items
 with their number of books; Enter or a double click lists an item's books,
 with the item in the breadcrumb. Esc, Alt+Left or the back button goes back
 up one level.
@@ -44,8 +45,8 @@ toggle (Ctrl+I) shows it anyway. A file's button, or Open in reader (Ctrl+O),
 opens it with the desktop's application for that format; Open in reader picks
 EPUB, KEPUB, AZW3, MOBI or PDF, in that order. Ctrl+O also works on the
 selected row of a list. A row's menu (right click, Menu or Shift+F10) opens
-the book, opens it in the reader, shows its folder, converts it or moves it
-to the trash.
+the book, opens it in the reader, shows its folder, converts it, sends it to
+a Kobo or moves it to the trash.
 
 When the library cannot be written right now, the status bar says why with a
 lock: Calibre open on this computer, Calibre writing, Dropbox syncing or not
@@ -222,7 +223,62 @@ Reliure departs from Calibre here too:
 - The settings are saved only with the converted file; Calibre saves them as
   its dialog closes, even when the conversion then fails.
 - KEPUB and AZW3 only. The quick KEPUB Calibre makes from an EPUB when it
-  sends it to a Kobo comes with sending, in the next version.
+  sends it to a Kobo comes with sending, below.
+
+## Sending to a Kobo
+
+A Kobo plugged in and mounted shows in the sidebar under Devices, with the
+name Calibre gave it or its model's. Its page lists the books on it: those
+sent by Calibre or Reliure, those copied by hand and those bought from Kobo,
+with their format, size and whether each is one of the library's, which Enter
+opens. Del removes a book from the Kobo, after asking; bought books stay.
+Eject unmounts the Kobo and powers it off, so it can be unplugged. The
+status bar shows the room left on it.
+
+The book's Files section has a Send to button for each Kobo plugged in, and
+says which Kobos have the book; the row menu and Ctrl+D, for the first Kobo,
+send too. Books go one batch after the other, each once the changes before
+it are saved; the status bar and the Files section show how far it got, and
+Stop in the Files section or the × of the status bar stops it.
+
+Calibre sends, as its "Send to device" does with the settings of its Kobo
+driver: the format the driver prefers that the book has, KEPUB, then EPUB,
+then PDF and the others; the library's metadata and cover put into a copy of
+the file; an EPUB made a KEPUB on the way, Calibre's quick KEPUB, with the
+driver's settings; the file placed by the driver's save template,
+`{author_sort}/{title} - {authors}.kepub.epub` unless changed; the book added
+to `metadata.calibre`, which tells Calibre the books it sent and their
+library uuid, and `driveinfo.calibre` updated. Calibre recognises the books
+Reliure sent as the library's, and Reliure the books Calibre sent, by their
+uuid, then by their title and authors as Calibre does. Calibre does the work
+through calibre-debug, on copies of what it reads of the library and of the
+Kobo; Reliure then copies the new files to the Kobo, each written whole under
+a hidden name then renamed, the books first and `metadata.calibre` last, and
+deletes the Kobo's cached covers of the books sent so it makes them again.
+Sending needs Calibre; without it the Send buttons do not show. While Calibre
+is open on this computer, it handles the Kobo: Reliure sends nothing and
+removes nothing until it is closed.
+
+Reliure departs from Calibre here:
+
+- It never writes to the Kobo's own database, `.kobo/KoboReader.sqlite`,
+  which it only reads. The Kobo takes in the books sent, and forgets the
+  books removed, once unplugged. Calibre also edits the database: it puts its
+  series and collections there, clears the record of a book deleted on the
+  Kobo before sending it again, and records a new file's size so that the
+  Kobo keeps the reading position of a book replaced. A book sent again with
+  Reliure may start over on the Kobo.
+- Plugging a Kobo in changes nothing on it. Calibre writes
+  `driveinfo.calibre` and `metadata.calibre` as soon as it connects, and
+  removes empty folders at the Kobo's root; Reliure writes them when it
+  sends.
+- Removing books, Reliure takes their entries out of `metadata.calibre` and
+  leaves the others as they are; Calibre writes them all again from the
+  Kobo's database, which it does anyway whenever it connects.
+- Calibre offers to convert a book without a format the Kobo reads; Reliure
+  says so, and the book can be converted to KEPUB first.
+- There is no settings page: the Kobo driver's settings are Calibre's, set in
+  Calibre.
 
 ## Settings
 
@@ -281,6 +337,7 @@ reliure-cli list [--library PATH]
 reliure-cli doctor [--library PATH]
 reliure-cli apply [--library PATH] [--force] changes.json
 reliure-cli read FILE…
+reliure-cli device [--library PATH] KOBO
 ```
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
@@ -318,8 +375,21 @@ library has them, and their files are added with the formats added:
 [{ "convert": { "book": 1, "format": "KEPUB" } }]
 ```
 
-Calibre's log of a conversion is in its job's folder, in a temporary folder
-removed at the end unless `RELIURE_KEEP_JOBS` is set.
+Books sent to a Kobo, or removed from it, by the folder it is mounted on,
+come last, once the library's changes are saved; removed books are named by
+their path on the Kobo:
+
+```json
+[{ "send": { "books": [1, 2], "device": "/run/media/me/KOBOeReader" } },
+ { "removeFromDevice": { "device": "/run/media/me/KOBOeReader",
+                         "lpaths": ["Vian, Boris/Ecume des jours, L_ - Boris Vian.kepub.epub"] } }]
+```
+
+Calibre's log of a conversion or a sending is in its job's folder, in a
+temporary folder removed at the end unless `RELIURE_KEEP_JOBS` is set.
+
+`device` prints, as JSON, the books on the Kobo mounted on the given folder
+and the library book each one is, without changing anything.
 
 `read` prints, as JSON, the metadata adding each file would read, as
 `tools/oracle/read_oracle.py` prints Calibre's.
@@ -330,15 +400,16 @@ removed at the end unless `RELIURE_KEEP_JOBS` is set.
 |---|---|
 | Up/Down, arrows in the grid | Move in the list |
 | Enter, Space, double click | Open the book, or the section's item |
-| Menu, Shift+F10, right click | Book actions: open, open in reader, show folder, convert, move to trash |
+| Menu, Shift+F10, right click | Book actions: open, open in reader, show folder, convert, send, move to trash |
 | Ctrl+N | Add books |
 | Ctrl+Shift+K, Ctrl+Shift+A | Convert the book, or the selected one, to KEPUB or AZW3 |
-| Del | Move the selected book to the trash |
+| Ctrl+D | Send the book, or the selected one, to the Kobo plugged in |
+| Del | Move the selected book to the trash, or remove it from the Kobo |
 | Ctrl+O | Open the book, or the selected one, in the reader |
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |
-| F5, Ctrl+R | Reload the library |
+| F5, Ctrl+R | Reload the library, or read the Kobo again |
 | Ctrl+I | Show or hide the book details pane |
 | Enter, Tab, Esc | Save, save and move on, or revert a field |
 | Ctrl+V | Paste the clipboard's image as the cover |
@@ -348,13 +419,14 @@ removed at the end unless `RELIURE_KEEP_JOBS` is set.
 
 ## Requirements
 
-- Qt 6.9 or later with QML, Quick, Quick Controls 2, SVG, Network, Xml and
-  Concurrent
+- Qt 6.9 or later with QML, Quick, Quick Controls 2, SVG, Network, Xml,
+  Concurrent and, on Linux, D-Bus
 - SQLite 3.31 or later
 - libzip
 - For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
-- For converting, Calibre
+- For converting and sending to a Kobo, Calibre
+- For ejecting a Kobo, UDisks2 and Qt D-Bus
 - CMake 3.21 or later
 - A C++20 compiler
 
@@ -427,12 +499,31 @@ The tests check the port against Calibre itself:
   Calibre gives the anchors it adds, and the order of an AZW3's stylesheets
   and images and of an element's classes, which change from one Calibre
   process to the next. Calibre draws a book's missing cover in a random
-  style: the tests leave it one. It is skipped without Calibre.
+  style: the tests leave it one. Then it sends books of the fixture to fake
+  Kobos, a folder each with a `.kobo/KoboReader.sqlite` made from
+  `tests/data/kobo.sql`, with Calibre's GUI (`tools/oracle/send_books.py`)
+  and with `reliure-cli apply`: four books, then two once the Kobo took the
+  first ones in (`tests/golden/kobo_import.py` does what a Kobo does once
+  unplugged), one of them again, then one removed. Each step compares the
+  Kobos' files, the books by content and `metadata.calibre` and
+  `driveinfo.calibre` as JSON, without the times and temporary paths in them
+  (`tests/golden/compare_devices.py`); then Calibre connects to both, which
+  must end alike, and each program must recognise the books the other sent.
+  With `RELIURE_GOLDEN_REAL=1`, books of the real library go too. It is
+  skipped without Calibre.
 - `conversion_tests` checks the OPF a conversion reads against Calibre's
   (`tests/data/oracle/conversion.json`, from `make oracle`), the job's files,
   how its outcome is read and added, and, with Calibre installed, converts a
   book of the fixture to KEPUB. `book_library_tests` and the UI tests drive
   conversions with `tests/data/fake-calibre-debug` standing in for Calibre.
+- `kobo_tests` reads fake Kobos: the model from a fake `/sys`, the books from
+  their database and `metadata.calibre`, Calibre's matching with the library,
+  the cover cache Calibre computes, removals that leave the other entries of
+  `metadata.calibre` as written; and the sending jobs, their outcome and how
+  their files reach the Kobo, and, with Calibre installed, sends a book of
+  the fixture. `book_library_tests` and the UI tests drive Kobos with a fake
+  list of mounted volumes and `tests/data/fake-calibre-send` standing in for
+  Calibre.
 - `concurrency_guard_tests` drives the write checks with a fake
   `/proc/net/unix` and a fake Dropbox socket.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%

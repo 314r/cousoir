@@ -48,9 +48,17 @@ FocusScope {
     readonly property var convertFormats: conversions && conversions.available && (book.id || 0) > 0
         ? conversions.formatsFor(book.id) : []
     readonly property var conversion: (conversions ? conversions.jobs : []).find(job => job.bookId === book.id) || null
+    property DeviceLibrary devices: null
+    // The Kobos the book is on, and its batch being sent, if any.
+    readonly property var deviceNames: devices && (book.id || 0) > 0 ? (devices.onDevice[String(book.id)] || []) : []
+    readonly property var sending: (devices ? devices.jobs : []).find(job => job.bookIds.includes(book.id)) || null
+    readonly property bool sendable: devices !== null && devices.available && devices.writable
+        && devices.devices.length > 0 && (book.id || 0) > 0 && !sending && devices.sendFormat(book.id) !== ""
 
     signal failed(string message)
     signal convertRequested(string format)
+    // Send to the Kobo mounted on `root`.
+    signal sendRequested(string root)
 
     function open(format) {
         const error = pane.library.openFormat(pane.book.id, format)
@@ -463,6 +471,85 @@ FocusScope {
                     variant: "outline"
                     text: qsTr("Stop")
                     onClicked: pane.conversions.cancel(pane.book.id)
+                }
+            }
+
+            Label {
+                objectName: "onDevice"
+
+                Layout.fillWidth: true
+                visible: pane.deviceNames.length > 0
+                text: qsTr("On %1").arg(pane.deviceNames.join(", "))
+                color: Theme.textMuted
+                wrapMode: Text.Wrap
+            }
+
+            // What a Kobo connected now reads of the book, made by Calibre.
+            Flow {
+                Layout.fillWidth: true
+                visible: pane.sendable
+                spacing: Theme.gutter
+
+                Label {
+                    height: Theme.rowHeight
+                    text: qsTr("Send to")
+                    color: Theme.textMuted
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Repeater {
+                    model: pane.devices ? pane.devices.devices : []
+
+                    delegate: FlatButton {
+                        required property var modelData
+                        required property int index
+
+                        objectName: "sendTo_" + index
+                        variant: "outline"
+                        text: modelData.name
+                        tip: index === 0 ? qsTr("Send to %1 (Ctrl+D)").arg(modelData.name) : qsTr("Send to %1").arg(modelData.name)
+                        onClicked: pane.sendRequested(modelData.root)
+                    }
+                }
+            }
+
+            // Why a Kobo is there but nothing can go to it.
+            Label {
+                objectName: "cannotSend"
+
+                Layout.fillWidth: true
+                visible: pane.devices !== null && pane.devices.devices.length > 0 && (pane.book.id || 0) > 0
+                    && (!pane.devices.available || !pane.devices.writable)
+                text: !pane.devices ? ""
+                    : !pane.devices.available ? qsTr("Sending to a Kobo needs Calibre, which is not installed.")
+                    : pane.devices.readOnlyReason
+                color: Theme.textMuted
+                wrapMode: Text.Wrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: pane.sending !== null
+                spacing: Theme.gutter
+
+                Label {
+                    objectName: "sendState"
+
+                    Layout.fillWidth: true
+                    text: !pane.sending ? ""
+                        : pane.sending.running ? qsTr("Sending to %1 · %2%").arg(pane.sending.name)
+                                                     .arg(Math.round(pane.sending.progress * 100))
+                        : qsTr("Waiting to send to %1").arg(pane.sending.name)
+                    color: Theme.textMuted
+                    wrapMode: Text.Wrap
+                }
+
+                FlatButton {
+                    objectName: "stopSending"
+
+                    variant: "outline"
+                    text: qsTr("Stop")
+                    onClicked: pane.devices.cancel(pane.book.id)
                 }
             }
 

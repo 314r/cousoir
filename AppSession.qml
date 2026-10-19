@@ -2,8 +2,8 @@ import QtQuick
 import Reliure
 
 // One session per window: owns the library, the guard that says whether it
-// may be written and the conversions, and pushes the system appearance into
-// the Theme singleton.
+// may be written, the conversions and the devices, and pushes the system
+// appearance into the Theme singleton.
 QtObject {
     id: session
 
@@ -22,6 +22,9 @@ QtObject {
         }
     }
     readonly property ConversionService conversions: ConversionService {
+        library: session.library
+    }
+    readonly property DeviceLibrary devices: DeviceLibrary {
         library: session.library
     }
     readonly property ConcurrencyGuard guard: ConcurrencyGuard {

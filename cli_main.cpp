@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QStorageInfo>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QTimer>
@@ -23,6 +24,8 @@
 #include "commit_engine.h"
 #include "concurrency_guard.h"
 #include "conversion.h"
+#include "kobo.h"
+#include "kobo_send.h"
 #include "reliure_paths.h"
 
 namespace {
@@ -244,6 +247,122 @@ bool convert(const QString &libraryPath, const CalibreConfig &config, const QLis
     return true;
 }
 
+// The Kobo mounted on `root`, or a folder made to look like one.
+bool kobo(const QString &root, Kobo::Device *device)
+{
+    if (!Kobo::isKobo(root)) {
+        err() << QStringLiteral("%1 is not a Kobo: it has no .kobo folder.").arg(root) << Qt::endl;
+        return false;
+    }
+    *device = Kobo::describe(QFileInfo(root).absoluteFilePath(), QStorageInfo(root).device());
+    return true;
+}
+
+// Sends the books to the Kobo on `root` as Calibre's "Send to device" does.
+// With RELIURE_KEEP_JOBS set, the job's folder stays for a look at Calibre's
+// log.
+bool send(const QString &libraryPath, const CalibreConfig &config, const QString &root, const QList<int> &bookIds)
+{
+    LibraryData data;
+    Kobo::Device device;
+    if (!load(libraryPath, &data) || !kobo(root, &device))
+        return false;
+    QTemporaryDir job;
+    job.setAutoRemove(qEnvironmentVariableIsEmpty("RELIURE_KEEP_JOBS"));
+    QString error;
+    if (!job.isValid()
+        || !KoboSend::prepare(data, bookIds, device, Kobo::formatMap(CalibreConfig::configDirectory()), job.path(),
+                              &error)) {
+        err() << (error.isEmpty() ? QStringLiteral("Cannot create a temporary folder.") : error) << Qt::endl;
+        return false;
+    }
+    const KoboSend::Outcome outcome = KoboSend::run(job.path(), config.interfaceLanguage);
+    if (!outcome.ok || !KoboSend::apply(job.path(), outcome, device, &error)) {
+        err() << (outcome.ok ? error : outcome.error) << Qt::endl;
+        return false;
+    }
+    for (const QString &title : outcome.unsendable)
+        err() << QStringLiteral("Not sent, no format the Kobo reads: %1").arg(title) << Qt::endl;
+    out() << QStringLiteral("Sent %1 book(s) to %2").arg(outcome.sent.size()).arg(device.name) << Qt::endl;
+    return true;
+}
+
+bool removeFromDevice(const QString &root, const QStringList &lpaths)
+{
+    Kobo::Device device;
+    if (!kobo(root, &device))
+        return false;
+    QString error;
+    QList<Kobo::DeviceBook> books = Kobo::books(device, &error);
+    books.removeIf([&](const Kobo::DeviceBook &book) { return !lpaths.contains(book.lpath); });
+    if (books.size() != lpaths.size()) {
+        err() << QStringLiteral("Not all of these books are on the device.") << Qt::endl;
+        return false;
+    }
+    if (!Kobo::removeBooks(device, books, &error)) {
+        err() << error << Qt::endl;
+        return false;
+    }
+    return true;
+}
+
+// The books on the Kobo mounted on `root`, matched with the library's.
+int device(const QString &libraryPath, const QString &root)
+{
+    LibraryData data;
+    Kobo::Device device;
+    if (!load(libraryPath, &data) || !kobo(root, &device))
+        return 1;
+    QString error;
+    QList<Kobo::DeviceBook> books = Kobo::books(device, &error);
+    if (!error.isEmpty())
+        err() << error << Qt::endl;
+    Kobo::match(&books, data);
+    QJsonArray list;
+    for (const Kobo::DeviceBook &book : std::as_const(books)) {
+        list.append(QJsonObject{
+            { QStringLiteral("lpath"), book.lpath },
+            { QStringLiteral("title"), book.title },
+            { QStringLiteral("authors"), QJsonArray::fromStringList(book.authors) },
+            { QStringLiteral("format"), book.format },
+            { QStringLiteral("size"), book.size },
+            { QStringLiteral("sent"), book.sent },
+            { QStringLiteral("imported"), book.imported },
+            { QStringLiteral("purchased"), book.purchased },
+            { QStringLiteral("book"), book.bookId },
+        });
+    }
+    out() << QJsonDocument(QJsonObject{ { QStringLiteral("name"), device.name },
+                                         { QStringLiteral("books"), list } })
+                 .toJson();
+    return 0;
+}
+
+// Saves the library changes of `request`.
+int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine::Request &request)
+{
+    request.libraryPath = libraryPath;
+    request.cacheFolder = ReliurePaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
+    request.backupFolder = ReliurePaths::backupFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
+    request.config = config;
+    request.producer = QStringLiteral("Reliure (%1)").arg(QStringLiteral(RELIURE_VERSION));
+    request.producerId = QStringLiteral("reliure");
+    const CommitEngine::Result result = CommitEngine::commit(request);
+    if (!result.ok) {
+        err() << result.error << Qt::endl;
+        return 1;
+    }
+    QStringList added;
+    for (const int id : std::as_const(result.added))
+        added.append(QString::number(id));
+    out() << QStringLiteral("Changed %1 book(s)%2; backup %3")
+                 .arg(result.dirtied.size())
+                 .arg(added.isEmpty() ? QString() : QStringLiteral(", added %1").arg(added.join(QStringLiteral(", "))))
+                 .arg(result.backup)
+          << Qt::endl;
+    return 0;
+}
+
 // Applies the changes of a JSON file, an array of:
 //   { "book": 1, "set": { "title": …, … } }   BookEdit's keys; a coverFile
 //                                               is relative to the JSON file
@@ -253,10 +372,13 @@ bool convert(const QString &libraryPath, const CalibreConfig &config, const QLis
 //   { "add": "book.epub" } or { "add": ["book.epub", "book.pdf"] }
 //   { "addFormat": { "book": 2, "file": "book.azw3" } }
 //   { "convert": { "book": 1, "format": "KEPUB" } }
+//   { "send": { "books": [1, 2], "device": "/run/media/…/KOBOeReader" } }
+//   { "removeFromDevice": { "device": …, "lpaths": ["Vian, Boris/…"] } }
 // Files are relative to the JSON file. Edits apply first, then the other
 // changes in the order above, as the application saves them. Conversions
 // run first, on the books as the library has them, and add their files
-// with the formats added.
+// with the formats added. What goes to devices comes last, in its order, from
+// the library as changed.
 int apply(const QString &libraryPath, const QString &opsPath, bool force)
 {
     QFile file(opsPath);
@@ -274,8 +396,15 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
     const CalibreConfig config = CalibreConfig::load();
     CommitEngine::Request request;
     QList<QPair<int, QString>> conversions;
+    QList<QJsonObject> deviceOps;
+    bool libraryChanges = false;
     for (const QJsonValue &value : document.array()) {
         const QJsonObject op = value.toObject();
+        if (op.contains(QLatin1String("send")) || op.contains(QLatin1String("removeFromDevice"))) {
+            deviceOps.append(op);
+            continue;
+        }
+        libraryChanges = true;
         if (op.contains(QLatin1String("removeFormats"))) {
             const QJsonObject removal = op.value(QLatin1String("removeFormats")).toObject();
             FormatRemoval formats{ removal.value(QLatin1String("book")).toInt(), {} };
@@ -336,7 +465,7 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
         }
         request.edits.append(edit);
     }
-    if (!force) {
+    if (libraryChanges && !force) {
         const QString reason = readOnlyReason(libraryPath);
         if (!reason.isEmpty()) {
             err() << reason << Qt::endl;
@@ -345,25 +474,25 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
     }
     if (!conversions.isEmpty() && !convert(libraryPath, config, conversions, &request))
         return 1;
-    request.libraryPath = libraryPath;
-    request.cacheFolder = ReliurePaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
-    request.backupFolder = ReliurePaths::backupFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
-    request.config = config;
-    request.producer = QStringLiteral("Reliure (%1)").arg(QStringLiteral(RELIURE_VERSION));
-    request.producerId = QStringLiteral("reliure");
-    const CommitEngine::Result result = CommitEngine::commit(request);
-    if (!result.ok) {
-        err() << result.error << Qt::endl;
+    if (libraryChanges && commit(libraryPath, config, request) != 0)
         return 1;
+    for (const QJsonObject &op : std::as_const(deviceOps)) {
+        if (op.contains(QLatin1String("send"))) {
+            const QJsonObject sending = op.value(QLatin1String("send")).toObject();
+            QList<int> books;
+            for (const QJsonValue &book : sending.value(QLatin1String("books")).toArray())
+                books.append(book.toInt());
+            if (!send(libraryPath, config, base.absoluteFilePath(sending.value(QLatin1String("device")).toString()), books))
+                return 1;
+        } else {
+            const QJsonObject removal = op.value(QLatin1String("removeFromDevice")).toObject();
+            QStringList lpaths;
+            for (const QJsonValue &lpath : removal.value(QLatin1String("lpaths")).toArray())
+                lpaths.append(lpath.toString());
+            if (!removeFromDevice(base.absoluteFilePath(removal.value(QLatin1String("device")).toString()), lpaths))
+                return 1;
+        }
     }
-    QStringList added;
-    for (const int id : std::as_const(result.added))
-        added.append(QString::number(id));
-    out() << QStringLiteral("Changed %1 book(s)%2; backup %3")
-                 .arg(result.dirtied.size())
-                 .arg(added.isEmpty() ? QString() : QStringLiteral(", added %1").arg(added.join(QStringLiteral(", "))))
-                 .arg(result.backup)
-          << Qt::endl;
     return 0;
 }
 
@@ -440,13 +569,15 @@ int main(int argc, char *argv[])
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral(
-        "Reads a Calibre library without changing it.\n\n"
+        "Reads a Calibre library without changing it, unless told to apply changes.\n\n"
         "Commands:\n"
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
         "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
         "  apply   Apply the changes of a JSON file (edits, added and removed books and\n"
-        "          formats, restorations, conversions), as the application saves them.\n"
-        "  read    Print the metadata adding the given book files would read."));
+        "          formats, restorations, conversions, books sent to or removed from a\n"
+        "          Kobo), as the application makes them.\n"
+        "  read    Print the metadata adding the given book files would read.\n"
+        "  device  Print the books on the Kobo mounted on the given folder."));
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption libraryOption(QStringList{ QStringLiteral("library"), QStringLiteral("with-library") },
@@ -456,7 +587,7 @@ int main(int argc, char *argv[])
     const QCommandLineOption forceOption(QStringLiteral("force"),
                                          QStringLiteral("apply: skip the Dropbox and recent-change checks."));
     parser.addOption(forceOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor, apply or read"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor, apply, read or device"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -464,7 +595,8 @@ int main(int argc, char *argv[])
     const QStringList arguments = parser.positionalArguments();
     if (arguments.value(0) == QLatin1String("read") && arguments.size() > 1)
         return read(arguments.mid(1));
-    if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != (arguments.first() == QLatin1String("apply")))
+    const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device");
+    if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != takesOne)
         parser.showHelp(2);
     const QString libraryPath = parser.isSet(libraryOption) ? parser.value(libraryOption)
                                                             : CalibreConfig::defaultLibraryPath();
@@ -478,6 +610,8 @@ int main(int argc, char *argv[])
         return doctor(libraryPath);
     if (arguments.first() == QLatin1String("apply"))
         return apply(libraryPath, arguments.at(1), parser.isSet(forceOption));
+    if (arguments.first() == QLatin1String("device"))
+        return device(libraryPath, arguments.at(1));
     err() << QStringLiteral("Unknown command “%1”.").arg(arguments.first()) << Qt::endl;
     return 2;
 }
