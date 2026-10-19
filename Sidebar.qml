@@ -14,6 +14,8 @@ Item {
     property bool focusFollows: false
     // Each item's count, by key, shown at the row's end.
     property var counts: ({})
+    // The Kobos connected, { root, name }: each is "device:<root>".
+    property var devices: []
     readonly property var groups: [
         { title: qsTr("Library"), items: [
             { key: "books", title: qsTr("Books"), icon: "book" },
@@ -26,7 +28,11 @@ Item {
             { key: "languages", title: qsTr("Languages"), icon: "globe" },
             { key: "publishers", title: qsTr("Publishers"), icon: "building" }
         ] }
-    ]
+    ].concat(devices.length > 0 ? [
+        { title: qsTr("Devices"), items: devices.map(device => ({
+            key: "device:" + device.root, title: device.name, icon: "ereader"
+        })) }
+    ] : [])
     readonly property var items: groups.reduce((all, group) => all.concat(group.items), [])
     readonly property var current: section(currentKey)
 

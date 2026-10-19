@@ -19,10 +19,12 @@ ApplicationWindow {
     // The section picked in the sidebar; a browse section's item and a book
     // open over it.
     property string section: "books"
-    readonly property bool facetShown: section !== "books" && section !== "trash" && !session.filterOpen
-        && !session.bookOpen
+    readonly property bool deviceSection: section.startsWith("device:")
+    readonly property bool facetShown: section !== "books" && section !== "trash" && !deviceSection
+        && !session.filterOpen && !session.bookOpen
     readonly property bool trashShown: section === "trash" && !session.bookOpen
-    readonly property bool booksShown: !facetShown && !trashShown && !session.bookOpen
+    readonly property bool deviceShown: deviceSection && !session.bookOpen
+    readonly property bool booksShown: !facetShown && !trashShown && !deviceShown && !session.bookOpen
     // A message to show in place of the key hints for a while: an error,
     // unless noticeIsError says otherwise.
     property string notice: ""
@@ -117,7 +119,10 @@ ApplicationWindow {
         bookPage.finishEditing()
         bookPage.confirmingRevert = false
         session.closeBook()
-        booksPage.focusList()
+        if (deviceShown)
+            devicePage.focusList()
+        else
+            booksPage.focusList()
     }
 
     // Back from a browse section's books to its items.
@@ -148,6 +153,8 @@ ApplicationWindow {
             facetPage.focusList(0)
         else if (trashShown)
             trashPage.focusList()
+        else if (deviceShown)
+            devicePage.focusList()
         else
             booksPage.focusList()
     }
@@ -164,6 +171,8 @@ ApplicationWindow {
             return 2
         if (trashShown)
             return 3
+        if (deviceShown)
+            return 4
         return facetShown ? 1 : 0
     }
 
@@ -198,6 +207,40 @@ ApplicationWindow {
 
     function currentBookId() {
         return session.bookOpen ? book.id : booksShown ? booksPage.currentBookId() : 0
+    }
+
+    // Sends the book to the Kobo mounted on `root`, the first one connected
+    // by default.
+    function sendBook(bookId, root) {
+        const target = root || (devices.devices.length > 0 ? devices.devices[0].root : "")
+        if (!bookId || !target)
+            return
+        const error = devices.send([bookId], target)
+        if (error)
+            showNotice(error)
+        else
+            notice = ""
+    }
+
+    // Asks before removing a book from the Kobo the device page shows.
+    function removeFromDevice(lpath, title) {
+        removeFromDeviceDialog.lpath = lpath
+        removeFromDeviceDialog.title = qsTr("Remove “%1” from %2?").arg(title).arg(devices.current.name)
+        removeFromDeviceDialog.ask()
+    }
+
+    function ejectDevice() {
+        const error = devices.eject(devices.currentRoot)
+        if (error)
+            showNotice(error)
+    }
+
+    // Reads the library again, or the Kobo the device page shows.
+    function reload() {
+        if (deviceShown)
+            devices.refresh()
+        else
+            session.reload()
     }
 
     function addBooks(urls) {
@@ -268,6 +311,9 @@ ApplicationWindow {
             return (book.formats || []).map(format => format.format).join(" · ")
         if (section === "trash")
             return plural(library.trashEntries.length, qsTr("%1 item"), qsTr("%1 items"))
+        if (deviceSection)
+            return plural(devices.rows.length, qsTr("%1 book"), qsTr("%1 books")) + " · "
+                + qsTr("%1 free").arg(devices.current.free || "")
         // From the section itself rather than facetShown, which may not have
         // followed a section change yet.
         const nouns = facetNouns(section)
@@ -294,18 +340,33 @@ ApplicationWindow {
                                 : qsTr("Converting “%1” to %2 after the changes…").arg(job.title).arg(job.format))
                 + (waiting > 0 ? " " + plural(waiting, qsTr("(%1 more waiting)"), qsTr("(%1 more waiting)")) : "")
         }
+        if (devices.busy) {
+            const job = devices.jobs[0]
+            const what = job.titles.length === 1 ? qsTr("“%1”").arg(job.titles[0])
+                                                 : qsTr("%1 books").arg(job.titles.length)
+            const waiting = devices.jobs.length - 1
+            return (job.running ? qsTr("Sending %1 to %2 · %3%").arg(what).arg(job.name).arg(Math.round(job.progress * 100))
+                                : qsTr("Sending %1 to %2 after the changes…").arg(what).arg(job.name))
+                + (waiting > 0 ? " " + plural(waiting, qsTr("(%1 more waiting)"), qsTr("(%1 more waiting)")) : "")
+        }
         if (library.saving)
             return qsTr("Saving…")
         if (session.bookOpen && bookPage.confirmingRevert)
             return qsTr("Enter revert · Esc keep")
         if (session.bookOpen && bookPage.editing)
             return qsTr("Enter save · Esc revert · Tab next field")
+        if (session.bookOpen && library.writable && devices.devices.length > 0)
+            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+D send · Ctrl+I details")
         if (session.bookOpen && library.writable)
             return qsTr("Esc back · Ctrl+O open in reader · Ctrl+V paste cover · Ctrl+I details")
         if (session.bookOpen)
             return qsTr("Esc back · Ctrl+O open in reader · Ctrl+I details")
         if (trashShown)
             return library.trashEntries.length > 0 ? qsTr("↑↓ move · Enter restore") : qsTr("F5 reload")
+        if (deviceShown)
+            return devices.rows.length === 0 ? qsTr("F5 read again")
+                : devices.writable ? qsTr("↑↓ move · Enter show in library · Del remove from %1").arg(devices.current.name)
+                : qsTr("↑↓ move · Enter show in library")
         if (facetShown)
             return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search")
                                                 : qsTr("Ctrl+F search · F5 reload")
@@ -327,6 +388,7 @@ ApplicationWindow {
     readonly property BookLibrary library: session.library
     readonly property ConcurrencyGuard guard: session.guard
     readonly property ConversionService conversions: session.conversions
+    readonly property DeviceLibrary devices: session.devices
 
     Timer {
         id: noticeTimer
@@ -387,6 +449,29 @@ ApplicationWindow {
 
         function onFailed(message) {
             window.showNotice(message)
+        }
+    }
+
+    Connections {
+        target: window.devices
+
+        function onSent(titles, name) {
+            window.showNotice(titles.length === 1 ? qsTr("“%1” sent to %2.").arg(titles[0]).arg(name)
+                                                  : qsTr("%1 books sent to %2.").arg(titles.length).arg(name), false)
+        }
+
+        function onEjected(name) {
+            window.showNotice(qsTr("%1 can be unplugged.").arg(name), false)
+        }
+
+        function onFailed(message) {
+            window.showNotice(message)
+        }
+
+        // A Kobo unplugged takes its page with it.
+        function onDevicesChanged() {
+            if (window.deviceSection && !window.devices.devices.some(device => "device:" + device.root === window.section))
+                window.section = "books"
         }
     }
 
@@ -497,7 +582,7 @@ ApplicationWindow {
 
     Shortcut {
         sequences: [StandardKey.Refresh, "Ctrl+R"]
-        onActivated: session.reload()
+        onActivated: window.reload()
     }
 
     Shortcut {
@@ -534,6 +619,13 @@ ApplicationWindow {
         sequence: "Ctrl+Shift+A"
         enabled: (session.bookOpen || window.booksShown) && library.writable && conversions.available
         onActivated: window.convertBook(window.currentBookId(), "AZW3")
+    }
+
+    Shortcut {
+        sequence: "Ctrl+D"
+        enabled: (session.bookOpen || window.booksShown) && devices.devices.length > 0 && devices.available
+            && devices.writable
+        onActivated: window.sendBook(window.currentBookId(), "")
     }
 
     Shortcut {
@@ -582,6 +674,22 @@ ApplicationWindow {
     }
 
     ConfirmDialog {
+        id: removeFromDeviceDialog
+        objectName: "removeFromDeviceDialog"
+
+        property string lpath
+
+        message: qsTr("Its file is deleted from the device. The library keeps the book.")
+        acceptText: qsTr("Remove")
+        acceptVariant: "danger"
+        onAccepted: {
+            const error = window.devices.remove([lpath])
+            if (error)
+                window.showNotice(error)
+        }
+    }
+
+    ConfirmDialog {
         id: duplicatesDialog
         objectName: "duplicatesDialog"
 
@@ -602,7 +710,11 @@ ApplicationWindow {
     onSectionChanged: {
         notice = ""
         session.closeBook()
-        library.section = section
+        // From the section itself: deviceSection may not have followed yet.
+        if (section.startsWith("device:"))
+            devices.currentRoot = section.slice(7)
+        else
+            library.section = section
     }
 
     onWideChanged: {
@@ -623,6 +735,7 @@ ApplicationWindow {
         readonly property real countWidth: Math.max(statusCount.implicitWidth, Theme.statusHeight)
         readonly property real stateWidth: Math.min((writeState.visible ? writeState.implicitWidth + Theme.gutter : 0)
             + (stopConversions.visible ? stopConversions.width + Theme.gutter : 0)
+            + (stopSending.visible ? stopSending.width + Theme.gutter : 0)
             + (detailsToggle.visible ? detailsToggle.width : 0), width * 0.45)
         readonly property real sideWidth: Math.max(countWidth, stateWidth)
         // Equal sides keep the hints centered while 40 characters of them
@@ -733,6 +846,24 @@ ApplicationWindow {
                 }
 
                 FlatButton {
+                    id: stopSending
+                    objectName: "stopSending"
+
+                    visible: window.devices.busy
+                    implicitWidth: implicitHeight
+                    implicitHeight: Theme.statusHeight - 6
+                    iconOnly: true
+                    text: qsTr("Stop sending")
+                    tip: window.devices.jobs.length === 1 ? qsTr("Stop sending")
+                        : qsTr("Stop the %1 sendings").arg(window.devices.jobs.length)
+                    icon.source: "assets/icons/close.svg"
+                    icon.width: Math.round(Theme.iconSize * 0.85)
+                    icon.height: Math.round(Theme.iconSize * 0.85)
+                    icon.color: Theme.textMuted
+                    onClicked: window.devices.cancel(0)
+                }
+
+                FlatButton {
                     id: detailsToggle
                     objectName: "detailsToggle"
 
@@ -766,6 +897,7 @@ ApplicationWindow {
             visible: !session.bookOpen
             currentKey: window.section
             counts: window.library.loaded ? window.library.counts : ({})
+            devices: window.devices.devices
             onActivated: function(key) {
                 window.section = key
             }
@@ -960,10 +1092,24 @@ ApplicationWindow {
                         onClicked: window.openInReader()
                     }
 
+                    // While the Kobo is mounted, Calibre's way of letting it
+                    // go: unmounted and powered off.
+                    FlatButton {
+                        objectName: "ejectButton"
+
+                        visible: window.deviceShown
+                        enabled: !window.devices.busy
+                        variant: "outline"
+                        text: qsTr("Eject")
+                        tip: qsTr("Eject %1 so it can be unplugged").arg(window.devices.current.name || "")
+                        icon.source: "assets/icons/eject.svg"
+                        onClicked: window.ejectDevice()
+                    }
+
                     FlatButton {
                         objectName: "addBooksButton"
 
-                        visible: !session.bookOpen
+                        visible: !session.bookOpen && !window.deviceShown
                         enabled: window.library.writable && !window.library.importing
                         iconOnly: true
                         text: qsTr("Add books")
@@ -994,7 +1140,7 @@ ApplicationWindow {
                                 booksPage.activate(0)
                         }
 
-                        visible: !session.bookOpen
+                        visible: !session.bookOpen && !window.deviceShown
                         Layout.fillWidth: true
                         Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
@@ -1021,10 +1167,10 @@ ApplicationWindow {
 
                         visible: !session.bookOpen
                         iconOnly: true
-                        text: qsTr("Reload library")
-                        tip: qsTr("Reload library (F5)")
+                        text: window.deviceShown ? qsTr("Read the device again") : qsTr("Reload library")
+                        tip: qsTr("%1 (F5)").arg(text)
                         icon.source: "assets/icons/refresh.svg"
-                        onClicked: session.reload()
+                        onClicked: window.reload()
                     }
 
                     Divider {
@@ -1061,12 +1207,14 @@ ApplicationWindow {
                         objectName: "booksPage"
                         library: window.library
                         conversions: window.conversions
+                        devices: window.devices
                         gridMode: layoutSettings.gridMode
                         onBookActivated: function(bookId) {
                             window.openBook(bookId)
                         }
                         onTrashRequested: function(bookId) { window.trashBook(bookId) }
                         onConvertRequested: function(bookId, format) { window.convertBook(bookId, format) }
+                        onSendRequested: function(bookId, root) { window.sendBook(bookId, root) }
                         onReloadRequested: session.reload()
                         onSettingsRequested: window.openSettings("library")
                         onFailed: function(message) { window.showNotice(message) }
@@ -1087,10 +1235,12 @@ ApplicationWindow {
                         objectName: "bookPage"
                         library: window.library
                         conversions: window.conversions
+                        devices: window.devices
                         book: window.book
                         detailsVisible: window.detailsVisible
                         onFailed: function(message) { window.showNotice(message) }
                         onConvertRequested: function(format) { window.convertBook(window.book.id, format) }
+                        onSendRequested: function(root) { window.sendBook(window.book.id, root) }
                     }
 
                     TrashPage {
@@ -1098,6 +1248,14 @@ ApplicationWindow {
                         objectName: "trashPage"
                         library: window.library
                         onFailed: function(message) { window.showNotice(message) }
+                    }
+
+                    DevicePage {
+                        id: devicePage
+                        objectName: "devicePage"
+                        devices: window.devices
+                        onBookRequested: function(bookId) { window.openBook(bookId) }
+                        onRemoveRequested: function(lpath, title) { window.removeFromDevice(lpath, title) }
                     }
                 }
 
@@ -1108,7 +1266,7 @@ ApplicationWindow {
                     objectName: "bookDrop"
 
                     anchors.fill: parent
-                    enabled: !session.bookOpen && window.library.writable
+                    enabled: !session.bookOpen && !window.deviceShown && window.library.writable
                     onEntered: function(drag) {
                         drag.accepted = drag.hasUrls
                     }

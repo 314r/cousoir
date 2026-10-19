@@ -10,6 +10,7 @@
 #include "book_library.h"
 #include "calibre_db.h"
 #include "conversion_service.h"
+#include "device_library.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -54,6 +55,23 @@ bool copyTree(const QString &from, const QString &to)
     return true;
 }
 
+// A folder made to look like a mounted Kobo: its version file and an empty
+// database with the tables Calibre uses.
+bool makeKobo(const QString &root)
+{
+    QDir().mkpath(QDir(root).filePath(QStringLiteral(".kobo")));
+    QFile version(QDir(root).filePath(QStringLiteral(".kobo/version")));
+    QFile schema(QStringLiteral(RELIURE_TEST_DATA_DIR "/kobo.sql"));
+    QFile database(QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite")));
+    if (!version.open(QIODevice::WriteOnly) || !schema.open(QIODevice::ReadOnly) || !database.open(QIODevice::WriteOnly))
+        return false;
+    version.write("N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390");
+    database.close();
+    SqliteDb db;
+    QString error;
+    return db.open(database.fileName(), SqliteDb::Mode::ReadWrite, &error) && db.exec(QString::fromUtf8(schema.readAll()), &error);
+}
+
 // Takes the URLs QDesktopServices would open.
 class UrlRecorder : public QObject
 {
@@ -95,6 +113,7 @@ private slots:
     void addsAndRemovesFormats();
     void movesBooksToTrash();
     void convertsBooks();
+    void sendsToKobos();
 
 private:
     std::unique_ptr<BookLibrary> open(const QString &path = fixtureLibrary());
@@ -759,6 +778,117 @@ void BookLibraryTest::convertsBooks()
     qunsetenv("RELIURE_FAKE_DELAY");
     QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.azw3"))));
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+}
+
+// A Kobo shows up while mounted, with its books matched with the library's;
+// books go to it through Calibre, a stand-in here, and come off it; ejected,
+// it stays out until plugged in again.
+void BookLibraryTest::sendsToKobos()
+{
+    auto library = open();
+    QVERIFY(library);
+    // The test's cache outlives it: none left from an earlier run.
+    QDir jobs(QDir(BookLibrary::cacheFolder(library->libraryPath())).filePath(QStringLiteral("sends")));
+    QVERIFY(jobs.removeRecursively());
+    QTemporaryDir kobo;
+    QVERIFY(makeKobo(kobo.path()));
+    const QString root = QDir::cleanPath(kobo.path());
+    QTemporaryDir config;
+    QList<Volume> volumes;
+    DeviceLibrary devices;
+    devices.setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
+    devices.setConfigDirectory(config.path());
+    QString ejected;
+    devices.setEjector([&ejected](const Kobo::Device &device, std::function<void(const QString &)> done) {
+        ejected = device.root;
+        done({});
+    });
+    devices.setVolumeProvider([&volumes] { return volumes; }, 20);
+    devices.setLibrary(library.get());
+    QVERIFY(devices.devices().isEmpty());
+    QVERIFY(devices.available());
+    QVERIFY(devices.writable());
+
+    // Any folder with a .kobo in it.
+    QTemporaryDir other;
+    volumes = { { other.path(), QStringLiteral("/dev/sdy") }, { kobo.path(), QStringLiteral("/dev/sdz") } };
+    QTRY_COMPARE(devices.devices().size(), 1);
+    const QVariantMap device = devices.devices().first().toMap();
+    QCOMPARE(device.value(QStringLiteral("root")).toString(), root);
+    QCOMPARE(device.value(QStringLiteral("name")).toString(), QStringLiteral("Kobo eReader"));
+    devices.setCurrentRoot(root);
+    QCOMPARE(devices.current().value(QStringLiteral("root")).toString(), root);
+    QTRY_VERIFY(!devices.loading());
+    QVERIFY(devices.rows().isEmpty());
+
+    QCOMPARE(devices.sendFormat(1), QStringLiteral("EPUB"));
+    QCOMPARE(devices.sendFormat(5), QStringLiteral("PDF"));
+    QCOMPARE(devices.sendFormat(6), QString());
+    QVERIFY(devices.send({ 6 }, root).contains(QStringLiteral("convert it to KEPUB")));
+    QVERIFY(!devices.send({ 1 }, QStringLiteral("/nowhere")).isEmpty());
+    QVERIFY(!devices.busy());
+
+    QSignalSpy sent(&devices, &DeviceLibrary::sent);
+    double progress = 0;
+    connect(&devices, &DeviceLibrary::jobsChanged, this, [&] {
+        if (devices.busy())
+            progress = qMax(progress, devices.jobs().first().toMap().value(QStringLiteral("progress")).toDouble());
+    });
+    QCOMPARE(devices.send({ 1, 2 }, root), QString());
+    QVERIFY(devices.busy());
+    QVERIFY(sent.wait(10000));
+    QCOMPARE(sent.first().at(0).toStringList(), (QStringList{ QStringLiteral("L'Écume des jours"), QStringLiteral("The Black Company") }));
+    QCOMPARE(sent.first().at(1).toString(), QStringLiteral("Kobo eReader"));
+    QVERIFY(!devices.busy());
+    QCOMPARE(progress, 1.0);
+    const QString ecume = QStringLiteral("Vian, Boris/L'Écume des jours - Boris Vian.kepub.epub");
+    QVERIFY(QFileInfo::exists(QDir(root).filePath(ecume)));
+    QTRY_COMPARE(devices.rows().size(), 2);
+    QCOMPARE(devices.rows().first().toMap().value(QStringLiteral("title")).toString(), QStringLiteral("L'Écume des jours"));
+    QCOMPARE(devices.rows().first().toMap().value(QStringLiteral("bookId")).toInt(), 1);
+    QCOMPARE(devices.rows().first().toMap().value(QStringLiteral("format")).toString(), QStringLiteral("KEPUB"));
+    QCOMPARE(devices.onDevice().value(QStringLiteral("2")).toStringList(), QStringList{ QStringLiteral("Kobo eReader") });
+    QVERIFY(!devices.onDevice().contains(QStringLiteral("3")));
+    // The job's folder goes once its files are on the Kobo.
+    QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+
+    QCOMPARE(devices.remove({ ecume }), QString());
+    QVERIFY(!QFileInfo::exists(QDir(root).filePath(ecume)));
+    QTRY_COMPARE(devices.rows().size(), 1);
+    QCOMPARE(Kobo::readMetadata(root).size(), 1);
+    QVERIFY(!devices.onDevice().contains(QStringLiteral("1")));
+
+    // Stopped, nothing is sent, and the next batch goes.
+    qputenv("RELIURE_FAKE_DELAY", "20");
+    QElapsedTimer timer;
+    timer.start();
+    QCOMPARE(devices.send({ 3 }, root), QString());
+    QCOMPARE(devices.send({ 4 }, root), QString());
+    QTRY_VERIFY(devices.jobs().first().toMap().value(QStringLiteral("running")).toBool());
+    QVERIFY(!devices.remove({ ecume }).isEmpty());
+    QVERIFY(!devices.eject(root).isEmpty());
+    devices.cancel(3);
+    QCOMPARE(devices.jobs().size(), 1);
+    devices.cancel();
+    QVERIFY(!devices.busy());
+    QVERIFY(timer.elapsed() < 10000);
+    qunsetenv("RELIURE_FAKE_DELAY");
+    QCOMPARE(Kobo::readMetadata(root).size(), 1);
+    QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+
+    // Ejected, it goes at once, and comes back once plugged in again.
+    QSignalSpy ejectedSpy(&devices, &DeviceLibrary::ejected);
+    QCOMPARE(devices.eject(root), QString());
+    QCOMPARE(ejected, root);
+    QCOMPARE(ejectedSpy.size(), 1);
+    QVERIFY(devices.devices().isEmpty());
+    QVERIFY(devices.rows().isEmpty());
+    QTest::qWait(100);
+    QVERIFY(devices.devices().isEmpty());
+    volumes = {};
+    QTest::qWait(100);
+    volumes = { { kobo.path(), QStringLiteral("/dev/sdz") } };
+    QTRY_COMPARE(devices.devices().size(), 1);
 }
 
 QTEST_MAIN(BookLibraryTest)

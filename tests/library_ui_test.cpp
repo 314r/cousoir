@@ -17,6 +17,8 @@
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
+#include "device_library.h"
+#include "sqlite_db.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
 #include "system_appearance.h"
@@ -70,6 +72,23 @@ public:
 public slots:
     void open(const QUrl &url) { urls.append(url); }
 };
+// A folder made to look like a mounted Kobo: its version file and an empty
+// database with the tables Calibre uses.
+bool makeKobo(const QString &root)
+{
+    QDir().mkpath(QDir(root).filePath(QStringLiteral(".kobo")));
+    QFile version(QDir(root).filePath(QStringLiteral(".kobo/version")));
+    QFile schema(QStringLiteral(RELIURE_TEST_DATA_DIR "/kobo.sql"));
+    QFile database(QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite")));
+    if (!version.open(QIODevice::WriteOnly) || !schema.open(QIODevice::ReadOnly) || !database.open(QIODevice::WriteOnly))
+        return false;
+    version.write("N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390");
+    database.close();
+    SqliteDb db;
+    QString error;
+    return db.open(database.fileName(), SqliteDb::Mode::ReadWrite, &error) && db.exec(QString::fromUtf8(schema.readAll()), &error);
+}
+
 } // namespace
 
 class LibraryUiTest : public QObject
@@ -98,6 +117,7 @@ private slots:
     void addsAndRemovesFiles();
     void asksAboutDuplicates();
     void convertsBooks();
+    void sendsToKobo();
 
 private:
     bool loadUi();
@@ -136,6 +156,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<BookLibrary>("Reliure", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Reliure", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Reliure", 1, 0, "ConversionService");
+    qmlRegisterType<DeviceLibrary>("Reliure", 1, 0, "DeviceLibrary");
     qmlRegisterType<SystemAppearance>("Reliure", 1, 0, "SystemAppearance");
     for (const char *type : { "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
                               "BooksPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
@@ -836,6 +857,67 @@ void LibraryUiTest::convertsBooks()
     QTRY_VERIFY(!control("conversionState")->isVisible());
     QCOMPARE(formatsOf(library()->property("currentBook").toMap()),
              (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+}
+
+// A Kobo plugged in: a book sent to it from the book's Files, then the
+// Kobo's page with the book, which opens the library's, the book removed
+// after asking, and the Kobo ejected, which takes its page with it.
+void LibraryUiTest::sendsToKobo()
+{
+    auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
+    QVERIFY(devices);
+    QTemporaryDir kobo;
+    QVERIFY(makeKobo(kobo.path()));
+    const QString root = QDir::cleanPath(kobo.path());
+    QTemporaryDir config;
+    devices->setConfigDirectory(config.path());
+    devices->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
+    devices->setEjector([](const Kobo::Device &, std::function<void(const QString &)> done) { done({}); });
+    QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
+    devices->setVolumeProvider([&volumes] { return volumes; }, 20);
+    const QString entry = QStringLiteral("sidebar_device:") + root;
+    QTRY_VERIFY(control(entry) && control(entry)->isVisible());
+    QCOMPARE(control(entry)->property("text").toString(), QStringLiteral("Kobo eReader"));
+
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(control("sendTo_0") && control("sendTo_0")->isVisible());
+    QCOMPARE(text("sendTo_0"), QStringLiteral("Kobo eReader"));
+    QVERIFY(!control("onDevice")->isVisible());
+    // Low in the pane, which may need scrolling to it.
+    QMetaObject::invokeMethod(control("sendTo_0"), "clicked");
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("“L'Écume des jours” sent to Kobo eReader."));
+    QTRY_VERIFY(control("onDevice")->isVisible());
+    QCOMPARE(text("onDevice"), QStringLiteral("On Kobo eReader"));
+
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(control(entry)->isVisible());
+    click(entry.toLatin1().constData());
+    QTRY_VERIFY(control("devicePage")->isVisible());
+    QCOMPARE(text("pageTitle"), QStringLiteral("Kobo eReader"));
+    QTRY_VERIFY(control("deviceRow0"));
+    QVERIFY(text("bookCount").startsWith(QStringLiteral("1 book · ")));
+    QVERIFY(!control("searchField")->isVisible());
+    control("deviceList")->forceActiveFocus();
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 1);
+    QCOMPARE(text("rootCrumb"), QStringLiteral("Kobo eReader"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(control("devicePage")->isVisible());
+
+    QTRY_VERIFY(control("deviceList")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_Delete);
+    QTRY_VERIFY(object("removeFromDeviceDialog")->property("opened").toBool());
+    QCOMPARE(object("removeFromDeviceDialog")->property("title").toString(),
+             QStringLiteral("Remove “L'Écume des jours” from Kobo eReader?"));
+    clickVisible("confirmAccept");
+    QTRY_VERIFY(control("deviceEmpty") && control("deviceEmpty")->isVisible());
+    QCOMPARE(text("deviceEmpty"), QStringLiteral("No books on Kobo eReader"));
+
+    click("ejectButton");
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("Kobo eReader can be unplugged."));
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Books"));
+    QVERIFY(!control(entry) || !control(entry)->isVisible());
+    devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
 }
 
 #include "library_ui_test.moc"

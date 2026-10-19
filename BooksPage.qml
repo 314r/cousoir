@@ -9,7 +9,7 @@ import Reliure
 // The library's books, or those of the author, series, tag, language or
 // publisher opened in a browse section: a table, or a grid of covers. A row's
 // menu (right click, Menu or Shift+F10) opens it here or in a reader,
-// converts it or moves it to the trash.
+// converts it, sends it to a Kobo or moves it to the trash.
 Rectangle {
     id: page
 
@@ -24,16 +24,21 @@ Rectangle {
         { key: "rating", title: qsTr("Rating"), sort: "rating", chars: 6, drop: 3 }
     ]
     property ConversionService conversions: null
+    property DeviceLibrary devices: null
     readonly property bool canConvert: library.writable && conversions !== null && conversions.available
+    readonly property bool canSend: devices !== null && devices.available && devices.writable
     readonly property var actions: [
         { key: "open", title: qsTr("Open") },
         { key: "read", title: qsTr("Open in reader") },
         { key: "folder", title: qsTr("Show in folder") },
         { key: "convert:KEPUB", title: qsTr("Convert to KEPUB") },
-        { key: "convert:AZW3", title: qsTr("Convert to AZW3") },
+        { key: "convert:AZW3", title: qsTr("Convert to AZW3") }
+    ].concat((page.canSend ? page.devices.devices : []).map(device => ({
+        key: "send:" + device.root, title: qsTr("Send to %1").arg(device.name)
+    }))).concat([
         { key: "trash", title: qsTr("Move to Trash") }
-    ].filter(action => action.key === "trash" ? page.library.writable
-                       : action.key.startsWith("convert:") ? page.canConvert : true)
+    ]).filter(action => action.key === "trash" ? page.library.writable
+                        : action.key.startsWith("convert:") ? page.canConvert : true)
     readonly property var view: gridMode ? coverGrid : bookTable
     readonly property int currentIndex: view.currentIndex
     // The row whose menu is open.
@@ -44,6 +49,8 @@ Rectangle {
     signal trashRequested(int bookId)
     // Convert to a format, chosen in a row's menu.
     signal convertRequested(int bookId, string format)
+    // Send to the Kobo mounted on `root`, chosen in a row's menu.
+    signal sendRequested(int bookId, string root)
     signal reloadRequested()
     signal settingsRequested()
     // Opening a book's file failed; `message` says why.
@@ -109,6 +116,10 @@ Rectangle {
         }
         if (key.startsWith("convert:")) {
             page.convertRequested(row.id, key.split(":")[1])
+            return
+        }
+        if (key.startsWith("send:")) {
+            page.sendRequested(row.id, key.slice(5))
             return
         }
         const error = key === "read" ? page.library.openFormat(row.id, "") : page.library.openFolder(row.id)

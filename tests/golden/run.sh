@@ -263,6 +263,109 @@ round_trip() {
 
 round_trip
 
+# Books sent to a Kobo and removed from it by Calibre's GUI and by
+# reliure-cli, each on a fake Kobo of its own, step by step: some sent, more
+# sent once the Kobo took the first ones in, one of them again, one removed.
+# Removing, Reliure leaves the other books' entries of metadata.calibre as
+# they are, which Calibre rewrites from the Kobo's database whenever it
+# connects: only which books remain is compared then, and both Kobos once
+# Calibre has connected to them. Then each program reads the other's Kobo:
+# Calibre must take the books Reliure sent for the library's, by their uuid,
+# and Reliure Calibre's.
+#
+#   devices <name> <library> <books first> <books then> <book removed>
+devices() {
+    local name=$1 library=$2 side kobo step lpath
+    for side in calibre reliure; do
+        rm -rf "$work/$name-library-$side" "$work/$name-$side"
+        cp -a --reflink=auto "$library" "$work/$name-library-$side"
+        kobo="$work/$name-$side"
+        mkdir -p "$kobo/.kobo"
+        printf 'N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390' \
+            > "$kobo/.kobo/version"
+        python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.executescript(open(sys.argv[2]).read())' \
+            "$kobo/.kobo/KoboReader.sqlite" "$root/tests/data/kobo.sql"
+    done
+    for step in 1 2 3; do
+        if [ "$step" -lt 3 ]; then
+            local books=$3
+            [ "$step" = 2 ] && books=$4
+            printf '[{"send": %s}]' "$books" > "$work/$name-ops-calibre.json"
+            printf '[{"send": {"books": %s, "device": "%s"}}]' "$books" "$work/$name-reliure" \
+                > "$work/$name-ops-reliure.json"
+        else
+            # The book's file as Calibre named it on its Kobo.
+            lpath=$(python3 -c 'import json, sys
+print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("application_id") == int(sys.argv[2])][:1]))' \
+                "$work/$name-calibre/metadata.calibre" "$5")
+            printf '[{"remove": %s}]' "$lpath" > "$work/$name-ops-calibre.json"
+            printf '[{"removeFromDevice": {"lpaths": %s, "device": "%s"}}]' "$lpath" "$work/$name-reliure" \
+                > "$work/$name-ops-reliure.json"
+        fi
+        oracle "$root/tools/oracle/send_books.py" -- "$work/$name-library-calibre" "$work/$name-calibre" 0 \
+            "$work/$name-ops-calibre.json" || return 0
+        if ! "$cli" apply --library "$work/$name-library-reliure" "$work/$name-ops-reliure.json" > "$work/$name.log" 2>&1; then
+            echo "$name step $step: reliure-cli apply failed:"
+            tail -20 "$work/$name.log"
+            status=1
+            return 0
+        fi
+        local only=()
+        [ "$step" = 3 ] && only=(--lpaths-only)
+        if python3 "$root/tests/golden/compare_devices.py" "${only[@]}" "$work/$name-calibre" "$work/$name-reliure" \
+            > "$work/$name.txt"; then
+            echo "$name step $step: $(tail -1 "$work/$name.txt")"
+        else
+            echo "$name step $step: Reliure sends differently:"
+            head -40 "$work/$name.txt"
+            status=1
+        fi
+        for side in calibre reliure; do
+            python3 "$root/tests/golden/kobo_import.py" "$work/$name-$side"
+        done
+    done
+    # Each Kobo read by both programs, on copies.
+    for side in calibre reliure; do
+        rm -rf "$work/$name-read-$side"
+        cp -a --reflink=auto "$work/$name-$side" "$work/$name-read-$side"
+        printf '[{"matches": "%s"}]' "$work/$name-matches-$side.json" > "$work/$name-ops-matches.json"
+        oracle "$root/tools/oracle/send_books.py" -- "$work/$name-library-calibre" "$work/$name-read-$side" 0 \
+            "$work/$name-ops-matches.json" || return 0
+        "$cli" device --library "$work/$name-library-reliure" "$work/$name-$side" \
+            | python3 -c 'import json, sys
+books = json.load(sys.stdin)["books"]
+for book in books: book.pop("size")
+print(json.dumps(sorted(books, key=lambda b: b["lpath"]), indent=1))' > "$work/$name-listed-$side.json"
+    done
+    if python3 "$root/tests/golden/compare_devices.py" "$work/$name-read-calibre" "$work/$name-read-reliure" \
+        > "$work/$name.txt"; then
+        echo "$name once Calibre connects: $(tail -1 "$work/$name.txt")"
+    else
+        echo "$name once Calibre connects: the Kobos differ:"
+        head -40 "$work/$name.txt"
+        status=1
+    fi
+    if ! python3 -c 'import json, sys
+for side in sys.argv[1:]:
+    matches = json.load(open(side))
+    assert matches and all(m[1] == "UUID" for m in matches), matches' \
+        "$work/$name-matches-calibre.json" "$work/$name-matches-reliure.json" \
+        || ! cmp -s "$work/$name-matches-calibre.json" "$work/$name-matches-reliure.json"; then
+        echo "$name: Calibre does not take the books on both Kobos for the library's alike:"
+        diff -u "$work/$name-matches-calibre.json" "$work/$name-matches-reliure.json" | head -20
+        status=1
+    elif ! cmp -s "$work/$name-listed-calibre.json" "$work/$name-listed-reliure.json" \
+        || grep -q '"book": 0' "$work/$name-listed-calibre.json"; then
+        echo "$name: Reliure does not list the books on both Kobos alike:"
+        diff -u "$work/$name-listed-calibre.json" "$work/$name-listed-reliure.json" | head -20
+        status=1
+    else
+        echo "$name: Calibre and Reliure each know the books the other sent ($(grep -c '"lpath"' "$work/$name-listed-calibre.json") books)"
+    fi
+}
+
+devices kobo "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
+
 # A few books of the real library converted, with the user's Calibre
 # settings: the two smallest EPUBs to KEPUB and AZW3, the smallest book
 # with a KEPUB to KEPUB again, and the smallest whose only source is an AZW3
@@ -302,6 +405,41 @@ PICK
         "$work/convert-real.json" "$converted"
 }
 
+# A few books of the real library sent to a Kobo with the user's Calibre
+# settings: the smallest EPUB without a KEPUB, made a KEPUB on the way, the
+# smallest with a KEPUB and the smallest PDF; the first sent again, then the
+# second removed.
+real_devices() {
+    local picks
+    picks=$(python3 - "$work/real-reliure/metadata.db" <<'PICK'
+import sqlite3, sys
+con = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True)
+formats = {}
+for book, fmt, size in con.execute('SELECT book, format, uncompressed_size FROM data'):
+    formats.setdefault(book, {})[fmt] = size
+def smallest(test, key):
+    found = sorted((f[key], book) for book, f in formats.items() if test(f))
+    return found[0][1] if found else None
+picks = [smallest(lambda f: 'EPUB' in f and 'KEPUB' not in f, 'EPUB'), smallest(lambda f: 'KEPUB' in f, 'KEPUB'),
+         smallest(lambda f: 'PDF' in f and not {'KEPUB', 'EPUB'} & set(f), 'PDF')]
+picks = [book for book in picks if book is not None]
+print(f'{picks} [{picks[0]}] {picks[1] if len(picks) > 1 else picks[0]}')
+PICK
+)
+    # The user's settings, without the rest of Calibre's.
+    rm -rf "$work/config-devices"
+    mkdir -p "$work/config-devices"
+    cp "$work/config/cover_generation.json" "$work/config-devices/"
+    for file in global.py.json tweaks.json save_to_disk.py.json device_drivers_KOBOTOUCH.py.json conversion; do
+        [ -e "$user_config/$file" ] && cp -a "$user_config/$file" "$work/config-devices/"
+    done
+    local first again removed
+    first=${picks% \[*}
+    again=$(echo "$picks" | sed 's/.*\(\[[0-9]*\]\) .*/\1/')
+    removed=${picks##* }
+    CALIBRE_CONFIG_DIRECTORY="$work/config-devices" devices real-kobo "$work/real-reliure" "$first" "$again" "$removed"
+}
+
 if [ "${RELIURE_GOLDEN_REAL:-0}" = 1 ]; then
     real=$(python3 -c "
 import json, sys
@@ -316,6 +454,7 @@ print(json.load(open(sys.argv[1])).get('library_path') or '')" "$user_config/glo
         compare real "$real"
         reads real "$work/real-reliure"
         real_conversions
+        real_devices
     fi
 fi
 
