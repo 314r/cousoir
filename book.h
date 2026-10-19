@@ -71,6 +71,8 @@ struct FacetItem
     QString name;
     QString sort;
     int count = 0;
+    // The item's link column: a web page about it, empty for most.
+    QString link;
 };
 
 // Enough of a file to notice that it changed: size, modification time and,

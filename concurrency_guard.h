@@ -20,9 +20,15 @@ class ConcurrencyGuard : public QObject
     // worked and whether the database has a structure Reliure knows.
     Q_PROPERTY(bool libraryReadable READ libraryReadable WRITE setLibraryReadable NOTIFY stateChanged)
     Q_PROPERTY(bool schemaKnown READ schemaKnown WRITE setSchemaKnown NOTIFY stateChanged)
+    // The library's id, which names its folder of heartbeats.
+    Q_PROPERTY(QString libraryUuid READ libraryUuid WRITE setLibraryUuid NOTIFY stateChanged)
+    // The metadata.db Reliure itself last wrote, as "size:time:inode": that
+    // change is no reason to wait.
+    Q_PROPERTY(QString ownChangeKey READ ownChangeKey WRITE setOwnChangeKey NOTIFY stateChanged)
     Q_PROPERTY(bool writable READ writable NOTIFY stateChanged)
     // "writable", "unreadable", "schema", "calibre", "journal", "dropbox",
-    // "recent" or "conflict": the first check that fails, in that order.
+    // "elsewhere", "recent" or "conflict": the first check that fails, in
+    // that order.
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(QString readOnlyReason READ readOnlyReason NOTIFY stateChanged)
     // Dropbox's word for metadata.db, like "up to date" or "syncing"; empty
@@ -43,6 +49,12 @@ public:
         // How long after a change from elsewhere the library stays read-only.
         int coolDownSeconds = 120;
         int intervalMs = 2000;
+        // How long after its last change a Reliure on another computer keeps
+        // this one read-only, and how old its heartbeat may be.
+        int editingSeconds = 600;
+        int heartbeatSeconds = 180;
+        // This computer's name in the heartbeats.
+        QString host;
 
         static Environment system();
     };
@@ -56,6 +68,10 @@ public:
     void setLibraryReadable(bool readable);
     bool schemaKnown() const;
     void setSchemaKnown(bool known);
+    QString libraryUuid() const;
+    void setLibraryUuid(const QString &uuid);
+    QString ownChangeKey() const;
+    void setOwnChangeKey(const QString &key);
     bool writable() const;
     QString state() const;
     QString readOnlyReason() const;
@@ -67,6 +83,16 @@ public:
     // Stops counting a conflict copy against writing; another copy, or this
     // one changed, counts again.
     Q_INVOKABLE void acknowledgeConflict(const QString &file);
+    // Tells the other computers sharing the library through Dropbox that
+    // Reliure just changed it here: their Reliure stays read-only for a
+    // while. The heartbeat is a file per computer in a .reliure folder at
+    // the Dropbox root, outside the library.
+    Q_INVOKABLE void noteWrite();
+
+    // "size:time:inode" of a file, as ownChangeKey takes it.
+    static QString changeKey(const QString &path);
+    // The heartbeat folder of a library in a Dropbox folder.
+    static QString heartbeatFolder(const QString &dropboxRoot, const QString &uuid);
 
     // Whether a Calibre program that can write the library, the GUI,
     // calibredb or the content server, holds Calibre's lock for `uid`. Linux
@@ -90,6 +116,10 @@ signals:
 
 private:
     void evaluate();
+    void writeHeartbeat();
+    // The computer editing the library elsewhere, if any.
+    QString editingElsewhere() const;
+    QString dropboxRoot() const;
     void askDropbox();
     void finishDropbox(const QString &status);
     bool inDropbox() const;
@@ -98,6 +128,10 @@ private:
     QString m_libraryPath;
     bool m_libraryReadable = false;
     bool m_schemaKnown = false;
+    QString m_libraryUuid;
+    QString m_ownChangeKey;
+    QDateTime m_lastWrite;
+    int m_ticks = 0;
     QString m_state = QStringLiteral("unreadable");
     QString m_reason;
     QString m_dropboxStatus;

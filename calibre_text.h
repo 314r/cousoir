@@ -61,4 +61,21 @@ QString languageName(const QString &code);
 // Lower case without accents, for searching "berenice" in "Bérénice".
 QString foldForSearch(const QString &text);
 
+// ascii_text(): `text` in ASCII, through Unihandecode's table as Calibre uses
+// it for every interface language but Japanese, Korean and Vietnamese.
+QString asciiText(const QString &text);
+// Whether asciiText() is what Calibre does in `interfaceLanguage`: the
+// three languages above have tables of their own.
+bool hasAsciiTable(const QString &interfaceLanguage);
+// sanitize_file_name(): `name` with the characters Windows, macOS or Linux
+// refuse replaced by "_", and no leading dot or trailing dot or space.
+QString sanitizeFileName(const QString &name);
+// ascii_filename(): asciiText() made a safe file name.
+QString asciiFilename(const QString &text);
+
+// Calibre's "Unknown", the title and author of a book without one, and
+// "Cover", in its interface language.
+QString unknownText(const QString &interfaceLanguage);
+QString coverText(const QString &interfaceLanguage);
+
 } // namespace CalibreText

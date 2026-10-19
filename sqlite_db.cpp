@@ -85,6 +85,11 @@ QString SqliteDb::lastError() const
     return errorOf(m_db);
 }
 
+qint64 SqliteDb::lastInsertRowId() const
+{
+    return sqlite3_last_insert_rowid(m_db);
+}
+
 SqliteStatement::SqliteStatement(SqliteDb &db, const QString &sql)
     : m_db(db.handle())
 {

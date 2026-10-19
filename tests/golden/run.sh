@@ -22,9 +22,11 @@ base=${RELIURE_GOLDEN_TMP:-${XDG_CACHE_HOME:-$HOME/.cache}/reliure-golden}
 mkdir -p "$base"
 work=$(mktemp -d "$base/run.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-# calibredb keeps its own preferences away from the user's.
+# calibredb keeps its own preferences away from the user's, and reliure-cli
+# its cache and backups.
 user_config=${CALIBRE_CONFIG_DIRECTORY:-${XDG_CONFIG_HOME:-$HOME/.config}/calibre}
 export CALIBRE_CONFIG_DIRECTORY="$work/config"
+export XDG_CACHE_HOME="$work/cache" XDG_DATA_HOME="$work/data"
 export CALIBRE_OVERRIDE_LANG=fr
 
 status=0
@@ -50,6 +52,69 @@ compare() {
 }
 
 compare fixture "$root/tests/data/library"
+
+# The same edits written by Calibre and by Reliure, then compared table by
+# table and file by file; calibredb then checks Reliure's copy and lists it as
+# it lists Calibre's.
+edits() {
+    local edits=$1
+    for side in calibre reliure; do
+        rm -rf "$work/edit-$side"
+        cp -a --reflink=auto "$root/tests/data/library" "$work/edit-$side"
+    done
+    calibre-debug -e "$root/tools/oracle/apply_edits.py" -- "$work/edit-calibre" "$edits" >/dev/null
+    "$cli" apply --force --library "$work/edit-reliure" "$edits" >/dev/null
+    if ! python3 "$root/tests/golden/compare_libraries.py" "$work/edit-calibre" "$work/edit-reliure"; then
+        status=1
+    fi
+    for side in calibre reliure; do
+        calibredb check_library --with-library "$work/edit-$side" > "$work/check-$side.txt" 2>&1 || true
+        calibredb list --with-library "$work/edit-$side" --for-machine --fields all \
+            | sed "s|$work/edit-$side|@LIBRARY@|g" > "$work/list-$side.json"
+    done
+    if ! cmp -s "$work/check-calibre.txt" "$work/check-reliure.txt"; then
+        echo "calibredb check_library reports differently:"
+        diff -u "$work/check-calibre.txt" "$work/check-reliure.txt" | head -30
+        status=1
+    fi
+    if ! cmp -s "$work/list-calibre.json" "$work/list-reliure.json"; then
+        echo "calibredb lists the copies differently:"
+        diff -u "$work/list-calibre.json" "$work/list-reliure.json" | head -40
+        status=1
+    else
+        echo "edits: calibredb lists both copies the same"
+    fi
+}
+
+edits "$root/tests/data/edits/edits.json"
+
+# The round trip: Calibre writes again the metadata.opf files of the books
+# Reliure changed, as its GUI does when it starts, and finds nothing to
+# change in them; then edits the library itself, which Reliure reads as
+# calibredb does.
+round_trip() {
+    rm -rf "$work/trip" "$work/trip-before"
+    cp -a --reflink=auto "$work/edit-reliure" "$work/trip"
+    cp -a --reflink=auto "$work/trip" "$work/trip-before"
+    calibredb backup_metadata --with-library "$work/trip" >/dev/null
+    if ! python3 "$root/tests/golden/compare_libraries.py" --files-only "$work/trip" "$work/trip-before" >/dev/null; then
+        echo "round trip: Calibre writes the metadata.opf files differently:"
+        python3 "$root/tests/golden/compare_libraries.py" --files-only "$work/trip" "$work/trip-before" | head -20
+        status=1
+    fi
+    calibredb set_metadata --with-library "$work/trip" 1 --field "title:Mood Indigo" --field "tags:Jazz,Roman" >/dev/null
+    calibredb list --with-library "$work/trip" --for-machine --fields all | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-calibre.json"
+    "$cli" list --library "$work/trip" | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-reliure.json"
+    if cmp -s "$work/trip-calibre.json" "$work/trip-reliure.json"; then
+        echo "round trip: Calibre keeps Reliure's files and Reliure reads Calibre's change"
+    else
+        echo "round trip: Reliure reads Calibre's change differently:"
+        diff -u "$work/trip-calibre.json" "$work/trip-reliure.json" | head -30
+        status=1
+    fi
+}
+
+round_trip
 
 if [ "${RELIURE_GOLDEN_REAL:-0}" = 1 ]; then
     real=$(python3 -c "

@@ -16,6 +16,7 @@ ApplicationWindow {
     required property BookLibrary library
     required property ConcurrencyGuard guard
     property string customLibraryPath: ""
+    property string calibreLanguage: ""
 
     property int currentSectionIndex: 0
     readonly property var sections: [
@@ -26,6 +27,7 @@ ApplicationWindow {
     signal themeModeSelected(string mode)
     signal textScalePercentSelected(int percent)
     signal libraryPathSelected(string path)
+    signal calibreLanguageSelected(string language)
 
     function showSection(key) {
         const index = sections.findIndex(section => section.key === key)
@@ -206,7 +208,9 @@ ApplicationWindow {
                         library: settingsWindow.library
                         guard: settingsWindow.guard
                         customPath: settingsWindow.customLibraryPath
+                        calibreLanguage: settingsWindow.calibreLanguage
                         onLibraryPathSelected: function(path) { settingsWindow.libraryPathSelected(path) }
+                        onCalibreLanguageSelected: function(language) { settingsWindow.calibreLanguageSelected(language) }
                     }
 
                     ScrollBar.vertical: ThinScrollBar {

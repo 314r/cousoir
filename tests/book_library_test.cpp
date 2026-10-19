@@ -86,6 +86,10 @@ private slots:
     void keepsBooksWhenReloadFails();
     void switchesLibrary();
     void reportsMissingLibrary();
+    void editsBooks();
+    void followsSortsLikeCalibre();
+    void refusesWhileReadOnly();
+    void revertsCurrentBook();
 
 private:
     std::unique_ptr<BookLibrary> open(const QString &path = fixtureLibrary());
@@ -406,6 +410,140 @@ void BookLibraryTest::reportsMissingLibrary()
     QVERIFY(!library->loaded());
     QVERIFY(library->lastError().contains(QStringLiteral("no Calibre library")));
     QVERIFY(library->rows().isEmpty());
+}
+
+namespace {
+
+// A copy of the fixture library the tests may write, old enough for that.
+std::unique_ptr<QTemporaryDir> writableCopy()
+{
+    auto copy = std::make_unique<QTemporaryDir>();
+    if (!copyTree(fixtureLibrary(), copy->path()))
+        return nullptr;
+    return copy;
+}
+
+bool waitForSave(BookLibrary *library)
+{
+    QSignalSpy saved(library, &BookLibrary::saved);
+    QSignalSpy failed(library, &BookLibrary::saveFailed);
+    if (!library->saving())
+        return true;
+    return saved.wait(15000) || !failed.isEmpty();
+}
+
+QString title(BookLibrary *library)
+{
+    return library->currentBook().value(QStringLiteral("title")).toString();
+}
+
+} // namespace
+
+void BookLibraryTest::editsBooks()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    library->setCurrentBookId(2);
+    QSignalSpy saved(library.get(), &BookLibrary::saved);
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("title"), QStringLiteral("The White Rose") } }), QString());
+    QVERIFY(library->saving());
+    // Edits made meanwhile wait their turn.
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("tags"), QStringLiteral("Fantasy, Military") } }), QString());
+    QTRY_VERIFY_WITH_TIMEOUT(!library->saving(), 15000);
+    QVERIFY(saved.size() >= 1);
+    QCOMPARE(title(library.get()), QStringLiteral("The White Rose"));
+    QCOMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(),
+             (QStringList{ QStringLiteral("Fantasy"), QStringLiteral("Military") }));
+    QVERIFY(!library->publishedKey().isEmpty());
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Glen Cook/The White Rose (2)/The White Rose - Glen Cook.azw3"))));
+    // The session's first change left a backup.
+    QVERIFY(!QDir(library->backupFolder()).entryList({ QStringLiteral("metadata-*.db") }).isEmpty());
+
+    // A value it refuses comes back at once.
+    QVERIFY(!library->updateBook(2, { { QStringLiteral("pubdate"), QStringLiteral("someday") } }).isEmpty());
+    QVERIFY(!library->updateBook(2, { { QStringLiteral("colour"), QStringLiteral("red") } }).isEmpty());
+    QVERIFY(!library->updateBook(99, { { QStringLiteral("title"), QStringLiteral("X") } }).isEmpty());
+}
+
+void BookLibraryTest::followsSortsLikeCalibre()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    library->setCurrentBookId(2);
+    // A sort that followed its title follows it, with the book's English
+    // articles.
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("title"), QStringLiteral("The Silver Spike") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("sort")).toString(), QStringLiteral("Silver Spike, The"));
+    // A sort set by hand stays.
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("sort"), QStringLiteral("Spike") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("title"), QStringLiteral("The Silver Spike (2)") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(title(library.get()), QStringLiteral("The Silver Spike (2)"));
+    QCOMPARE(library->currentBook().value(QStringLiteral("sort")).toString(), QStringLiteral("Spike"));
+
+    // The same for the author sort.
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("authors"), QStringLiteral("Glen Cook & Neil Gaiman") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("authorSort")).toString(), QStringLiteral("Cook, Glen & Gaiman, Neil"));
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("authorSort"), QStringLiteral("Cook") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("authors"), QStringLiteral("Glen Cook") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("authors")).toStringList(), QStringList{ QStringLiteral("Glen Cook") });
+    QCOMPARE(library->currentBook().value(QStringLiteral("authorSort")).toString(), QStringLiteral("Cook"));
+}
+
+void BookLibraryTest::refusesWhileReadOnly()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    const QString error = library->updateBook(1, { { QStringLiteral("title"), QStringLiteral("X") } });
+    QVERIFY(error.contains(QStringLiteral("cannot be changed")));
+    QVERIFY(!library->saving());
+    QVERIFY(!library->pasteCover(1).isEmpty());
+}
+
+void BookLibraryTest::revertsCurrentBook()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    library->setCurrentBookId(1);
+    const QByteArray cover = [&] {
+        QFile file(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/cover.jpg")));
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    }();
+    QVERIFY(!library->canRevert());
+    QCOMPARE(library->updateBook(1, { { QStringLiteral("title"), QStringLiteral("Mood Indigo") },
+                                      { QStringLiteral("pubdate"), QString() },
+                                      { QStringLiteral("rating"), 3 } }), QString());
+    QVERIFY(library->canRevert());
+    QVERIFY(waitForSave(library.get()));
+    QCOMPARE(library->removeCover(1), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(title(library.get()), QStringLiteral("Mood Indigo"));
+    QVERIFY(!library->currentBook().value(QStringLiteral("hasCover")).toBool());
+
+    library->revertCurrentBook();
+    QVERIFY(!library->canRevert());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(title(library.get()), QStringLiteral("L'Écume des jours"));
+    const QVariantMap book = library->currentBook();
+    QCOMPARE(book.value(QStringLiteral("sort")).toString(), QStringLiteral("Écume des jours, L'"));
+    QCOMPARE(book.value(QStringLiteral("rating")).toString(), QStringLiteral("★★★★"));
+    QCOMPARE(book.value(QStringLiteral("pubdateText")).toString(), QStringLiteral("1947-03-20"));
+    QFile restored(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/cover.jpg")));
+    QVERIFY(restored.open(QIODevice::ReadOnly));
+    QCOMPARE(restored.readAll(), cover);
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.epub"))));
 }
 
 QTEST_MAIN(BookLibraryTest)

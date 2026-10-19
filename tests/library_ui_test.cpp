@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include <QClipboard>
 #include <QDesktopServices>
 #include <QDirIterator>
 #include <QGuiApplication>
@@ -87,6 +88,11 @@ private slots:
     void showsWriteState();
     void picksLibraryInSettings();
     void missingLibraryShowsError();
+    void editsDetailsInPlace();
+    void revertsBookChanges();
+    void refusesInvalidValues();
+    void changesRating();
+    void changesCovers();
 
 private:
     bool loadUi();
@@ -97,6 +103,11 @@ private:
     QString text(const char *name) const;
     void typeText(const QString &text);
     void click(const char *name);
+    // Makes the copy old enough to be written, and opens `bookId`.
+    void openWritable(int bookId);
+    // Clicks a field of the details pane and types over its text.
+    void retype(const char *field, const QString &text);
+    void waitForSave();
 
     std::unique_ptr<QQmlApplicationEngine> m_engine;
     QQuickWindow *m_window = nullptr;
@@ -189,6 +200,37 @@ QString LibraryUiTest::text(const char *name) const
 {
     QQuickItem *item = control(name);
     return item ? item->property("text").toString() : QString();
+}
+
+void LibraryUiTest::openWritable(int bookId)
+{
+    QFile database(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")));
+    QVERIFY(database.open(QIODevice::ReadWrite));
+    QVERIFY(database.setFileTime(QDateTime::currentDateTime().addSecs(-600), QFileDevice::FileModificationTime));
+    database.close();
+    QMetaObject::invokeMethod(guard(), "refresh");
+    QTRY_VERIFY2(guard()->property("writable").toBool(), qPrintable(guard()->property("readOnlyReason").toString()));
+    QTRY_VERIFY(library()->property("writable").toBool());
+    library()->setProperty("currentBookId", bookId);
+    QTRY_VERIFY(control("bookFields") && control("bookFields")->isVisible());
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
+}
+
+void LibraryUiTest::retype(const char *field, const QString &text)
+{
+    click(field);
+    QQuickItem *item = control(field);
+    QTRY_VERIFY(item->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    if (text.isEmpty())
+        QTest::keyClick(m_window, Qt::Key_Backspace);
+    for (const QChar character : text)
+        QTest::keyClick(m_window, character.toLatin1());
+}
+
+void LibraryUiTest::waitForSave()
+{
+    QTRY_VERIFY_WITH_TIMEOUT(!library()->property("saving").toBool(), 15000);
 }
 
 // Clicks a control once the layouts placed it: an item that just appeared
@@ -287,7 +329,10 @@ void LibraryUiTest::showsBookDetails()
     QVERIFY(!control("fact_series")->isVisible());
     QCOMPARE(control("identifier_isbn")->property("value").toString(), QStringLiteral("9782253140870"));
     QVERIFY(control("format_EPUB")->isEnabled());
-    QTRY_COMPARE(control("bookCover")->childItems().first()->property("status").toInt(), 1);
+    QTRY_COMPARE(control("bookCoverImage")->property("status").toInt(), 1);
+    // A copy just made changed a moment ago: read-only, metadata as text.
+    QVERIFY(!control("bookFields")->isVisible());
+    QVERIFY(!control("coverButton")->isVisible());
 
     // Ctrl+I hides the pane; its facts move under the title.
     QVERIFY(!control("factsLine")->isVisible());
@@ -456,6 +501,143 @@ void LibraryUiTest::missingLibraryShowsError()
     QVERIFY(control("chooseLibraryButton")->isVisible());
     QCOMPARE(text("bookCount"), QString());
     QVERIFY(!control("writeState")->isVisible());
+}
+
+void LibraryUiTest::editsDetailsInPlace()
+{
+    openWritable(1);
+    QCOMPARE(control("field_title")->property("text").toString(), QStringLiteral("L'Écume des jours"));
+    QVERIFY(control("coverButton")->isVisible());
+
+    // Enter saves; the book's folder follows its title.
+    retype("field_title", QStringLiteral("Mood Indigo"));
+    QCOMPARE(text("keyHints"), QStringLiteral("Enter save · Esc revert · Tab next field"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("title")).toString(),
+                 QStringLiteral("Mood Indigo"));
+    QCOMPARE(text("pageTitle"), QStringLiteral("Mood Indigo"));
+    QVERIFY(QFileInfo(QDir(m_libraryPath).filePath(QStringLiteral("Boris Vian/Mood Indigo (1)/Mood Indigo - Boris Vian.epub"))).isFile());
+    // The title sort followed, with the book's French articles.
+    QCOMPARE(library()->property("currentBook").toMap().value(QStringLiteral("sort")).toString(), QStringLiteral("Mood Indigo"));
+    // Its own change keeps the library writable.
+    QTRY_VERIFY(guard()->property("writable").toBool());
+
+    // Tab saves too and moves on; the list shows the change.
+    retype("field_tags", QStringLiteral("Roman, Jazz"));
+    QTest::keyClick(m_window, Qt::Key_Tab);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("tags")).toStringList(),
+                 (QStringList{ QStringLiteral("Roman"), QStringLiteral("Jazz") }));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+    const QVariantList rows = library()->property("rows").toList();
+    QVERIFY(std::any_of(rows.cbegin(), rows.cend(), [](const QVariant &row) {
+        return row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("Mood Indigo");
+    }));
+}
+
+void LibraryUiTest::revertsBookChanges()
+{
+    openWritable(2);
+    QVERIFY(!control("revertChangesButton")->isVisible());
+    retype("field_publisher", QStringLiteral("Gallimard"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    retype("field_series", QString());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_VERIFY(control("revertChangesButton")->isVisible());
+    QCOMPARE(library()->property("currentBook").toMap().value(QStringLiteral("series")).toString(), QString());
+
+    // Asked first; Esc keeps the changes.
+    click("revertChangesButton");
+    QTRY_VERIFY(control("revertQuestion")->isVisible());
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!control("revertQuestion")->isVisible());
+    QCOMPARE(library()->property("currentBookId").toInt(), 2);
+
+    click("revertChangesButton");
+    click("confirmRevertButton");
+    waitForSave();
+    const QVariantMap book = library()->property("currentBook").toMap();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("publisher")).toString(), QStringLiteral("Tor"));
+    QCOMPARE(library()->property("currentBook").toMap().value(QStringLiteral("series")).toString(),
+             QStringLiteral("Chronicles of the Black Company"));
+    QVERIFY(!control("revertChangesButton")->isVisible());
+}
+
+void LibraryUiTest::refusesInvalidValues()
+{
+    openWritable(3);
+    // Esc puts the stored value back without saving.
+    retype("field_title", QStringLiteral("Nope"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QCOMPARE(control("field_title")->property("text").toString(), QStringLiteral("Shadows Linger"));
+    QCOMPARE(library()->property("currentBookId").toInt(), 3);
+    QVERIFY(!library()->property("saving").toBool());
+
+    // A date the field cannot take shows in red and is not saved.
+    retype("field_pubdate", QStringLiteral("someday"));
+    QVERIFY(control("field_pubdate")->property("invalid").toBool());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QVERIFY(!library()->property("saving").toBool());
+    QCOMPARE(library()->property("currentBook").toMap().value(QStringLiteral("pubdateText")).toString(), QString());
+
+    retype("field_pubdate", QStringLiteral("1989-6"));
+    QVERIFY(!control("field_pubdate")->property("invalid").toBool());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("pubdateText")).toString(),
+                 QStringLiteral("1989-06-15"));
+
+    // A title cannot be empty.
+    retype("field_title", QString());
+    QVERIFY(control("field_title")->property("invalid").toBool());
+}
+
+void LibraryUiTest::changesRating()
+{
+    openWritable(1);
+    QCOMPARE(control("field_rating")->property("currentIndex").toInt(), 8);
+    click("field_rating");
+    QTRY_VERIFY(control("field_rating")->property("popup").value<QObject *>()->property("visible").toBool());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("rating")).toString(), QStringLiteral("★★★★½"));
+}
+
+void LibraryUiTest::changesCovers()
+{
+    openWritable(5);
+    QVERIFY(!library()->property("currentBook").toMap().value(QStringLiteral("hasCover")).toBool());
+    QCOMPARE(QMetaObject::invokeMethod(library(), "setCover", Q_ARG(int, 5),
+                                       Q_ARG(QString, QStringLiteral(RELIURE_TEST_DATA_DIR "/edits/transparent.png"))),
+             true);
+    waitForSave();
+    QTRY_VERIFY(library()->property("currentBook").toMap().value(QStringLiteral("hasCover")).toBool());
+    QTRY_COMPARE(control("bookCoverImage")->property("status").toInt(), 1);
+    const QString cover = QDir(m_libraryPath).filePath(QStringLiteral("Jean-Pierre Dupont/Manuel technique (5)/cover.jpg"));
+    QCOMPARE(QImage(cover).size(), QSize(400, 600));
+
+    // Ctrl+V pastes the clipboard's image.
+    QImage pasted(120, 180, QImage::Format_RGB32);
+    pasted.fill(Qt::darkGreen);
+    QGuiApplication::clipboard()->setImage(pasted);
+    QTest::keyClick(m_window, Qt::Key_V, Qt::ControlModifier);
+    waitForSave();
+    QTRY_COMPARE(QImage(cover).size(), QSize(120, 180));
+
+    // The Cover menu removes it.
+    click("coverButton");
+    QQuickItem *remove = control("coverMenu_remove");
+    QTRY_VERIFY(remove && remove->isVisible());
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
+    QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(remove));
+    waitForSave();
+    QTRY_VERIFY(!library()->property("currentBook").toMap().value(QStringLiteral("hasCover")).toBool());
+    QVERIFY(!QFileInfo::exists(cover));
 }
 
 int main(int argc, char **argv)

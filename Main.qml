@@ -108,6 +108,9 @@ ApplicationWindow {
     }
 
     function closeBook() {
+        // A field being edited saves first.
+        bookPage.finishEditing()
+        bookPage.confirmingRevert = false
         session.closeBook()
         booksPage.focusList()
     }
@@ -220,6 +223,14 @@ ApplicationWindow {
     }
 
     function hintText() {
+        if (library.saving)
+            return qsTr("Saving…")
+        if (session.bookOpen && bookPage.confirmingRevert)
+            return qsTr("Enter revert · Esc keep")
+        if (session.bookOpen && bookPage.editing)
+            return qsTr("Enter save · Esc revert · Tab next field")
+        if (session.bookOpen && library.writable)
+            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+V paste cover · Ctrl+I details")
         if (session.bookOpen)
             return qsTr("Esc back · Ctrl+O open in reader · Ctrl+I details")
         if (facetShown)
@@ -236,6 +247,7 @@ ApplicationWindow {
         id: session
         adaptiveTypography: true
         libraryPath: librarySettings.path
+        calibreLanguage: librarySettings.calibreLanguage
     }
     readonly property BookLibrary library: session.library
     readonly property ConcurrencyGuard guard: session.guard
@@ -251,6 +263,14 @@ ApplicationWindow {
 
         function onLoadFailed(message) {
             window.showNotice(message)
+        }
+
+        function onSaveFailed(message) {
+            window.showNotice(message)
+        }
+
+        function onRecovered(message) {
+            window.showNotice(qsTr("Reliure %1.").arg(message))
         }
 
         function onSortOptionChanged() {
@@ -289,6 +309,8 @@ ApplicationWindow {
         category: "Library"
         // Empty for the library Calibre opens.
         property string path: ""
+        // Empty for Calibre's own interface language.
+        property string calibreLanguage: ""
     }
 
     SettingsWindow {
@@ -301,6 +323,7 @@ ApplicationWindow {
         library: window.library
         guard: window.guard
         customLibraryPath: librarySettings.path
+        calibreLanguage: librarySettings.calibreLanguage
 
         onThemeModeSelected: function(mode) {
             window.setThemeMode(mode)
@@ -310,6 +333,9 @@ ApplicationWindow {
         }
         onLibraryPathSelected: function(path) {
             librarySettings.path = path
+        }
+        onCalibreLanguageSelected: function(language) {
+            librarySettings.calibreLanguage = language
         }
     }
 
@@ -331,7 +357,25 @@ ApplicationWindow {
     Shortcut {
         sequences: ["Esc", "Alt+Left", StandardKey.Back]
         enabled: session.bookOpen || session.filterOpen
-        onActivated: window.goBack()
+        // The revert question keeps the changes instead.
+        onActivated: {
+            if (bookPage.confirmingRevert)
+                bookPage.confirmingRevert = false
+            else
+                window.goBack()
+        }
+    }
+
+    Shortcut {
+        sequences: ["Return", "Enter"]
+        enabled: session.bookOpen && bookPage.confirmingRevert
+        onActivated: bookPage.revertChanges()
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Paste]
+        enabled: session.bookOpen && library.writable && !bookPage.editing
+        onActivated: bookPage.pasteCover()
     }
 
     Shortcut {
@@ -381,7 +425,11 @@ ApplicationWindow {
             detailsForced = false
     }
 
-    onClosing: settingsWindow.close()
+    onClosing: {
+        // A field being edited saves before the window goes.
+        bookPage.finishEditing()
+        settingsWindow.close()
+    }
 
     footer: Rectangle {
         id: statusBar
@@ -638,10 +686,58 @@ ApplicationWindow {
                         }
                     }
 
+                    // Every change saves at once; this undoes them all until the
+                    // book closes, after asking.
+                    FlatButton {
+                        objectName: "revertChangesButton"
+
+                        visible: session.bookOpen && window.library.canRevert && !bookPage.confirmingRevert
+                        variant: "outline"
+                        text: qsTr("Revert changes")
+                        tip: qsTr("Undo every change since you opened the book")
+                        // Out of any field first, so Enter and Esc answer.
+                        onClicked: {
+                            bookPage.finishEditing()
+                            bookPage.forceActiveFocus()
+                            bookPage.confirmingRevert = true
+                        }
+                    }
+
+                    Label {
+                        objectName: "revertQuestion"
+
+                        // Whole when there is room: a layout rounds a fractional
+                        // width down, which would elide the last letter.
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: Math.ceil(implicitWidth)
+                        Layout.maximumWidth: Math.ceil(implicitWidth)
+                        visible: session.bookOpen && bookPage.confirmingRevert
+                        text: qsTr("Undo every change since you opened it?")
+                        elide: Text.ElideRight
+                    }
+
+                    FlatButton {
+                        objectName: "revertKeepButton"
+
+                        visible: session.bookOpen && bookPage.confirmingRevert
+                        variant: "outline"
+                        text: qsTr("Keep")
+                        onClicked: bookPage.confirmingRevert = false
+                    }
+
+                    FlatButton {
+                        objectName: "confirmRevertButton"
+
+                        visible: session.bookOpen && bookPage.confirmingRevert
+                        variant: "danger"
+                        text: qsTr("Revert")
+                        onClicked: bookPage.revertChanges()
+                    }
+
                     FlatButton {
                         objectName: "openInReaderButton"
 
-                        visible: session.bookOpen
+                        visible: session.bookOpen && !bookPage.confirmingRevert
                         enabled: (window.book.formats || []).some(format => !format.missing)
                         variant: "outline"
                         text: qsTr("Open in reader")

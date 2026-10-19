@@ -6,13 +6,16 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSettings>
+#include <QSysInfo>
 
 #ifdef Q_OS_UNIX
 #include <unistd.h>
 #endif
 
 #include "calibre_db.h"
+#include "calibre_lock.h"
 
 namespace {
 
@@ -39,6 +42,7 @@ uint currentUid()
 ConcurrencyGuard::Environment ConcurrencyGuard::Environment::system()
 {
     Environment environment;
+    environment.host = QSysInfo::machineHostName();
     environment.dropboxSocket = QDir::homePath() + QStringLiteral("/.dropbox/command_socket");
     environment.dropboxInfo = QDir::homePath() + QStringLiteral("/.dropbox/info.json");
     return environment;
@@ -105,6 +109,108 @@ void ConcurrencyGuard::setSchemaKnown(bool known)
     evaluate();
 }
 
+QString ConcurrencyGuard::libraryUuid() const
+{
+    return m_libraryUuid;
+}
+
+void ConcurrencyGuard::setLibraryUuid(const QString &uuid)
+{
+    if (m_libraryUuid == uuid)
+        return;
+    m_libraryUuid = uuid;
+    evaluate();
+}
+
+QString ConcurrencyGuard::ownChangeKey() const
+{
+    return m_ownChangeKey;
+}
+
+void ConcurrencyGuard::setOwnChangeKey(const QString &key)
+{
+    if (m_ownChangeKey == key)
+        return;
+    m_ownChangeKey = key;
+    evaluate();
+}
+
+QString ConcurrencyGuard::changeKey(const QString &path)
+{
+    const FileIdentity identity = CalibreDb::identify(path);
+    return identity.exists ? QStringLiteral("%1:%2:%3").arg(identity.size).arg(identity.modifiedMs).arg(identity.inode)
+                           : QString();
+}
+
+QString ConcurrencyGuard::heartbeatFolder(const QString &dropboxRoot, const QString &uuid)
+{
+    return QDir(dropboxRoot).filePath(QStringLiteral(".reliure/libraries/%1/sessions").arg(uuid));
+}
+
+QString ConcurrencyGuard::dropboxRoot() const
+{
+    if (m_libraryPath.isEmpty())
+        return {};
+    const QString library = QFileInfo(m_libraryPath).canonicalFilePath();
+    for (const QString &root : dropboxRoots(m_environment.dropboxInfo)) {
+        const QString canonicalRoot = QFileInfo(root).canonicalFilePath();
+        if (!canonicalRoot.isEmpty() && (library == canonicalRoot || library.startsWith(canonicalRoot + u'/')))
+            return canonicalRoot;
+    }
+    return {};
+}
+
+void ConcurrencyGuard::noteWrite()
+{
+    m_lastWrite = QDateTime::currentDateTimeUtc();
+    writeHeartbeat();
+}
+
+void ConcurrencyGuard::writeHeartbeat()
+{
+    // Only while this computer's change is recent: an idle Reliure keeps no
+    // other computer from editing.
+    const QString root = dropboxRoot();
+    if (root.isEmpty() || m_libraryUuid.isEmpty() || !m_lastWrite.isValid()
+        || m_lastWrite.secsTo(QDateTime::currentDateTimeUtc()) > m_environment.editingSeconds)
+        return;
+    const QString folder = heartbeatFolder(root, m_libraryUuid);
+    QDir().mkpath(folder);
+    QSaveFile file(QDir(folder).filePath(m_environment.host + QStringLiteral(".json")));
+    if (!file.open(QIODevice::WriteOnly))
+        return;
+    file.write(QJsonDocument(QJsonObject{
+        { QStringLiteral("host"), m_environment.host },
+        { QStringLiteral("updated"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
+        { QStringLiteral("lastWrite"), m_lastWrite.toString(Qt::ISODate) },
+    }).toJson(QJsonDocument::Compact));
+    file.commit();
+}
+
+QString ConcurrencyGuard::editingElsewhere() const
+{
+    const QString root = dropboxRoot();
+    if (root.isEmpty() || m_libraryUuid.isEmpty())
+        return {};
+    const QDir folder(heartbeatFolder(root, m_libraryUuid));
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    for (const QString &file : folder.entryList({ QStringLiteral("*.json") }, QDir::Files)) {
+        QFile heartbeat(folder.filePath(file));
+        if (!heartbeat.open(QIODevice::ReadOnly))
+            continue;
+        const QJsonObject beat = QJsonDocument::fromJson(heartbeat.readAll()).object();
+        const QString host = beat.value(QLatin1String("host")).toString();
+        if (host.isEmpty() || host == m_environment.host)
+            continue;
+        const QDateTime updated = QDateTime::fromString(beat.value(QLatin1String("updated")).toString(), Qt::ISODate);
+        const QDateTime lastWrite = QDateTime::fromString(beat.value(QLatin1String("lastWrite")).toString(), Qt::ISODate);
+        if (updated.isValid() && lastWrite.isValid() && updated.secsTo(now) <= m_environment.heartbeatSeconds
+            && lastWrite.secsTo(now) <= m_environment.editingSeconds)
+            return host;
+    }
+    return {};
+}
+
 bool ConcurrencyGuard::writable() const
 {
     return m_state == QLatin1String("writable");
@@ -134,6 +240,9 @@ void ConcurrencyGuard::refresh()
 {
     evaluate();
     askDropbox();
+    // About once a minute.
+    if (++m_ticks % std::max(1, 60000 / std::max(1, m_environment.intervalMs)) == 0)
+        writeHeartbeat();
 }
 
 void ConcurrencyGuard::acknowledgeConflict(const QString &file)
@@ -226,16 +335,7 @@ QString ConcurrencyGuard::parseDropboxStatus(const QByteArray &answer)
 
 bool ConcurrencyGuard::inDropbox() const
 {
-    if (m_libraryPath.isEmpty())
-        return false;
-    const QString library = QFileInfo(m_libraryPath).canonicalFilePath();
-    const QStringList roots = dropboxRoots(m_environment.dropboxInfo);
-    for (const QString &root : roots) {
-        const QString canonicalRoot = QFileInfo(root).canonicalFilePath();
-        if (!canonicalRoot.isEmpty() && (library == canonicalRoot || library.startsWith(canonicalRoot + u'/')))
-            return true;
-    }
-    return false;
+    return !dropboxRoot().isEmpty();
 }
 
 void ConcurrencyGuard::askDropbox()
@@ -310,13 +410,15 @@ void ConcurrencyGuard::evaluate()
     const bool dropbox = inDropbox();
     const FileIdentity identity = CalibreDb::identify(database);
     const qint64 age = (QDateTime::currentMSecsSinceEpoch() - identity.modifiedMs) / 1000;
+    const bool ownChange = !m_ownChangeKey.isEmpty() && changeKey(database) == m_ownChangeKey;
+    const QString elsewhere = dropbox ? editingElsewhere() : QString();
     if (m_libraryPath.isEmpty() || !m_libraryReadable) {
         state = QStringLiteral("unreadable");
         reason = tr("Read-only: the library cannot be read");
     } else if (!m_schemaKnown) {
         state = QStringLiteral("schema");
         reason = tr("Read-only: the database is from a Calibre version Reliure does not know");
-    } else if (calibreRunning(m_environment.procNetUnix, currentUid())) {
+    } else if (calibreRunning(m_environment.procNetUnix, currentUid()) && !CalibreLock::heldHere()) {
         state = QStringLiteral("calibre");
         reason = tr("Read-only: Calibre is open on this computer");
     } else if (QFileInfo::exists(database + QStringLiteral("-journal"))
@@ -324,13 +426,18 @@ void ConcurrencyGuard::evaluate()
         state = QStringLiteral("journal");
         reason = tr("Read-only: Calibre is writing to the library");
     } else if (dropbox && m_dropboxStatus != QLatin1String("up to date")
-               && m_dropboxStatus != QLatin1String("unwatched")) {
+               && m_dropboxStatus != QLatin1String("unwatched")
+               // Dropbox sending Reliure's own change is no reason to wait.
+               && !(ownChange && m_dropboxStatus == QLatin1String("syncing"))) {
         state = QStringLiteral("dropbox");
         reason = m_dropboxStatus.isEmpty() ? tr("Read-only: waiting for Dropbox")
             : m_dropboxStatus == QLatin1String("unavailable") ? tr("Read-only: Dropbox is not running")
             : m_dropboxStatus == QLatin1String("syncing") ? tr("Read-only: Dropbox is syncing")
             : tr("Read-only: Dropbox says “%1”").arg(m_dropboxStatus);
-    } else if (identity.exists && age < m_environment.coolDownSeconds) {
+    } else if (!elsewhere.isEmpty()) {
+        state = QStringLiteral("elsewhere");
+        reason = tr("Read-only: Reliure is editing on %1").arg(elsewhere);
+    } else if (identity.exists && age < m_environment.coolDownSeconds && !ownChange) {
         state = QStringLiteral("recent");
         reason = tr("Read-only: library changed %1 s ago").arg(std::max<qint64>(0, age));
     } else if (unseenConflict) {

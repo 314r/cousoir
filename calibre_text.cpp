@@ -8,6 +8,9 @@
 
 namespace {
 
+#include "calibre_strings.inc"
+#include "calibre_unidecode.inc"
+
 // Python's str.isspace(), which str.strip() and str.split() use: Qt's spaces
 // and the four information separators.
 bool isPythonSpace(QChar character)
@@ -357,6 +360,124 @@ QString languageName(const QString &code)
     if (language == QLocale::AnyLanguage)
         return code;
     return QLocale::languageToString(language);
+}
+
+QString asciiText(const QString &text)
+{
+    // Unihandecoder.decode(): NFKC, then each character outside ASCII by
+    // the table; a character outside the table's plane is "?".
+    const QString normalized = text.normalized(QString::NormalizationForm_KC);
+    QString result;
+    result.reserve(normalized.size());
+    for (qsizetype i = 0; i < normalized.size(); ++i) {
+        const char16_t code = normalized.at(i).unicode();
+        if (code < 0x80) {
+            result.append(QChar(code));
+        } else if (QChar::isHighSurrogate(code) && i + 1 < normalized.size()
+                   && normalized.at(i + 1).isLowSurrogate()) {
+            result.append(u'?');
+            ++i;
+        } else if (QChar::isSurrogate(code)) {
+            result.append(u'?');
+        } else {
+            result.append(QString::fromUtf8(unidecodeStrings[unidecodeIndex[code - 0x80]]));
+        }
+    }
+    return result;
+}
+
+bool hasAsciiTable(const QString &interfaceLanguage)
+{
+    // get_udc() picks Unihandecoder(lang=get_lang()).
+    const QString language = interfaceLanguage.toLower();
+    return !language.startsWith(QLatin1String("ja")) && !language.startsWith(QLatin1String("kr"))
+        && language != QLatin1String("korean") && !language.startsWith(QLatin1String("vn"))
+        && language != QLatin1String("vietnum");
+}
+
+QString sanitizeFileName(const QString &name)
+{
+    QString one;
+    one.reserve(name.size());
+    for (const QChar character : name) {
+        const char16_t code = character.unicode();
+        const bool bad = code < 32 || code == u'\\' || code == u'|' || code == u'?' || code == u'*' || code == u'<'
+            || code == u'"' || code == u':' || code == u'>' || code == u'+' || code == u'/';
+        one.append(bad ? QChar(u'_') : character);
+    }
+    // re.sub(r'\s', ' ', one).strip()
+    for (QChar &character : one) {
+        if (isPythonSpace(character))
+            character = u' ';
+    }
+    one = pythonStrip(one);
+    // os.path.splitext() ignores the dots a name starts with.
+    qsizetype dot = one.lastIndexOf(u'.');
+    qsizetype leading = 0;
+    while (leading < one.size() && one.at(leading) == u'.')
+        ++leading;
+    if (dot < leading)
+        dot = -1;
+    QString base = dot < 0 ? one : one.left(dot);
+    const QString extension = dot < 0 ? QString() : one.mid(dot);
+    static const QRegularExpression onlyDots(QStringLiteral("^\\.+$"));
+    if (onlyDots.match(base).hasMatch())
+        base = QStringLiteral("_");
+    base.replace(QStringLiteral(".."), QStringLiteral("_"));
+    one = base + extension;
+    if (!one.isEmpty() && (one.back() == u'.' || one.back() == u' '))
+        one.back() = u'_';
+    if (one.startsWith(u'.'))
+        one[0] = u'_';
+    return one;
+}
+
+QString asciiFilename(const QString &text)
+{
+    QString ascii = asciiText(text);
+    ascii.replace(u'?', u'_');
+    for (QChar &character : ascii) {
+        if (character.unicode() < 32)
+            character = u'_';
+    }
+    return sanitizeFileName(ascii);
+}
+
+namespace {
+
+struct CalibreStrings
+{
+    const char *unknown = "Unknown";
+    const char *cover = "Cover";
+};
+
+// Calibre's translations as get_lc_messages_path() finds them: the language
+// as given, then without its script, then without its country.
+CalibreStrings calibreStringsFor(const QString &interfaceLanguage)
+{
+    QString language = interfaceLanguage;
+    language.replace(u'-', u'_');
+    language = language.section(u'.', 0, 0);
+    const QStringList candidates = { language, language.section(u'@', 0, 0), language.section(u'_', 0, 0) };
+    for (const QString &candidate : candidates) {
+        for (const auto &entry : calibreStrings) {
+            if (candidate == QLatin1String(entry.language))
+                return { entry.unknown, entry.cover };
+        }
+    }
+    return {};
+}
+
+} // namespace
+
+QString unknownText(const QString &interfaceLanguage)
+{
+    return QString::fromUtf8(calibreStringsFor(interfaceLanguage).unknown);
+}
+
+QString coverText(const QString &interfaceLanguage)
+{
+    return QString::fromUtf8(calibreStringsFor(interfaceLanguage).cover);
 }
 
 QString foldForSearch(const QString &text)

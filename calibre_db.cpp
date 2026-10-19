@@ -530,10 +530,10 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
     // computer's tweaks.
     const bool ok =
         forEachRow(db, QStringLiteral("SELECT id, name, CASE WHEN sort IS NULL OR sort = '' "
-                                      "THEN author_to_author_sort(name) ELSE sort END FROM authors"),
+                                      "THEN author_to_author_sort(name) ELSE sort END, link FROM authors"),
                    [&](SqliteStatement &row) {
                        authors.insert(int(row.integer(0)), { int(row.integer(0)), row.text(1).replace(u'|', u','),
-                                                             row.text(2), 0 });
+                                                             row.text(2), 0, row.text(3) });
                    }, error)
         && forEachRow(db, QStringLiteral("SELECT book, author FROM books_authors_link ORDER BY id"),
                       [&](SqliteStatement &row) {
@@ -545,8 +545,8 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                           book->authors.append(author->name);
                           addTo(authorCounts, author->id);
                       }, error)
-        && forEachRow(db, QStringLiteral("SELECT id, name, sort FROM series"), [&](SqliteStatement &row) {
-            series.insert(int(row.integer(0)), { int(row.integer(0)), row.text(1), row.text(2), 0 });
+        && forEachRow(db, QStringLiteral("SELECT id, name, sort, link FROM series"), [&](SqliteStatement &row) {
+            series.insert(int(row.integer(0)), { int(row.integer(0)), row.text(1), row.text(2), 0, row.text(3) });
         }, error)
         && forEachRow(db, QStringLiteral("SELECT book, series FROM books_series_link"), [&](SqliteStatement &row) {
             Book *book = bookWithId(row.integer(0));
@@ -557,8 +557,8 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
             book->series = item->name;
             addTo(seriesCounts, item->id);
         }, error)
-        && forEachRow(db, QStringLiteral("SELECT id, name FROM tags"), [&](SqliteStatement &row) {
-            tags.insert(int(row.integer(0)), { int(row.integer(0)), row.text(1), row.text(1), 0 });
+        && forEachRow(db, QStringLiteral("SELECT id, name, link FROM tags"), [&](SqliteStatement &row) {
+            tags.insert(int(row.integer(0)), { int(row.integer(0)), row.text(1), row.text(1), 0, row.text(2) });
         }, error)
         && forEachRow(db, QStringLiteral("SELECT book, tag FROM books_tags_link ORDER BY id"),
                       [&](SqliteStatement &row) {
@@ -570,9 +570,9 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                           book->tags.append(tag->name);
                           addTo(tagCounts, tag->id);
                       }, error)
-        && forEachRow(db, QStringLiteral("SELECT id, name, sort FROM publishers"), [&](SqliteStatement &row) {
+        && forEachRow(db, QStringLiteral("SELECT id, name, sort, link FROM publishers"), [&](SqliteStatement &row) {
             publishers.insert(int(row.integer(0)), { int(row.integer(0)), row.text(1),
-                                                     row.isNull(2) ? row.text(1) : row.text(2), 0 });
+                                                     row.isNull(2) ? row.text(1) : row.text(2), 0, row.text(3) });
         }, error)
         && forEachRow(db, QStringLiteral("SELECT book, publisher FROM books_publishers_link"),
                       [&](SqliteStatement &row) {
@@ -595,7 +595,7 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
         && forEachRow(db, QStringLiteral("SELECT id, lang_code FROM languages"), [&](SqliteStatement &row) {
             // Shown by name; the code stays in `sort`.
             const QString code = row.text(1);
-            languages.insert(int(row.integer(0)), { int(row.integer(0)), CalibreText::languageName(code), code, 0 });
+            languages.insert(int(row.integer(0)), { int(row.integer(0)), CalibreText::languageName(code), code, 0, {} });
         }, error)
         && forEachRow(db, QStringLiteral("SELECT book, lang_code FROM books_languages_link ORDER BY id"),
                       [&](SqliteStatement &row) {

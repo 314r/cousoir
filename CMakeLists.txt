@@ -25,24 +25,42 @@ endif()
 
 qt_standard_project_setup(REQUIRES 6.9)
 
-# Reading the library: Qt Core, Network and SQLite only, shared by the
-# application, reliure-cli and the tests.
+# Reading and writing the library, shared by the application, reliure-cli
+# and the tests. Qt Gui only for QImage, which covers need.
 set(RELIURE_LIBRARY_SOURCES
     book.h
+    book_edit.cpp
+    book_edit.h
     calibre_config.cpp
     calibre_config.h
     calibre_db.cpp
     calibre_db.h
     calibre_list.cpp
     calibre_list.h
+    calibre_lock.cpp
+    calibre_lock.h
+    calibre_paths.cpp
+    calibre_paths.h
+    calibre_strings.inc
     calibre_text.cpp
     calibre_text.h
+    calibre_unidecode.inc
+    commit_engine.cpp
+    commit_engine.h
     concurrency_guard.cpp
     concurrency_guard.h
+    field_writers.cpp
+    field_writers.h
+    file_transaction.cpp
+    file_transaction.h
+    opf.cpp
+    opf.h
+    reliure_paths.cpp
+    reliure_paths.h
     sqlite_db.cpp
     sqlite_db.h
 )
-set(RELIURE_LIBRARY_LINKS Qt6::Core Qt6::Network ${RELIURE_SQLITE})
+set(RELIURE_LIBRARY_LINKS Qt6::Core Qt6::Gui Qt6::Network ${RELIURE_SQLITE})
 
 # The models QML uses on top of it.
 set(RELIURE_MODEL_SOURCES
@@ -52,7 +70,7 @@ set(RELIURE_MODEL_SOURCES
     cover_cache.cpp
     cover_cache.h
 )
-set(RELIURE_MODEL_LINKS ${RELIURE_LIBRARY_LINKS} Qt6::Concurrent Qt6::Gui Qt6::Quick)
+set(RELIURE_MODEL_LINKS ${RELIURE_LIBRARY_LINKS} Qt6::Concurrent Qt6::Quick)
 
 qt_add_executable(reliure
     main.cpp
@@ -226,6 +244,24 @@ if(BUILD_TESTING)
     target_link_libraries(calibre_text_tests PRIVATE ${RELIURE_LIBRARY_LINKS} Qt6::Test)
     reliure_configure_test_executable(calibre_text_tests)
     reliure_add_logged_test(calibre_text_tests calibre_text_tests)
+
+    qt_add_executable(calibre_paths_tests
+        tests/calibre_paths_test.cpp
+        ${RELIURE_LIBRARY_SOURCES}
+    )
+    target_link_libraries(calibre_paths_tests PRIVATE ${RELIURE_LIBRARY_LINKS} Qt6::Test)
+    reliure_configure_test_executable(calibre_paths_tests)
+    reliure_add_logged_test(calibre_paths_tests calibre_paths_tests)
+
+    foreach(name IN ITEMS opf commit_engine)
+        qt_add_executable(${name}_tests
+            tests/${name}_test.cpp
+            ${RELIURE_LIBRARY_SOURCES}
+        )
+        target_link_libraries(${name}_tests PRIVATE ${RELIURE_LIBRARY_LINKS} Qt6::Test)
+        reliure_configure_test_executable(${name}_tests)
+        reliure_add_logged_test(${name}_tests ${name}_tests)
+    endforeach()
 
     qt_add_executable(calibre_db_tests
         tests/calibre_db_test.cpp

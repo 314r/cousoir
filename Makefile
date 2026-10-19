@@ -31,6 +31,10 @@ test: build
 fixtures:
 	tools/make_fixture_library.sh
 
-# Records Calibre's title and author sorts for tests/calibre_text_test.cpp.
+# Records what Calibre computes, for the tests and the tables Reliure takes
+# from it: title and author sorts, folder and file names, the transliteration
+# table and Calibre's "Unknown" and "Cover" in every language.
 oracle:
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/text_oracle.py -- tests/data/oracle/text.json
+	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/paths_oracle.py -- tests/data/oracle/paths.json
+	calibre-debug -e tools/oracle/tables_oracle.py -- .

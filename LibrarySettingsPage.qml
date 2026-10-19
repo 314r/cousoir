@@ -7,8 +7,9 @@ import QtQuick.Layouts
 
 import Reliure
 
-// Which library Reliure opens, whether it could be written now, and the
-// Dropbox conflict copies found beside its database.
+// Which library Reliure opens, whether it can be written now, Calibre's
+// language for it, the backups, and the Dropbox conflict copies found beside
+// its database.
 Item {
     id: libraryPage
 
@@ -16,8 +17,11 @@ Item {
     required property ConcurrencyGuard guard
     // The folder picked here; empty for the library Calibre opens.
     required property string customPath
+    // The language set here; empty for Calibre's own.
+    required property string calibreLanguage
 
     signal libraryPathSelected(string path)
+    signal calibreLanguageSelected(string language)
 
     implicitHeight: contentLayout.implicitHeight + 2 * Theme.panePadding
 
@@ -102,14 +106,76 @@ Item {
 
                 Layout.fillWidth: true
                 text: libraryPage.guard.writable
-                    ? qsTr("Nothing else is using the library right now.")
+                    ? qsTr("Nothing else is using the library: books can be changed.")
                     : libraryPage.guard.readOnlyReason
                 wrapMode: Text.WordWrap
             }
 
             Label {
                 Layout.fillWidth: true
-                text: qsTr("This version of Reliure never changes the library: it reads a copy of metadata.db. Changing books comes next, and only while nothing else can be writing: Calibre closed on this computer, Dropbox done syncing, and no change from another computer in the last two minutes.")
+                text: qsTr("Reliure changes the library only while nothing else can be writing to it: Calibre closed on this computer, Dropbox done syncing, no change from another computer in the last two minutes, and no Reliure editing on another computer. While it saves, Calibre cannot start.")
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+            }
+
+            Label {
+                objectName: "backupLabel"
+
+                Layout.fillWidth: true
+                text: qsTr("Before its first change in a session, Reliure copies metadata.db to %1. It keeps the last 30 copies.")
+                    .arg(libraryPage.library.backupFolder)
+                color: Theme.textMuted
+                wrapMode: Text.WrapAnywhere
+            }
+
+            FlatButton {
+                objectName: "showBackupsButton"
+
+                variant: "outline"
+                text: qsTr("Show backups")
+                icon.source: "assets/icons/folder.svg"
+                onClicked: libraryPage.library.openBackupFolder()
+            }
+        }
+
+        ColumnLayout {
+            objectName: "calibreSection"
+
+            Layout.fillWidth: true
+            spacing: Theme.gutter
+
+            HeadingLabel {
+                text: qsTr("Calibre's language")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.gutter
+
+                FormField {
+                    id: languageField
+                    objectName: "calibreLanguageField"
+
+                    Layout.preferredWidth: Math.round(16 * Theme.charWidth)
+                    text: libraryPage.calibreLanguage
+                    placeholderText: qsTr("Calibre's")
+                    onEditingFinished: {
+                        if (text.trim() !== libraryPage.calibreLanguage)
+                            libraryPage.calibreLanguageSelected(text.trim())
+                    }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("In effect: %1").arg(libraryPage.library.interfaceLanguage)
+                    color: Theme.textMuted
+                    elide: Text.ElideRight
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Calibre sorts titles, names a book without author and spells names of other scripts in its interface language, “fr” or “en” for instance. Reliure reads it from Calibre on this computer; set it here if you use Calibre in another language on the computers sharing this library.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
             }
