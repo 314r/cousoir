@@ -36,6 +36,8 @@ void bind(SqliteStatement &statement, const QVariantList &values)
             statement.bind(position, value.toLongLong());
         else if (value.typeId() == QMetaType::Double)
             statement.bind(position, value.toDouble());
+        else if (value.typeId() == QMetaType::QByteArray)
+            statement.bind(position, value.toByteArray());
         else
             statement.bind(position, value.toString());
     }
@@ -513,7 +515,7 @@ bool addFormat(SqliteDb &db, FileTransaction &files, const NewFormat &format, co
 {
     if (!bookExists(db, format.bookId))
         return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(format.bookId));
-    const QString extension = QFileInfo(format.file).suffix().toUpper();
+    const QString extension = format.format.isEmpty() ? QFileInfo(format.file).suffix().toUpper() : format.format;
     if (extension.isEmpty())
         return fail(error, QObject::tr("%1 has no extension to tell its format.").arg(QFileInfo(format.file).fileName()));
     if (!QFileInfo(format.file).isFile())
@@ -522,6 +524,14 @@ bool addFormat(SqliteDb &db, FileTransaction &files, const NewFormat &format, co
         return false;
     result->touched.insert(format.bookId);
     return true;
+}
+
+bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QString *error)
+{
+    if (!bookExists(db, bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    return run(db, QStringLiteral("INSERT OR REPLACE INTO conversion_options(book,format,data) VALUES (?,'PIPE',?)"),
+               { bookId, data }, error);
 }
 
 bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &removal, const Context &context,

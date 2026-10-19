@@ -8,7 +8,8 @@ import Reliure
 
 // The library's books, or those of the author, series, tag, language or
 // publisher opened in a browse section: a table, or a grid of covers. A row's
-// menu (right click, Menu or Shift+F10) opens it here or in a reader.
+// menu (right click, Menu or Shift+F10) opens it here or in a reader,
+// converts it or moves it to the trash.
 Rectangle {
     id: page
 
@@ -22,12 +23,17 @@ Rectangle {
         { key: "added", title: qsTr("Added"), sort: "added", chars: 10, drop: 4 },
         { key: "rating", title: qsTr("Rating"), sort: "rating", chars: 6, drop: 3 }
     ]
+    property ConversionService conversions: null
+    readonly property bool canConvert: library.writable && conversions !== null && conversions.available
     readonly property var actions: [
         { key: "open", title: qsTr("Open") },
         { key: "read", title: qsTr("Open in reader") },
         { key: "folder", title: qsTr("Show in folder") },
+        { key: "convert:KEPUB", title: qsTr("Convert to KEPUB") },
+        { key: "convert:AZW3", title: qsTr("Convert to AZW3") },
         { key: "trash", title: qsTr("Move to Trash") }
-    ].filter(action => action.key !== "trash" || page.library.writable)
+    ].filter(action => action.key === "trash" ? page.library.writable
+                       : action.key.startsWith("convert:") ? page.canConvert : true)
     readonly property var view: gridMode ? coverGrid : bookTable
     readonly property int currentIndex: view.currentIndex
     // The row whose menu is open.
@@ -36,6 +42,8 @@ Rectangle {
     signal bookActivated(int bookId)
     // Move to Trash, chosen in a row's menu.
     signal trashRequested(int bookId)
+    // Convert to a format, chosen in a row's menu.
+    signal convertRequested(int bookId, string format)
     signal reloadRequested()
     signal settingsRequested()
     // Opening a book's file failed; `message` says why.
@@ -97,6 +105,10 @@ Rectangle {
         }
         if (key === "trash") {
             page.trashRequested(row.id)
+            return
+        }
+        if (key.startsWith("convert:")) {
+            page.convertRequested(row.id, key.split(":")[1])
             return
         }
         const error = key === "read" ? page.library.openFormat(row.id, "") : page.library.openFolder(row.id)

@@ -9,14 +9,15 @@ import Reliure
 
 // A book's metadata as Calibre keeps it, and its files, each of which opens
 // in the desktop's reader for it, goes to the library's trash, or is added
-// from a file. While the library may be written the
-// metadata edits in place: a field saves when you leave it, with Enter or
-// Tab; Esc puts the stored value back; a value the field cannot take shows
-// in red and is not saved.
+// from a file; Calibre converts the book to KEPUB or AZW3. While the library
+// may be written the metadata edits in place: a field saves when you leave
+// it, with Enter or Tab; Esc puts the stored value back; a value the field
+// cannot take shows in red and is not saved.
 FocusScope {
     id: pane
 
     required property BookLibrary library
+    property ConversionService conversions: null
     property var book: ({})
     readonly property bool editable: library.writable && (book.id || 0) > 0
     // A field has the focus.
@@ -42,7 +43,14 @@ FocusScope {
         { key: "modified", label: qsTr("Modified"), value: book.modified || "" }
     ]
 
+    // The formats Calibre can convert the book to, and its conversion, if
+    // one runs or waits.
+    readonly property var convertFormats: conversions && conversions.available && (book.id || 0) > 0
+        ? conversions.formatsFor(book.id) : []
+    readonly property var conversion: (conversions ? conversions.jobs : []).find(job => job.bookId === book.id) || null
+
     signal failed(string message)
+    signal convertRequested(string format)
 
     function open(format) {
         const error = pane.library.openFormat(pane.book.id, format)
@@ -400,6 +408,61 @@ FocusScope {
                             onClicked: pane.removeFormat(formatRow.modelData.format)
                         }
                     }
+                }
+            }
+
+            // Calibre makes the files a Kobo or a Kindle reads best.
+            Flow {
+                Layout.fillWidth: true
+                visible: pane.editable && pane.convertFormats.length > 0 && !pane.conversion
+                spacing: Theme.gutter
+
+                Label {
+                    height: Theme.rowHeight
+                    text: qsTr("Convert to")
+                    color: Theme.textMuted
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Repeater {
+                    model: pane.convertFormats
+
+                    delegate: FlatButton {
+                        required property string modelData
+
+                        objectName: "convert_" + modelData
+                        variant: "outline"
+                        text: modelData
+                        tip: qsTr("Convert to %1 (%2)").arg(modelData)
+                            .arg(modelData === "KEPUB" ? "Ctrl+Shift+K" : "Ctrl+Shift+A")
+                        onClicked: pane.convertRequested(modelData)
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                visible: pane.conversion !== null
+                spacing: Theme.gutter
+
+                Label {
+                    objectName: "conversionState"
+
+                    Layout.fillWidth: true
+                    text: !pane.conversion ? ""
+                        : pane.conversion.running ? qsTr("Converting to %1 · %2%").arg(pane.conversion.format)
+                                                        .arg(Math.round(pane.conversion.progress * 100))
+                        : qsTr("Waiting to convert to %1").arg(pane.conversion.format)
+                    color: Theme.textMuted
+                    wrapMode: Text.Wrap
+                }
+
+                FlatButton {
+                    objectName: "stopConversion"
+
+                    variant: "outline"
+                    text: qsTr("Stop")
+                    onClicked: pane.conversions.cancel(pane.book.id)
                 }
             }
 

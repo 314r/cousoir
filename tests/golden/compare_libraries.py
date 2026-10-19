@@ -2,27 +2,43 @@
 # Compares two copies of a Calibre library after the same edits, one written
 # by Calibre and one by Reliure:
 #
-#   compare_libraries.py [--files-only] [--added-from N] <calibre copy> <reliure copy>
+#   compare_libraries.py [--files-only] [--added-from N] [--converted 1:KEPUB,2:AZW3]
+#                        <calibre copy> <reliure copy>
 #
 # - every table of metadata.db but the preferences Calibre updates when it
 #   opens a library, with last_modified, the time of the write, left out, and
 #   for books added, from id N, the time and the random uuid they got;
 # - the files: metadata.opf as parsed XML, without the producer, which names
 #   the program; cover.jpg by its size and pixels, as two JPEG encoders may
-#   differ by a few bits; anything else byte for byte.
+#   differ by a few bits; anything else byte for byte;
+# - but the files of conversions, each book and format listed by --converted:
+#   an EPUB or KEPUB by its entries, an AZW3 or MOBI by the files Calibre
+#   explodes it to, without the time it was made, the random ids of the
+#   anchors Calibre adds or the order of an AZW3's stylesheets and images,
+#   which varies from one of Calibre's processes to the next. Their sizes in
+#   the data table, which those change, are left out.
 #
 # Prints each difference and exits with 1 when there is one.
 
 import hashlib
 import os
+import re
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 
 files_only = '--files-only' in sys.argv
 added_from = int(sys.argv[sys.argv.index('--added-from') + 1]) if '--added-from' in sys.argv else None
-arguments = [a for i, a in enumerate(sys.argv[1:], 1) if not a.startswith('--') and sys.argv[i - 1] != '--added-from']
+converted = set()
+if '--converted' in sys.argv:
+    for item in sys.argv[sys.argv.index('--converted') + 1].split(','):
+        book, _, fmt = item.partition(':')
+        converted.add((int(book), fmt.upper()))
+arguments = [a for i, a in enumerate(sys.argv[1:], 1)
+             if not a.startswith('--') and sys.argv[i - 1] not in ('--added-from', '--converted')]
 calibre_copy, reliure_copy = arguments[:2]
 problems = []
 
@@ -47,6 +63,8 @@ def tables(path):
                 if added_from is not None and row[columns.index('id')] >= added_from:
                     row[columns.index('timestamp')] = '<now>'
                     row[columns.index('uuid')] = '<uuid>'
+            if name == 'data' and (row[columns.index('book')], row[columns.index('format')]) in converted:
+                row[columns.index('uncompressed_size')] = '<size>'
             if name == 'books_pages_link':
                 # The row's creation time.
                 row[columns.index('timestamp')] = '<now>'
@@ -142,6 +160,69 @@ def opf(path):
     return items, guide
 
 
+TEXT = ('.html', '.xhtml', '.htm', '.ncx', '.opf', '.css', '.xml')
+
+
+def masked(name, data):
+    # The time of the conversion, the random ids Calibre gives the anchors it
+    # adds for a table of contents, and the names of an exploded AZW3's
+    # stylesheets and images, which Calibre numbers in an order that depends
+    # on where its process put them in memory, as it lists an element's
+    # classes.
+    if name.endswith('.opf'):
+        data = re.sub(rb'(<meta property="dcterms:modified"[^>]*>)[^<]*', rb'\1<now>', data)
+    if name.endswith(TEXT):
+        data = re.sub(rb'\b[0-9a-f]{32}\b', b'<id>', data)
+        data = re.sub(rb'styles/\d+\.css', b'styles/<n>.css', data)
+        data = re.sub(rb'images/\d+\.\w+', b'images/<n>', data)
+        # The classes of an element, which Calibre lists in no set order.
+        data = re.sub(rb'class="([^"]*)"', lambda m: b'class="' + b' '.join(sorted(m.group(1).split())) + b'"', data)
+    if name.endswith('.opf'):
+        # Its manifest follows the numbers, and so do the ids of its images.
+        lines = [re.sub(rb'id="[^"]*"', b'id="<n>"', line) if b'href="images/<n>"' in line else line
+                 for line in data.splitlines()]
+        data = b'\n'.join(sorted(lines))
+    return data
+
+
+def conversion(path):
+    # A converted file without what differs from one conversion to the next:
+    # an EPUB's entries, an AZW3's or MOBI's as Calibre explodes it.
+    with open(path, 'rb') as f:
+        raw = f.read()
+    if raw.startswith(b'PK'):
+        entries = []
+        with zipfile.ZipFile(path) as archive:
+            for info in archive.infolist():
+                entries.append((info.filename, hashlib.sha256(masked(info.filename, archive.read(info))).hexdigest()))
+        # Calibre zips the files in no set order but the first.
+        return entries[:1] + sorted(entries[1:])
+    if raw[60:68] == b'BOOKMOBI':
+        with tempfile.TemporaryDirectory() as folder:
+            subprocess.run(['calibre-debug', '--explode-book', path, folder], capture_output=True, check=True)
+            entries = []
+            for root, dirs, names in os.walk(folder):
+                for name in names:
+                    full = os.path.join(root, name)
+                    with open(full, 'rb') as f:
+                        data = masked(name, f.read())
+                    rel = re.sub(r'^(styles|images)/\d+\.', r'\1/<n>.', os.path.relpath(full, folder))
+                    entries.append((rel, hashlib.sha256(data).hexdigest()))
+            return sorted(entries)
+    return hashlib.sha256(raw).hexdigest()
+
+
+def converted_file(rel):
+    # A book folder is "Title (id)".
+    folder = os.path.basename(os.path.dirname(rel))
+    fmt = os.path.splitext(rel)[1][1:].upper()
+    try:
+        book = int(folder.rpartition('(')[2][:-1])
+    except ValueError:
+        return False
+    return (book, fmt) in converted
+
+
 def image(path):
     size = subprocess.run(['magick', 'identify', '-format', '%wx%h', path], capture_output=True, text=True).stdout
     return size
@@ -156,6 +237,9 @@ for rel in sorted(set(fa) | set(fb)):
         if opf(fa[rel]) != opf(fb[rel]):
             problems.append(f'{rel} differs:\n    Calibre: {opf(fa[rel])}\n    Reliure: {opf(fb[rel])}')
     elif os.path.basename(rel) == 'cover.jpg':
+        with open(fa[rel], 'rb') as f, open(fb[rel], 'rb') as g:
+            if f.read() == g.read():
+                continue
         if image(fa[rel]) != image(fb[rel]):
             problems.append(f'{rel}: {image(fa[rel])} against {image(fb[rel])}')
         else:
@@ -164,6 +248,10 @@ for rel in sorted(set(fa) | set(fb)):
             mean = float(diff.split('(')[1].split(')')[0]) if '(' in diff else 0.0
             if mean > 0.01:
                 problems.append(f'{rel}: covers differ by {mean:.4f}')
+    elif converted_file(rel):
+        if conversion(fa[rel]) != conversion(fb[rel]):
+            problems.append(f'{rel} differs as a conversion:\n    Calibre: {conversion(fa[rel])}\n'
+                            f'    Reliure: {conversion(fb[rel])}')
     else:
         da = hashlib.sha256(open(fa[rel], 'rb').read()).hexdigest()
         db = hashlib.sha256(open(fb[rel], 'rb').read()).hexdigest()

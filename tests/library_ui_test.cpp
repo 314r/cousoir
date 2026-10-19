@@ -16,6 +16,7 @@
 
 #include "book_library.h"
 #include "concurrency_guard.h"
+#include "conversion_service.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
 #include "system_appearance.h"
@@ -96,6 +97,7 @@ private slots:
     void movesBooksToTrashAndBack();
     void addsAndRemovesFiles();
     void asksAboutDuplicates();
+    void convertsBooks();
 
 private:
     bool loadUi();
@@ -133,6 +135,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<IsolatedTheme>("Reliure", 1, 0, "OmarchyTheme");
     qmlRegisterType<BookLibrary>("Reliure", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Reliure", 1, 0, "ConcurrencyGuard");
+    qmlRegisterType<ConversionService>("Reliure", 1, 0, "ConversionService");
     qmlRegisterType<SystemAppearance>("Reliure", 1, 0, "SystemAppearance");
     for (const char *type : { "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
                               "BooksPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
@@ -797,6 +800,42 @@ void LibraryUiTest::asksAboutDuplicates()
     waitForSave();
     QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("books")).toInt(), books + 1);
     QTRY_COMPARE(text("keyHints"), QStringLiteral("Added 1 book."));
+}
+
+// The window's conversions, with a stand-in for Calibre: from the Files
+// section, asking before replacing a file, and stopped from there.
+void LibraryUiTest::convertsBooks()
+{
+    auto *conversions = qobject_cast<ConversionService *>(m_window->property("conversions").value<QObject *>());
+    QVERIFY(conversions);
+    conversions->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-debug"));
+    openWritable(1);
+    click("convert_KEPUB");
+    waitForSave();
+    QTRY_COMPARE(formatsOf(library()->property("currentBook").toMap()),
+                 (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("“L'Écume des jours” converted to KEPUB."));
+
+    click("convert_KEPUB");
+    QTRY_VERIFY(object("convertDialog")->property("opened").toBool());
+    QCOMPARE(object("convertDialog")->property("title").toString(),
+             QStringLiteral("Convert “L'Écume des jours” to KEPUB again?"));
+    clickVisible("confirmReject");
+    QTRY_VERIFY(!object("convertDialog")->property("opened").toBool());
+    QVERIFY(!conversions->busy());
+
+    qputenv("RELIURE_FAKE_DELAY", "20");
+    click("convert_AZW3");
+    QTRY_VERIFY(control("conversionState")->isVisible());
+    QTRY_COMPARE(text("conversionState"), QStringLiteral("Converting to AZW3 · 50%"));
+    QVERIFY(text("keyHints").startsWith(QStringLiteral("Converting “L'Écume des jours” to AZW3")));
+    QVERIFY(control("stopConversions")->isVisible());
+    click("stopConversion");
+    QTRY_VERIFY(!conversions->busy());
+    qunsetenv("RELIURE_FAKE_DELAY");
+    QTRY_VERIFY(!control("conversionState")->isVisible());
+    QCOMPARE(formatsOf(library()->property("currentBook").toMap()),
+             (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
 }
 
 #include "library_ui_test.moc"

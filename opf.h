@@ -9,7 +9,8 @@
 // The metadata.opf Calibre keeps beside a book's files, from which its
 // "Restore database" rebuilds a library. Ported from metadata_to_opf() in
 // src/calibre/ebooks/metadata/opf2.py of Calibre 9.16, as Cache.dump_metadata()
-// calls it.
+// calls it, and as create_opf_file() of gui2/convert/metadata.py calls it
+// for a conversion.
 namespace Opf {
 
 struct Settings
@@ -21,6 +22,12 @@ struct Settings
     // version, and the short name it files under.
     QString producer;
     QString producerId;
+    // The first identifier, Calibre's application_id: the book's id, or
+    // another value, like the uuid a conversion's OPF has there.
+    QString applicationId;
+    // Whether the guide names the cover: a metadata.opf always does, the OPF
+    // a conversion reads never.
+    bool coverReference = true;
 };
 
 // The dates of a book as Calibre holds them in memory, to the microsecond,

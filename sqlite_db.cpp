@@ -133,6 +133,11 @@ void SqliteStatement::bind(int index, double value)
     sqlite3_bind_double(m_statement, index, value);
 }
 
+void SqliteStatement::bind(int index, const QByteArray &value)
+{
+    sqlite3_bind_blob(m_statement, index, value.constData(), int(value.size()), SQLITE_TRANSIENT);
+}
+
 void SqliteStatement::bindNull(int index)
 {
     sqlite3_bind_null(m_statement, index);
@@ -183,9 +188,17 @@ QString SqliteStatement::text(int column) const
     return data ? QString::fromUtf8(data, sqlite3_column_bytes(m_statement, column)) : QString();
 }
 
+QByteArray SqliteStatement::blob(int column) const
+{
+    const auto *data = static_cast<const char *>(sqlite3_column_blob(m_statement, column));
+    return data ? QByteArray(data, sqlite3_column_bytes(m_statement, column)) : QByteArray();
+}
+
 QVariant SqliteStatement::value(int column) const
 {
     switch (sqlite3_column_type(m_statement, column)) {
+    case SQLITE_BLOB:
+        return blob(column);
     case SQLITE_INTEGER:
         return integer(column);
     case SQLITE_FLOAT:

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QString>
 #include <QVariant>
 
@@ -57,6 +58,8 @@ public:
     void bind(int index, const QString &value);
     void bind(int index, qint64 value);
     void bind(int index, double value);
+    // A BLOB.
+    void bind(int index, const QByteArray &value);
     void bindNull(int index);
 
     // True while there is a row; false at the end or on an error.
@@ -69,6 +72,8 @@ public:
     double real(int column) const;
     // Text as UTF-8; a NULL is an empty string.
     QString text(int column) const;
+    QByteArray blob(int column) const;
+    // A BLOB as a QByteArray, text as a QString.
     QVariant value(int column) const;
 
 private:

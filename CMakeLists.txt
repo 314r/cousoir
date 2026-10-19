@@ -56,6 +56,8 @@ set(RELIURE_LIBRARY_SOURCES
     commit_engine.h
     concurrency_guard.cpp
     concurrency_guard.h
+    conversion.cpp
+    conversion.h
     field_writers.cpp
     field_writers.h
     file_transaction.cpp
@@ -78,6 +80,8 @@ set(RELIURE_MODEL_SOURCES
     ${RELIURE_LIBRARY_SOURCES}
     book_library.cpp
     book_library.h
+    conversion_service.cpp
+    conversion_service.h
     cover_cache.cpp
     cover_cache.h
 )
@@ -266,7 +270,7 @@ if(BUILD_TESTING)
     reliure_configure_test_executable(calibre_paths_tests)
     reliure_add_logged_test(calibre_paths_tests calibre_paths_tests)
 
-    foreach(name IN ITEMS opf commit_engine)
+    foreach(name IN ITEMS opf commit_engine conversion)
         qt_add_executable(${name}_tests
             tests/${name}_test.cpp
             ${RELIURE_LIBRARY_SOURCES}

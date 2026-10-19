@@ -35,8 +35,10 @@ fixtures:
 
 # Records what Calibre computes, for the tests and the tables Reliure takes
 # from it: title and author sorts, folder and file names, the transliteration
-# table and Calibre's "Unknown" and "Cover" in every language.
+# table and Calibre's "Unknown" and "Cover" in every language, and the OPF a
+# conversion reads.
 oracle:
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/text_oracle.py -- tests/data/oracle/text.json
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/paths_oracle.py -- tests/data/oracle/paths.json
 	calibre-debug -e tools/oracle/tables_oracle.py -- .
+	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/conversion_oracle.py -- tests/data/library tests/data/oracle/conversion.json

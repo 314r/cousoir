@@ -167,6 +167,39 @@ ApplicationWindow {
         return facetShown ? 1 : 0
     }
 
+    // The open book, or the current row's, converted to `format`; asks first
+    // when the book has a file of that format.
+    function convertBook(bookId, format) {
+        const row = bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+        if (!row || !library.writable)
+            return
+        // The open book lists its files; a row joins their formats.
+        const formats = typeof row.formats === "string" ? row.formats.split(", ")
+                                                        : (row.formats || []).map(file => file.format)
+        if (formats.includes(format)) {
+            convertDialog.bookId = bookId
+            convertDialog.format = format
+            convertDialog.title = qsTr("Convert “%1” to %2 again?").arg(row.title).arg(format)
+            convertDialog.message = qsTr("Its %1 file is replaced by the new one.").arg(format)
+            convertDialog.ask()
+            return
+        }
+        startConversion(bookId, format)
+    }
+
+    // An older notice gives way to the conversion's progress.
+    function startConversion(bookId, format) {
+        const error = conversions.convert(bookId, format)
+        if (error)
+            showNotice(error)
+        else
+            notice = ""
+    }
+
+    function currentBookId() {
+        return session.bookOpen ? book.id : booksShown ? booksPage.currentBookId() : 0
+    }
+
     function addBooks(urls) {
         const error = library.addBooks(urls)
         if (error)
@@ -253,6 +286,14 @@ ApplicationWindow {
     function hintText() {
         if (library.importing)
             return qsTr("Reading %1 of %2 files…").arg(library.importDone).arg(library.importTotal)
+        if (conversions.busy) {
+            const job = conversions.jobs[0]
+            const waiting = conversions.jobs.length - 1
+            return (job.running ? qsTr("Converting “%1” to %2 · %3%").arg(job.title).arg(job.format)
+                                      .arg(Math.round(job.progress * 100))
+                                : qsTr("Converting “%1” to %2 after the changes…").arg(job.title).arg(job.format))
+                + (waiting > 0 ? " " + plural(waiting, qsTr("(%1 more waiting)"), qsTr("(%1 more waiting)")) : "")
+        }
         if (library.saving)
             return qsTr("Saving…")
         if (session.bookOpen && bookPage.confirmingRevert)
@@ -285,6 +326,7 @@ ApplicationWindow {
     }
     readonly property BookLibrary library: session.library
     readonly property ConcurrencyGuard guard: session.guard
+    readonly property ConversionService conversions: session.conversions
 
     Timer {
         id: noticeTimer
@@ -333,6 +375,18 @@ ApplicationWindow {
 
         function onSortOptionChanged() {
             layoutSettings.sortOption = window.library.sortOption
+        }
+    }
+
+    Connections {
+        target: window.conversions
+
+        function onConverted(bookId, title, format) {
+            window.showNotice(qsTr("“%1” converted to %2.").arg(title).arg(format), false)
+        }
+
+        function onFailed(message) {
+            window.showNotice(message)
         }
     }
 
@@ -471,6 +525,18 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+Shift+K"
+        enabled: (session.bookOpen || window.booksShown) && library.writable && conversions.available
+        onActivated: window.convertBook(window.currentBookId(), "KEPUB")
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+A"
+        enabled: (session.bookOpen || window.booksShown) && library.writable && conversions.available
+        onActivated: window.convertBook(window.currentBookId(), "AZW3")
+    }
+
+    Shortcut {
         sequences: [StandardKey.Delete]
         enabled: window.booksShown && library.writable
         onActivated: window.trashBook(booksPage.currentBookId())
@@ -502,6 +568,17 @@ ApplicationWindow {
             else if (session.bookOpen && window.book.id === bookId)
                 window.closeBook()
         }
+    }
+
+    ConfirmDialog {
+        id: convertDialog
+        objectName: "convertDialog"
+
+        property int bookId: 0
+        property string format
+
+        acceptText: qsTr("Convert")
+        onAccepted: window.startConversion(bookId, format)
     }
 
     ConfirmDialog {
@@ -545,6 +622,7 @@ ApplicationWindow {
 
         readonly property real countWidth: Math.max(statusCount.implicitWidth, Theme.statusHeight)
         readonly property real stateWidth: Math.min((writeState.visible ? writeState.implicitWidth + Theme.gutter : 0)
+            + (stopConversions.visible ? stopConversions.width + Theme.gutter : 0)
             + (detailsToggle.visible ? detailsToggle.width : 0), width * 0.45)
         readonly property real sideWidth: Math.max(countWidth, stateWidth)
         // Equal sides keep the hints centered while 40 characters of them
@@ -634,6 +712,24 @@ ApplicationWindow {
                             elide: Text.ElideRight
                         }
                     }
+                }
+
+                FlatButton {
+                    id: stopConversions
+                    objectName: "stopConversions"
+
+                    visible: window.conversions.busy
+                    implicitWidth: implicitHeight
+                    implicitHeight: Theme.statusHeight - 6
+                    iconOnly: true
+                    text: qsTr("Stop converting")
+                    tip: window.conversions.jobs.length === 1 ? qsTr("Stop the conversion")
+                        : qsTr("Stop the %1 conversions").arg(window.conversions.jobs.length)
+                    icon.source: "assets/icons/close.svg"
+                    icon.width: Math.round(Theme.iconSize * 0.85)
+                    icon.height: Math.round(Theme.iconSize * 0.85)
+                    icon.color: Theme.textMuted
+                    onClicked: window.conversions.cancel(0)
                 }
 
                 FlatButton {
@@ -964,11 +1060,13 @@ ApplicationWindow {
                         id: booksPage
                         objectName: "booksPage"
                         library: window.library
+                        conversions: window.conversions
                         gridMode: layoutSettings.gridMode
                         onBookActivated: function(bookId) {
                             window.openBook(bookId)
                         }
                         onTrashRequested: function(bookId) { window.trashBook(bookId) }
+                        onConvertRequested: function(bookId, format) { window.convertBook(bookId, format) }
                         onReloadRequested: session.reload()
                         onSettingsRequested: window.openSettings("library")
                         onFailed: function(message) { window.showNotice(message) }
@@ -988,9 +1086,11 @@ ApplicationWindow {
                         id: bookPage
                         objectName: "bookPage"
                         library: window.library
+                        conversions: window.conversions
                         book: window.book
                         detailsVisible: window.detailsVisible
                         onFailed: function(message) { window.showNotice(message) }
+                        onConvertRequested: function(format) { window.convertBook(window.book.id, format) }
                     }
 
                     TrashPage {

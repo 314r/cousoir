@@ -22,6 +22,7 @@
 #include "calibre_list.h"
 #include "commit_engine.h"
 #include "concurrency_guard.h"
+#include "conversion.h"
 #include "reliure_paths.h"
 
 namespace {
@@ -207,6 +208,42 @@ QString readOnlyReason(const QString &libraryPath)
     return guard.writable() ? QString() : guard.readOnlyReason();
 }
 
+// Converts the books to the formats, as Calibre's convert action does, and
+// adds what it adds to `request`. The jobs' folders stay until the process
+// ends, with the files the request adds; with RELIURE_KEEP_JOBS set, after,
+// for a look at Calibre's log.
+bool convert(const QString &libraryPath, const CalibreConfig &config, const QList<QPair<int, QString>> &conversions,
+             CommitEngine::Request *request)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return false;
+    static QTemporaryDir jobs;
+    jobs.setAutoRemove(qEnvironmentVariableIsEmpty("RELIURE_KEEP_JOBS"));
+    for (const auto &[bookId, format] : conversions) {
+        const auto book = std::find_if(data.books.cbegin(), data.books.cend(),
+                                       [bookId](const Book &book) { return book.id == bookId; });
+        if (book == data.books.cend()) {
+            err() << QStringLiteral("No book %1 in the library.").arg(bookId) << Qt::endl;
+            return false;
+        }
+        const QString folder = jobs.filePath(QStringLiteral("%1-%2").arg(bookId).arg(format));
+        QString error;
+        if (!jobs.isValid() || !QDir().mkpath(folder)
+            || !Conversion::prepare(data, *book, format, config.interfaceLanguage, folder, &error)) {
+            err() << (error.isEmpty() ? QStringLiteral("Cannot create a temporary folder.") : error) << Qt::endl;
+            return false;
+        }
+        const Conversion::Outcome outcome = Conversion::run(folder, config.interfaceLanguage);
+        if (!outcome.ok) {
+            err() << book->title << QStringLiteral(": ") << outcome.error << Qt::endl;
+            return false;
+        }
+        Conversion::addTo(request, *book, format, outcome);
+    }
+    return true;
+}
+
 // Applies the changes of a JSON file, an array of:
 //   { "book": 1, "set": { "title": …, … } }   BookEdit's keys; a coverFile
 //                                               is relative to the JSON file
@@ -215,8 +252,11 @@ QString readOnlyReason(const QString &libraryPath)
 //   { "restore": 3 } or { "restore": { "book": 2, "format": "AZW3" } }
 //   { "add": "book.epub" } or { "add": ["book.epub", "book.pdf"] }
 //   { "addFormat": { "book": 2, "file": "book.azw3" } }
+//   { "convert": { "book": 1, "format": "KEPUB" } }
 // Files are relative to the JSON file. Edits apply first, then the other
-// changes in the order above, as the application saves them.
+// changes in the order above, as the application saves them. Conversions
+// run first, on the books as the library has them, and add their files
+// with the formats added.
 int apply(const QString &libraryPath, const QString &opsPath, bool force)
 {
     QFile file(opsPath);
@@ -233,6 +273,7 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
     const QDir base = QFileInfo(opsPath).absoluteDir();
     const CalibreConfig config = CalibreConfig::load();
     CommitEngine::Request request;
+    QList<QPair<int, QString>> conversions;
     for (const QJsonValue &value : document.array()) {
         const QJsonObject op = value.toObject();
         if (op.contains(QLatin1String("removeFormats"))) {
@@ -272,6 +313,12 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             request.newBooks.append(book);
             continue;
         }
+        if (op.contains(QLatin1String("convert"))) {
+            const QJsonObject convert = op.value(QLatin1String("convert")).toObject();
+            conversions.append({ convert.value(QLatin1String("book")).toInt(),
+                                 convert.value(QLatin1String("format")).toString().toUpper() });
+            continue;
+        }
         if (op.contains(QLatin1String("addFormat"))) {
             const QJsonObject format = op.value(QLatin1String("addFormat")).toObject();
             request.newFormats.append({ format.value(QLatin1String("book")).toInt(),
@@ -296,6 +343,8 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             return 1;
         }
     }
+    if (!conversions.isEmpty() && !convert(libraryPath, config, conversions, &request))
+        return 1;
     request.libraryPath = libraryPath;
     request.cacheFolder = ReliurePaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
     request.backupFolder = ReliurePaths::backupFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
@@ -396,7 +445,7 @@ int main(int argc, char *argv[])
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
         "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
         "  apply   Apply the changes of a JSON file (edits, added and removed books and\n"
-        "          formats, restorations), as the application saves them.\n"
+        "          formats, restorations, conversions), as the application saves them.\n"
         "  read    Print the metadata adding the given book files would read."));
     parser.addHelpOption();
     parser.addVersionOption();

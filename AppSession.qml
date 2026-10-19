@@ -1,9 +1,9 @@
 import QtQuick
 import Reliure
 
-// One session per window: owns the library and the guard that says whether
-// it may be written, and pushes the system appearance into the Theme
-// singleton.
+// One session per window: owns the library, the guard that says whether it
+// may be written and the conversions, and pushes the system appearance into
+// the Theme singleton.
 QtObject {
     id: session
 
@@ -20,6 +20,9 @@ QtObject {
             session.guard.noteWrite()
             session.guard.refresh()
         }
+    }
+    readonly property ConversionService conversions: ConversionService {
+        library: session.library
     }
     readonly property ConcurrencyGuard guard: ConcurrencyGuard {
         libraryPath: session.library.libraryPath

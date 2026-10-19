@@ -4,6 +4,7 @@
 
 #include "book_library.h"
 #include "concurrency_guard.h"
+#include "conversion_service.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
 #include "system_appearance.h"
@@ -22,6 +23,7 @@ int main(int argc, char *argv[])
 
     qmlRegisterType<BookLibrary>("Reliure", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Reliure", 1, 0, "ConcurrencyGuard");
+    qmlRegisterType<ConversionService>("Reliure", 1, 0, "ConversionService");
     qmlRegisterType<OmarchyTheme>("Reliure", 1, 0, "OmarchyTheme");
     qmlRegisterType<SystemAppearance>("Reliure", 1, 0, "SystemAppearance");
 

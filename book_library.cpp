@@ -23,6 +23,7 @@
 #include "calibre_db.h"
 #include "calibre_text.h"
 #include "concurrency_guard.h"
+#include "conversion.h"
 #include "cover_cache.h"
 #include "field_writers.h"
 #include "reliure_paths.h"
@@ -1104,7 +1105,8 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     // With the edits just before it, if the last change waiting is edits.
     const CommitEngine::Request &last = m_pending.isEmpty() ? CommitEngine::Request() : m_pending.last();
     const bool editsOnly = !m_pending.isEmpty() && last.formatRemovals.isEmpty() && last.trash.isEmpty()
-        && last.restorations.isEmpty() && last.newBooks.isEmpty() && last.newFormats.isEmpty();
+        && last.restorations.isEmpty() && last.newBooks.isEmpty() && last.newFormats.isEmpty()
+        && last.conversionOptions.isEmpty();
     if (editsOnly) {
         m_pending.last().edits.append(edit);
     } else {
@@ -1331,6 +1333,16 @@ QString BookLibrary::addFormat(int bookId, const QString &fileUrl)
         return tr("%1 has no extension to tell its format.").arg(QFileInfo(file).fileName());
     CommitEngine::Request change;
     change.newFormats.append({ bookId, file });
+    return queueChange(change);
+}
+
+QString BookLibrary::addConversion(int bookId, const QString &format, const Conversion::Outcome &outcome)
+{
+    const Book *book = findBook(bookId);
+    if (!book)
+        return tr("This book is no longer in the library.");
+    CommitEngine::Request change;
+    Conversion::addTo(&change, *book, format, outcome);
     return queueChange(change);
 }
 
