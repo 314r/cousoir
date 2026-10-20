@@ -2,9 +2,9 @@ BUILD_DIR ?= build
 PREFIX ?= $(HOME)/.local
 
 ifeq ($(shell uname -s),Darwin)
-RUN_EXECUTABLE = $(BUILD_DIR)/reliure.app/Contents/MacOS/reliure
+RUN_EXECUTABLE = $(BUILD_DIR)/cousoir.app/Contents/MacOS/cousoir
 else
-RUN_EXECUTABLE = $(BUILD_DIR)/reliure
+RUN_EXECUTABLE = $(BUILD_DIR)/cousoir
 endif
 
 .PHONY: all build install clean run test fixtures oracle
@@ -33,7 +33,7 @@ fixtures:
 	tools/make_fixture_library.sh
 	tools/make_import_fixtures.sh
 
-# Records what Calibre computes, for the tests and the tables Reliure takes
+# Records what Calibre computes, for the tests and the tables Cousoir takes
 # from it: title and author sorts, folder and file names, the transliteration
 # table and Calibre's "Unknown" and "Cover" in every language, and the OPF a
 # conversion reads.

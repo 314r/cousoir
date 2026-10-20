@@ -4,7 +4,7 @@
 
 #include "calibre_text.h"
 
-// What Reliure reads of Calibre's own configuration on this computer: the
+// What Cousoir reads of Calibre's own configuration on this computer: the
 // library Calibre opens, its interface language and the tweaks that change
 // how titles and authors sort. Calibre's settings can differ per computer
 // even though the library is shared.
@@ -27,7 +27,7 @@ struct CalibreConfig
     // CALIBRE_CONFIG_DIRECTORY, as Calibre honours it, or Calibre's default
     // folder for this platform.
     static QString configDirectory();
-    // The library Reliure opens unless told otherwise: RELIURE_LIBRARY_PATH,
+    // The library Cousoir opens unless told otherwise: COUSOIR_LIBRARY_PATH,
     // else the one Calibre opens. Empty when there is none.
     static QString defaultLibraryPath();
     // Reads global.py.json and tweaks.json from `directory`; missing or

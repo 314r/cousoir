@@ -41,7 +41,7 @@ void OpfTest::initTestCase()
     CalibreConfig config;
     config.interfaceLanguage = QStringLiteral("fr");
     QString error;
-    QVERIFY2(CalibreDb::loadLibrary(QStringLiteral(RELIURE_TEST_DATA_DIR "/library"),
+    QVERIFY2(CalibreDb::loadLibrary(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library"),
                                     m_cache.filePath(QStringLiteral("snapshot.db")), config, &m_data, &error),
              qPrintable(error));
 }

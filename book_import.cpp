@@ -1,3 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/ebooks/mobi/reader/headers.py: MetadataHeader, BookHeader
+//   and EXTHHeader
+// - src/calibre/ebooks/metadata/mobi.py: get_metadata()
+// - src/calibre/ebooks/metadata/meta.py: metadata_from_filename() and
+//   _get_metadata()
+// - src/calibre/ebooks/metadata/book/base.py: smart_update()
+// - src/calibre/ebooks/metadata/epub.py: Encryption, get_metadata() and
+//   get_cover()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "book_import.h"
 
 #include <QBuffer>
@@ -479,7 +494,7 @@ bool readWithCalibre(const QString &path, ImportedMetadata *metadata, bool cover
     const QString program = BookImport::calibreDebug();
     if (program.isEmpty()) {
         if (error)
-            *error = QObject::tr("Reliure cannot read %1 files without Calibre.").arg(BookImport::formatOf(path));
+            *error = QObject::tr("Cousoir cannot read %1 files without Calibre.").arg(BookImport::formatOf(path));
         return false;
     }
     QTemporaryDir folder;

@@ -91,7 +91,7 @@ QString FileTransaction::keptName(const QString &path)
 {
     const QFileInfo info(path);
     const QString id = QString::number(QRandomGenerator::global()->generate(), 16);
-    return info.dir().filePath(QStringLiteral(".~reliure-%1-old-%2").arg(id, info.fileName()));
+    return info.dir().filePath(QStringLiteral(".~cousoir-%1-old-%2").arg(id, info.fileName()));
 }
 
 bool FileTransaction::log(const Step &step, QString *error)
@@ -245,7 +245,7 @@ void FileTransaction::cleanUp(const QList<Step> &steps)
     for (const Step &step : steps) {
         if ((step.op == QLatin1String("write") || step.op == QLatin1String("remove"))
             && QFileInfo(step.other).fileName().contains(QLatin1String("-old-"))) {
-            // A kept folder is an empty one Reliure cleared.
+            // A kept folder is an empty one Cousoir cleared.
             if (QFileInfo(step.other).isDir())
                 QDir(step.other).removeRecursively();
             else

@@ -1,16 +1,16 @@
 # Applies the changes of a JSON file the way Calibre writes them, for the
-# golden test that compares Reliure's writes with Calibre's:
+# golden test that compares Cousoir's writes with Calibre's:
 #
 #   calibre-debug -e tools/oracle/apply_edits.py -- <library> <changes.json>
 #
-# The file is reliure-cli apply's. Edits, [{"book": 1, "set": {"title": ...}}],
+# The file is cousoir-cli apply's. Edits, [{"book": 1, "set": {"title": ...}}],
 # go field by field through Cache.set_field() or set_cover(), in the order
-# Cache.set_metadata() sets them. Then, in reliure-cli's order: formats to the
+# Cache.set_metadata() sets them. Then, in cousoir-cli's order: formats to the
 # trash with remove_formats(), books with remove_books(), restorations with
 # move_book_from_trash() and move_format_from_trash(), books added as
 # calibredb add adds them, formats with add_format(). The metadata.opf files
 # of the books changed are then written and the books left dirtied, as
-# Reliure leaves them for Calibre to write again.
+# Cousoir leaves them for Calibre to write again.
 
 import json
 import os
@@ -28,7 +28,7 @@ with open(edits_path, encoding='utf-8') as f:
 
 cache = open_library(library).new_api
 # The books dirtied before, by an earlier run, Calibre would write again only
-# when it next opens the library, as it would Reliure's.
+# when it next opens the library, as it would Cousoir's.
 start = cache.dirtied_sequence
 ORDER = ('title', 'authors', 'coverFile', 'removeCover', 'rating', 'seriesIndex', 'authorSort', 'publisher', 'series',
          'tags', 'comments', 'languages', 'pubdate', 'sort', 'identifiers')
@@ -69,7 +69,8 @@ def edit(change):
 
 
 def add(paths):
-    # cmd_add.book(): the first file's metadata, every file a format.
+    # book() of Calibre's src/calibre/db/cli/cmd_add.py, Copyright (C) Kovid
+    # Goyal, GPL v3: the first file's metadata, every file a format.
     paths = [os.path.join(base, p) for p in (paths if isinstance(paths, list) else [paths])]
     fmt = os.path.splitext(paths[0])[1]
     fmt = (fmt[1:] if fmt else None) or 'unknown'

@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/db/utils.py: find_identical_books()
+// - src/calibre/ebooks/__init__.py: BOOK_EXTENSIONS
+// - src/calibre/ebooks/metadata/__init__.py: fmt_sidx() and rating_to_stars()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "book_library.h"
 
 #include <QBuffer>
@@ -26,7 +36,7 @@
 #include "conversion.h"
 #include "cover_cache.h"
 #include "field_writers.h"
-#include "reliure_paths.h"
+#include "cousoir_paths.h"
 
 namespace {
 
@@ -264,7 +274,7 @@ BookLibrary::~BookLibrary()
 
 QString BookLibrary::cacheFolder(const QString &libraryPath)
 {
-    return ReliurePaths::cacheFolder(libraryPath);
+    return CousoirPaths::cacheFolder(libraryPath);
 }
 
 QString BookLibrary::libraryPath() const
@@ -938,7 +948,7 @@ QString BookLibrary::interfaceLanguage() const
 
 QString BookLibrary::backupFolder() const
 {
-    return ReliurePaths::backupFolder(m_libraryPath);
+    return CousoirPaths::backupFolder(m_libraryPath);
 }
 
 CalibreConfig BookLibrary::effectiveConfig() const
@@ -1041,7 +1051,7 @@ QString BookLibrary::setCover(int bookId, const QString &fileUrl)
 {
     const QString path = fileUrl.startsWith(QLatin1String("file:")) ? QUrl(fileUrl).toLocalFile() : fileUrl;
     if (QImageReader(path).format().isEmpty())
-        return tr("%1 is not an image Reliure can read.").arg(QFileInfo(path).fileName());
+        return tr("%1 is not an image Cousoir can read.").arg(QFileInfo(path).fileName());
     return updateBook(bookId, { { QStringLiteral("coverFile"), path } });
 }
 
@@ -1147,8 +1157,8 @@ void BookLibrary::startCommit()
     request.backupFolder = m_backedUp ? QString() : backupFolder();
     request.config = effectiveConfig();
     const QString version = QCoreApplication::applicationVersion();
-    request.producer = version.isEmpty() ? QStringLiteral("Reliure") : QStringLiteral("Reliure (%1)").arg(version);
-    request.producerId = QStringLiteral("reliure");
+    request.producer = version.isEmpty() ? QStringLiteral("Cousoir") : QStringLiteral("Cousoir (%1)").arg(version);
+    request.producerId = QStringLiteral("cousoir");
     m_commitWatcher.setFuture(QtConcurrent::run([request] { return CommitEngine::commit(request); }));
     emit savingChanged();
 }

@@ -16,6 +16,9 @@ ONBOARD = 'file:///mnt/onboard/'
 TYPES = {'.kepub.epub': 'application/x-kobo-epub+zip', '.epub': 'application/epub+zip', '.pdf': 'application/pdf'}
 
 
+# qhash() and imageid_from_contentid() of Calibre's Kobo driver,
+# src/calibre/devices/kobo/driver.py, Copyright (C) Timothy Legge, Kovid Goyal
+# and David Forrester, GPL v3.
 def qhash(text):
     h = 0
     for x in text.encode('utf-8'):

@@ -1,5 +1,5 @@
 import QtQuick
-import Reliure
+import Cousoir
 
 // One session per window: owns the library, the guard that says whether it
 // may be written, the conversions and the devices, and pushes the system

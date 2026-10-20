@@ -31,7 +31,7 @@ QString name(const QJsonObject &driveInfo, const QString &friendlyName, const QS
 
 // The books on the Kindle as MTP_DEVICE.books() lists them: every e-book
 // file but text files at the root, with the metadata Calibre keeps for those
-// it sent. Calibre reads the others' metadata from their files; Reliure
+// it sent. Calibre reads the others' metadata from their files; Cousoir
 // shows their names.
 QList<DeviceBook> books(DeviceFiles &files, QString *error);
 

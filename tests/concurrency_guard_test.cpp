@@ -86,7 +86,7 @@ private:
 
 void ConcurrencyGuardTest::initTestCase()
 {
-    QCoreApplication::setOrganizationName(QStringLiteral("reliure-tests"));
+    QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
     QCoreApplication::setApplicationName(QStringLiteral("concurrency-guard"));
 }
 
@@ -285,7 +285,7 @@ void ConcurrencyGuardTest::ownChangeIsNoReasonToWait()
     age(database, 10);
     auto checks = guard();
     QTRY_COMPARE(checks->state(), QStringLiteral("recent"));
-    // The file Reliure wrote itself.
+    // The file Cousoir wrote itself.
     checks->setOwnChangeKey(ConcurrencyGuard::changeKey(database));
     QCOMPARE(checks->state(), QStringLiteral("writable"));
     // Dropbox sending it is no reason either.
@@ -326,7 +326,7 @@ void ConcurrencyGuardTest::readOnlyWhileEditedElsewhere()
     QVERIFY(QFileInfo::exists(QDir(folder).filePath(QStringLiteral("desktop.json"))));
     laptop.refresh();
     QCOMPARE(laptop.state(), QStringLiteral("elsewhere"));
-    QCOMPARE(laptop.readOnlyReason(), QStringLiteral("Read-only: Reliure is editing on desktop"));
+    QCOMPARE(laptop.readOnlyReason(), QStringLiteral("Read-only: Cousoir is editing on desktop"));
     // Not the desktop itself.
     desktop.refresh();
     QTRY_COMPARE(desktop.state(), QStringLiteral("writable"));

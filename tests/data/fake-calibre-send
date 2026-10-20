@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Stands in for calibre-debug in the tests of sending to a reader: run as
-# Reliure runs Calibre's job, "-e send.py -- <job folder>", it reports
-# progress and writes what the job writes, after RELIURE_FAKE_DELAY seconds
+# Cousoir runs Calibre's job, "-e send.py -- <job folder>", it reports
+# progress and writes what the job writes, after COUSOIR_FAKE_DELAY seconds
 # if set. For a Kobo, each book as "Author/Title - Author.kepub.epub" in the
 # job's device folder, its entry in metadata.calibre and driveinfo.calibre;
 # for a Kindle, the same as operations to do, the book as
@@ -19,8 +19,8 @@ device = os.path.join(folder, 'device')
 kindle = 'objects' in job
 os.makedirs(device, exist_ok=True)
 print(json.dumps({'progress': 0.5}), flush=True)
-if os.environ.get('RELIURE_FAKE_DELAY'):
-    time.sleep(float(os.environ['RELIURE_FAKE_DELAY']))
+if os.environ.get('COUSOIR_FAKE_DELAY'):
+    time.sleep(float(os.environ['COUSOIR_FAKE_DELAY']))
 
 con = sqlite3.connect(os.path.join(folder, 'library', 'metadata.db'))
 try:

@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // A browse section: the library's authors, series, tags, languages or
 // publishers with their number of books. Opening one lists its books.

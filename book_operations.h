@@ -67,7 +67,7 @@ struct TrashEntry
 // database changes go through the connection, the file changes through the
 // transaction's journal.
 //
-// Reliure never empties the trash: Calibre deletes its entries after 14 days
+// Cousoir never empties the trash: Calibre deletes its entries after 14 days
 // when it starts.
 namespace BookOperations {
 

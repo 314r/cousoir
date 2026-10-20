@@ -3,7 +3,7 @@
 # metadata readers: EPUB 2 and 3 package files, MOBI and AZW3 headers made by
 # ebook-convert, PDF info dictionaries and XMP packets (one written by
 # Calibre), covers to render and metadata only in a file's name.
-# tests/golden/run.sh reads them with Reliure and with Calibre.
+# tests/golden/run.sh reads them with Cousoir and with Calibre.
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -69,6 +69,6 @@ ebook-meta "$out/calibre.pdf" --title "Écrit par Calibre" --authors "Kovid Goya
     --tags "Logiciel,Livres" --series "Outils" --index 3 --isbn 9782070360246 --rating 4 \
     --comments "<p>Un PDF.</p>" --date 2001-02-03 --publisher "Éditions Libres" --language fr >/dev/null
 
-# Formats Reliure leaves to Calibre, and one Calibre has no reader for.
+# Formats Cousoir leaves to Calibre, and one Calibre has no reader for.
 printf 'Chapter one.\n' > "$out/Plain Notes - Jane Doe.txt"
 printf 'nothing to read\n' > "$out/data.xyz"

@@ -17,7 +17,7 @@ struct Request;
 // when you pick a format in "Convert books" and keep its settings: the book's
 // settings saved by its last conversion over Calibre's defaults, the
 // library's metadata and cover in the result, the result added to the book.
-// Calibre does the work itself, through calibre-debug: Reliure hands it the
+// Calibre does the work itself, through calibre-debug: Cousoir hands it the
 // book's files, its metadata as Calibre's create_opf_file() writes it and
 // its cover, and takes back the converted file and the settings to keep.
 //
@@ -25,7 +25,7 @@ struct Request;
 // what it writes, log.txt and result.json.
 namespace Conversion {
 
-// The formats Reliure converts to, as Calibre names them.
+// The formats Cousoir converts to, as Calibre names them.
 QStringList outputFormats();
 
 // supported_input_formats(): the book's formats Calibre converts from, in
@@ -37,7 +37,7 @@ QString program();
 
 // Writes the job converting `book` of `data` to `format` into `folder`,
 // which must exist and be empty. The book's metadata.opf supplies what
-// Reliure does not keep, as for the metadata.opf Reliure writes.
+// Cousoir does not keep, as for the metadata.opf Cousoir writes.
 bool prepare(const LibraryData &data, const Book &book, const QString &format, const QString &interfaceLanguage,
              const QString &folder, QString *error);
 

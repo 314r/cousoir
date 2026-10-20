@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <mutex>
 
-#ifdef RELIURE_HAVE_LIBMTP
+#ifdef COUSOIR_HAVE_LIBMTP
 #include <libmtp.h>
 
 namespace {
@@ -328,7 +328,7 @@ Session::~Session() = default;
 bool Session::open(quint32, quint8, QString *error)
 {
     if (error)
-        *error = QObject::tr("Reliure was built without libmtp, which reaches MTP devices.");
+        *error = QObject::tr("Cousoir was built without libmtp, which reaches MTP devices.");
     return false;
 }
 

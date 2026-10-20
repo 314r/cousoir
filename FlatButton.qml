@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 
-import Reliure
+import Cousoir
 
 // Omarchy buttons: plain is transparent until hovered; outline, primary and
 // danger express emphasis through edge and text, never a solid fill.

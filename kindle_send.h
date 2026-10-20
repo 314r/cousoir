@@ -16,14 +16,14 @@ struct LibraryData;
 // copy, the file in the documents folder named by the driver's template, its
 // cover in system/thumbnails and amazon-cover-bug, its page numbers in an
 // APNX file, and the book in metadata.calibre. Calibre's MTP driver runs in
-// a SendJob on a stand-in for the Kindle: its files and folders as Reliure
+// a SendJob on a stand-in for the Kindle: its files and folders as Cousoir
 // listed them, and copies of the few Calibre reads. What the driver would do
-// to them, folders made, files put and deleted, is noted; Reliure then does
+// to them, folders made, files put and deleted, is noted; Cousoir then does
 // it on the Kindle, through the MTP connection it keeps from the listing on,
 // so that nothing else changes the Kindle meanwhile.
 namespace KindleSend {
 
-// What Reliure knows of the Kindle that Calibre's driver asks.
+// What Cousoir knows of the Kindle that Calibre's driver asks.
 struct Device
 {
     QString friendlyName;

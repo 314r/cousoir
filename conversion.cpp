@@ -1,3 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/gui2/convert/single.py: setup_pipeline(), in the Python the
+//   job runs
+// - src/calibre/gui2/tools.py: convert_single_ebook()
+// - src/calibre/ebooks/conversion/config.py: load_defaults()
+// - src/calibre/db/legacy.py: original_fmt()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "conversion.h"
 
 #include <QDir>

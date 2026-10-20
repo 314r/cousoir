@@ -23,7 +23,7 @@ const Book *bookIn(const LibraryData &data, int bookId)
 }
 
 // Folders a conversion left behind, a crash or a kill, a day old: younger
-// ones may be another Reliure's on the same library.
+// ones may be another Cousoir's on the same library.
 void removeStaleFolders(const QString &base)
 {
     const QDateTime dayAgo = QDateTime::currentDateTime().addDays(-1);
@@ -121,7 +121,7 @@ QString ConversionService::convert(int bookId, const QString &format)
         return tr("This book is no longer in the library.");
     const QString upper = format.toUpper();
     if (!Conversion::outputFormats().contains(upper))
-        return tr("Reliure does not convert to %1.").arg(format);
+        return tr("Cousoir does not convert to %1.").arg(format);
     if (Conversion::inputFormats(*book).isEmpty())
         return tr("Calibre converts none of this book's formats.");
     for (const Job &job : std::as_const(m_jobs)) {

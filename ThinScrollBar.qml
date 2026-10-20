@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 
-import Reliure
+import Cousoir
 
 ScrollBar {
     id: scrollBar

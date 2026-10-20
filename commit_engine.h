@@ -27,7 +27,7 @@ namespace CommitEngine {
 struct Request
 {
     QString libraryPath;
-    // Reliure's folder for the library in the user's cache: the copy being
+    // Cousoir's folder for the library in the user's cache: the copy being
     // edited, the journal, the snapshot the library is read from.
     QString cacheFolder;
     // Where to keep the database as it was before the change; empty for no

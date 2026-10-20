@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/db/backend.py: construct_path_name(), construct_file_name()
+//   and WINDOWS_RESERVED_NAMES
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "calibre_paths.h"
 
 #include <QStringList>

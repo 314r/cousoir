@@ -38,7 +38,7 @@ public:
     QVariantList jobs() const;
     bool busy() const;
 
-    // Reliure's output formats when the book has a format Calibre converts
+    // Cousoir's output formats when the book has a format Calibre converts
     // from; none otherwise.
     Q_INVOKABLE QStringList formatsFor(int bookId) const;
     // Converts the book to `format` after the conversions before it.

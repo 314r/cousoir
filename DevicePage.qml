@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // The books on a connected Kobo: those sent to it, those copied or bought,
 // and whether each is one of the library's. A book in the library opens

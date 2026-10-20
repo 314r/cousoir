@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Compares two copies of a Calibre library after the same edits, one written
-# by Calibre and one by Reliure:
+# by Calibre and one by Cousoir:
 #
 #   compare_libraries.py [--files-only] [--added-from N] [--converted 1:KEPUB,2:AZW3]
-#                        <calibre copy> <reliure copy>
+#                        <calibre copy> <cousoir copy>
 #
 # - every table of metadata.db but the preferences Calibre updates when it
 #   opens a library, with last_modified, the time of the write, left out, and
@@ -39,7 +39,7 @@ if '--converted' in sys.argv:
         converted.add((int(book), fmt.upper()))
 arguments = [a for i, a in enumerate(sys.argv[1:], 1)
              if not a.startswith('--') and sys.argv[i - 1] not in ('--added-from', '--converted')]
-calibre_copy, reliure_copy = arguments[:2]
+calibre_copy, cousoir_copy = arguments[:2]
 problems = []
 
 SKIPPED_TABLES = {'preferences'}
@@ -79,9 +79,9 @@ def tables(path):
 
 
 a = {} if files_only else tables(os.path.join(calibre_copy, 'metadata.db'))
-b = {} if files_only else tables(os.path.join(reliure_copy, 'metadata.db'))
+b = {} if files_only else tables(os.path.join(cousoir_copy, 'metadata.db'))
 if 'books_pages_link' in a and 'books_pages_link' in b:
-    # Calibre counts a book's pages in the background; Reliure leaves the
+    # Calibre counts a book's pages in the background; Cousoir leaves the
     # books it changed for Calibre to count: either is right, on either side.
     columns = b['books_pages_link'][0]
     scan = columns.index('needs_scan')
@@ -102,7 +102,7 @@ for name in sorted(set(a) | set(b)):
     if a[name] != b[name]:
         ra, rb = set(a[name][1]), set(b[name][1])
         problems.append(f'table {name} differs:\n    Calibre only: {sorted(ra - rb, key=repr)[:6]}\n'
-                        f'    Reliure only: {sorted(rb - ra, key=repr)[:6]}')
+                        f'    Cousoir only: {sorted(rb - ra, key=repr)[:6]}')
 
 
 def files(root):
@@ -228,14 +228,14 @@ def image(path):
     return size
 
 
-fa, fb = files(calibre_copy), files(reliure_copy)
+fa, fb = files(calibre_copy), files(cousoir_copy)
 for rel in sorted(set(fa) | set(fb)):
     if rel not in fa or rel not in fb:
-        problems.append(f'file {rel} only in the {"Calibre" if rel in fa else "Reliure"} copy')
+        problems.append(f'file {rel} only in the {"Calibre" if rel in fa else "Cousoir"} copy')
         continue
     if os.path.basename(rel) == 'metadata.opf':
         if opf(fa[rel]) != opf(fb[rel]):
-            problems.append(f'{rel} differs:\n    Calibre: {opf(fa[rel])}\n    Reliure: {opf(fb[rel])}')
+            problems.append(f'{rel} differs:\n    Calibre: {opf(fa[rel])}\n    Cousoir: {opf(fb[rel])}')
     elif os.path.basename(rel) == 'cover.jpg':
         with open(fa[rel], 'rb') as f, open(fb[rel], 'rb') as g:
             if f.read() == g.read():
@@ -251,7 +251,7 @@ for rel in sorted(set(fa) | set(fb)):
     elif converted_file(rel):
         if conversion(fa[rel]) != conversion(fb[rel]):
             problems.append(f'{rel} differs as a conversion:\n    Calibre: {conversion(fa[rel])}\n'
-                            f'    Reliure: {conversion(fb[rel])}')
+                            f'    Cousoir: {conversion(fb[rel])}')
     else:
         da = hashlib.sha256(open(fa[rel], 'rb').read()).hexdigest()
         db = hashlib.sha256(open(fb[rel], 'rb').read()).hexdigest()

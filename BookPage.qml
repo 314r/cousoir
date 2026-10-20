@@ -6,7 +6,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 
-import Reliure
+import Cousoir
 
 // A book: its cover, title, authors and description, beside the details
 // pane with the rest of its metadata and its files. While the library may be

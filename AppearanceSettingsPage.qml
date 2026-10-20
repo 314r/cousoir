@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 Item {
     id: appearancePage
@@ -132,7 +132,7 @@ Item {
                 objectName: "textSizeDescription"
 
                 Layout.fillWidth: true
-                text: qsTr("Scales the system text size throughout Reliure. In the main window, Ctrl+Plus, Ctrl+Minus and Ctrl+0 do the same.")
+                text: qsTr("Scales the system text size throughout Cousoir. In the main window, Ctrl+Plus, Ctrl+Minus and Ctrl+0 do the same.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
             }

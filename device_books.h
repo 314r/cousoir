@@ -23,7 +23,7 @@ struct DeviceBook
     qint64 size = 0;
     // As the library names formats: KEPUB, EPUB, PDF…
     QString format;
-    // In metadata.calibre: Calibre or Reliure sent it.
+    // In metadata.calibre: Calibre or Cousoir sent it.
     bool sent = false;
     // In a Kobo's database: the Kobo has taken it in.
     bool imported = false;

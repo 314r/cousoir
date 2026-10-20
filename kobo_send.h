@@ -18,7 +18,7 @@ struct LibraryData;
 // metadata added to metadata.calibre. Calibre does it, through calibre-debug,
 // on a copy of what it reads of the library and of the Kobo: the job's
 // "device" folder stands for the Kobo, and takes what Calibre would write
-// there. Reliure then puts the new files on the Kobo itself, the books
+// there. Cousoir then puts the new files on the Kobo itself, the books
 // first and metadata.calibre last, and leaves the Kobo's own database alone.
 //
 // A job is SendJob's, with the copies of the Kobo's files under "device".

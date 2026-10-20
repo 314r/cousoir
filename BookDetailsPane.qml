@@ -5,7 +5,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // A book's metadata as Calibre keeps it, and its files, each of which opens
 // in the desktop's reader for it, goes to the library's trash, or is added
@@ -647,7 +647,7 @@ FocusScope {
 
         property string format
 
-        message: qsTr("Reliure and Calibre can restore it from the library's trash.")
+        message: qsTr("Cousoir and Calibre can restore it from the library's trash.")
         acceptText: qsTr("Move to Trash")
         acceptVariant: "danger"
         onAccepted: {

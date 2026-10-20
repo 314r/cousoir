@@ -144,7 +144,7 @@ QString ConcurrencyGuard::changeKey(const QString &path)
 
 QString ConcurrencyGuard::heartbeatFolder(const QString &dropboxRoot, const QString &uuid)
 {
-    return QDir(dropboxRoot).filePath(QStringLiteral(".reliure/libraries/%1/sessions").arg(uuid));
+    return QDir(dropboxRoot).filePath(QStringLiteral(".cousoir/libraries/%1/sessions").arg(uuid));
 }
 
 QString ConcurrencyGuard::dropboxRoot() const
@@ -168,7 +168,7 @@ void ConcurrencyGuard::noteWrite()
 
 void ConcurrencyGuard::writeHeartbeat()
 {
-    // Only while this computer's change is recent: an idle Reliure keeps no
+    // Only while this computer's change is recent: an idle Cousoir keeps no
     // other computer from editing.
     const QString root = dropboxRoot();
     if (root.isEmpty() || m_libraryUuid.isEmpty() || !m_lastWrite.isValid()
@@ -417,7 +417,7 @@ void ConcurrencyGuard::evaluate()
         reason = tr("Read-only: the library cannot be read");
     } else if (!m_schemaKnown) {
         state = QStringLiteral("schema");
-        reason = tr("Read-only: the database is from a Calibre version Reliure does not know");
+        reason = tr("Read-only: the database is from a Calibre version Cousoir does not know");
     } else if (calibreRunning(m_environment.procNetUnix, currentUid()) && !CalibreLock::heldHere()) {
         state = QStringLiteral("calibre");
         reason = tr("Read-only: Calibre is open on this computer");
@@ -427,7 +427,7 @@ void ConcurrencyGuard::evaluate()
         reason = tr("Read-only: Calibre is writing to the library");
     } else if (dropbox && m_dropboxStatus != QLatin1String("up to date")
                && m_dropboxStatus != QLatin1String("unwatched")
-               // Dropbox sending Reliure's own change is no reason to wait.
+               // Dropbox sending Cousoir's own change is no reason to wait.
                && !(ownChange && m_dropboxStatus == QLatin1String("syncing"))) {
         state = QStringLiteral("dropbox");
         reason = m_dropboxStatus.isEmpty() ? tr("Read-only: waiting for Dropbox")
@@ -436,7 +436,7 @@ void ConcurrencyGuard::evaluate()
             : tr("Read-only: Dropbox says “%1”").arg(m_dropboxStatus);
     } else if (!elsewhere.isEmpty()) {
         state = QStringLiteral("elsewhere");
-        reason = tr("Read-only: Reliure is editing on %1").arg(elsewhere);
+        reason = tr("Read-only: Cousoir is editing on %1").arg(elsewhere);
     } else if (identity.exists && age < m_environment.coolDownSeconds && !ownChange) {
         state = QStringLiteral("recent");
         reason = tr("Read-only: library changed %1 s ago").arg(std::max<qint64>(0, age));

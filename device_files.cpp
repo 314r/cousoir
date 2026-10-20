@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/devices/mtp/driver.py: is_folder_ignored()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "device_files.h"
 
 #include <QDateTime>

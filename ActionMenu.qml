@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls.Basic
 
-import Reliure
+import Cousoir
 
 // A context menu with the look of ChoiceBox's list. Its items come from
 // `actions`, a list of { key, title }; `chosen` names the one picked. Items

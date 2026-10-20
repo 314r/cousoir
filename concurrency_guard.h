@@ -17,12 +17,12 @@ class ConcurrencyGuard : public QObject
     Q_OBJECT
     Q_PROPERTY(QString libraryPath READ libraryPath WRITE setLibraryPath NOTIFY libraryPathChanged)
     // Set by the session from the library model: whether its last load
-    // worked and whether the database has a structure Reliure knows.
+    // worked and whether the database has a structure Cousoir knows.
     Q_PROPERTY(bool libraryReadable READ libraryReadable WRITE setLibraryReadable NOTIFY stateChanged)
     Q_PROPERTY(bool schemaKnown READ schemaKnown WRITE setSchemaKnown NOTIFY stateChanged)
     // The library's id, which names its folder of heartbeats.
     Q_PROPERTY(QString libraryUuid READ libraryUuid WRITE setLibraryUuid NOTIFY stateChanged)
-    // The metadata.db Reliure itself last wrote, as "size:time:inode": that
+    // The metadata.db Cousoir itself last wrote, as "size:time:inode": that
     // change is no reason to wait.
     Q_PROPERTY(QString ownChangeKey READ ownChangeKey WRITE setOwnChangeKey NOTIFY stateChanged)
     Q_PROPERTY(bool writable READ writable NOTIFY stateChanged)
@@ -49,7 +49,7 @@ public:
         // How long after a change from elsewhere the library stays read-only.
         int coolDownSeconds = 120;
         int intervalMs = 2000;
-        // How long after its last change a Reliure on another computer keeps
+        // How long after its last change a Cousoir on another computer keeps
         // this one read-only, and how old its heartbeat may be.
         int editingSeconds = 600;
         int heartbeatSeconds = 180;
@@ -84,8 +84,8 @@ public:
     // one changed, counts again.
     Q_INVOKABLE void acknowledgeConflict(const QString &file);
     // Tells the other computers sharing the library through Dropbox that
-    // Reliure just changed it here: their Reliure stays read-only for a
-    // while. The heartbeat is a file per computer in a .reliure folder at
+    // Cousoir just changed it here: their Cousoir stays read-only for a
+    // while. The heartbeat is a file per computer in a .cousoir folder at
     // the Dropbox root, outside the library.
     Q_INVOKABLE void noteWrite();
 

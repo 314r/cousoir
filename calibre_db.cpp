@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/db/backend.py: the SQL functions, aggregates and temporary
+//   author triggers of a connection, and format_abspath()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "calibre_db.h"
 
 #include <QCryptographicHash>
@@ -25,7 +34,7 @@
 
 namespace {
 
-// The structures Reliure has been checked against, as schemaFingerprint()
+// The structures Cousoir has been checked against, as schemaFingerprint()
 // computes them.
 struct KnownSchema
 {
@@ -666,7 +675,7 @@ void findFiles(LibraryData *data)
                 format.file = expected;
                 continue;
             }
-            // format_abspath() renames a file found this way; Reliure only
+            // format_abspath() renames a file found this way; Cousoir only
             // reads it.
             format.file.clear();
             if (book.path.isEmpty())
