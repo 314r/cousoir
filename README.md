@@ -12,10 +12,8 @@
 
 ### *Your Calibre library, beautifully bound*
 
-Browse, edit and grow your Calibre library in a fast, keyboard-first app,<br/>
+Browse, edit and grow your Calibre library in a fast, Omarchy-first app,<br/>
 then send your books to a Kobo or a Kindle. Calibre stays in charge, and both always agree.
-
-<sub><i>A cousoir is the frame a bookbinder sews a book's sections on, to make them one book.</i></sub>
 
 <br/>
 
@@ -34,8 +32,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 📚 **Your Calibre library, as it is.** Cousoir opens the library Calibre
   opens and works on Calibre's own `metadata.db`. Nothing to import, no second
   database.
-- 🖼️ **A table or a wall of covers.** Ctrl+G switches between them. Sort by
-  title, author, series, date added or rating, in Calibre's own order:
+- 🖼️ **A table or a wall of covers.** Sort by title, author, series, date added or rating, in Calibre's own order:
   *Le Petit Prince* files under "Petit Prince, Le".
 - 🔍 **Find anything.** Search titles, authors, series and tags, with or
   without accents, or browse by author, series, tag, language and publisher.
@@ -221,8 +218,9 @@ If Cousoir is useful to you, please
 Thanks also to Hiroshi Miura and John Schember for Unihandecode, and to Sean
 M. Burke for Text::Unidecode, which it grew from; to
 [kbextract](https://github.com/314r/kbextract) and JolieBulle, where Cousoir's
-structure, theming and Settings window come from; to
-[Omarchy](https://omarchy.org) for the look; to [Lucide](https://lucide.dev)
+structure, theming and Settings window come from; to bjarneo's
+[omadji](https://github.com/bjarneo/omadji), where its Omarchy theming comes
+from; to [Omarchy](https://omarchy.org) for the look; to [Lucide](https://lucide.dev)
 for a few icons; and to Qt, SQLite, libzip, libmtp and poppler.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
@@ -245,9 +243,9 @@ for every result.
 Cousoir is free software, released under the
 [GNU General Public License, version 3](LICENSE), because it contains code
 ported from Calibre, which is GPL v3. The theme files that come from
-kbextract and JolieBulle also keep their
-[MIT notice](LICENSES/MIT-omarchy.txt), and the icons adapted from Lucide
-their [ISC notice](LICENSES/ISC-lucide.txt).
+kbextract, JolieBulle and omadji also keep their
+[MIT notice](LICENSES/MIT.txt), and the icons adapted from Lucide their
+[ISC notice](LICENSES/ISC-lucide.txt).
 
 ---
 

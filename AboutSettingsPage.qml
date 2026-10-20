@@ -109,7 +109,7 @@ Item {
 
             Label {
                 Layout.fillWidth: true
-                text: qsTr("Hiroshi Miura and John Schember for Unihandecode, and Sean M. Burke for Text::Unidecode, which it grew from; kbextract and JolieBulle, where Cousoir's structure, theming and settings come from; Omarchy for the look; Lucide for a few icons; and Qt, SQLite, libzip, libmtp and poppler.")
+                text: qsTr("Hiroshi Miura and John Schember for Unihandecode, and Sean M. Burke for Text::Unidecode, which it grew from; kbextract and JolieBulle, where Cousoir's structure, theming and settings come from; bjarneo's omadji, where its Omarchy theming comes from; Omarchy for the look; Lucide for a few icons; and Qt, SQLite, libzip, libmtp and poppler.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
             }
@@ -135,7 +135,7 @@ Item {
 
             Label {
                 Layout.fillWidth: true
-                text: qsTr("The theme files from kbextract and JolieBulle also keep their MIT notice, and the icons adapted from Lucide their ISC notice.")
+                text: qsTr("The theme files from kbextract, JolieBulle and omadji also keep their MIT notice, and the icons adapted from Lucide their ISC notice.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
             }

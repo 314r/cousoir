@@ -131,15 +131,17 @@ Calibre's output.
 If Cousoir is useful to you, please consider
 [supporting Calibre](https://calibre-ebook.com/donate).
 
-## kbextract, JolieBulle and Omarchy
+## kbextract, JolieBulle, omadji and Omarchy
 
 The project structure, the theming (system, light, dark and Omarchy), the
 Settings window and the shared controls come from the JolieBulle Qt port,
 which took them from [kbextract](https://github.com/314r/kbextract), Copyright
-(c) 2026 bjarneo and 314r, MIT license: `Theme.qml`, `omarchy_theme.*`,
+(c) 2026 314r, MIT license: `Theme.qml`, `omarchy_theme.*`,
 `system_appearance.*`, `AppearanceSettingsPage.qml`, `SettingsWindow.qml`, the
-shared controls and the theme icons. They keep their MIT notice, in
-[`LICENSES/MIT-omarchy.txt`](LICENSES/MIT-omarchy.txt).
+shared controls and the theme icons. The Omarchy theming, `omarchy_theme.*` and
+the colors of `Theme.qml`, is derived from bjarneo's
+[omadji](https://github.com/bjarneo/omadji), Copyright (c) 2026 bjarneo, MIT
+license. They keep their MIT notice, in [`LICENSES/MIT.txt`](LICENSES/MIT.txt).
 
 The look follows [Omarchy](https://omarchy.org)'s style, and the Omarchy theme
 reads the colors of the current Omarchy theme.
