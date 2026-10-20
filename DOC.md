@@ -476,12 +476,18 @@ reader `mtpdir:FOLDER` is a folder that stands for a Kindle over MTP.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+cmake --build build --parallel "$(tools/build_jobs.sh)"
 ./build/cousoir
 ```
 
+Give `--parallel` a number. The app and each test compile the library again,
+about 400 compilers taking up to 1 GB each, and without a number `make` runs
+them all at once and runs out of memory. `tools/build_jobs.sh` gives as many
+as the cores and the free memory allow.
+
 `make build`, `make run`, `make test` and `make install` (under `~/.local`)
-are available as shortcuts.
+are available as shortcuts. They pick the number the same way, and
+`make JOBS=4` sets it.
 
 ## Testing
 
