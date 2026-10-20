@@ -73,15 +73,25 @@ ApplicationWindow {
         return modes
     }
 
+    function defaultThemeMode() {
+        return omarchyTheme.available ? "omarchy" : "system"
+    }
+
     function normalizedThemeMode(candidate) {
-        return availableThemeModes().indexOf(candidate) >= 0 ? candidate : "system"
+        return availableThemeModes().indexOf(candidate) >= 0 ? candidate : defaultThemeMode()
+    }
+
+    // The mode picked in Settings, or the default until one is; a mode that
+    // is not available falls back to the default without being saved.
+    function applyThemeMode() {
+        Theme.mode = normalizedThemeMode(appearanceSettings.colorMode)
     }
 
     function setThemeMode(candidate) {
         const normalizedMode = normalizedThemeMode(candidate)
-        Theme.mode = normalizedMode
         if (appearanceSettings.colorMode !== normalizedMode)
             appearanceSettings.colorMode = normalizedMode
+        applyThemeMode()
     }
 
     function normalizedTextScalePercent(candidate) {
@@ -526,15 +536,16 @@ ApplicationWindow {
         onPaletteChanged: window.applyOmarchyTheme()
         onAvailableChanged: {
             window.applyOmarchyTheme()
-            if (!available && Theme.mode === "omarchy")
-                window.setThemeMode("system")
+            window.applyThemeMode()
         }
     }
 
     Settings {
         id: appearanceSettings
         category: "Appearance"
-        property string colorMode: "system"
+        // Empty until one is picked: Omarchy's colors on Omarchy, the
+        // system's elsewhere.
+        property string colorMode: ""
         property int textScalePercent: 100
     }
 
@@ -761,7 +772,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         applyOmarchyTheme()
-        setThemeMode(appearanceSettings.colorMode)
+        applyThemeMode()
         setTextScalePercent(appearanceSettings.textScalePercent)
         library.sortOption = layoutSettings.sortOption
         booksPage.focusList()
