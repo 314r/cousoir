@@ -1,5 +1,8 @@
 BUILD_DIR ?= build
 PREFIX ?= $(HOME)/.local
+# As many compilers at once as the cores and the free memory allow; make
+# JOBS=n sets it.
+JOBS ?= $(shell tools/build_jobs.sh)
 
 ifeq ($(shell uname -s),Darwin)
 RUN_EXECUTABLE = $(BUILD_DIR)/cousoir.app/Contents/MacOS/cousoir
@@ -13,7 +16,7 @@ all: build
 
 build:
 	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
-	cmake --build $(BUILD_DIR) --parallel
+	cmake --build $(BUILD_DIR) --parallel $(or $(JOBS),1)
 
 install: build
 	cmake --install $(BUILD_DIR) --prefix $(PREFIX)
