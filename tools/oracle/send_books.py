@@ -1,5 +1,5 @@
 # Connects a Kobo to Calibre's GUI and sends books to it or removes books
-# from it, as the GUI does, for the golden test that compares Reliure's
+# from it, as the GUI does, for the golden test that compares Cousoir's
 # sending with Calibre's:
 #
 #   calibre-debug -e tools/oracle/send_books.py -- <library> <device> <product> <ops.json>
@@ -65,7 +65,9 @@ db.new_api.maintain_page_counts = NoPageCounts()
 def kindle(root):
     # Calibre's MTP driver with libmtp's calls done on a folder, and what
     # its open() does but for libmtp's part. The Kindle says of itself what
-    # reliure-cli's stand-in for one says.
+    # cousoir-cli's stand-in for one says. FolderDevice's methods follow those
+    # of src/calibre/devices/mtp/unix/driver.py, and the lines after it open()
+    # of src/calibre/devices/mtp/driver.py, Copyright (C) Kovid Goyal, GPL v3.
     import itertools
 
     from calibre.devices.mtp.driver import DEFAULT_THUMBNAIL_HEIGHT, MTP_DEVICE

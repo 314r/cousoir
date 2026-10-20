@@ -4,11 +4,11 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // The library's trash, as Calibre keeps it: books removed whole, and files
 // removed from books still there. Each comes back with Restore; Calibre
-// deletes them for good after some days, which Reliure never does.
+// deletes them for good after some days, which Cousoir never does.
 Rectangle {
     id: page
 
@@ -209,7 +209,7 @@ Rectangle {
 
         Label {
             Layout.fillWidth: true
-            text: qsTr("Books and files you remove go here, in Reliure as in Calibre.")
+            text: qsTr("Books and files you remove go here, in Cousoir as in Calibre.")
             color: Theme.textMuted
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap

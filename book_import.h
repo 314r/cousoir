@@ -7,7 +7,7 @@
 
 // Reading an ebook file's metadata to add it to a library, as calibredb add
 // reads it in Calibre 9.16: the metadata of the file's name, updated with the
-// file's own. Reliure reads EPUB and KEPUB, MOBI, AZW, AZW3 and PRC itself,
+// file's own. Cousoir reads EPUB and KEPUB, MOBI, AZW, AZW3 and PRC itself,
 // PDF through poppler's tools; any other format, and the cover of an EPUB
 // that has no image for one, through Calibre's own reader when Calibre is
 // installed.

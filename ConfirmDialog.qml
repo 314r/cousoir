@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // A question in the middle of the window, answered by its two buttons, Enter
 // or Esc. `accepted` follows the action's button; the other one only closes.

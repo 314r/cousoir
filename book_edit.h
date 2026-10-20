@@ -39,14 +39,14 @@ struct BookEdit
     std::optional<QString> comments;
     // An image file's contents; empty removes the cover.
     std::optional<QByteArray> cover;
-    // When the book was added: only for books Reliure adds or restores.
+    // When the book was added: only for books Cousoir adds or restores.
     std::optional<CalibreDate> timestamp;
 
     bool isEmpty() const;
     // Whether the book's folder and file names may change.
     bool movesFiles() const;
 
-    // From the keys QML and `reliure-cli apply` use: title, sort, authors,
+    // From the keys QML and `cousoir-cli apply` use: title, sort, authors,
     // authorSort, series, seriesIndex, tags, rating, publisher, languages,
     // identifiers ({ type: value } or "isbn:…, goodreads:…"), pubdate,
     // comments, coverFile (a path to read) and removeCover. Lists may be

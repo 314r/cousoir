@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Timothy Legge,
+// Kovid Goyal and David Forrester, GPL v3:
+// - src/calibre/devices/kobo/driver.py: the books KOBOTOUCH's books() lists,
+//   imageid_from_contentid(), images_path(), cover_file_endings(), qhash(),
+//   path_from_contentid() and the device models
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "kobo.h"
 
 #include <QDir>
@@ -114,7 +124,7 @@ bool syncAndRename(QFile &file, const QString &path, QString *error)
 QString temporaryFor(const QString &path)
 {
     const QFileInfo info(path);
-    return info.dir().filePath(QStringLiteral(".~reliure-") + info.fileName() + QStringLiteral(".tmp"));
+    return info.dir().filePath(QStringLiteral(".~cousoir-") + info.fileName() + QStringLiteral(".tmp"));
 }
 
 } // namespace

@@ -12,7 +12,7 @@ namespace {
 
 QString fixtureLibrary()
 {
-    return QStringLiteral(RELIURE_TEST_DATA_DIR "/library");
+    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
 }
 
 QByteArray readAll(const QString &path)
@@ -101,7 +101,7 @@ void CalibreDbTest::listsLikeCalibredb()
     // library's folder as @LIBRARY@.
     LibraryData data;
     QVERIFY(load(&data));
-    QByteArray expected = readAll(QStringLiteral(RELIURE_TEST_DATA_DIR "/library-list.json"));
+    QByteArray expected = readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library-list.json"));
     QVERIFY(!expected.isEmpty());
     expected.replace("@LIBRARY@", QDir::cleanPath(QFileInfo(fixtureLibrary()).absoluteFilePath()).toUtf8());
     const QByteArray actual = CalibreList::machineList(data);

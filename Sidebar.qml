@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // Home navigation, grouped like the Places sidebar of a file manager.
 Item {

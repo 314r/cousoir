@@ -5,7 +5,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtCore
 
-import Reliure
+import Cousoir
 
 ApplicationWindow {
     id: window
@@ -37,10 +37,10 @@ ApplicationWindow {
     height: 820
     minimumWidth: 720
     minimumHeight: 480
-    title: session.bookOpen && book.title ? qsTr("%1 — Reliure").arg(book.title)
-        : session.filterOpen ? qsTr("%1 — Reliure").arg(filter.name)
-        : section !== "books" ? qsTr("%1 — Reliure").arg(sidebar.current.title)
-        : qsTr("Reliure")
+    title: session.bookOpen && book.title ? qsTr("%1 — Cousoir").arg(book.title)
+        : session.filterOpen ? qsTr("%1 — Cousoir").arg(filter.name)
+        : section !== "books" ? qsTr("%1 — Cousoir").arg(sidebar.current.title)
+        : qsTr("Cousoir")
     color: Theme.canvas
     font.family: Theme.uiFont
     font.pointSize: Theme.fontPointSizeBody
@@ -441,7 +441,7 @@ ApplicationWindow {
         }
 
         function onRecovered(message) {
-            window.showNotice(qsTr("Reliure %1.").arg(message))
+            window.showNotice(qsTr("Cousoir %1.").arg(message))
         }
 
         function onBooksAdded(bookIds) {
@@ -695,7 +695,7 @@ ApplicationWindow {
 
         property int bookId: 0
 
-        message: qsTr("Its files go to the library's trash, where Reliure and Calibre can restore it.")
+        message: qsTr("Its files go to the library's trash, where Cousoir and Calibre can restore it.")
         acceptText: qsTr("Move to Trash")
         acceptVariant: "danger"
         onAccepted: {

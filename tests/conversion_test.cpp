@@ -16,7 +16,7 @@ namespace {
 
 QString fixtureLibrary()
 {
-    return QStringLiteral(RELIURE_TEST_DATA_DIR "/library");
+    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
 }
 
 QByteArray readAll(const QString &path)
@@ -137,7 +137,7 @@ private slots:
     void writesCalibresOpf()
     {
         const QJsonObject oracle =
-            QJsonDocument::fromJson(readAll(QStringLiteral(RELIURE_TEST_DATA_DIR "/oracle/conversion.json"))).object();
+            QJsonDocument::fromJson(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/oracle/conversion.json"))).object();
         const QJsonObject opfs = oracle.value(QLatin1String("opfs")).toObject();
         QVERIFY(!opfs.isEmpty());
         for (auto it = opfs.constBegin(); it != opfs.constEnd(); ++it) {
@@ -270,8 +270,8 @@ private slots:
         request.libraryPath = library;
         request.cacheFolder = root.filePath(QStringLiteral("cache"));
         request.config = config;
-        request.producer = QStringLiteral("Reliure (test)");
-        request.producerId = QStringLiteral("reliure");
+        request.producer = QStringLiteral("Cousoir (test)");
+        request.producerId = QStringLiteral("cousoir");
         request.now = QDateTime(QDate(2026, 10, 19), QTime(12, 0), QTimeZone::UTC);
         const CommitEngine::Result result = CommitEngine::commit(request);
         QVERIFY2(result.ok, qPrintable(result.error));

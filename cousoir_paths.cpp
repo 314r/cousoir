@@ -1,4 +1,4 @@
-#include "reliure_paths.h"
+#include "cousoir_paths.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -14,18 +14,18 @@ QString libraryKey(const QString &libraryPath)
 
 } // namespace
 
-namespace ReliurePaths {
+namespace CousoirPaths {
 
 QString cacheFolder(const QString &libraryPath)
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/reliure/")
+    return QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/cousoir/")
         + libraryKey(libraryPath);
 }
 
 QString backupFolder(const QString &libraryPath)
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/reliure/backups/")
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/cousoir/backups/")
         + libraryKey(libraryPath);
 }
 
-} // namespace ReliurePaths
+} // namespace CousoirPaths

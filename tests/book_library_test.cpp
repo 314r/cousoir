@@ -17,7 +17,7 @@ namespace {
 
 QString fixtureLibrary()
 {
-    return QStringLiteral(RELIURE_TEST_DATA_DIR "/library");
+    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
 }
 
 CalibreConfig frenchConfig()
@@ -61,7 +61,7 @@ bool makeKobo(const QString &root)
 {
     QDir().mkpath(QDir(root).filePath(QStringLiteral(".kobo")));
     QFile version(QDir(root).filePath(QStringLiteral(".kobo/version")));
-    QFile schema(QStringLiteral(RELIURE_TEST_DATA_DIR "/kobo.sql"));
+    QFile schema(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"));
     QFile database(QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite")));
     if (!version.open(QIODevice::WriteOnly) || !schema.open(QIODevice::ReadOnly) || !database.open(QIODevice::WriteOnly))
         return false;
@@ -575,7 +575,7 @@ namespace {
 
 QString importFile(const QString &name)
 {
-    return QStringLiteral(RELIURE_TEST_DATA_DIR "/import/") + name;
+    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/") + name;
 }
 
 QStringList formatsOf(const QVariantMap &book)
@@ -719,7 +719,7 @@ void BookLibraryTest::convertsBooks()
     auto library = open(copy->path());
     QVERIFY(library);
     ConversionService service;
-    service.setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-debug"));
+    service.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
     service.setLibrary(library.get());
     QVERIFY(service.available());
     QCOMPARE(service.formatsFor(1), (QStringList{ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
@@ -764,7 +764,7 @@ void BookLibraryTest::convertsBooks()
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 
     // Stopped, a conversion adds nothing, and the next one runs.
-    qputenv("RELIURE_FAKE_DELAY", "20");
+    qputenv("COUSOIR_FAKE_DELAY", "20");
     QElapsedTimer timer;
     timer.start();
     QCOMPARE(service.convert(3, QStringLiteral("AZW3")), QString());
@@ -776,7 +776,7 @@ void BookLibraryTest::convertsBooks()
     service.cancel();
     QVERIFY(!service.busy());
     QVERIFY(timer.elapsed() < 10000);
-    qunsetenv("RELIURE_FAKE_DELAY");
+    qunsetenv("COUSOIR_FAKE_DELAY");
     QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.azw3"))));
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 }
@@ -797,7 +797,7 @@ void BookLibraryTest::sendsToKobos()
     QTemporaryDir config;
     QList<Volume> volumes;
     DeviceLibrary devices;
-    devices.setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
+    devices.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-send"));
     devices.setConfigDirectory(config.path());
     QString ejected;
     devices.setEjector([&ejected](const Kobo::Device &device, std::function<void(const QString &)> done) {
@@ -861,7 +861,7 @@ void BookLibraryTest::sendsToKobos()
     QVERIFY(!devices.onDevice().contains(QStringLiteral("1")));
 
     // Stopped, nothing is sent, and the next batch goes.
-    qputenv("RELIURE_FAKE_DELAY", "20");
+    qputenv("COUSOIR_FAKE_DELAY", "20");
     QElapsedTimer timer;
     timer.start();
     QCOMPARE(devices.send({ 3 }, root), QString());
@@ -874,7 +874,7 @@ void BookLibraryTest::sendsToKobos()
     devices.cancel();
     QVERIFY(!devices.busy());
     QVERIFY(timer.elapsed() < 10000);
-    qunsetenv("RELIURE_FAKE_DELAY");
+    qunsetenv("COUSOIR_FAKE_DELAY");
     QCOMPARE(Kobo::readMetadata(root).size(), 1);
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 
@@ -915,7 +915,7 @@ void BookLibraryTest::sendsToKindles()
     QTemporaryDir config;
     QList<KindleSlot> kindles;
     DeviceLibrary devices;
-    devices.setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
+    devices.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-send"));
     devices.setConfigDirectory(config.path());
     devices.setVolumeProvider([] { return QList<Volume>(); }, 20);
     devices.setKindleProvider([&kindles] { return kindles; });

@@ -1,3 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/devices/mtp/driver.py: _sync_kindle_thumbnails() and
+//   delete_kindle_cover_thumbnail_for()
+// - src/calibre/devices/mtp/filesystem_cache.py and
+//   src/calibre/ebooks/__init__.py: the book extensions
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "kindle.h"
 
 #include <QCryptographicHash>

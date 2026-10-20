@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 ApplicationWindow {
     id: settingsWindow
@@ -21,7 +21,8 @@ ApplicationWindow {
     property int currentSectionIndex: 0
     readonly property var sections: [
         { key: "appearance", title: qsTr("Appearance"), icon: "assets/icons/settings-appearance.svg" },
-        { key: "library", title: qsTr("Library"), icon: "assets/icons/folder.svg" }
+        { key: "library", title: qsTr("Library"), icon: "assets/icons/folder.svg" },
+        { key: "about", title: qsTr("About"), icon: "assets/icons/info.svg" }
     ]
 
     signal themeModeSelected(string mode)
@@ -218,6 +219,25 @@ ApplicationWindow {
                         x: libraryScroll.width - width
                         y: libraryScroll.topPadding
                         height: libraryScroll.availableHeight
+                    }
+                }
+
+                ScrollView {
+                    id: aboutScroll
+
+                    clip: true
+                    contentWidth: availableWidth
+
+                    AboutSettingsPage {
+                        width: aboutScroll.availableWidth
+                        height: Math.max(implicitHeight, aboutScroll.availableHeight)
+                    }
+
+                    ScrollBar.vertical: ThinScrollBar {
+                        parent: aboutScroll
+                        x: aboutScroll.width - width
+                        y: aboutScroll.topPadding
+                        height: aboutScroll.availableHeight
                     }
                 }
             }

@@ -1,3 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/ebooks/metadata/opf3.py: read_metadata() and the readers it
+//   calls, parse_prefixes(), expand_prefix(), parse_identifier() and
+//   find_main_title()
+// - src/calibre/ebooks/metadata/opf2.py: the OPF class's readers,
+//   first_spine_item() and the EPUB 3 raster cover
+// - src/calibre/ebooks/metadata/utils.py: parse_opf_version()
+// - src/calibre/ebooks/metadata/book/base.py: set_identifier()
+// - src/calibre/utils/date.py: fix_only_date()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "opf_reader.h"
 
 #include <QDomDocument>
@@ -212,7 +227,7 @@ QHash<QString, QList<Scheme>> propertiesWithScheme(const QString &id, const QHas
 
 bool isRelatorsRole(const QHash<QString, QList<Scheme>> &properties, const QString &role)
 {
-    // A role without a scheme Reliure can resolve counts, as do MARC
+    // A role without a scheme Cousoir can resolve counts, as do MARC
     // relators.
     for (const Scheme &scheme : properties.value(QStringLiteral("role"))) {
         if (scheme.value.toLower() == role

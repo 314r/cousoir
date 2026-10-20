@@ -130,7 +130,7 @@ def stand_in(db, dev):
         def booklists(self):
             return self.lists
 
-        # Converting first is Reliure's to offer, not the job's.
+        # Converting first is Cousoir's to offer, not the job's.
         def auto_convert_question(self, msg, autos):
             self.unsendable.extend(autos)
             return False

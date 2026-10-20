@@ -17,7 +17,7 @@ namespace {
 
 QString fixtureLibrary()
 {
-    return QStringLiteral(RELIURE_TEST_DATA_DIR "/library");
+    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
 }
 
 QByteArray readAll(const QString &path)
@@ -52,7 +52,7 @@ bool makeKobo(const QString &root, QString *error)
     const QString database = QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
     SqliteDb db;
     return writeAll(database, {}) && db.open(database, SqliteDb::Mode::ReadWrite, error)
-        && db.exec(QString::fromUtf8(readAll(QStringLiteral(RELIURE_TEST_DATA_DIR "/kobo.sql"))), error);
+        && db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"))), error);
 }
 
 // A row of the Kobo's database, as the Kobo writes it for a book it took in.
@@ -549,7 +549,7 @@ private slots:
     }
 
     // Calibre itself, when it is installed, with its default settings: an
-    // EPUB arrives as a KEPUB with the library's metadata, which Reliure
+    // EPUB arrives as a KEPUB with the library's metadata, which Cousoir
     // then finds on the Kobo as the library's book.
     void sendsWithCalibre()
     {

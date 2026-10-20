@@ -12,7 +12,7 @@
 // folder its storage is mounted on, with Kobo's own .kobo folder in it.
 // Calibre keeps two files at its root: metadata.calibre, the books it sent
 // with their library metadata, and driveinfo.calibre, the device's name and
-// the library it last met. Reliure reads and writes both as Calibre does.
+// the library it last met. Cousoir reads and writes both as Calibre does.
 // The Kobo's database, .kobo/KoboReader.sqlite, which Calibre edits too, it
 // only reads: the Kobo finds the books sent or removed by itself.
 namespace Kobo {
@@ -23,7 +23,7 @@ struct Device
     QString root;
     // Its block device, like /dev/sdb.
     QString node;
-    // driveinfo.calibre's name once Calibre or Reliure wrote one, else the
+    // driveinfo.calibre's name once Calibre or Cousoir wrote one, else the
     // name Calibre gives its model.
     QString name;
     // .kobo/version: serial number, firmware, and the model id that tells

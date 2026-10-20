@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 
-import Reliure
+import Cousoir
 
 // A text field with the search field's look, without its icon.
 TextField {

@@ -16,7 +16,7 @@ namespace {
 
 QString fixtureLibrary()
 {
-    return QStringLiteral(RELIURE_TEST_DATA_DIR "/library");
+    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
 }
 
 QByteArray readAll(const QString &path)
@@ -331,7 +331,7 @@ private slots:
 
     // Calibre itself, when it is installed, with its default settings: the
     // AZW3, its cover kept against Amazon's bug, its page numbers, and the
-    // book in metadata.calibre, which Reliure then finds as the library's.
+    // book in metadata.calibre, which Cousoir then finds as the library's.
     void sendsWithCalibre()
     {
         if (SendJob::program().isEmpty())

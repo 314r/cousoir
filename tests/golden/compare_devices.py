@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # Compares two fake readers, Kobos or Kindles, after the same books were sent
-# to or removed from them, one by Calibre and one by Reliure:
+# to or removed from them, one by Calibre and one by Cousoir:
 #
-#   compare_devices.py [--lpaths-only] <calibre kobo> <reliure kobo>
+#   compare_devices.py [--lpaths-only] <calibre kobo> <cousoir kobo>
 #
-# - every file but a Kobo's database, which Calibre edits and Reliure leaves
+# - every file but a Kobo's database, which Calibre edits and Cousoir leaves
 #   alone;
 # - the book files by their content, without the time Calibre stamps in
 #   each: an EPUB's entries, in any order, without its dcterms:modified, a
@@ -26,7 +26,7 @@ import sys
 import zipfile
 
 lpaths_only = '--lpaths-only' in sys.argv
-calibre_kobo, reliure_kobo = [a for a in sys.argv[1:] if not a.startswith('--')]
+calibre_kobo, cousoir_kobo = [a for a in sys.argv[1:] if not a.startswith('--')]
 problems = []
 
 
@@ -83,15 +83,15 @@ def driveinfo(path, root):
     return info
 
 
-fa, fb = files(calibre_kobo), files(reliure_kobo)
+fa, fb = files(calibre_kobo), files(cousoir_kobo)
 for rel in sorted(set(fa) | set(fb)):
     if rel not in fa or rel not in fb:
-        problems.append(f'{rel} only on the {"Calibre" if rel in fa else "Reliure"} device')
+        problems.append(f'{rel} only on the {"Calibre" if rel in fa else "Cousoir"} device')
     elif rel == 'metadata.calibre':
-        ma, mb = metadata(fa[rel], calibre_kobo), metadata(fb[rel], reliure_kobo)
+        ma, mb = metadata(fa[rel], calibre_kobo), metadata(fb[rel], cousoir_kobo)
         for lpath in sorted(set(ma) | set(mb)):
             if lpath not in ma or lpath not in mb:
-                problems.append(f'metadata.calibre: {lpath} only in {"Calibre" if lpath in ma else "Reliure"}\'s')
+                problems.append(f'metadata.calibre: {lpath} only in {"Calibre" if lpath in ma else "Cousoir"}\'s')
                 continue
             if lpaths_only:
                 continue
@@ -99,11 +99,11 @@ for rel in sorted(set(fa) | set(fb)):
                 if ma[lpath].get(key) != mb[lpath].get(key):
                     problems.append(f'metadata.calibre: {lpath}: {key} differs:\n'
                                     f'    Calibre: {str(ma[lpath].get(key))[:120]}\n'
-                                    f'    Reliure: {str(mb[lpath].get(key))[:120]}')
+                                    f'    Cousoir: {str(mb[lpath].get(key))[:120]}')
     elif rel == 'driveinfo.calibre':
-        da, db = driveinfo(fa[rel], calibre_kobo), driveinfo(fb[rel], reliure_kobo)
+        da, db = driveinfo(fa[rel], calibre_kobo), driveinfo(fb[rel], cousoir_kobo)
         if da != db:
-            problems.append(f'driveinfo.calibre differs:\n    Calibre: {da}\n    Reliure: {db}')
+            problems.append(f'driveinfo.calibre differs:\n    Calibre: {da}\n    Cousoir: {db}')
     elif content(fa[rel]) != content(fb[rel]):
         problems.append(f'{rel} differs')
 

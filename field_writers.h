@@ -28,7 +28,7 @@ struct Context
     QString interfaceLanguage;
     // last_modified of the books a change touches.
     QDateTime now;
-    // Items with a note in .calnotes, as (field, id): Reliure keeps them when
+    // Items with a note in .calnotes, as (field, id): Cousoir keeps them when
     // no book uses them any more, where Calibre would retire the note.
     QSet<QPair<QString, int>> notes;
     // Whether a value differing from an item only by case renames the item,

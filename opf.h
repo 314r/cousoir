@@ -39,9 +39,9 @@ struct ExactDates
     CalibreDate timestamp;
 };
 
-// `book` of `data` as an OPF. The calibre: metadata Reliure does not keep,
+// `book` of `data` as an OPF. The calibre: metadata Cousoir does not keep,
 // custom columns, annotations and user categories, comes from `previous`,
-// the file it replaces: it cannot have changed, as Reliure never writes it.
+// the file it replaces: it cannot have changed, as Cousoir never writes it.
 QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settings &settings,
                          const QByteArray &previous = {}, const ExactDates *exact = nullptr);
 

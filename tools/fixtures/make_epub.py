@@ -13,7 +13,7 @@ out, title, author, language, *paragraphs = sys.argv[1:]
 opf = f'''<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="id">urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, 'reliure-fixture:' + title)}</dc:identifier>
+    <dc:identifier id="id">urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, 'cousoir-fixture:' + title)}</dc:identifier>
     <dc:title>{escape(title)}</dc:title>
     <dc:creator>{escape(author)}</dc:creator>
     <dc:language>{language}</dc:language>

@@ -1,3 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/db/write.py: the field writers, one_one_in_books(),
+//   many_one(), many_many() and identifiers(), with get_db_id(),
+//   change_case(), get_series_values(), clean_identifier() and the
+//   adapt_*() functions
+// - src/calibre/db/fields.py: author_sort_for_book()
+// - src/calibre/db/cache.py: set_field() and set_metadata()
+// - src/calibre/utils/date.py: fix_only_date()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "field_writers.h"
 
 #include <QHash>
@@ -182,7 +196,7 @@ bool readItems(SqliteDb &db, const ItemTable &table, Items *items, QString *erro
             value.replace(u'|', u',');
         const int id = row.at(0).toInt();
         const QString key = table.caseInsensitive ? lowerKey(value) : value;
-        // fix_case_duplicates() would merge them; Reliure leaves that to
+        // fix_case_duplicates() would merge them; Cousoir leaves that to
         // Calibre.
         if (items->ids.contains(key)) {
             if (error) {

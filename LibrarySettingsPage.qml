@@ -5,9 +5,9 @@ import QtQuick.Controls.Basic
 import QtQuick.Dialogs
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
-// Which library Reliure opens, whether it can be written now, Calibre's
+// Which library Cousoir opens, whether it can be written now, Calibre's
 // language for it, the backups, and the Dropbox conflict copies found beside
 // its database.
 Item {
@@ -84,7 +84,7 @@ Item {
             Label {
                 Layout.fillWidth: true
                 text: libraryPage.customPath.length > 0
-                    ? qsTr("Reliure opens this folder instead of the library Calibre opens on this computer.")
+                    ? qsTr("Cousoir opens this folder instead of the library Calibre opens on this computer.")
                     : qsTr("The library Calibre opens on this computer.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
@@ -113,7 +113,7 @@ Item {
 
             Label {
                 Layout.fillWidth: true
-                text: qsTr("Reliure changes the library only while nothing else can be writing to it: Calibre closed on this computer, Dropbox done syncing, no change from another computer in the last two minutes, and no Reliure editing on another computer. While it saves, Calibre cannot start.")
+                text: qsTr("Cousoir changes the library only while nothing else can be writing to it: Calibre closed on this computer, Dropbox done syncing, no change from another computer in the last two minutes, and no Cousoir editing on another computer. While it saves, Calibre cannot start.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
             }
@@ -122,7 +122,7 @@ Item {
                 objectName: "backupLabel"
 
                 Layout.fillWidth: true
-                text: qsTr("Before its first change in a session, Reliure copies metadata.db to %1. It keeps the last 30 copies.")
+                text: qsTr("Before its first change in a session, Cousoir copies metadata.db to %1. It keeps the last 30 copies.")
                     .arg(libraryPage.library.backupFolder)
                 color: Theme.textMuted
                 wrapMode: Text.WrapAnywhere
@@ -175,7 +175,7 @@ Item {
 
             Label {
                 Layout.fillWidth: true
-                text: qsTr("Calibre sorts titles, names a book without author and spells names of other scripts in its interface language, “fr” or “en” for instance. Reliure reads it from Calibre on this computer; set it here if you use Calibre in another language on the computers sharing this library.")
+                text: qsTr("Calibre sorts titles, names a book without author and spells names of other scripts in its interface language, “fr” or “en” for instance. Cousoir reads it from Calibre on this computer; set it here if you use Calibre in another language on the computers sharing this library.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
             }

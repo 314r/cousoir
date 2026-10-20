@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Basic
 
-import Reliure
+import Cousoir
 
 // Small uppercase heading, like PLACES in a file manager sidebar.
 Label {

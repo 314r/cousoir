@@ -57,7 +57,7 @@ class BookLibrary : public QObject
     Q_PROPERTY(bool saving READ saving NOTIFY savingChanged)
     // The current book has changed since it was opened.
     Q_PROPERTY(bool canRevert READ canRevert NOTIFY canRevertChanged)
-    // The metadata.db Reliure last wrote, for the guard's ownChangeKey.
+    // The metadata.db Cousoir last wrote, for the guard's ownChangeKey.
     Q_PROPERTY(QString publishedKey READ publishedKey NOTIFY publishedKeyChanged)
     // Calibre's interface language as set here, empty for Calibre's own; and
     // the one in effect. It decides title sorts, the "Unknown" of a book

@@ -1,3 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/ebooks/metadata/xmp.py: metadata_from_xmp_packet(),
+//   consolidate_metadata() and the readers they call
+// - src/calibre/ebooks/metadata/pdf.py: read_info() and get_metadata()
+// - src/calibre/ebooks/metadata/book/base.py: smart_update()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "pdf_reader.h"
 
 #include <QDir>
@@ -387,7 +398,7 @@ bool read(const QString &path, const QString &interfaceLanguage, ImportedMetadat
     const Tool info = findTool(QStringLiteral("pdfinfo"));
     if (info.program.isEmpty()) {
         if (error)
-            *error = QObject::tr("Reliure needs Calibre or poppler's pdfinfo to read PDF files.");
+            *error = QObject::tr("Cousoir needs Calibre or poppler's pdfinfo to read PDF files.");
         return false;
     }
     const QString file = QFileInfo(path).absoluteFilePath();

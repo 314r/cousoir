@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/gui2/device.py: set_books_in_library()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "device_books.h"
 
 #include <QHash>

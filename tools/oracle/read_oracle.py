@@ -1,5 +1,5 @@
 # Prints the metadata Calibre reads to add each book file, as calibredb add
-# reads it, in the shape `reliure-cli read` prints Reliure's:
+# reads it, in the shape `cousoir-cli read` prints Cousoir's:
 #
 #   calibre-debug -e tools/oracle/read_oracle.py -- <output.json> <file>…
 #
@@ -26,7 +26,8 @@ def date(value):
 
 
 def read(path):
-    # cmd_add.book()
+    # book() of Calibre's src/calibre/db/cli/cmd_add.py, Copyright (C) Kovid
+    # Goyal, GPL v3.
     fmt = os.path.splitext(path)[1]
     fmt = (fmt[1:] if fmt else None) or 'unknown'
     with open(path, 'rb') as stream:

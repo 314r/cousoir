@@ -78,7 +78,7 @@ bool makeKobo(const QString &root)
 {
     QDir().mkpath(QDir(root).filePath(QStringLiteral(".kobo")));
     QFile version(QDir(root).filePath(QStringLiteral(".kobo/version")));
-    QFile schema(QStringLiteral(RELIURE_TEST_DATA_DIR "/kobo.sql"));
+    QFile schema(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"));
     QFile database(QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite")));
     if (!version.open(QIODevice::WriteOnly) || !schema.open(QIODevice::ReadOnly) || !database.open(QIODevice::WriteOnly))
         return false;
@@ -107,6 +107,7 @@ private slots:
     void opensInReader();
     void showsWriteState();
     void picksLibraryInSettings();
+    void creditsCalibreInSettings();
     void missingLibraryShowsError();
     void editsDetailsInPlace();
     void revertsBookChanges();
@@ -154,20 +155,20 @@ private:
 void LibraryUiTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
-    qmlRegisterType<IsolatedTheme>("Reliure", 1, 0, "OmarchyTheme");
-    qmlRegisterType<BookLibrary>("Reliure", 1, 0, "BookLibrary");
-    qmlRegisterType<ConcurrencyGuard>("Reliure", 1, 0, "ConcurrencyGuard");
-    qmlRegisterType<ConversionService>("Reliure", 1, 0, "ConversionService");
-    qmlRegisterType<DeviceLibrary>("Reliure", 1, 0, "DeviceLibrary");
-    qmlRegisterType<SystemAppearance>("Reliure", 1, 0, "SystemAppearance");
-    for (const char *type : { "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
+    qmlRegisterType<IsolatedTheme>("Cousoir", 1, 0, "OmarchyTheme");
+    qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
+    qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
+    qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
+    qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
+    qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
+    for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
                               "BooksPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
                               "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
                               "SettingsWindow", "Sidebar", "SidebarItem", "StatTile", "ThinScrollBar", "TrashPage" }) {
-        qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Reliure/%1.qml").arg(QLatin1String(type))),
-                        "Reliure", 1, 0, type);
+        qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
+                        "Cousoir", 1, 0, type);
     }
-    qmlRegisterSingletonType(QUrl(QStringLiteral("qrc:/qt/qml/Reliure/Theme.qml")), "Reliure", 1, 0, "Theme");
+    qmlRegisterSingletonType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/Theme.qml")), "Cousoir", 1, 0, "Theme");
 }
 
 void LibraryUiTest::init()
@@ -176,8 +177,8 @@ void LibraryUiTest::init()
     m_libraryDir = std::make_unique<QTemporaryDir>();
     QVERIFY(m_libraryDir->isValid());
     m_libraryPath = m_libraryDir->filePath(QStringLiteral("library"));
-    QVERIFY(copyTree(QStringLiteral(RELIURE_TEST_DATA_DIR "/library"), m_libraryPath));
-    qputenv("RELIURE_LIBRARY_PATH", QFile::encodeName(m_libraryPath));
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library"), m_libraryPath));
+    qputenv("COUSOIR_LIBRARY_PATH", QFile::encodeName(m_libraryPath));
     qputenv("CALIBRE_OVERRIDE_LANG", "fr");
     m_warnings.clear();
     QVERIFY2(loadUi(), qPrintable(m_warnings.join('\n')));
@@ -193,7 +194,7 @@ bool LibraryUiTest::loadUi()
         for (const QQmlError &error : errors)
             m_warnings.append(error.toString());
     });
-    m_engine->load(QUrl(QStringLiteral("qrc:/qt/qml/Reliure/Main.qml")));
+    m_engine->load(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/Main.qml")));
     if (m_engine->rootObjects().isEmpty())
         return false;
     m_window = qobject_cast<QQuickWindow *>(m_engine->rootObjects().constFirst());
@@ -209,7 +210,7 @@ void LibraryUiTest::cleanup()
     m_engine.reset();
     m_window = nullptr;
     m_libraryDir.reset();
-    qunsetenv("RELIURE_LIBRARY_PATH");
+    qunsetenv("COUSOIR_LIBRARY_PATH");
     qunsetenv("CALIBRE_OVERRIDE_LANG");
     QVERIFY2(m_warnings.isEmpty(), qPrintable(m_warnings.join('\n')));
 }
@@ -352,7 +353,7 @@ void LibraryUiTest::opensAndClosesBook()
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 1);
     QTRY_COMPARE(text("pageTitle"), QStringLiteral("L'Écume des jours"));
     QCOMPARE(text("rootCrumb"), QStringLiteral("Books"));
-    QCOMPARE(m_window->title(), QStringLiteral("L'Écume des jours — Reliure"));
+    QCOMPARE(m_window->title(), QStringLiteral("L'Écume des jours — Cousoir"));
     QVERIFY(!control("sidebar")->isVisible());
     QCOMPARE(text("bookCount"), QStringLiteral("EPUB"));
 
@@ -450,7 +451,7 @@ void LibraryUiTest::browsesByAuthor()
     QTRY_COMPARE(text("pageTitle"), QStringLiteral("Glen Cook"));
     QCOMPARE(text("rootCrumb"), QStringLiteral("Authors"));
     QCOMPARE(text("bookCount"), QStringLiteral("2 books"));
-    QCOMPARE(m_window->title(), QStringLiteral("Glen Cook — Reliure"));
+    QCOMPARE(m_window->title(), QStringLiteral("Glen Cook — Cousoir"));
     QTRY_VERIFY(control("bookList")->hasActiveFocus());
 
     // A book opened from there shows all three levels.
@@ -527,7 +528,7 @@ void LibraryUiTest::showsWriteState()
 void LibraryUiTest::picksLibraryInSettings()
 {
     QTemporaryDir other;
-    QVERIFY(copyTree(QStringLiteral(RELIURE_TEST_DATA_DIR "/library"), other.path()));
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library"), other.path()));
     click("settingsButton");
     QQuickWindow *settings = m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
     QTRY_VERIFY(settings && settings->isVisible());
@@ -546,11 +547,31 @@ void LibraryUiTest::picksLibraryInSettings()
     settings->close();
 }
 
+void LibraryUiTest::creditsCalibreInSettings()
+{
+    click("settingsButton");
+    QQuickWindow *settings = m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
+    QTRY_VERIFY(settings && settings->isVisible());
+    QMetaObject::invokeMethod(settings, "showSection", Q_ARG(QVariant, QStringLiteral("about")));
+    QCOMPARE(settings->property("currentSectionIndex").toInt(), 2);
+
+    const QList<QQuickItem *> credit = visualDescendants(settings->contentItem(), QStringLiteral("calibreCreditLabel"));
+    QCOMPARE(credit.size(), 1);
+    QVERIFY(credit.constFirst()->isVisible());
+    const QString text = credit.constFirst()->property("text").toString();
+    QVERIFY(text.contains(QStringLiteral("Calibre")));
+    QVERIFY(text.contains(QStringLiteral("Kovid Goyal")));
+    const QList<QQuickItem *> version = visualDescendants(settings->contentItem(), QStringLiteral("versionLabel"));
+    QCOMPARE(version.size(), 1);
+    QVERIFY(version.constFirst()->property("text").toString().contains(QStringLiteral(COUSOIR_VERSION)));
+    settings->close();
+}
+
 void LibraryUiTest::missingLibraryShowsError()
 {
     m_engine.reset();
     QTemporaryDir empty;
-    qputenv("RELIURE_LIBRARY_PATH", QFile::encodeName(empty.path()));
+    qputenv("COUSOIR_LIBRARY_PATH", QFile::encodeName(empty.path()));
     QVERIFY(loadUi());
     QTRY_COMPARE_WITH_TIMEOUT(text("emptyTitle"), QStringLiteral("Cannot read the library"), 10000);
     QVERIFY(text("emptyMessage").contains(QStringLiteral("no Calibre library")));
@@ -670,7 +691,7 @@ void LibraryUiTest::changesCovers()
     openWritable(5);
     QVERIFY(!library()->property("currentBook").toMap().value(QStringLiteral("hasCover")).toBool());
     QCOMPARE(QMetaObject::invokeMethod(library(), "setCover", Q_ARG(int, 5),
-                                       Q_ARG(QString, QStringLiteral(RELIURE_TEST_DATA_DIR "/edits/transparent.png"))),
+                                       Q_ARG(QString, QStringLiteral(COUSOIR_TEST_DATA_DIR "/edits/transparent.png"))),
              true);
     waitForSave();
     QTRY_VERIFY(library()->property("currentBook").toMap().value(QStringLiteral("hasCover")).toBool());
@@ -707,8 +728,9 @@ int main(int argc, char **argv)
     themeStateRoot = settingsDir.filePath(QStringLiteral("omarchy"));
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir.path());
-    app.setOrganizationName(QStringLiteral("reliure-tests"));
+    app.setOrganizationName(QStringLiteral("cousoir-tests"));
     app.setApplicationName(QStringLiteral("library-ui"));
+    app.setApplicationVersion(QStringLiteral(COUSOIR_VERSION));
     LibraryUiTest test;
     return QTest::qExec(&test, argc, argv);
 }
@@ -783,7 +805,7 @@ void LibraryUiTest::addsAndRemovesFiles()
     QVERIFY(QFileInfo::exists(QDir(m_libraryPath).filePath(QStringLiteral(".caltrash/f/1/epub"))));
 
     // A file added; the same format again asks before replacing it.
-    const QUrl mobi = QUrl::fromLocalFile(QStringLiteral(RELIURE_TEST_DATA_DIR "/import/Vicomte.mobi"));
+    const QUrl mobi = QUrl::fromLocalFile(QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Vicomte.mobi"));
     QMetaObject::invokeMethod(control("detailsPane"), "addFormat", Q_ARG(QVariant, mobi));
     waitForSave();
     QTRY_COMPARE(formatsOf(library()->property("currentBook").toMap()), QStringList{ QStringLiteral("MOBI") });
@@ -831,7 +853,7 @@ void LibraryUiTest::convertsBooks()
 {
     auto *conversions = qobject_cast<ConversionService *>(m_window->property("conversions").value<QObject *>());
     QVERIFY(conversions);
-    conversions->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-debug"));
+    conversions->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
     openWritable(1);
     click("convert_KEPUB");
     waitForSave();
@@ -847,7 +869,7 @@ void LibraryUiTest::convertsBooks()
     QTRY_VERIFY(!object("convertDialog")->property("opened").toBool());
     QVERIFY(!conversions->busy());
 
-    qputenv("RELIURE_FAKE_DELAY", "20");
+    qputenv("COUSOIR_FAKE_DELAY", "20");
     click("convert_AZW3");
     QTRY_VERIFY(control("conversionState")->isVisible());
     QTRY_COMPARE(text("conversionState"), QStringLiteral("Converting to AZW3 · 50%"));
@@ -855,7 +877,7 @@ void LibraryUiTest::convertsBooks()
     QVERIFY(control("stopConversions")->isVisible());
     click("stopConversion");
     QTRY_VERIFY(!conversions->busy());
-    qunsetenv("RELIURE_FAKE_DELAY");
+    qunsetenv("COUSOIR_FAKE_DELAY");
     QTRY_VERIFY(!control("conversionState")->isVisible());
     QCOMPARE(formatsOf(library()->property("currentBook").toMap()),
              (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
@@ -873,7 +895,7 @@ void LibraryUiTest::sendsToKobo()
     const QString root = QDir::cleanPath(kobo.path());
     QTemporaryDir config;
     devices->setConfigDirectory(config.path());
-    devices->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
+    devices->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-send"));
     devices->setEjector([](const Kobo::Device &, std::function<void(const QString &)> done) { done({}); });
     QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
     devices->setVolumeProvider([&volumes] { return volumes; }, 20);
@@ -934,8 +956,8 @@ void LibraryUiTest::sendsToKindle()
     QVERIFY(QDir(kindle.path()).mkpath(QStringLiteral("documents")));
     QTemporaryDir config;
     devices->setConfigDirectory(config.path());
-    devices->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-send"));
-    conversions->setProgram(QStringLiteral(RELIURE_TEST_DATA_DIR "/fake-calibre-debug"));
+    devices->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-send"));
+    conversions->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
     QList<KindleSlot> kindles{ { 0, 0, 0x9981, kindle.path() } };
     devices->setKindleProvider([&kindles] { return kindles; });
     const QString entry = QStringLiteral("sidebar_device:mtpdir:") + QDir::cleanPath(kindle.path());

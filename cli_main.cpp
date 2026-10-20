@@ -31,7 +31,7 @@
 #include "kobo.h"
 #include "kobo_send.h"
 #include "mtp.h"
-#include "reliure_paths.h"
+#include "cousoir_paths.h"
 
 namespace {
 
@@ -48,7 +48,7 @@ QTextStream &err()
 }
 
 // Reads the library from a copy of metadata.db in a temporary folder, so a
-// running Reliure's own copy is left alone.
+// running Cousoir's own copy is left alone.
 bool load(const QString &libraryPath, LibraryData *data)
 {
     QTemporaryDir folder;
@@ -131,7 +131,7 @@ int doctor(const QString &libraryPath)
     }
     if (!data.schemaKnown) {
         problems.append(QStringLiteral("The database structure is unknown (schema %1, fingerprint %2): "
-                                       "Reliure stays read-only").arg(data.userVersion).arg(data.schemaFingerprint));
+                                       "Cousoir stays read-only").arg(data.userVersion).arg(data.schemaFingerprint));
     }
 
     // The guard answers about Dropbox asynchronously; give it a moment.
@@ -218,7 +218,7 @@ QString readOnlyReason(const QString &libraryPath)
 
 // Converts the books to the formats, as Calibre's convert action does, and
 // adds what it adds to `request`. The jobs' folders stay until the process
-// ends, with the files the request adds; with RELIURE_KEEP_JOBS set, after,
+// ends, with the files the request adds; with COUSOIR_KEEP_JOBS set, after,
 // for a look at Calibre's log.
 bool convert(const QString &libraryPath, const CalibreConfig &config, const QList<QPair<int, QString>> &conversions,
              CommitEngine::Request *request)
@@ -227,7 +227,7 @@ bool convert(const QString &libraryPath, const CalibreConfig &config, const QLis
     if (!load(libraryPath, &data))
         return false;
     static QTemporaryDir jobs;
-    jobs.setAutoRemove(qEnvironmentVariableIsEmpty("RELIURE_KEEP_JOBS"));
+    jobs.setAutoRemove(qEnvironmentVariableIsEmpty("COUSOIR_KEEP_JOBS"));
     for (const auto &[bookId, format] : conversions) {
         const auto book = std::find_if(data.books.cbegin(), data.books.cend(),
                                        [bookId](const Book &book) { return book.id == bookId; });
@@ -314,7 +314,7 @@ QList<DeviceBook> booksOn(Reader &reader, QString *error)
 }
 
 // Sends the books to the reader as Calibre's "Send to device" does. With
-// RELIURE_KEEP_JOBS set, the job's folder stays for a look at Calibre's log.
+// COUSOIR_KEEP_JOBS set, the job's folder stays for a look at Calibre's log.
 bool send(const QString &libraryPath, const CalibreConfig &config, const QString &spec, const QList<int> &bookIds)
 {
     LibraryData data;
@@ -322,7 +322,7 @@ bool send(const QString &libraryPath, const CalibreConfig &config, const QString
     if (!load(libraryPath, &data) || !openReader(spec, &reader))
         return false;
     QTemporaryDir job;
-    job.setAutoRemove(qEnvironmentVariableIsEmpty("RELIURE_KEEP_JOBS"));
+    job.setAutoRemove(qEnvironmentVariableIsEmpty("COUSOIR_KEEP_JOBS"));
     QString error;
     if (!job.isValid()) {
         err() << QStringLiteral("Cannot create a temporary folder.") << Qt::endl;
@@ -434,11 +434,11 @@ QString deviceSpec(const QDir &base, const QString &device)
 int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine::Request &request)
 {
     request.libraryPath = libraryPath;
-    request.cacheFolder = ReliurePaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
-    request.backupFolder = ReliurePaths::backupFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
+    request.cacheFolder = CousoirPaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
+    request.backupFolder = CousoirPaths::backupFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
     request.config = config;
-    request.producer = QStringLiteral("Reliure (%1)").arg(QStringLiteral(RELIURE_VERSION));
-    request.producerId = QStringLiteral("reliure");
+    request.producer = QStringLiteral("Cousoir (%1)").arg(QStringLiteral(COUSOIR_VERSION));
+    request.producerId = QStringLiteral("cousoir");
     const CommitEngine::Result result = CommitEngine::commit(request);
     if (!result.ok) {
         err() << result.error << Qt::endl;
@@ -657,9 +657,9 @@ int read(const QStringList &paths)
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
-    app.setOrganizationName(QStringLiteral("reliure"));
-    app.setApplicationName(QStringLiteral("reliure"));
-    app.setApplicationVersion(QStringLiteral(RELIURE_VERSION));
+    app.setOrganizationName(QStringLiteral("cousoir"));
+    app.setApplicationName(QStringLiteral("cousoir"));
+    app.setApplicationVersion(QStringLiteral(COUSOIR_VERSION));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral(
@@ -672,7 +672,9 @@ int main(int argc, char *argv[])
         "          Kobo), as the application makes them.\n"
         "  read    Print the metadata adding the given book files would read.\n"
         "  device  Print the books on a reader: a Kobo by the folder it is mounted on,\n"
-        "          \"mtp\" or \"mtp:SERIAL\" for a Kindle connected over MTP."));
+        "          \"mtp\" or \"mtp:SERIAL\" for a Kindle connected over MTP.\n\n"
+        "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
+        "Goyal and the Calibre contributors, https://calibre-ebook.com. GPL v3."));
     parser.addHelpOption();
     parser.addVersionOption();
     const QCommandLineOption libraryOption(QStringList{ QStringLiteral("library"), QStringLiteral("with-library") },

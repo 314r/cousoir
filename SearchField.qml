@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Controls.impl
 
-import Reliure
+import Cousoir
 
 TextField {
     id: field

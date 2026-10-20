@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/__init__.py: fit_image()
+// - src/calibre/utils/img.py: save_cover_data_to()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "commit_engine.h"
 
 #include <QBuffer>
@@ -161,7 +170,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
 
     // Calibre names folders with another table in these languages.
     if (!CalibreText::hasAsciiTable(request.config.interfaceLanguage))
-        return fail(QObject::tr("Calibre's interface language, %1, names folders in a way Reliure does not know yet.")
+        return fail(QObject::tr("Calibre's interface language, %1, names folders in a way Cousoir does not know yet.")
                         .arg(request.config.interfaceLanguage));
     if (!lock.acquire())
         return fail(QObject::tr("Calibre is open on this computer: close it to change the library."));
@@ -197,7 +206,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     // The guard checks the structure before; a write never trusts that alone.
     if (!CalibreDb::isKnownSchema(db.value(QStringLiteral("PRAGMA user_version")).toInt(), CalibreDb::schemaFingerprint(db))) {
         db.exec(QStringLiteral("ROLLBACK"), nullptr);
-        return fail(QObject::tr("The database is from a Calibre version Reliure does not know; nothing was written."));
+        return fail(QObject::tr("The database is from a Calibre version Cousoir does not know; nothing was written."));
     }
 
     FieldWriters::Context context;
@@ -354,7 +363,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     // metadata.db changed meanwhile.
     const QByteArray written = readFile(work, &error);
     const QByteArray sha256 = QCryptographicHash::hash(written, QCryptographicHash::Sha256);
-    const QString incoming = library.filePath(QStringLiteral(".~reliure-%1-metadata.db")
+    const QString incoming = library.filePath(QStringLiteral(".~cousoir-%1-metadata.db")
                                                   .arg(QRandomGenerator::global()->generate(), 0, 16));
     if (written.isEmpty() || !files.addScratch(incoming, &error) || !writeFile(incoming, written, &error)) {
         files.rollback(nullptr);
@@ -427,7 +436,7 @@ QByteArray coverData(const QByteArray &data, QString *error)
     QImage image;
     if (!reader.read(&image)) {
         if (error)
-            *error = QObject::tr("This is not an image Reliure can read.");
+            *error = QObject::tr("This is not an image Cousoir can read.");
         return {};
     }
     // fit_image() into maximum_cover_size.

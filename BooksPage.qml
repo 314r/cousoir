@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // The library's books, or those of the author, series, tag, language or
 // publisher opened in a browse section: a table, or a grid of covers. A row's

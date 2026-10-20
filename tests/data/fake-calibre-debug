@@ -1,11 +1,11 @@
 #!/bin/sh
-# Stands in for calibre-debug in the tests of conversions: run as Reliure
+# Stands in for calibre-debug in the tests of conversions: run as Cousoir
 # runs Calibre's job, "-e convert.py -- <job folder>", it reports progress and
-# writes what the job writes, after RELIURE_FAKE_DELAY seconds if set.
+# writes what the job writes, after COUSOIR_FAKE_DELAY seconds if set.
 folder="$4"
 format=$(sed -n 's/.*"format": "\([a-z0-9]*\)".*/\1/p' "$folder/job.json" | head -n 1)
 echo '{"progress": 0.5}'
-[ -n "$RELIURE_FAKE_DELAY" ] && sleep "$RELIURE_FAKE_DELAY"
+[ -n "$COUSOIR_FAKE_DELAY" ] && sleep "$COUSOIR_FAKE_DELAY"
 printf 'converted to %s' "$format" > "$folder/output.$format"
 printf '{"input": "epub", "file": "output.%s", "save_original": false, "options": "%s"}' \
     "$format" "$(printf '\200\002T\007\000\000\000json:{}.' | base64)" > "$folder/result.json"

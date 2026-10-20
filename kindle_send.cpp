@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/devices/mtp/unix/driver.py: put_file(), get_mtp_file() and
+//   delete_file_or_folder(), in the Python the job runs
+// - src/calibre/devices/mtp/driver.py: open() and books()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "kindle_send.h"
 
 #include <QDir>
@@ -46,8 +56,8 @@ def send(job):
 
     class Device(MTP_DEVICE):
         # Calibre's MTP driver on a stand-in for the Kindle: its files and
-        # folders as Reliure listed them, the few the driver reads copied in
-        # the job's folder, and what it does to them noted for Reliure.
+        # folders as Cousoir listed them, the few the driver reads copied in
+        # the job's folder, and what it does to them noted for Cousoir.
 
         @property
         def filesystem_cache(self):
@@ -161,7 +171,7 @@ def send(job):
     # Sending, then adding to metadata.calibre.
     dev.set_progress_reporter(reporter(2))
     # open(), but for libmtp's part, the history of devices in Calibre's
-    # settings and the covers put back, which Reliure does itself.
+    # settings and the covers put back, which Cousoir does itself.
     device = job['device']
     dev.current_library_uuid = db.library_id
     dev.location_paths = None

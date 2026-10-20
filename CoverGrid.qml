@@ -5,7 +5,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import QtQuick.Window
 
-import Reliure
+import Cousoir
 
 // Books as covers, with ListTable's rows, current index and signals so the
 // book list can switch between the two. A cell is a cover with a hairline

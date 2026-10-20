@@ -1,10 +1,10 @@
 # Converts books as Calibre's convert action does when a format is picked
-# for them, for the golden test that compares Reliure's conversions with
+# for them, for the golden test that compares Cousoir's conversions with
 # Calibre's:
 #
 #   calibre-debug -e tools/oracle/convert_books.py -- <library> <changes.json>
 #
-# The file is reliure-cli apply's; its { "convert": { "book": 1, "format":
+# The file is cousoir-cli apply's; its { "convert": { "book": 1, "format":
 # "KEPUB" } } go, in order, through convert_single_ebook() of gui2/tools.py
 # with auto_conversion, which saves the book's settings, the job,
 # gui_convert_override(), in a worker process of its own as the job manager
@@ -35,7 +35,7 @@ db = open_library(library)
 class NoPageCounts:
     # Calibre counts the pages of the books it changed in the background,
     # and corrects on the way the sizes of files changed outside it: not
-    # part of converting, and left to Calibre for Reliure's changes too.
+    # part of converting, and left to Calibre for Cousoir's changes too.
     def queue_scan(self, book_id=0):
         pass
 
@@ -57,6 +57,8 @@ for change in changes:
     if bad:
         raise SystemExit(f'Book {book_id} has no format Calibre converts from')
     for func, args, desc, out_fmt, job_book, temp_files in jobs:
+        # From book_converted() of Calibre's src/calibre/gui2/actions/convert.py,
+        # Copyright (C) Kovid Goyal, GPL v3.
         parts = set(func.partition(':')[2].split(';'))
         fork_job('calibre.gui2.convert.gui_conversion', 'gui_convert_override', args=args, timeout=3600)
         if 'same_fmt' in parts and tweaks['save_original_format']:

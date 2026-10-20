@@ -1,3 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/db/cache.py: create_book_entry(), set_metadata(),
+//   _do_add_format(), remove_formats(), remove_books(),
+//   move_book_from_trash(), move_format_from_trash(),
+//   author_sort_from_authors(), get_next_series_num_for() and
+//   _add_newbook_tag()
+// - src/calibre/db/backend.py: update_path(), add_format(), remove_formats(),
+//   remove_books(), move_book_to_trash(), list_trash_entries(),
+//   get_metadata_for_trash_book() and format_abspath()
+// - src/calibre/db/tables.py: update_fmt()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "book_operations.h"
 
 #include <QDir>
@@ -138,11 +154,11 @@ QStringList folderEntries(const QString &folder)
 {
     QStringList entries = QDir(folder).entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
                                                  QDir::Name);
-    entries.removeIf([](const QString &entry) { return entry.startsWith(QLatin1String(".~reliure-")); });
+    entries.removeIf([](const QString &entry) { return entry.startsWith(QLatin1String(".~cousoir-")); });
     return entries;
 }
 
-// The custom columns, which Reliure does not write.
+// The custom columns, which Cousoir does not write.
 bool hasCustomColumns(SqliteDb &db)
 {
     return rows(db, QStringLiteral("SELECT count(*) FROM custom_columns")).value(0).value(0).toInt() > 0;
@@ -447,7 +463,7 @@ bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath
         return updateDatabase();
     }
 
-    // Calibre deletes whatever is already at the new place; Reliure only
+    // Calibre deletes whatever is already at the new place; Cousoir only
     // clears an empty folder and refuses otherwise.
     if (QFileInfo::exists(target)) {
         if (!QFileInfo(target).isDir()
@@ -484,7 +500,7 @@ bool addBook(SqliteDb &db, FileTransaction &files, const NewBook &book, const Co
              FieldWriters::Result *fields, Result *result, QString *error)
 {
     if (hasCustomColumnDefaults(db))
-        return fail(error, QObject::tr("This library's custom columns give new books values Reliure cannot set yet: "
+        return fail(error, QObject::tr("This library's custom columns give new books values Cousoir cannot set yet: "
                                        "add the book in Calibre."));
     // format_map: one file per format, the last one given.
     QStringList formats;
@@ -679,11 +695,11 @@ bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoratio
     if (bookExists(db, bookId))
         return fail(error, QObject::tr("The library already has a book %1.").arg(bookId));
     if (hasCustomColumns(db))
-        return fail(error, QObject::tr("This library has custom columns, whose values Reliure cannot restore yet: "
+        return fail(error, QObject::tr("This library has custom columns, whose values Cousoir cannot restore yet: "
                                        "restore the book in Calibre."));
     const QByteArray raw = readFile(QDir(folder).filePath(QStringLiteral("metadata.opf")));
     if (raw.contains("calibre:annotation"))
-        return fail(error, QObject::tr("The book has annotations, which Reliure cannot restore yet: restore it in "
+        return fail(error, QObject::tr("The book has annotations, which Cousoir cannot restore yet: restore it in "
                                        "Calibre."));
     OpfReader::Package package;
     if (!OpfReader::read(raw, &package, error))

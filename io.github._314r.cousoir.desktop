@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=Reliure
+Name=Cousoir
 Comment=Browse your Calibre ebook library
-Exec=reliure
-Icon=io.github._314r.reliure
+Exec=cousoir
+Icon=io.github._314r.cousoir
 Terminal=false
 Categories=Office;Viewer;
 Keywords=ebook;calibre;library;epub;kobo;kindle;
 StartupNotify=true
-StartupWMClass=reliure
+StartupWMClass=cousoir

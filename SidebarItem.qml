@@ -3,7 +3,7 @@ import QtQuick.Controls.Basic
 import QtQuick.Controls.impl
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // A navigation row: transparent until hovered, tinted and bold when current.
 // Text too long for it, such as a reader's name, is cut short, the whole of

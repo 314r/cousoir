@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Controls.impl
 
-import Reliure
+import Cousoir
 
 // A drop-down with the form field's look, for a list of { value, label }.
 // The list opens below the field; Up and Down change the choice in place.

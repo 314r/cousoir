@@ -88,7 +88,7 @@ QString CalibreConfig::configDirectory()
 
 QString CalibreConfig::defaultLibraryPath()
 {
-    const QString overridePath = qEnvironmentVariable("RELIURE_LIBRARY_PATH");
+    const QString overridePath = qEnvironmentVariable("COUSOIR_LIBRARY_PATH");
     const QString path = !overridePath.isEmpty() ? overridePath : load().libraryPath;
     return path.isEmpty() ? QString() : QDir::cleanPath(QFileInfo(path).absoluteFilePath());
 }

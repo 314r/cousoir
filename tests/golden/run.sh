@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Compares `reliure-cli list` with `calibredb list --for-machine --fields all`,
-# each on its own copy of the fixture library and, with RELIURE_GOLDEN_REAL=1,
-# of the library Calibre opens; `reliure-cli read` with Calibre's readers on
-# book files; and the libraries Calibre and `reliure-cli apply` leave after
+# Compares `cousoir-cli list` with `calibredb list --for-machine --fields all`,
+# each on its own copy of the fixture library and, with COUSOIR_GOLDEN_REAL=1,
+# of the library Calibre opens; `cousoir-cli read` with Calibre's readers on
+# book files; and the libraries Calibre and `cousoir-cli apply` leave after
 # the same edits, additions, removals and conversions. calibredb can rename
 # files and touches metadata.db even to list it, so neither ever runs on the
 # library itself.
 #
-#   tests/golden/run.sh build/reliure-cli
+#   tests/golden/run.sh build/cousoir-cli
 #
 # Exits 77, which ctest counts as skipped, without calibredb.
 set -euo pipefail
@@ -21,11 +21,11 @@ fi
 
 # Under the home folder by default: on a copy-on-write filesystem the copies
 # of a large library then cost nothing.
-base=${RELIURE_GOLDEN_TMP:-${XDG_CACHE_HOME:-$HOME/.cache}/reliure-golden}
+base=${COUSOIR_GOLDEN_TMP:-${XDG_CACHE_HOME:-$HOME/.cache}/cousoir-golden}
 mkdir -p "$base"
 work=$(mktemp -d "$base/run.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-# calibredb keeps its own preferences away from the user's, and reliure-cli
+# calibredb keeps its own preferences away from the user's, and cousoir-cli
 # its cache and backups.
 user_config=${CALIBRE_CONFIG_DIRECTORY:-${XDG_CONFIG_HOME:-$HOME/.config}/calibre}
 export CALIBRE_CONFIG_DIRECTORY="$work/config"
@@ -47,7 +47,7 @@ oracle() {
 
 compare() {
     local name=$1 source=$2
-    for side in calibre reliure; do
+    for side in calibre cousoir; do
         cp -a --reflink=auto "$source" "$work/$name-$side"
         # Dropbox conflict copies are not part of the library.
         find "$work/$name-$side" -maxdepth 1 -type f \
@@ -55,20 +55,20 @@ compare() {
     done
     calibredb list --with-library "$work/$name-calibre" --for-machine --fields all \
         | sed "s|$work/$name-calibre|@LIBRARY@|g" > "$work/$name-calibre.json"
-    "$cli" list --library "$work/$name-reliure" \
-        | sed "s|$work/$name-reliure|@LIBRARY@|g" > "$work/$name-reliure.json"
-    if cmp -s "$work/$name-calibre.json" "$work/$name-reliure.json"; then
+    "$cli" list --library "$work/$name-cousoir" \
+        | sed "s|$work/$name-cousoir|@LIBRARY@|g" > "$work/$name-cousoir.json"
+    if cmp -s "$work/$name-calibre.json" "$work/$name-cousoir.json"; then
         echo "$name: identical ($(grep -c '"id":' "$work/$name-calibre.json") books)"
     else
-        echo "$name: reliure-cli list differs from calibredb list"
-        diff -u "$work/$name-calibre.json" "$work/$name-reliure.json" | head -60
+        echo "$name: cousoir-cli list differs from calibredb list"
+        diff -u "$work/$name-calibre.json" "$work/$name-cousoir.json" | head -60
         status=1
     fi
 }
 
 compare fixture "$root/tests/data/library"
 
-# What adding a file reads from it, Calibre's readers against Reliure's, on
+# What adding a file reads from it, Calibre's readers against Cousoir's, on
 # the book files of folders: the fixture library's and tests/data/import.
 reads() {
     local name=$1 files=()
@@ -83,17 +83,17 @@ reads() {
         return
     fi
     oracle "$root/tools/oracle/read_oracle.py" -- "$work/$name-read-calibre.json" "${files[@]}" || return 0
-    if ! "$cli" read "${files[@]}" > "$work/$name-read-reliure.json" 2> "$work/$name-read.log"; then
-        echo "$name reads: reliure-cli read failed:"
+    if ! "$cli" read "${files[@]}" > "$work/$name-read-cousoir.json" 2> "$work/$name-read.log"; then
+        echo "$name reads: cousoir-cli read failed:"
         tail -20 "$work/$name-read.log"
         status=1
         return 0
     fi
-    if python3 "$root/tests/golden/compare_reads.py" "$work/$name-read-calibre.json" "$work/$name-read-reliure.json" \
+    if python3 "$root/tests/golden/compare_reads.py" "$work/$name-read-calibre.json" "$work/$name-read-cousoir.json" \
         > "$work/$name-reads.txt"; then
         echo "$name reads: $(tail -1 "$work/$name-reads.txt")"
     else
-        echo "$name reads: Reliure reads files differently:"
+        echo "$name reads: Cousoir reads files differently:"
         head -60 "$work/$name-reads.txt"
         status=1
     fi
@@ -101,38 +101,38 @@ reads() {
 
 reads fixture "$root/tests/data/import" "$root/tests/data/library"
 
-# The same edits written by Calibre and by Reliure, then compared table by
-# table and file by file; calibredb then checks Reliure's copy and lists it as
+# The same edits written by Calibre and by Cousoir, then compared table by
+# table and file by file; calibredb then checks Cousoir's copy and lists it as
 # it lists Calibre's.
 edits() {
     local edits=$1
-    for side in calibre reliure; do
+    for side in calibre cousoir; do
         rm -rf "$work/edit-$side"
         cp -a --reflink=auto "$root/tests/data/library" "$work/edit-$side"
     done
     oracle "$root/tools/oracle/apply_edits.py" -- "$work/edit-calibre" "$edits" || return 0
-    if ! "$cli" apply --force --library "$work/edit-reliure" "$edits" >/dev/null; then
+    if ! "$cli" apply --force --library "$work/edit-cousoir" "$edits" >/dev/null; then
         status=1
         return 0
     fi
-    if ! python3 "$root/tests/golden/compare_libraries.py" "$work/edit-calibre" "$work/edit-reliure"; then
+    if ! python3 "$root/tests/golden/compare_libraries.py" "$work/edit-calibre" "$work/edit-cousoir"; then
         status=1
     fi
     # last_modified is the time of each side's write, a second apart at times.
-    for side in calibre reliure; do
+    for side in calibre cousoir; do
         calibredb check_library --with-library "$work/edit-$side" > "$work/check-$side.txt" 2>&1 || true
         calibredb list --with-library "$work/edit-$side" --for-machine --fields all \
             | sed -e "s|$work/edit-$side|@LIBRARY@|g" -e 's|"last_modified": "[^"]*"|"last_modified": "<now>"|' \
             > "$work/list-$side.json"
     done
-    if ! cmp -s "$work/check-calibre.txt" "$work/check-reliure.txt"; then
+    if ! cmp -s "$work/check-calibre.txt" "$work/check-cousoir.txt"; then
         echo "calibredb check_library reports differently:"
-        diff -u "$work/check-calibre.txt" "$work/check-reliure.txt" | head -30
+        diff -u "$work/check-calibre.txt" "$work/check-cousoir.txt" | head -30
         status=1
     fi
-    if ! cmp -s "$work/list-calibre.json" "$work/list-reliure.json"; then
+    if ! cmp -s "$work/list-calibre.json" "$work/list-cousoir.json"; then
         echo "calibredb lists the copies differently:"
-        diff -u "$work/list-calibre.json" "$work/list-reliure.json" | head -40
+        diff -u "$work/list-calibre.json" "$work/list-cousoir.json" | head -40
         status=1
     else
         echo "edits: calibredb lists both copies the same"
@@ -144,7 +144,7 @@ edits "$root/tests/data/edits/edits.json"
 # Books and formats added, moved to the trash and restored, step by step on
 # both copies, each step compared.
 operations() {
-    for side in calibre reliure; do
+    for side in calibre cousoir; do
         rm -rf "$work/ops-$side"
         cp -a --reflink=auto "$root/tests/data/library" "$work/ops-$side"
     done
@@ -152,22 +152,22 @@ operations() {
     for ops in "$@"; do
         echo "$(basename "$ops"):"
         oracle "$root/tools/oracle/apply_edits.py" -- "$work/ops-calibre" "$ops" || return 0
-        if ! "$cli" apply --force --library "$work/ops-reliure" "$ops" >/dev/null; then
+        if ! "$cli" apply --force --library "$work/ops-cousoir" "$ops" >/dev/null; then
             status=1
             return
         fi
-        if ! python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/ops-calibre" "$work/ops-reliure"; then
+        if ! python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/ops-calibre" "$work/ops-cousoir"; then
             status=1
         fi
-        for side in calibre reliure; do
+        for side in calibre cousoir; do
             calibredb check_library --with-library "$work/ops-$side" > "$work/ops-check-$side.txt" 2>&1 || true
         done
-        if ! cmp -s "$work/ops-check-calibre.txt" "$work/ops-check-reliure.txt"; then
+        if ! cmp -s "$work/ops-check-calibre.txt" "$work/ops-check-cousoir.txt"; then
             echo "calibredb check_library reports differently:"
-            diff -u "$work/ops-check-calibre.txt" "$work/ops-check-reliure.txt" | head -30
+            diff -u "$work/ops-check-calibre.txt" "$work/ops-check-cousoir.txt" | head -30
             status=1
         fi
-        for side in calibre reliure; do
+        for side in calibre cousoir; do
             cp -a --reflink=auto "$work/ops-$side" "$work/after-$(basename "$ops" .json)-$side"
         done
     done
@@ -176,32 +176,32 @@ operations() {
 operations "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" "$root/tests/data/edits/ops-3.json"
 
 # Each restores what the other moved to the trash: the second step applied by
-# Calibre to Reliure's copy, and by Reliure to Calibre's, ends as the other.
+# Calibre to Cousoir's copy, and by Cousoir to Calibre's, ends as the other.
 cross() {
-    rm -rf "$work/cross-calibre" "$work/cross-reliure"
-    cp -a --reflink=auto "$work/after-ops-1-reliure" "$work/cross-calibre"
-    cp -a --reflink=auto "$work/after-ops-1-calibre" "$work/cross-reliure"
+    rm -rf "$work/cross-calibre" "$work/cross-cousoir"
+    cp -a --reflink=auto "$work/after-ops-1-cousoir" "$work/cross-calibre"
+    cp -a --reflink=auto "$work/after-ops-1-calibre" "$work/cross-cousoir"
     oracle "$root/tools/oracle/apply_edits.py" -- "$work/cross-calibre" "$root/tests/data/edits/ops-2.json" || return 0
-    if ! "$cli" apply --force --library "$work/cross-reliure" "$root/tests/data/edits/ops-2.json" >/dev/null; then
+    if ! "$cli" apply --force --library "$work/cross-cousoir" "$root/tests/data/edits/ops-2.json" >/dev/null; then
         status=1
         return 0
     fi
-    echo "Calibre restoring Reliure's trash:"
+    echo "Calibre restoring Cousoir's trash:"
     python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/after-ops-2-calibre" "$work/cross-calibre" \
         || status=1
-    echo "Reliure restoring Calibre's trash:"
-    python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/after-ops-2-reliure" "$work/cross-reliure" \
+    echo "Cousoir restoring Calibre's trash:"
+    python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/after-ops-2-cousoir" "$work/cross-cousoir" \
         || status=1
 }
 
 cross
 
-# Books converted by Calibre's convert action and by reliure-cli, compared:
+# Books converted by Calibre's convert action and by cousoir-cli, compared:
 # the files of conversions by their content, without the time each stamps
 # or the ids it draws. `prepare`, if given, runs on each copy first.
 conversions() {
     local name=$1 source=$2 ops=$3 converted=$4 prepare=${5:-}
-    for side in calibre reliure; do
+    for side in calibre cousoir; do
         rm -rf "$work/$name-$side"
         cp -a --reflink=auto "$source" "$work/$name-$side"
         if [ -n "$prepare" ]; then
@@ -209,17 +209,17 @@ conversions() {
         fi
     done
     oracle "$root/tools/oracle/convert_books.py" -- "$work/$name-calibre" "$ops" || return 0
-    if ! "$cli" apply --force --library "$work/$name-reliure" "$ops" > "$work/$name.log" 2>&1; then
-        echo "$name: reliure-cli apply failed:"
+    if ! "$cli" apply --force --library "$work/$name-cousoir" "$ops" > "$work/$name.log" 2>&1; then
+        echo "$name: cousoir-cli apply failed:"
         tail -20 "$work/$name.log"
         status=1
         return 0
     fi
     if python3 "$root/tests/golden/compare_libraries.py" --converted "$converted" "$work/$name-calibre" \
-        "$work/$name-reliure" > "$work/$name.txt"; then
+        "$work/$name-cousoir" > "$work/$name.txt"; then
         echo "$name: $(tail -1 "$work/$name.txt")"
     else
-        echo "$name: Reliure converts differently:"
+        echo "$name: Cousoir converts differently:"
         head -40 "$work/$name.txt"
         status=1
     fi
@@ -236,12 +236,12 @@ conversions conversions "$root/tests/data/library" "$root/tests/data/edits/conve
     "$root/tests/golden/conversion_settings.py"
 
 # The round trip: Calibre writes again the metadata.opf files of the books
-# Reliure changed, as its GUI does when it starts, and finds nothing to
-# change in them; then edits the library itself, which Reliure reads as
+# Cousoir changed, as its GUI does when it starts, and finds nothing to
+# change in them; then edits the library itself, which Cousoir reads as
 # calibredb does.
 round_trip() {
     rm -rf "$work/trip" "$work/trip-before"
-    cp -a --reflink=auto "$work/edit-reliure" "$work/trip"
+    cp -a --reflink=auto "$work/edit-cousoir" "$work/trip"
     cp -a --reflink=auto "$work/trip" "$work/trip-before"
     calibredb backup_metadata --with-library "$work/trip" >/dev/null
     if ! python3 "$root/tests/golden/compare_libraries.py" --files-only "$work/trip" "$work/trip-before" >/dev/null; then
@@ -251,12 +251,12 @@ round_trip() {
     fi
     calibredb set_metadata --with-library "$work/trip" 1 --field "title:Mood Indigo" --field "tags:Jazz,Roman" >/dev/null
     calibredb list --with-library "$work/trip" --for-machine --fields all | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-calibre.json"
-    "$cli" list --library "$work/trip" | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-reliure.json"
-    if cmp -s "$work/trip-calibre.json" "$work/trip-reliure.json"; then
-        echo "round trip: Calibre keeps Reliure's files and Reliure reads Calibre's change"
+    "$cli" list --library "$work/trip" | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-cousoir.json"
+    if cmp -s "$work/trip-calibre.json" "$work/trip-cousoir.json"; then
+        echo "round trip: Calibre keeps Cousoir's files and Cousoir reads Calibre's change"
     else
-        echo "round trip: Reliure reads Calibre's change differently:"
-        diff -u "$work/trip-calibre.json" "$work/trip-reliure.json" | head -30
+        echo "round trip: Cousoir reads Calibre's change differently:"
+        diff -u "$work/trip-calibre.json" "$work/trip-cousoir.json" | head -30
         status=1
     fi
 }
@@ -264,22 +264,22 @@ round_trip() {
 round_trip
 
 # Books sent to a reader and removed from it by Calibre's GUI and by
-# reliure-cli, each on a fake reader of its own, a Kobo or a Kindle reached
+# cousoir-cli, each on a fake reader of its own, a Kobo or a Kindle reached
 # over MTP, step by step: some sent, more sent once the reader had them a
 # while, one of them again, one removed. Between steps, a Kobo takes the
 # books in its database (tests/golden/kobo_import.py) and Amazon blanks a
 # Kindle's covers (tests/golden/kindle_sync.py), which both programs put
-# back. Removing, Reliure leaves the other books' entries of
+# back. Removing, Cousoir leaves the other books' entries of
 # metadata.calibre as they are, which Calibre writes again whenever it
 # connects: only which books remain is compared then, and both readers once
 # Calibre has connected to them. Then each program reads the other's reader:
-# Calibre must take the books Reliure sent for the library's, by their uuid,
-# and Reliure Calibre's.
+# Calibre must take the books Cousoir sent for the library's, by their uuid,
+# and Cousoir Calibre's.
 #
 #   devices <kobo|kindle> <name> <library> <books first> <books then> <book removed>
 devices() {
-    local kind=$1 name=$2 library=$3 side step lpath product=0 calibre_device reliure_device
-    for side in calibre reliure; do
+    local kind=$1 name=$2 library=$3 side step lpath product=0 calibre_device cousoir_device
+    for side in calibre cousoir; do
         rm -rf "$work/$name-library-$side" "$work/$name-$side"
         cp -a --reflink=auto "$library" "$work/$name-library-$side"
         if [ "$kind" = kobo ]; then
@@ -293,47 +293,47 @@ devices() {
         fi
     done
     calibre_device="$work/$name-calibre"
-    reliure_device="$work/$name-reliure"
+    cousoir_device="$work/$name-cousoir"
     if [ "$kind" = kindle ]; then
         product=0x9981
         calibre_device="mtpdir:$calibre_device"
-        reliure_device="mtpdir:$reliure_device"
+        cousoir_device="mtpdir:$cousoir_device"
     fi
     for step in 1 2 3; do
         if [ "$step" -lt 3 ]; then
             local books=$4
             [ "$step" = 2 ] && books=$5
             printf '[{"send": %s}]' "$books" > "$work/$name-ops-calibre.json"
-            printf '[{"send": {"books": %s, "device": "%s"}}]' "$books" "$reliure_device" \
-                > "$work/$name-ops-reliure.json"
+            printf '[{"send": {"books": %s, "device": "%s"}}]' "$books" "$cousoir_device" \
+                > "$work/$name-ops-cousoir.json"
         else
             # The book's file as Calibre named it on its reader.
             lpath=$(python3 -c 'import json, sys
 print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("application_id") == int(sys.argv[2])][:1]))' \
                 "$work/$name-calibre/metadata.calibre" "$6")
             printf '[{"remove": %s}]' "$lpath" > "$work/$name-ops-calibre.json"
-            printf '[{"removeFromDevice": {"lpaths": %s, "device": "%s"}}]' "$lpath" "$reliure_device" \
-                > "$work/$name-ops-reliure.json"
+            printf '[{"removeFromDevice": {"lpaths": %s, "device": "%s"}}]' "$lpath" "$cousoir_device" \
+                > "$work/$name-ops-cousoir.json"
         fi
         oracle "$root/tools/oracle/send_books.py" -- "$work/$name-library-calibre" "$calibre_device" "$product" \
             "$work/$name-ops-calibre.json" || return 0
-        if ! "$cli" apply --library "$work/$name-library-reliure" "$work/$name-ops-reliure.json" > "$work/$name.log" 2>&1; then
-            echo "$name step $step: reliure-cli apply failed:"
+        if ! "$cli" apply --library "$work/$name-library-cousoir" "$work/$name-ops-cousoir.json" > "$work/$name.log" 2>&1; then
+            echo "$name step $step: cousoir-cli apply failed:"
             tail -20 "$work/$name.log"
             status=1
             return 0
         fi
         local only=()
         [ "$step" = 3 ] && only=(--lpaths-only)
-        if python3 "$root/tests/golden/compare_devices.py" "${only[@]}" "$work/$name-calibre" "$work/$name-reliure" \
+        if python3 "$root/tests/golden/compare_devices.py" "${only[@]}" "$work/$name-calibre" "$work/$name-cousoir" \
             > "$work/$name.txt"; then
             echo "$name step $step: $(tail -1 "$work/$name.txt")"
         else
-            echo "$name step $step: Reliure sends differently:"
+            echo "$name step $step: Cousoir sends differently:"
             head -40 "$work/$name.txt"
             status=1
         fi
-        for side in calibre reliure; do
+        for side in calibre cousoir; do
             if [ "$kind" = kobo ]; then
                 python3 "$root/tests/golden/kobo_import.py" "$work/$name-$side"
             else
@@ -342,7 +342,7 @@ print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("app
         done
     done
     # Each reader read by both programs, on copies.
-    for side in calibre reliure; do
+    for side in calibre cousoir; do
         rm -rf "$work/$name-read-$side"
         cp -a --reflink=auto "$work/$name-$side" "$work/$name-read-$side"
         printf '[{"matches": "%s"}]' "$work/$name-matches-$side.json" > "$work/$name-ops-matches.json"
@@ -353,13 +353,13 @@ print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("app
         fi
         oracle "$root/tools/oracle/send_books.py" -- "$work/$name-library-calibre" "$read" "$product" \
             "$work/$name-ops-matches.json" || return 0
-        "$cli" device --library "$work/$name-library-reliure" "$listed" \
+        "$cli" device --library "$work/$name-library-cousoir" "$listed" \
             | python3 -c 'import json, sys
 books = json.load(sys.stdin)["books"]
 for book in books: book.pop("size")
 print(json.dumps(sorted(books, key=lambda b: b["lpath"].lower()), indent=1))' > "$work/$name-listed-$side.json"
     done
-    if python3 "$root/tests/golden/compare_devices.py" "$work/$name-read-calibre" "$work/$name-read-reliure" \
+    if python3 "$root/tests/golden/compare_devices.py" "$work/$name-read-calibre" "$work/$name-read-cousoir" \
         > "$work/$name.txt"; then
         echo "$name once Calibre connects: $(tail -1 "$work/$name.txt")"
     else
@@ -371,18 +371,18 @@ print(json.dumps(sorted(books, key=lambda b: b["lpath"].lower()), indent=1))' > 
 for side in sys.argv[1:]:
     matches = json.load(open(side))
     assert matches and all(m[1] == "UUID" for m in matches), matches' \
-        "$work/$name-matches-calibre.json" "$work/$name-matches-reliure.json" \
-        || ! cmp -s "$work/$name-matches-calibre.json" "$work/$name-matches-reliure.json"; then
+        "$work/$name-matches-calibre.json" "$work/$name-matches-cousoir.json" \
+        || ! cmp -s "$work/$name-matches-calibre.json" "$work/$name-matches-cousoir.json"; then
         echo "$name: Calibre does not take the books on both readers for the library's alike:"
-        diff -u "$work/$name-matches-calibre.json" "$work/$name-matches-reliure.json" | head -20
+        diff -u "$work/$name-matches-calibre.json" "$work/$name-matches-cousoir.json" | head -20
         status=1
-    elif ! cmp -s "$work/$name-listed-calibre.json" "$work/$name-listed-reliure.json" \
+    elif ! cmp -s "$work/$name-listed-calibre.json" "$work/$name-listed-cousoir.json" \
         || grep -q '"book": 0' "$work/$name-listed-calibre.json"; then
-        echo "$name: Reliure does not list the books on both readers alike:"
-        diff -u "$work/$name-listed-calibre.json" "$work/$name-listed-reliure.json" | head -20
+        echo "$name: Cousoir does not list the books on both readers alike:"
+        diff -u "$work/$name-listed-calibre.json" "$work/$name-listed-cousoir.json" | head -20
         status=1
     else
-        echo "$name: Calibre and Reliure each know the books the other sent ($(grep -c '"lpath"' "$work/$name-listed-calibre.json") books)"
+        echo "$name: Calibre and Cousoir each know the books the other sent ($(grep -c '"lpath"' "$work/$name-listed-calibre.json") books)"
     fi
 }
 
@@ -396,7 +396,7 @@ devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
 # before, so not locked by DRM.
 real_conversions() {
     local converted
-    converted=$(python3 - "$work/real-reliure/metadata.db" "$work/convert-real.json" <<'PICK'
+    converted=$(python3 - "$work/real-cousoir/metadata.db" "$work/convert-real.json" <<'PICK'
 import json, sqlite3, sys
 con = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True)
 formats = {}
@@ -424,7 +424,7 @@ PICK
     for file in global.py.json tweaks.json conversion; do
         [ -e "$user_config/$file" ] && cp -a "$user_config/$file" "$work/config-real/"
     done
-    CALIBRE_CONFIG_DIRECTORY="$work/config-real" conversions real-conversions "$work/real-reliure" \
+    CALIBRE_CONFIG_DIRECTORY="$work/config-real" conversions real-conversions "$work/real-cousoir" \
         "$work/convert-real.json" "$converted"
 }
 
@@ -436,7 +436,7 @@ PICK
 real_devices() {
     local picks kind
     for kind in kobo kindle; do
-    picks=$(python3 - "$work/real-reliure/metadata.db" "$kind" <<'PICK'
+    picks=$(python3 - "$work/real-cousoir/metadata.db" "$kind" <<'PICK'
 import sqlite3, sys
 con = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True)
 formats = {}
@@ -467,12 +467,12 @@ PICK
     first=${picks% \[*}
     again=$(echo "$picks" | sed 's/.*\(\[[0-9]*\]\) .*/\1/')
     removed=${picks##* }
-    CALIBRE_CONFIG_DIRECTORY="$work/config-devices" devices "$kind" "real-$kind" "$work/real-reliure" "$first" "$again" \
+    CALIBRE_CONFIG_DIRECTORY="$work/config-devices" devices "$kind" "real-$kind" "$work/real-cousoir" "$first" "$again" \
         "$removed"
     done
 }
 
-if [ "${RELIURE_GOLDEN_REAL:-0}" = 1 ]; then
+if [ "${COUSOIR_GOLDEN_REAL:-0}" = 1 ]; then
     real=$(python3 -c "
 import json, sys
 print(json.load(open(sys.argv[1])).get('library_path') or '')" "$user_config/global.py.json")
@@ -484,7 +484,7 @@ print(json.load(open(sys.argv[1])).get('library_path') or '')" "$user_config/glo
         status=1
     else
         compare real "$real"
-        reads real "$work/real-reliure"
+        reads real "$work/real-cousoir"
         real_conversions
         real_devices
     fi

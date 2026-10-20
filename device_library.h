@@ -38,11 +38,11 @@ struct KindleSlot
 
 // The readers connected to the computer, each with its books, and the books
 // sent to them: Kobos mounted as folders, and Kindles reached over MTP, which
-// Reliure opens for each thing it does there, one at a time, on a thread of
+// Cousoir opens for each thing it does there, one at a time, on a thread of
 // their own. A reader's books are read once it shows up, and after each
-// change Reliure makes. Sending goes through Calibre as KoboSend and
+// change Cousoir makes. Sending goes through Calibre as KoboSend and
 // KindleSend describe, one batch at a time. While Calibre runs on this
-// computer it handles the readers itself, which Reliure then leaves alone.
+// computer it handles the readers itself, which Cousoir then leaves alone.
 class DeviceLibrary : public QObject
 {
     Q_OBJECT
@@ -100,7 +100,7 @@ public:
     // empty for none.
     Q_INVOKABLE QString sendFormat(int bookId, const QString &root) const;
     // What Calibre converts a book to before sending it to the reader on
-    // `root`: the first of its driver's formats that Reliure converts to.
+    // `root`: the first of its driver's formats that Cousoir converts to.
     Q_INVOKABLE QString convertFormat(const QString &root) const;
     // Sends the books to the reader on `root`. Returns an error message,
     // empty once they wait their turn.

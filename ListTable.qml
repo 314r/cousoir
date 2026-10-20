@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
-import Reliure
+import Cousoir
 
 // A file-manager list: a header and plain rows sharing column lanes. The
 // first column stretches; the others are `chars` caption characters wide,

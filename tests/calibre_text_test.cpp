@@ -14,7 +14,7 @@ namespace {
 QJsonObject oracle()
 {
     static const QJsonObject data = [] {
-        QFile file(QStringLiteral(RELIURE_TEST_DATA_DIR "/oracle/text.json"));
+        QFile file(QStringLiteral(COUSOIR_TEST_DATA_DIR "/oracle/text.json"));
         if (!file.open(QIODevice::ReadOnly))
             return QJsonObject();
         return QJsonDocument::fromJson(file.readAll()).object();

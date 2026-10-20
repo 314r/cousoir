@@ -10,7 +10,7 @@ struct LIBMTP_mtpdevice_struct;
 // A reader that speaks MTP, as a Kindle Paperwhite does, through libmtp, the
 // library Calibre's MTP driver uses: its storages, the files and folders in
 // them by object id, and the copies to and from it. A session is MTP's one
-// connection to the device at a time: Reliure opens one for each thing it
+// connection to the device at a time: Cousoir opens one for each thing it
 // does, so that Calibre or a file manager can have the device in between.
 // Calls block; they belong on a thread of their own.
 namespace Mtp {

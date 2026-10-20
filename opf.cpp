@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/ebooks/metadata/opf2.py: metadata_to_opf()
+// - src/calibre/ebooks/metadata/__init__.py: fmt_sidx()
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "opf.h"
 
 #include <QXmlStreamReader>
@@ -129,7 +138,7 @@ QString seriesIndexText(double index)
     return text;
 }
 
-// The calibre: metadata of `previous` Reliure has no data for.
+// The calibre: metadata of `previous` Cousoir has no data for.
 QList<QPair<QString, QString>> keptMetadata(const QByteArray &previous)
 {
     QList<QPair<QString, QString>> kept;

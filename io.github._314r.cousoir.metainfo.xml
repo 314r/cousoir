@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github._314r.cousoir</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>Cousoir</name>
+  <summary>Browse your Calibre ebook library</summary>
+  <description>
+    <p>
+      Cousoir works on the library of the Calibre ebook manager. It lists its
+      books by title, author, series, tag, language and publisher, as a table
+      or as covers, with each book's metadata, description and files. It edits
+      their metadata and covers, adds books, moves them to the library's trash
+      and back, and sends them to a Kobo or a Kindle.
+    </p>
+    <p>
+      Calibre stays the library's owner. Cousoir follows Calibre's own rules,
+      ported from the code of Calibre, the free ebook manager by Kovid Goyal
+      and the Calibre contributors, and Calibre itself converts the books and
+      sends them to the readers. Cousoir is an independent project, not made
+      or endorsed by the Calibre project.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/314r/cousoir</url>
+  <developer id="io.github._314r">
+    <name>314r</name>
+  </developer>
+  <launchable type="desktop-id">io.github._314r.cousoir.desktop</launchable>
+  <provides>
+    <binary>cousoir</binary>
+    <binary>cousoir-cli</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+</component>

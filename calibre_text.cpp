@@ -1,3 +1,26 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
+// GPL v3:
+// - src/calibre/ebooks/metadata/__init__.py: title_sort(),
+//   get_title_sort_pat(), quote_pairs, author_to_author_sort(),
+//   remove_bracketed_text(), string_to_authors(), authors_to_string(),
+//   check_isbn() and check_doi()
+// - resources/default_tweaks.py: the title sort articles and the author sort
+//   word lists
+// - src/calibre/__init__.py: sanitize_file_name()
+// - src/calibre/utils/filenames.py: ascii_filename()
+// - src/calibre/ebooks/html_entities.c: replace_entities()
+// - src/calibre/db/__init__.py: _get_next_series_num_for_list()
+// - src/calibre/db/utils.py: fuzzy_title()
+// - src/calibre/utils/localization.py: canonicalize_lang()
+// - src/calibre/utils/cleantext.py: clean_xml_chars() and clean_ascii_chars()
+//
+// The tables it includes, calibre_unidecode.inc and calibre_strings.inc,
+// are Calibre's too: see their own headers.
+//
+// CREDITS.md lists all of the Calibre code in Cousoir.
+
 #include "calibre_text.h"
 
 #include <QHash>

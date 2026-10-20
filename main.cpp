@@ -14,26 +14,26 @@ int main(int argc, char *argv[])
 {
     QGuiApplication app(argc, argv);
 
-    app.setOrganizationName(QStringLiteral("reliure"));
-    app.setApplicationName(QStringLiteral("reliure"));
-    app.setApplicationDisplayName(QStringLiteral("Reliure"));
-    app.setApplicationVersion(QStringLiteral(RELIURE_VERSION));
+    app.setOrganizationName(QStringLiteral("cousoir"));
+    app.setApplicationName(QStringLiteral("cousoir"));
+    app.setApplicationDisplayName(QStringLiteral("Cousoir"));
+    app.setApplicationVersion(QStringLiteral(COUSOIR_VERSION));
     app.setOrganizationDomain(QStringLiteral("314r.github.io"));
-    app.setDesktopFileName(QStringLiteral("io.github._314r.reliure"));
-    app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Reliure/assets/icons/hicolor/reliure-256.png")));
+    app.setDesktopFileName(QStringLiteral("io.github._314r.cousoir"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Cousoir/assets/icons/hicolor/cousoir-256.png")));
 
-    qmlRegisterType<BookLibrary>("Reliure", 1, 0, "BookLibrary");
-    qmlRegisterType<ConcurrencyGuard>("Reliure", 1, 0, "ConcurrencyGuard");
-    qmlRegisterType<ConversionService>("Reliure", 1, 0, "ConversionService");
-    qmlRegisterType<DeviceLibrary>("Reliure", 1, 0, "DeviceLibrary");
-    qmlRegisterType<OmarchyTheme>("Reliure", 1, 0, "OmarchyTheme");
-    qmlRegisterType<SystemAppearance>("Reliure", 1, 0, "SystemAppearance");
+    qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
+    qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
+    qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
+    qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
+    qmlRegisterType<OmarchyTheme>("Cousoir", 1, 0, "OmarchyTheme");
+    qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
 
     QQmlApplicationEngine engine;
     engine.addImageProvider(QStringLiteral("covers"), new CoverCache);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
-    engine.loadFromModule("Reliure", "Main");
+    engine.loadFromModule("Cousoir", "Main");
 
     return app.exec();
 }
