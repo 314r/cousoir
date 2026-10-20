@@ -21,7 +21,8 @@ itself converts the books and sends them to the readers.
 [CREDITS.md](CREDITS.md) lists the Calibre code in Cousoir, file by file.
 
 The project structure, theming (system, light, dark and Omarchy) and Settings
-window come from the JolieBulle Qt port, which took them from kbextract.
+window come from the JolieBulle Qt port, which took them from kbextract; the
+Omarchy theming is derived from bjarneo's omadji.
 
 ## Interface
 
@@ -588,8 +589,8 @@ The tests check the port against Calibre itself:
 
 GPL-3.0-only, as Cousoir holds code ported from Calibre, which is GPL v3; see
 `LICENSE`, and [CREDITS.md](CREDITS.md) for what comes from Calibre. The theme
-files taken from kbextract and JolieBulle (`Theme.qml`, `omarchy_theme.*`,
-`system_appearance.*`, `AppearanceSettingsPage.qml`, `SettingsWindow.qml` and
-the shared controls) also keep their MIT notice, in
-`LICENSES/MIT-omarchy.txt`, and the icons adapted from Lucide their ISC
-notice, in `LICENSES/ISC-lucide.txt`.
+files taken from kbextract, JolieBulle and omadji (`Theme.qml`,
+`omarchy_theme.*`, `system_appearance.*`, `AppearanceSettingsPage.qml`,
+`SettingsWindow.qml` and the shared controls) also keep their MIT notice, in
+`LICENSES/MIT.txt`, and the icons adapted from Lucide their ISC notice, in
+`LICENSES/ISC-lucide.txt`.
