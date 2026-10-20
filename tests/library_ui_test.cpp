@@ -108,6 +108,7 @@ private slots:
     void showsWriteState();
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
+    void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
     void editsDetailsInPlace();
     void revertsBookChanges();
@@ -565,6 +566,37 @@ void LibraryUiTest::creditsCalibreInSettings()
     QCOMPARE(version.size(), 1);
     QVERIFY(version.constFirst()->property("text").toString().contains(QStringLiteral(COUSOIR_VERSION)));
     settings->close();
+}
+
+void LibraryUiTest::usesOmarchyColorsByDefault()
+{
+    const auto settingsWindow = [this] {
+        return m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
+    };
+    QVERIFY(settingsWindow());
+    QCOMPARE(settingsWindow()->property("currentThemeMode").toString(), QStringLiteral("system"));
+
+    // On Omarchy, its colors until another mode is picked; the setting stays
+    // empty until then.
+    const auto removeTheme = qScopeGuard([] { QDir(themeStateRoot).removeRecursively(); });
+    QVERIFY(QDir().mkpath(themeStateRoot + QStringLiteral("/theme")));
+    QFile colors(themeStateRoot + QStringLiteral("/theme/colors.toml"));
+    QVERIFY(colors.open(QIODevice::WriteOnly));
+    colors.write("accent = \"#d35f5f\"\n");
+    colors.close();
+    m_engine.reset();
+    QVERIFY(loadUi());
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
+    QCOMPARE(settingsWindow()->property("currentThemeMode").toString(), QStringLiteral("omarchy"));
+    QVERIFY(QSettings().value(QStringLiteral("Appearance/colorMode")).toString().isEmpty());
+
+    QMetaObject::invokeMethod(settingsWindow(), "themeModeSelected", Q_ARG(QString, QStringLiteral("dark")));
+    QCOMPARE(settingsWindow()->property("currentThemeMode").toString(), QStringLiteral("dark"));
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Appearance/colorMode")).toString(), QStringLiteral("dark"));
+    m_engine.reset();
+    QVERIFY(loadUi());
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
+    QCOMPARE(settingsWindow()->property("currentThemeMode").toString(), QStringLiteral("dark"));
 }
 
 void LibraryUiTest::missingLibraryShowsError()
