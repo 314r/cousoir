@@ -32,6 +32,13 @@ struct NewFormat
     QString format;
 };
 
+// The formats of book `from` that book `to` has no file for, copied to it.
+struct FormatCopy
+{
+    int from = 0;
+    int to = 0;
+};
+
 // Formats of a book moved to the library's trash.
 struct FormatRemoval
 {
@@ -97,6 +104,12 @@ bool addBook(SqliteDb &db, FileTransaction &files, const NewBook &book, const Co
              FieldWriters::Result *fields, Result *result, QString *error);
 bool addFormat(SqliteDb &db, FileTransaction &files, const NewFormat &format, const Context &context, Result *result,
                QString *error);
+// Merge only formats of Calibre's merge_books() in gui2/actions/
+// edit_metadata.py: add_formats(…, replace=False) copies into the book kept
+// each format of the other whose file is there and that the kept book has no
+// file for.
+bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, const Context &context, Result *result,
+                 QString *error);
 bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &removal, const Context &context,
                    Result *result, QString *error);
 bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds, const Context &context,

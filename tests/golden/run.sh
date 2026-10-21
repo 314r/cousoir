@@ -141,8 +141,9 @@ edits() {
 
 edits "$root/tests/data/edits/edits.json"
 
-# Books and formats added, moved to the trash and restored, step by step on
-# both copies, each step compared.
+# Books and formats added, moved to the trash and restored, then one copy of
+# a book kept with the formats of another, step by step on both copies, each
+# step compared.
 operations() {
     for side in calibre cousoir; do
         rm -rf "$work/ops-$side"
@@ -173,7 +174,8 @@ operations() {
     done
 }
 
-operations "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" "$root/tests/data/edits/ops-3.json"
+operations "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" "$root/tests/data/edits/ops-3.json" \
+    "$root/tests/data/edits/ops-4.json"
 
 # Each restores what the other moved to the trash: the second step applied by
 # Calibre to Cousoir's copy, and by Cousoir to Calibre's, ends as the other.

@@ -86,6 +86,8 @@ set(COUSOIR_LIBRARY_SOURCES
     kindle_send.h
     kobo_send.cpp
     kobo_send.h
+    library_check.cpp
+    library_check.h
     mtp.cpp
     mtp.h
     file_transaction.cpp
@@ -138,6 +140,7 @@ set(COUSOIR_QML_FILES
     BookDetailsPane.qml
     BookPage.qml
     BooksPage.qml
+    CheckPage.qml
     ChoiceBox.qml
     ConfirmDialog.qml
     CoverGrid.qml
@@ -166,6 +169,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/arrow-left.svg
     assets/icons/book.svg
     assets/icons/building.svg
+    assets/icons/check.svg
     assets/icons/chevron-down.svg
     assets/icons/close.svg
     assets/icons/eject.svg
@@ -314,7 +318,7 @@ if(BUILD_TESTING)
     cousoir_configure_test_executable(calibre_paths_tests)
     cousoir_add_logged_test(calibre_paths_tests calibre_paths_tests)
 
-    foreach(name IN ITEMS opf commit_engine conversion kobo kindle)
+    foreach(name IN ITEMS opf commit_engine conversion kobo kindle library_check)
         qt_add_executable(${name}_tests
             tests/${name}_test.cpp
             ${COUSOIR_LIBRARY_SOURCES}

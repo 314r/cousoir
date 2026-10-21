@@ -35,9 +35,11 @@ struct Request
     QString backupFolder;
     CalibreConfig config;
     QList<BookEdit> edits;
-    // After the edits, in this order: formats moved to the trash, books moved
-    // to the trash, books and formats restored from it, books added and
+    // After the edits, in this order: formats copied from one book to
+    // another, before anything leaves, then formats moved to the trash, books
+    // moved to the trash, books and formats restored from it, books added and
     // formats added.
+    QList<FormatCopy> formatCopies;
     QList<FormatRemoval> formatRemovals;
     QList<int> trash;
     QList<Restoration> restorations;

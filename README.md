@@ -44,6 +44,10 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   already have.
 - 🗑️ **A trash shared with Calibre.** Books and files go to the library's own
   trash and come back with Restore, from Cousoir or from Calibre.
+- 🩺 **A check-up for your library.** The Check section finds the same book
+  added twice, an author filed under several names, books whose files are
+  gone and files the database doesn't know. Keep one copy, merge the names or
+  tidy the entries in a click, or ignore what you meant.
 - 🔄 **Convert with Calibre.** KEPUB for a Kobo, AZW3 for a Kindle, using your
   Calibre conversion settings.
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land

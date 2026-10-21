@@ -197,10 +197,11 @@ bool readItems(SqliteDb &db, const ItemTable &table, Items *items, QString *erro
         const int id = row.at(0).toInt();
         const QString key = table.caseInsensitive ? lowerKey(value) : value;
         // fix_case_duplicates() would merge them; Cousoir leaves that to
-        // Calibre.
+        // Calibre, which runs it the next time it writes the field.
         if (items->ids.contains(key)) {
             if (error) {
-                *error = QObject::tr("Two %1 differ only by case (“%2”): open the library in Calibre once to merge them.")
+                *error = QObject::tr("Two %1 differ only by case (“%2”): Calibre merges them the next time it saves "
+                                     "one, and Cousoir can change them then.")
                              .arg(table.table, value);
             }
             return false;

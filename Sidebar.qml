@@ -19,7 +19,8 @@ Item {
     readonly property var places: [
         { title: qsTr("Library"), items: [
             { key: "books", title: qsTr("Books"), icon: "book" },
-            { key: "trash", title: qsTr("Trash"), icon: "trash" }
+            { key: "trash", title: qsTr("Trash"), icon: "trash" },
+            { key: "check", title: qsTr("Check"), icon: "check" }
         ] },
         { title: qsTr("Browse"), items: [
             { key: "authors", title: qsTr("Authors"), icon: "user" },

@@ -65,7 +65,9 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | | `src/calibre/ebooks/metadata/meta.py`: `metadata_from_filename()`, `_get_metadata()` |
 | | `src/calibre/ebooks/metadata/book/base.py`: `smart_update()` |
 | | `src/calibre/ebooks/metadata/epub.py`: `Encryption`, `get_metadata()`, `get_cover()` |
-| `book_operations.cpp` | `src/calibre/db/cache.py`: `create_book_entry()`, `set_metadata()`, `_do_add_format()`, `remove_formats()`, `remove_books()`, `move_book_from_trash()`, `move_format_from_trash()`, `author_sort_from_authors()`, `get_next_series_num_for()`, `_add_newbook_tag()` |
+| `library_check.cpp` | `src/calibre/library/check_library.py`: `scan_library()`, `process_book()`, `IGNORE_AT_TOP_LEVEL`, `NORMALS`; `src/calibre/db/utils.py`: `find_identical_books()` |
+| `book_operations.cpp` | `src/calibre/gui2/actions/edit_metadata.py`: `merge_books()` with `merge_only_formats`, `add_formats()` |
+| | `src/calibre/db/cache.py`: `create_book_entry()`, `set_metadata()`, `_do_add_format()`, `remove_formats()`, `remove_books()`, `move_book_from_trash()`, `move_format_from_trash()`, `author_sort_from_authors()`, `get_next_series_num_for()`, `_add_newbook_tag()` |
 | | `src/calibre/db/backend.py`: `update_path()`, `add_format()`, `remove_formats()`, `remove_books()`, `move_book_to_trash()`, `list_trash_entries()`, `get_metadata_for_trash_book()`, `format_abspath()` |
 | | `src/calibre/db/tables.py`: `update_fmt()` |
 | `field_writers.cpp` | `src/calibre/db/write.py`: the field writers, `one_one_in_books()`, `many_one()`, `many_many()`, `identifiers()`, with `get_db_id()`, `change_case()`, `get_series_values()`, `clean_identifier()` and the `adapt_*()` functions |
@@ -84,6 +86,12 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 
 `concurrency_guard.cpp` uses the name of Calibre's single-instance socket,
 from `src/calibre/utils/lock.py`, to tell whether Calibre is running.
+
+The Check section's idea of finding duplicate books and author name
+variants, and of telling sure matches from likely ones, comes from the Find
+Duplicates plugin for Calibre by Grant Drake (kiwidude), GPL v3,
+<https://github.com/kiwidude68/calibre_plugins>. No code of it is in
+Cousoir.
 
 The headers next to these files (`calibre_text.h`, `calibre_paths.h`,
 `opf_reader.h`, `opf.h`, `field_writers.h`, `book_operations.h` and the
@@ -113,7 +121,8 @@ run inside `calibre-debug` and call Calibre's own functions. A few lines in
 them come from Calibre and say so:
 
 - `tools/oracle/read_oracle.py` and `tools/oracle/apply_edits.py`: `book()`
-  of `src/calibre/db/cli/cmd_add.py`;
+  of `src/calibre/db/cli/cmd_add.py`; `apply_edits.py` also follows
+  `merge_books()` of `src/calibre/gui2/actions/edit_metadata.py`;
 - `tools/oracle/convert_books.py`: `book_converted()` of
   `src/calibre/gui2/actions/convert.py`;
 - `tools/oracle/send_books.py`: the methods of

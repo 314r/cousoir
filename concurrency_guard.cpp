@@ -404,6 +404,17 @@ bool ConcurrencyGuard::calibreRunningHere()
 
 QStringList ConcurrencyGuard::conflictCopies(const QString &folder)
 {
+    QStringList copies;
+    const QStringList files = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
+    for (const QString &file : files) {
+        if (isConflictCopy(file))
+            copies.append(file);
+    }
+    return copies;
+}
+
+bool ConcurrencyGuard::isConflictCopy(const QString &name)
+{
     // Dropbox names a conflict copy in its user's language, after the name of
     // whoever made it in some: "(Pierre's conflicted copy 2024-11-14)".
     // Nextcloud and ownCloud write "(conflicted copy …)" or "(case clash from
@@ -416,13 +427,7 @@ QStringList ConcurrencyGuard::conflictCopies(const QString &folder)
                        "|\\.sync-conflict-\\d{8}-\\d{6}"
                        "|_conflict-.*\\d{8}-\\d{6}"),
         QRegularExpression::CaseInsensitiveOption);
-    QStringList copies;
-    const QStringList files = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
-    for (const QString &file : files) {
-        if (pattern.match(file).hasMatch())
-            copies.append(file);
-    }
-    return copies;
+    return pattern.match(name).hasMatch();
 }
 
 QStringList ConcurrencyGuard::dropboxRoots(const QString &infoPath)

@@ -5,6 +5,7 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -118,6 +119,10 @@ private slots:
     void convertsBooks();
     void sendsToKobos();
     void sendsToKindles();
+    void checksLibrary();
+    void mergesAuthorVariants();
+    void keepsOneCopy();
+    void removesMissingEntries();
 
 private:
     std::unique_ptr<BookLibrary> open(const QString &path = fixtureLibrary());
@@ -126,6 +131,9 @@ private:
 void BookLibraryTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
+    QCoreApplication::setApplicationName(QStringLiteral("book-library"));
+    QSettings().clear();
 }
 
 std::unique_ptr<BookLibrary> BookLibraryTest::open(const QString &path)
@@ -983,6 +991,145 @@ void BookLibraryTest::sendsToKindles()
 
     kindles = {};
     QTRY_VERIFY(devices.devices().isEmpty());
+}
+
+namespace {
+
+// The check's rows of `kind`.
+QVariantList checkRows(BookLibrary *library, const QString &kind)
+{
+    QVariantList rows;
+    for (const QVariant &row : library->check().value(QStringLiteral("rows")).toList()) {
+        if (row.toMap().value(QStringLiteral("kind")).toString() == kind)
+            rows.append(row);
+    }
+    return rows;
+}
+
+// Waits for the check of the library as it now is.
+bool waitForCheck(BookLibrary *library)
+{
+    QTest::qWait(0);
+    return QTest::qWaitFor([library] { return !library->checking() && !library->saving(); }, 15000);
+}
+
+} // namespace
+
+void BookLibraryTest::checksLibrary()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    QVERIFY(waitForCheck(library.get()));
+    // Le Petit Prince has no file.
+    QCOMPARE(library->check().value(QStringLiteral("count")).toInt(), 1);
+    const QVariantMap missing = checkRows(library.get(), QStringLiteral("missing")).value(0).toMap();
+    QCOMPARE(missing.value(QStringLiteral("bookId")).toInt(), 6);
+    QVERIFY(missing.value(QStringLiteral("noFormats")).toBool());
+    QVERIFY(!library->check().value(QStringLiteral("checked")).toString().isEmpty());
+
+    // Ignored, until asked for again.
+    library->ignoreFinding(missing.value(QStringLiteral("key")).toString());
+    QCOMPARE(library->check().value(QStringLiteral("count")).toInt(), 0);
+    QCOMPARE(library->check().value(QStringLiteral("ignored")).toInt(), 1);
+    library->showIgnored();
+    QCOMPARE(library->check().value(QStringLiteral("count")).toInt(), 1);
+
+    // A file dropped in the library's folder, seen on opening the section.
+    QFile stray(copy->filePath(QStringLiteral("stray.epub")));
+    QVERIFY(stray.open(QIODevice::WriteOnly));
+    stray.close();
+    library->setSection(QStringLiteral("check"));
+    QVERIFY(waitForCheck(library.get()));
+    QCOMPARE(checkRows(library.get(), QStringLiteral("outside")).value(0).toMap().value(QStringLiteral("path")).toString(),
+             QStringLiteral("stray.epub"));
+    QVERIFY(!library->showInFolder(QStringLiteral("../elsewhere")).isEmpty());
+
+    // The fixes wait for the library to be writable.
+    QVERIFY(!library->keepDuplicate(1, { 2 }).isEmpty());
+    QVERIFY(!library->mergeAuthors({ 1, 2 }, 1).isEmpty());
+    QVERIFY(!library->removeMissingFormats(6).isEmpty());
+}
+
+void BookLibraryTest::mergesAuthorVariants()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QCOMPARE(library->updateBook(3, { { QStringLiteral("authors"), QStringLiteral("Cook, Glen") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Cook, Glen/Shadows Linger (3)"))));
+    QVERIFY(waitForCheck(library.get()));
+    const QVariantMap group = checkRows(library.get(), QStringLiteral("authors")).value(0).toMap();
+    QCOMPARE(group.value(QStringLiteral("ids")).toList().size(), 2);
+    QVERIFY(!group.value(QStringLiteral("initials")).toBool());
+
+    QCOMPARE(library->mergeAuthors(group.value(QStringLiteral("ids")).toList(), 2), QString());
+    QVERIFY(waitForSave(library.get()));
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Glen Cook/Shadows Linger (3)"))));
+    QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral("Cook, Glen"))));
+    QCOMPARE(library->counts().value(QStringLiteral("authors")).toInt(), 6);
+    QVERIFY(waitForCheck(library.get()));
+    QVERIFY(checkRows(library.get(), QStringLiteral("authors")).isEmpty());
+}
+
+void BookLibraryTest::keepsOneCopy()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    // Book 2's EPUB added again: book 7.
+    QSignalSpy added(library.get(), &BookLibrary::booksAdded);
+    QCOMPARE(library->addBooks({ QUrl::fromLocalFile(
+                 copy->filePath(QStringLiteral("Glen Cook/The Black Company (2)/The Black Company - Glen Cook.epub"))) }),
+             QString());
+    QSignalSpy duplicates(library.get(), &BookLibrary::duplicatesFound);
+    QVERIFY(duplicates.wait(15000));
+    library->addDuplicates(true);
+    QVERIFY(added.wait(15000));
+    QVERIFY(waitForCheck(library.get()));
+    const QVariantMap group = checkRows(library.get(), QStringLiteral("duplicates")).value(0).toMap();
+    QVERIFY(group.value(QStringLiteral("sameTitle")).toBool());
+    const QVariantList books = group.value(QStringLiteral("books")).toList();
+    QCOMPARE(books.size(), 2);
+    // The copy with both files first; keeping the other brings it the AZW3.
+    QCOMPARE(books.at(0).toMap().value(QStringLiteral("id")).toInt(), 2);
+    QCOMPARE(books.at(1).toMap().value(QStringLiteral("gains")).toStringList(), QStringList{ QStringLiteral("AZW3") });
+
+    QCOMPARE(library->keepDuplicate(7, { 2, 7 }), QString());
+    QVERIFY(waitForSave(library.get()));
+    library->setCurrentBookId(7);
+    QCOMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("AZW3"), QStringLiteral("EPUB") }));
+    QCOMPARE(library->trashEntries().size(), 1);
+    QVERIFY(waitForCheck(library.get()));
+    QVERIFY(checkRows(library.get(), QStringLiteral("duplicates")).isEmpty());
+
+    // Back from the trash, the two copies are found again.
+    QCOMPARE(library->restoreFromTrash(2), QString());
+    QVERIFY(waitForSave(library.get()));
+    QVERIFY(waitForCheck(library.get()));
+    QCOMPARE(checkRows(library.get(), QStringLiteral("duplicates")).size(), 1);
+}
+
+void BookLibraryTest::removesMissingEntries()
+{
+    auto copy = writableCopy();
+    QVERIFY(QFile::remove(copy->filePath(QStringLiteral("Glen Cook/The Black Company (2)/The Black Company - Glen Cook.azw3"))));
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QVERIFY(waitForCheck(library.get()));
+    QCOMPARE(library->removeMissingFormats(1), QStringLiteral("None of the book's files is missing."));
+    QCOMPARE(library->removeMissingFormats(2), QString());
+    QVERIFY(waitForSave(library.get()));
+    library->setCurrentBookId(2);
+    QCOMPARE(formatsOf(library->currentBook()), QStringList{ QStringLiteral("EPUB") });
+    // Nothing went to the trash: there was nothing to put there.
+    QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral(".caltrash/f/2"))));
+    QVERIFY(waitForCheck(library.get()));
+    QCOMPARE(checkRows(library.get(), QStringLiteral("missing")).size(), 1);
 }
 
 QTEST_MAIN(BookLibraryTest)

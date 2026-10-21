@@ -5,7 +5,8 @@
 #
 # The file is cousoir-cli apply's. Edits, [{"book": 1, "set": {"title": ...}}],
 # go field by field through Cache.set_field() or set_cover(), in the order
-# Cache.set_metadata() sets them. Then, in cousoir-cli's order: formats to the
+# Cache.set_metadata() sets them. Then, in cousoir-cli's order: formats copied
+# from one book to another as Merge only formats copies them, formats to the
 # trash with remove_formats(), books with remove_books(), restorations with
 # move_book_from_trash() and move_format_from_trash(), books added as
 # calibredb add adds them, formats with add_format(). The metadata.opf files
@@ -36,7 +37,7 @@ FIELDS = {'title': 'title', 'authors': 'authors', 'rating': 'rating', 'seriesInd
           'authorSort': 'author_sort', 'publisher': 'publisher', 'series': 'series', 'tags': 'tags',
           'comments': 'comments', 'languages': 'languages', 'pubdate': 'pubdate', 'sort': 'sort',
           'identifiers': 'identifiers'}
-OPERATIONS = ('removeFormats', 'trash', 'restore', 'add', 'addFormat')
+OPERATIONS = ('copyFormats', 'removeFormats', 'trash', 'restore', 'add', 'addFormat')
 
 
 def edit(change):
@@ -92,7 +93,13 @@ for key in OPERATIONS:
         if key not in change:
             continue
         value = change[key]
-        if key == 'removeFormats':
+        if key == 'copyFormats':
+            # merge_books(merge_only_formats=True): add_formats(…, replace=False).
+            for fmt in cache.formats(value['from']):
+                path = cache.format_abspath(value['from'], fmt)
+                if path:
+                    cache.add_format(value['to'], fmt, path, replace=False, run_hooks=False)
+        elif key == 'removeFormats':
             cache.remove_formats({value['book']: value['formats']})
         elif key == 'trash':
             cache.remove_books(value)

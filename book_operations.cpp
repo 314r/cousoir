@@ -22,6 +22,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMap>
 #include <QObject>
 
 #include <algorithm>
@@ -548,6 +549,41 @@ bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QStr
         return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
     return run(db, QStringLiteral("INSERT OR REPLACE INTO conversion_options(book,format,data) VALUES (?,'PIPE',?)"),
                { bookId, data }, error);
+}
+
+bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, const Context &context, Result *result,
+                 QString *error)
+{
+    for (const int bookId : { copy.from, copy.to }) {
+        if (!bookExists(db, bookId))
+            return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    }
+    if (copy.from == copy.to)
+        return true;
+    // has_format(): a format whose file is there.
+    const auto present = [&db, &context](int bookId) {
+        QMap<QString, QString> found;
+        const QString path = pathOf(db, bookId);
+        if (path.isEmpty())
+            return found;
+        const QString folder = QDir(context.libraryPath).filePath(path);
+        for (const QVariantList &row : rows(db, QStringLiteral("SELECT format, name FROM data WHERE book=?"), { bookId })) {
+            const QString file = formatFile(folder, row.at(1).toString(), row.at(0).toString());
+            if (!file.isEmpty())
+                found.insert(row.at(0).toString(), file);
+        }
+        return found;
+    };
+    const QMap<QString, QString> kept = present(copy.to);
+    const QMap<QString, QString> other = present(copy.from);
+    for (auto it = other.cbegin(); it != other.cend(); ++it) {
+        if (kept.contains(it.key()))
+            continue;
+        if (!addFormatFile(db, files, copy.to, it.key(), it.value(), false, context, error))
+            return false;
+        result->touched.insert(copy.to);
+    }
+    return true;
 }
 
 bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &removal, const Context &context,
