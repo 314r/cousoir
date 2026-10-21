@@ -700,6 +700,13 @@ ApplicationWindow {
         onAccepted: window.addBooks(selectedFiles)
     }
 
+    LibraryFolderDialog {
+        id: libraryFolderDialog
+
+        libraryPath: window.library.libraryPath
+        onChosen: function(path) { librarySettings.path = path }
+    }
+
     ConfirmDialog {
         id: trashDialog
         objectName: "trashDialog"
@@ -1287,7 +1294,7 @@ ApplicationWindow {
                         onConvertRequested: function(bookId, format) { window.convertBook(bookId, format) }
                         onSendRequested: function(bookId, root) { window.sendBook(bookId, root) }
                         onReloadRequested: session.reload()
-                        onSettingsRequested: window.openSettings("library")
+                        onLibraryFolderRequested: libraryFolderDialog.open()
                         onFailed: function(message) { window.showNotice(message) }
                     }
 

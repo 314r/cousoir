@@ -562,7 +562,11 @@ QString BookLibrary::openFolder(int bookId)
 
 void BookLibrary::reload()
 {
-    startLoad();
+    // Calibre may have made its first library since, or opened another.
+    if (m_defaultPath && CalibreConfig::defaultLibraryPath() != m_libraryPath)
+        setLibraryPath(QString());
+    else
+        startLoad();
 }
 
 void BookLibrary::startLoad()
@@ -574,7 +578,7 @@ void BookLibrary::startLoad()
     }
     if (m_libraryPath.isEmpty()) {
         m_loaded = false;
-        m_lastError = tr("Calibre has no library on this computer yet. Choose one in Settings.");
+        m_lastError = tr("Calibre has no library on this computer yet.");
         emit libraryChanged();
         return;
     }

@@ -337,8 +337,10 @@ its license.
 ## The library
 
 By default Cousoir opens the library Calibre opens on this computer, read from
-Calibre's `global.py.json` (`CALIBRE_CONFIG_DIRECTORY` is honoured). Set
-`COUSOIR_LIBRARY_PATH` to open another one:
+Calibre's `global.py.json` (`CALIBRE_CONFIG_DIRECTORY` is honoured). When
+Calibre has none yet, the books page welcomes you and asks for a library's
+folder; Reload reads Calibre's choice again, so a library just made in Calibre
+opens without restarting. Set `COUSOIR_LIBRARY_PATH` to open another one:
 
 ```bash
 COUSOIR_LIBRARY_PATH=tests/data/library ./build/cousoir

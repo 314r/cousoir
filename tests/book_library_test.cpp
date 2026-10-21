@@ -3,6 +3,8 @@
 #include <QDesktopServices>
 #include <QDirIterator>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -105,6 +107,7 @@ private slots:
     void keepsBooksWhenReloadFails();
     void switchesLibrary();
     void reportsMissingLibrary();
+    void followsCalibreOnReload();
     void editsBooks();
     void followsSortsLikeCalibre();
     void refusesWhileReadOnly();
@@ -435,6 +438,29 @@ void BookLibraryTest::reportsMissingLibrary()
     QVERIFY(!library->loaded());
     QVERIFY(library->lastError().contains(QStringLiteral("no Calibre library")));
     QVERIFY(library->rows().isEmpty());
+}
+
+void BookLibraryTest::followsCalibreOnReload()
+{
+    QTemporaryDir config;
+    qunsetenv("COUSOIR_LIBRARY_PATH");
+    qputenv("CALIBRE_CONFIG_DIRECTORY", QFile::encodeName(config.path()));
+    const auto restore = qScopeGuard([] { qunsetenv("CALIBRE_CONFIG_DIRECTORY"); });
+    auto library = std::make_unique<BookLibrary>(QString(), frenchConfig());
+    QSignalSpy changed(library.get(), &BookLibrary::libraryChanged);
+    QVERIFY(changed.wait(10000));
+    QVERIFY(library->libraryPath().isEmpty());
+    QVERIFY(!library->loaded());
+
+    // Calibre's welcome wizard made a library meanwhile.
+    QFile global(config.filePath(QStringLiteral("global.py.json")));
+    QVERIFY(global.open(QIODevice::WriteOnly));
+    global.write(QJsonDocument(QJsonObject{ { QStringLiteral("library_path"), fixtureLibrary() } }).toJson());
+    global.close();
+    library->reload();
+    QCOMPARE(library->libraryPath(), QDir::cleanPath(fixtureLibrary()));
+    QTRY_VERIFY_WITH_TIMEOUT(library->loaded(), 10000);
+    QCOMPARE(library->rows().size(), 6);
 }
 
 namespace {

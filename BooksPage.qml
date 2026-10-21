@@ -52,7 +52,8 @@ Rectangle {
     // Send to the Kobo mounted on `root`, chosen in a row's menu.
     signal sendRequested(int bookId, string root)
     signal reloadRequested()
-    signal settingsRequested()
+    // Choose folder…, when the library cannot be read.
+    signal libraryFolderRequested()
     // Opening a book's file failed; `message` says why.
     signal failed(string message)
 
@@ -127,6 +128,27 @@ Rectangle {
             page.failed(error)
     }
 
+    // What stands in place of the books when there are none to show.
+    function emptyTitle() {
+        if (page.library.loaded)
+            return page.library.scopeCount === 0 ? qsTr("No books yet")
+                                                 : qsTr("No book matches “%1”").arg(page.library.searchText)
+        if (page.library.loading)
+            return qsTr("Reading the library…")
+        return page.library.libraryPath ? qsTr("Cannot read the library") : qsTr("Welcome to Cousoir")
+    }
+
+    function emptyMessage() {
+        if (page.library.loaded)
+            return page.library.scopeCount === 0 ? qsTr("Add books with Ctrl+N, or drop their files here.")
+                                                 : qsTr("Esc clears the search.")
+        if (page.library.loading)
+            return ""
+        return page.library.libraryPath
+            ? page.library.lastError
+            : qsTr("Cousoir opens the library Calibre opens on this computer, and Calibre has none yet. Choose a library's folder, the one holding metadata.db, or make one in Calibre and press Reload.")
+    }
+
     // Both views follow the same row, so switching keeps the selection.
     onGridModeChanged: {
         if (gridMode)
@@ -184,11 +206,7 @@ Rectangle {
                 objectName: "emptyTitle"
 
                 Layout.fillWidth: true
-                text: !page.library.loaded
-                    ? (page.library.loading ? qsTr("Reading the library…") : qsTr("Cannot read the library"))
-                    : page.library.scopeCount === 0
-                        ? qsTr("No books yet")
-                        : qsTr("No book matches “%1”").arg(page.library.searchText)
+                text: page.emptyTitle()
                 font.weight: Font.Bold
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
@@ -199,11 +217,7 @@ Rectangle {
 
                 Layout.fillWidth: true
                 visible: text.length > 0
-                text: !page.library.loaded
-                    ? (page.library.loading ? "" : page.library.lastError)
-                    : page.library.scopeCount === 0
-                        ? qsTr("Add books with Ctrl+N, or drop their files here.")
-                        : qsTr("Esc clears the search.")
+                text: page.emptyMessage()
                 color: Theme.textMuted
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
@@ -226,9 +240,11 @@ Rectangle {
                 FlatButton {
                     objectName: "chooseLibraryButton"
 
-                    variant: "outline"
-                    text: qsTr("Choose library…")
-                    onClicked: page.settingsRequested()
+                    // The one way forward when Calibre has no library.
+                    variant: page.library.libraryPath ? "outline" : "primary"
+                    text: qsTr("Choose folder…")
+                    icon.source: "assets/icons/folder.svg"
+                    onClicked: page.libraryFolderRequested()
                 }
             }
         }
