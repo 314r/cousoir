@@ -21,7 +21,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 
 <br/>
 
-✨ [Features](#-features) • ⚡ [Installation](#-installation) • 🚀 [Getting started](#-getting-started) • 🤝 [Calibre stays in charge](#-calibre-stays-in-charge) • 🔒 [Your library stays safe](#-your-library-stays-safe) • 🎨 [Made for Omarchy](#-made-for-omarchy) • 💛 [Built on Calibre](#-built-on-calibre) • 🔧 [For developers](#-for-developers)
+✨ [Features](#-features) • ⚡ [Installation](#-installation) • 🚀 [Getting started](#-getting-started) • 🤝 [Calibre stays in charge](#-calibre-stays-in-charge) • 🔒 [Your library stays safe](#-your-library-stays-hopefully-safe) • 🎨 [Made for Omarchy](#-made-for-omarchy) • 💛 [Built on Calibre](#-built-on-calibre) • 🔧 [For developers](#-for-developers)
 
 </div>
 
@@ -156,7 +156,7 @@ The few places where Cousoir departs from Calibre on purpose are listed in
 
 ---
 
-## 🔒 Your library stays safe
+## 🔒 Your library stays (hopefully) safe
 
 - **Never opened in place.** Cousoir reads a copy of `metadata.db`, so Dropbox
   has nothing to sync and Calibre nothing to notice.
