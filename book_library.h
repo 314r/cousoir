@@ -146,7 +146,8 @@ public:
     // Shows the book's folder in the file manager. Returns an error message,
     // empty on success.
     Q_INVOKABLE QString openFolder(int bookId);
-    // Reads the library again now.
+    // Reads the library again now, or the one Calibre opens now when none was
+    // picked.
     Q_INVOKABLE void reload();
 
     // Saves `changes` to the book, BookEdit's keys, after the edits before

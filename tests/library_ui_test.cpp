@@ -110,6 +110,7 @@ private slots:
     void creditsCalibreInSettings();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
+    void welcomesWithoutLibrary();
     void editsDetailsInPlace();
     void revertsBookChanges();
     void refusesInvalidValues();
@@ -609,8 +610,33 @@ void LibraryUiTest::missingLibraryShowsError()
     QVERIFY(text("emptyMessage").contains(QStringLiteral("no Calibre library")));
     QVERIFY(control("reloadButton")->isVisible());
     QVERIFY(control("chooseLibraryButton")->isVisible());
+    QCOMPARE(control("chooseLibraryButton")->property("variant").toString(), QStringLiteral("outline"));
     QCOMPARE(text("bookCount"), QString());
     QVERIFY(!control("writeState")->isVisible());
+}
+
+void LibraryUiTest::welcomesWithoutLibrary()
+{
+    m_engine.reset();
+    QTemporaryDir config;
+    qunsetenv("COUSOIR_LIBRARY_PATH");
+    qputenv("CALIBRE_CONFIG_DIRECTORY", QFile::encodeName(config.path()));
+    const auto restore = qScopeGuard([] { qunsetenv("CALIBRE_CONFIG_DIRECTORY"); });
+    QVERIFY(loadUi());
+    QTRY_COMPARE_WITH_TIMEOUT(text("emptyTitle"), QStringLiteral("Welcome to Cousoir"), 10000);
+    QVERIFY(text("emptyMessage").contains(QStringLiteral("metadata.db")));
+    QVERIFY(control("chooseLibraryButton")->isVisible());
+    QCOMPARE(control("chooseLibraryButton")->property("variant").toString(), QStringLiteral("primary"));
+    QVERIFY(control("reloadButton")->isVisible());
+
+    // Calibre's welcome wizard made a library meanwhile: Reload finds it.
+    QFile global(config.filePath(QStringLiteral("global.py.json")));
+    QVERIFY(global.open(QIODevice::WriteOnly));
+    global.write(QJsonDocument(QJsonObject{ { QStringLiteral("library_path"), m_libraryPath } }).toJson());
+    global.close();
+    click("reloadButton");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
+    QCOMPARE(library()->property("libraryPath").toString(), QDir::cleanPath(m_libraryPath));
 }
 
 void LibraryUiTest::editsDetailsInPlace()

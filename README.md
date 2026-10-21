@@ -92,7 +92,8 @@ Cousoir installs under `~/.local` and appears in your app launcher. Set
 ## 🚀 Getting started
 
 1. **Have a Calibre library.** Cousoir opens the one Calibre opens on this
-   computer. Another one? Pick it in Settings, under Library.
+   computer. None yet? Cousoir asks for its folder on first launch. Another
+   one? Pick it in Settings, under Library.
 2. **Open Cousoir.** Your books appear as a table. Press Ctrl+G for covers,
    Ctrl+F to search.
 3. **Open a book** with Enter. Edit its details in the pane on the right; each

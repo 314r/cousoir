@@ -147,6 +147,7 @@ set(COUSOIR_QML_FILES
     FlatButton.qml
     FormField.qml
     HeadingLabel.qml
+    LibraryFolderDialog.qml
     LibrarySettingsPage.qml
     ListTable.qml
     Main.qml

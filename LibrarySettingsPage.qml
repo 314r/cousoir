@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import Cousoir
@@ -24,10 +23,6 @@ Item {
     signal calibreLanguageSelected(string language)
 
     implicitHeight: contentLayout.implicitHeight + 2 * Theme.panePadding
-
-    function localPath(url) {
-        return decodeURIComponent(url.toString().replace(/^file:\/\//, ""))
-    }
 
     ColumnLayout {
         id: contentLayout
@@ -243,11 +238,10 @@ Item {
         }
     }
 
-    FolderDialog {
+    LibraryFolderDialog {
         id: folderDialog
 
-        title: qsTr("Choose a Calibre library")
-        currentFolder: libraryPage.library.libraryPath ? "file://" + libraryPage.library.libraryPath : ""
-        onAccepted: libraryPage.libraryPathSelected(libraryPage.localPath(selectedFolder))
+        libraryPath: libraryPage.library.libraryPath
+        onChosen: function(path) { libraryPage.libraryPathSelected(path) }
     }
 }
