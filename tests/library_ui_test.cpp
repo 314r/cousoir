@@ -119,6 +119,7 @@ private slots:
     void movesBooksToTrashAndBack();
     void addsAndRemovesFiles();
     void asksAboutDuplicates();
+    void checksLibrary();
     void convertsBooks();
     void sendsToKobo();
     void sendsToKindle();
@@ -164,7 +165,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
-                              "BooksPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
+                              "BooksPage", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
                               "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
                               "SettingsWindow", "Sidebar", "SidebarItem", "StatTile", "ThinScrollBar", "TrashPage" }) {
         qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
@@ -919,6 +920,55 @@ void LibraryUiTest::asksAboutDuplicates()
     waitForSave();
     QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("books")).toInt(), books + 1);
     QTRY_COMPARE(text("keyHints"), QStringLiteral("Added 1 book."));
+}
+
+void LibraryUiTest::checksLibrary()
+{
+    makeWritable();
+    // Le Petit Prince has no file.
+    QTRY_COMPARE_WITH_TIMEOUT(library()->property("check").toMap().value(QStringLiteral("count")).toInt(), 1, 10000);
+    click("sidebar_check");
+    QTRY_VERIFY(control("checkPage") && control("checkPage")->isVisible());
+    QTRY_VERIFY(control("check_missing:6:"));
+    QCOMPARE(text("bookCount"), QStringLiteral("1 thing to check"));
+
+    // Book 3's EPUB added again: two copies of it.
+    const QString existing = QDir(m_libraryPath).filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.epub"));
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(existing) }));
+    QCOMPARE(error, QString());
+    QTRY_VERIFY_WITH_TIMEOUT(object("duplicatesDialog")->property("opened").toBool(), 15000);
+    clickVisible("confirmAccept");
+    waitForSave();
+    QTRY_VERIFY_WITH_TIMEOUT(control("check_duplicates:3,7") && control("keep_7"), 10000);
+
+    // Calibre writing: the fixes wait, and say why.
+    QFile journal(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db-journal")));
+    QVERIFY(journal.open(QIODevice::WriteOnly));
+    journal.close();
+    QMetaObject::invokeMethod(guard(), "refresh");
+    QTRY_VERIFY(control("checkReadOnly")->isVisible());
+    QVERIFY(!control("keep_7")->isEnabled());
+    QVERIFY(journal.remove());
+    QMetaObject::invokeMethod(guard(), "refresh");
+    QTRY_VERIFY(control("keep_7")->isEnabled());
+
+    click("keep_7");
+    QTRY_VERIFY(object("keepDialog")->property("opened").toBool());
+    QCOMPARE(object("keepDialog")->property("title").toString(),
+             QStringLiteral("Keep “Shadows Linger” and move the other copy to the Trash?"));
+    clickVisible("confirmAccept");
+    waitForSave();
+    QTRY_VERIFY_WITH_TIMEOUT(!control("check_duplicates:3,7"), 10000);
+    QCOMPARE(library()->property("trashEntries").toList().size(), 1);
+
+    // Ignored, it is out of the way until asked for.
+    click("ignore_missing:6:");
+    QTRY_COMPARE(text("checkEmpty"), QStringLiteral("Nothing to fix"));
+    QVERIFY(control("checkEmpty")->isVisible());
+    click("showIgnoredButton");
+    QTRY_VERIFY(control("check_missing:6:"));
 }
 
 // The window's conversions, with a stand-in for Calibre: from the Files

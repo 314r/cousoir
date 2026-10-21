@@ -20,11 +20,12 @@ ApplicationWindow {
     // open over it.
     property string section: "books"
     readonly property bool deviceSection: section.startsWith("device:")
-    readonly property bool facetShown: section !== "books" && section !== "trash" && !deviceSection
-        && !session.filterOpen && !session.bookOpen
+    readonly property bool facetShown: section !== "books" && section !== "trash" && section !== "check"
+        && !deviceSection && !session.filterOpen && !session.bookOpen
     readonly property bool trashShown: section === "trash" && !session.bookOpen
+    readonly property bool checkShown: section === "check" && !session.bookOpen
     readonly property bool deviceShown: deviceSection && !session.bookOpen
-    readonly property bool booksShown: !facetShown && !trashShown && !deviceShown && !session.bookOpen
+    readonly property bool booksShown: !facetShown && !trashShown && !checkShown && !deviceShown && !session.bookOpen
     // A message to show in place of the key hints for a while: an error,
     // unless noticeIsError says otherwise.
     property string notice: ""
@@ -133,6 +134,8 @@ ApplicationWindow {
         session.closeBook()
         if (deviceShown)
             devicePage.focusList()
+        else if (checkShown)
+            checkPage.focusList()
         else
             booksPage.focusList()
     }
@@ -165,6 +168,8 @@ ApplicationWindow {
             facetPage.focusList(0)
         else if (trashShown)
             trashPage.focusList()
+        else if (checkShown)
+            checkPage.focusList()
         else if (deviceShown)
             devicePage.focusList()
         else
@@ -174,6 +179,8 @@ ApplicationWindow {
     function moveCurrent(delta) {
         if (facetShown)
             facetPage.moveCurrent(delta)
+        else if (checkShown)
+            checkPage.moveCurrent(delta)
         else
             booksPage.moveCurrent(delta)
     }
@@ -185,6 +192,8 @@ ApplicationWindow {
             return 3
         if (deviceShown)
             return 4
+        if (checkShown)
+            return 5
         return facetShown ? 1 : 0
     }
 
@@ -354,6 +363,9 @@ ApplicationWindow {
             return (book.formats || []).map(format => format.format).join(" · ")
         if (section === "trash")
             return plural(library.trashEntries.length, qsTr("%1 item"), qsTr("%1 items"))
+        if (section === "check")
+            return library.checking ? qsTr("Checking…")
+                : plural(library.check.count || 0, qsTr("%1 thing to check"), qsTr("%1 things to check"))
         if (deviceSection)
             return plural(devices.rows.length, qsTr("%1 book"), qsTr("%1 books")) + " · "
                 + qsTr("%1 free").arg(devices.current.free || "")
@@ -406,6 +418,9 @@ ApplicationWindow {
             return qsTr("Esc back · Ctrl+O open in reader · Ctrl+I details")
         if (trashShown)
             return library.trashEntries.length > 0 ? qsTr("↑↓ move · Enter restore") : qsTr("F5 reload")
+        if (checkShown)
+            return (library.check.count || 0) > 0 ? qsTr("↑↓ move · Enter actions · F5 check again")
+                                                  : qsTr("F5 check again")
         if (deviceShown)
             return devices.rows.length === 0 ? qsTr("F5 read again")
                 : devices.writable ? qsTr("↑↓ move · Enter show in library · Del remove from %1").arg(devices.current.name)
@@ -974,7 +989,9 @@ ApplicationWindow {
             Layout.preferredWidth: Math.min(implicitWidth, Math.round(window.width * 0.3))
             visible: !session.bookOpen
             currentKey: window.section
-            counts: window.library.loaded ? window.library.counts : ({})
+            // The check's count follows the check, not the library's load.
+            counts: window.library.loaded
+                ? Object.assign({}, window.library.counts, { check: window.library.check.count || "" }) : ({})
             devices: window.devices.devices
             onActivated: function(key) {
                 window.section = key
@@ -1218,7 +1235,7 @@ ApplicationWindow {
                                 booksPage.activate(0)
                         }
 
-                        visible: !session.bookOpen && !window.deviceShown
+                        visible: !session.bookOpen && !window.deviceShown && !window.checkShown
                         Layout.fillWidth: true
                         Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
@@ -1334,6 +1351,15 @@ ApplicationWindow {
                         devices: window.devices
                         onBookRequested: function(bookId) { window.openBook(bookId) }
                         onRemoveRequested: function(lpath, title) { window.removeFromDevice(lpath, title) }
+                    }
+
+                    CheckPage {
+                        id: checkPage
+                        objectName: "checkPage"
+                        library: window.library
+                        guard: window.guard
+                        onBookRequested: function(bookId) { window.openBook(bookId) }
+                        onFailed: function(message) { window.showNotice(message) }
                     }
                 }
 

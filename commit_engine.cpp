@@ -238,11 +238,15 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
             return undo(error);
     }
 
-    // Formats and books removed, restored and added, in that order, then the
-    // settings of the conversions that added formats.
+    // Formats copied, then formats and books removed, restored and added, in
+    // that order, then the settings of the conversions that added formats.
     const Opf::Settings opf{ request.config.interfaceLanguage, request.producer, request.producerId };
     BookOperations::Context operations{ request.libraryPath, context, request.config.newBookTags, nullptr, opf };
     BookOperations::Result done;
+    for (const FormatCopy &copy : request.formatCopies) {
+        if (!BookOperations::copyFormats(db, files, copy, operations, &done, &error))
+            return undo(error);
+    }
     for (const FormatRemoval &removal : request.formatRemovals) {
         if (!BookOperations::removeFormats(db, files, removal, operations, &done, &error))
             return undo(error);
@@ -278,7 +282,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     QSet<int> dirtied = state.dirtied;
     dirtied.unite(done.dirtied);
     const QSet<int> touched = done.touched - dirtied;
-    const bool operated = !request.formatRemovals.isEmpty() || !request.trash.isEmpty()
+    const bool operated = !request.formatCopies.isEmpty() || !request.formatRemovals.isEmpty() || !request.trash.isEmpty()
         || !request.restorations.isEmpty() || !request.newBooks.isEmpty() || !request.newFormats.isEmpty()
         || !request.conversionOptions.isEmpty();
     // Books removed are no longer there to write.

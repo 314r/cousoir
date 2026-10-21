@@ -101,6 +101,7 @@ private slots:
     void finishesPublishedChange();
     void addsAndTrashesBooks();
     void undoesFailedOperations();
+    void copiesFormatsBeforeTrash();
     void recoversInterruptedCopy();
 
 private:
@@ -569,6 +570,53 @@ void CommitEngineTest::undoesFailedOperations()
     QVERIFY2(result.error.contains(QStringLiteral("no longer in the library")), qPrintable(result.error));
     QCOMPARE(tree(m_library), before);
     QCOMPARE(value(QStringLiteral("SELECT count(*) FROM books")).toInt(), 6);
+}
+
+void CommitEngineTest::copiesFormatsBeforeTrash()
+{
+    // Book 3 keeps its EPUB and takes book 2's AZW3, under its own name, in
+    // the change that moves book 2 to the trash with both its files.
+    const QDir black(QDir(m_library).filePath(QStringLiteral("Glen Cook/The Black Company (2)")));
+    const QDir shadows(QDir(m_library).filePath(QStringLiteral("Glen Cook/Shadows Linger (3)")));
+    const QByteArray azw3 = readAll(black.filePath(QStringLiteral("The Black Company - Glen Cook.azw3")));
+    const QByteArray epub = readAll(shadows.filePath(QStringLiteral("Shadows Linger - Glen Cook.epub")));
+    CommitEngine::Request keep;
+    keep.formatCopies = { { 2, 3 } };
+    keep.trash = { 2 };
+    const CommitEngine::Result kept = commit(keep);
+    QVERIFY2(kept.ok, qPrintable(kept.error));
+    QCOMPARE(readAll(shadows.filePath(QStringLiteral("Shadows Linger - Glen Cook.azw3"))), azw3);
+    QCOMPARE(readAll(shadows.filePath(QStringLiteral("Shadows Linger - Glen Cook.epub"))), epub);
+    QCOMPARE(value(QStringLiteral("SELECT name FROM data WHERE book=3 AND format='AZW3'")).toString(),
+             QStringLiteral("Shadows Linger - Glen Cook"));
+    QVERIFY(QFileInfo(QDir(m_library).filePath(QStringLiteral(".caltrash/b/2/The Black Company - Glen Cook.azw3"))).isFile());
+    QVERIFY(QFileInfo(QDir(m_library).filePath(QStringLiteral(".caltrash/b/2/The Black Company - Glen Cook.epub"))).isFile());
+
+    // A format whose file is gone counts as missing: book 1's EPUB fills it.
+    QVERIFY(QFile::remove(shadows.filePath(QStringLiteral("Shadows Linger - Glen Cook.epub"))));
+    CommitEngine::Request refill;
+    refill.formatCopies = { { 1, 3 } };
+    const CommitEngine::Result refilled = commit(refill);
+    QVERIFY2(refilled.ok, qPrintable(refilled.error));
+    QCOMPARE(readAll(shadows.filePath(QStringLiteral("Shadows Linger - Glen Cook.epub"))),
+             readAll(QDir(m_library).filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.epub"))));
+
+    // A file that is gone is not copied.
+    QVERIFY(QFile::remove(QDir(m_library).filePath(QStringLiteral("Terry Pratchett/Good Omens (4)/Good Omens - Terry Pratchett.epub"))));
+    CommitEngine::Request none;
+    none.formatCopies = { { 4, 5 } };
+    const CommitEngine::Result nothing = commit(none);
+    QVERIFY2(nothing.ok, qPrintable(nothing.error));
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM data WHERE book=5")).toInt(), 1);
+
+    // A later step failing takes the copy back.
+    const QStringList before = tree(m_library);
+    CommitEngine::Request failing;
+    failing.formatCopies = { { 1, 5 } };
+    failing.trash = { 1 };
+    failing.newFormats = { { 42, QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Vicomte.mobi") } };
+    QVERIFY(!commit(failing).ok);
+    QCOMPARE(tree(m_library), before);
 }
 
 void CommitEngineTest::recoversInterruptedCopy()

@@ -44,7 +44,8 @@ const QStringList &sections()
 {
     static const QStringList names = { QStringLiteral("books"), QStringLiteral("authors"), QStringLiteral("series"),
                                        QStringLiteral("tags"), QStringLiteral("languages"),
-                                       QStringLiteral("publishers"), QStringLiteral("trash") };
+                                       QStringLiteral("publishers"), QStringLiteral("trash"),
+                                       QStringLiteral("check") };
     return names;
 }
 
@@ -261,12 +262,15 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
     connect(&m_commitWatcher, &QFutureWatcher<CommitEngine::Result>::finished, this, &BookLibrary::finishCommit);
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::finished, this, &BookLibrary::finishImport);
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::progressValueChanged, this, &BookLibrary::importChanged);
+    connect(&m_checkWatcher, &QFutureWatcher<LibraryCheck::Findings>::finished, this, &BookLibrary::finishCheck);
     // QML may still set another library; only the last one loads.
     QMetaObject::invokeMethod(this, &BookLibrary::startLoad, Qt::QueuedConnection);
 }
 
 BookLibrary::~BookLibrary()
 {
+    m_checkWatcher.cancel();
+    m_checkWatcher.waitForFinished();
     m_loadWatcher.waitForFinished();
     m_commitWatcher.waitForFinished();
     m_importWatcher.waitForFinished();
@@ -297,6 +301,10 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_filterKind.clear();
     m_filterId = 0;
     m_currentBookId = 0;
+    m_checkWatcher.cancel();
+    m_findings = {};
+    m_checkedAt = {};
+    rebuildCheck();
     emit libraryChanged();
     emit filterChanged();
     rebuildRows();
@@ -371,6 +379,9 @@ void BookLibrary::setSection(const QString &section)
         emit filterChanged();
     rebuildRows();
     rebuildFacetRows();
+    // Files may have come and gone without the database changing.
+    if (m_section == QLatin1String("check"))
+        scheduleCheck();
 }
 
 QVariantMap BookLibrary::filter() const
@@ -664,6 +675,7 @@ void BookLibrary::applyData(LibraryData data)
     rebuildFacetRows();
     rebuildCurrentBook();
     watchLibrary();
+    scheduleCheck();
 }
 
 void BookLibrary::watchLibrary()
@@ -1020,17 +1032,9 @@ QString BookLibrary::updateBook(int bookId, const QVariantMap &changes)
                                      config.interfaceLanguage)
             : book->sort);
     }
-    if (adjusted.contains(QStringLiteral("authors")) && !adjusted.contains(QStringLiteral("authorSort"))) {
-        QStringList sorts;
-        for (const int id : book->authorIds) {
-            for (const FacetItem &author : std::as_const(m_data.authors)) {
-                if (author.id == id)
-                    sorts.append(author.sort);
-            }
-        }
-        if (book->authorSort != sorts.join(QStringLiteral(" & ")))
-            adjusted.insert(QStringLiteral("authorSort"), book->authorSort);
-    }
+    if (adjusted.contains(QStringLiteral("authors")) && !adjusted.contains(QStringLiteral("authorSort"))
+        && !LibraryCheck::authorSortFollows(m_data, *book))
+        adjusted.insert(QStringLiteral("authorSort"), book->authorSort);
 
     BookEdit edit;
     QString error;
@@ -1118,7 +1122,8 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
         return {};
     // With the edits just before it, if the last change waiting is edits.
     const CommitEngine::Request &last = m_pending.isEmpty() ? CommitEngine::Request() : m_pending.last();
-    const bool editsOnly = !m_pending.isEmpty() && last.formatRemovals.isEmpty() && last.trash.isEmpty()
+    const bool editsOnly = !m_pending.isEmpty() && last.formatCopies.isEmpty() && last.formatRemovals.isEmpty()
+        && last.trash.isEmpty()
         && last.restorations.isEmpty() && last.newBooks.isEmpty() && last.newFormats.isEmpty()
         && last.conversionOptions.isEmpty();
     if (editsOnly) {
@@ -1164,6 +1169,11 @@ void BookLibrary::startCommit()
     request.producer = version.isEmpty() ? QStringLiteral("Cousoir") : QStringLiteral("Cousoir (%1)").arg(version);
     request.producerId = QStringLiteral("cousoir");
     m_commitWatcher.setFuture(QtConcurrent::run([request] { return CommitEngine::commit(request); }));
+    // The files move meanwhile: the check waits for the library saved.
+    if (m_checkWatcher.isRunning()) {
+        m_checkWatcher.cancel();
+        m_checkPending = true;
+    }
     emit savingChanged();
 }
 
@@ -1197,6 +1207,8 @@ void BookLibrary::finishCommit()
     if (std::exchange(m_reloadPending, false))
         reloadIfChanged();
     startCommit();
+    if (m_checkPending && !m_commitWatcher.isRunning())
+        scheduleCheck();
 }
 
 QVariantList BookLibrary::trashEntries() const
@@ -1393,6 +1405,257 @@ QString BookLibrary::restoreFromTrash(int bookId, const QStringList &formats)
     for (const QString &format : formats)
         change.restorations.append(Restoration{ bookId, format });
     return queueChange(change);
+}
+
+QString BookLibrary::keepDuplicate(int keepId, const QVariantList &otherIds)
+{
+    QList<int> others;
+    for (const QVariant &id : otherIds)
+        others.append(id.toInt());
+    CommitEngine::Request change;
+    QString error;
+    if (!LibraryCheck::keepOne(m_data, keepId, others, &change, &error))
+        return error;
+    return queueChange(change);
+}
+
+QString BookLibrary::mergeAuthors(const QVariantList &authorIds, int keepAuthorId)
+{
+    // FieldWriters refuses every author while two differ only by case.
+    if (!m_findings.caseDuplicates.isEmpty())
+        return tr("Two author names differ only by case: Calibre merges them the next time it saves an author, and "
+                  "these names can be merged then.");
+    QList<int> ids;
+    for (const QVariant &id : authorIds)
+        ids.append(id.toInt());
+    CommitEngine::Request change;
+    QString error;
+    change.edits = LibraryCheck::mergeAuthors(m_data, ids, keepAuthorId, &error);
+    if (change.edits.isEmpty())
+        return error;
+    return queueChange(change);
+}
+
+QString BookLibrary::removeMissingFormats(int bookId)
+{
+    if (!findBook(bookId))
+        return tr("This book is no longer in the library.");
+    // As the check found them: a file kept online only is not missing.
+    QStringList formats;
+    for (const LibraryCheck::MissingFiles &missing : std::as_const(m_findings.missing)) {
+        if (missing.book == bookId)
+            formats = missing.formats;
+    }
+    if (formats.isEmpty())
+        return tr("None of the book's files is missing.");
+    CommitEngine::Request change;
+    change.formatRemovals.append({ bookId, formats });
+    return queueChange(change);
+}
+
+QString BookLibrary::showInFolder(const QString &path)
+{
+    const QString library = QDir::cleanPath(m_libraryPath);
+    const QFileInfo info(QDir::cleanPath(QDir(library).filePath(path)));
+    if (library.isEmpty() || !info.absoluteFilePath().startsWith(library + u'/'))
+        return tr("%1 is not in the library.").arg(path);
+    if (!info.exists())
+        return tr("%1 is no longer there.").arg(path);
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(info.isDir() ? info.absoluteFilePath() : info.absolutePath())))
+        return tr("No application shows folders.");
+    return {};
+}
+
+void BookLibrary::ignoreFinding(const QString &key)
+{
+    LibraryCheck::ignore(m_data.uuid, key);
+    rebuildCheck();
+}
+
+void BookLibrary::showIgnored()
+{
+    LibraryCheck::clearIgnored(m_data.uuid);
+    rebuildCheck();
+}
+
+void BookLibrary::recheck()
+{
+    scheduleCheck();
+}
+
+QVariantMap BookLibrary::check() const
+{
+    return m_check;
+}
+
+bool BookLibrary::checking() const
+{
+    return m_checkWatcher.isRunning() || m_checkPending;
+}
+
+void BookLibrary::scheduleCheck()
+{
+    if (m_checkWatcher.isRunning())
+        m_checkWatcher.cancel();
+    if (!m_loaded || m_libraryPath.isEmpty()) {
+        m_checkPending = false;
+        emit checkingChanged();
+        return;
+    }
+    // A save moves files about: after it.
+    if (m_commitWatcher.isRunning() || !m_pending.isEmpty()) {
+        m_checkPending = true;
+        emit checkingChanged();
+        return;
+    }
+    m_checkPending = false;
+    const LibraryData data = m_data;
+    const CalibreConfig config = effectiveConfig();
+    LibraryCheck::Options options;
+    options.tweaks = config.tweaks;
+    options.interfaceLanguage = config.interfaceLanguage;
+    m_checkWatcher.setFuture(QtConcurrent::run([data, options](QPromise<LibraryCheck::Findings> &promise) {
+        LibraryCheck::Options checks = options;
+        checks.canceled = [&promise] { return promise.isCanceled(); };
+        promise.addResult(LibraryCheck::check(data, checks));
+    }));
+    emit checkingChanged();
+}
+
+void BookLibrary::finishCheck()
+{
+    if (!m_checkWatcher.isCanceled() && m_checkWatcher.future().resultCount() > 0) {
+        m_findings = m_checkWatcher.result();
+        m_checkedAt = QDateTime::currentDateTime();
+        rebuildCheck();
+    }
+    emit checkingChanged();
+}
+
+void BookLibrary::rebuildCheck()
+{
+    const QStringList ignored = m_loaded ? LibraryCheck::ignoredKeys(m_data.uuid) : QStringList();
+    const QString coverKey = QFileInfo(cacheFolder(m_libraryPath)).fileName();
+    const auto present = [](const Book &book) {
+        QStringList formats;
+        for (const BookFormat &format : book.formats) {
+            if (!format.file.isEmpty())
+                formats.append(format.format);
+        }
+        return formats;
+    };
+    QVariantList rows;
+    int ignoredCount = 0;
+    const auto add = [&rows, &ignored, &ignoredCount](QVariantMap row) {
+        if (ignored.contains(row.value(QStringLiteral("key")).toString())) {
+            ++ignoredCount;
+            return;
+        }
+        rows.append(row);
+    };
+
+    for (const LibraryCheck::DuplicateGroup &group : std::as_const(m_findings.duplicates)) {
+        QVariantList books;
+        for (const int id : group.books) {
+            const Book *book = findBook(id);
+            if (!book)
+                continue;
+            // What keeping this copy brings it from the others.
+            QStringList gains;
+            for (const int other : group.books) {
+                const Book *copy = findBook(other);
+                if (!copy || other == id)
+                    continue;
+                for (const QString &format : present(*copy)) {
+                    if (!present(*book).contains(format) && !gains.contains(format))
+                        gains.append(format);
+                }
+            }
+            QStringList missing;
+            for (const BookFormat &format : book->formats) {
+                if (format.file.isEmpty())
+                    missing.append(format.format);
+            }
+            books.append(QVariantMap{
+                { QStringLiteral("id"), id },
+                { QStringLiteral("title"), book->title },
+                { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
+                { QStringLiteral("formats"), present(*book) },
+                { QStringLiteral("missing"), missing },
+                { QStringLiteral("added"), QLocale().toString(book->timestamp.toLocalTime().date(), QLocale::ShortFormat) },
+                { QStringLiteral("cover"), book->coverFile.isEmpty()
+                      ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
+                { QStringLiteral("gains"), gains },
+            });
+        }
+        add({ { QStringLiteral("kind"), QStringLiteral("duplicates") },
+              { QStringLiteral("key"), LibraryCheck::key(group) },
+              { QStringLiteral("sameTitle"), group.sameTitle },
+              { QStringLiteral("isbns"), group.isbns },
+              { QStringLiteral("books"), books } });
+    }
+
+    for (const LibraryCheck::AuthorGroup &group : std::as_const(m_findings.authorVariants)) {
+        QVariantList authors;
+        QVariantList ids;
+        for (const int id : group.authors) {
+            for (const FacetItem &author : std::as_const(m_data.authors)) {
+                if (author.id != id)
+                    continue;
+                authors.append(QVariantMap{ { QStringLiteral("id"), id },
+                                            { QStringLiteral("name"), author.name },
+                                            { QStringLiteral("count"), author.count } });
+                ids.append(id);
+            }
+        }
+        add({ { QStringLiteral("kind"), QStringLiteral("authors") },
+              { QStringLiteral("key"), LibraryCheck::key(group) },
+              { QStringLiteral("initials"), group.initials },
+              { QStringLiteral("ids"), ids },
+              { QStringLiteral("authors"), authors } });
+    }
+
+    QList<const LibraryCheck::MissingFiles *> missing;
+    for (const LibraryCheck::MissingFiles &entry : std::as_const(m_findings.missing)) {
+        if (findBook(entry.book))
+            missing.append(&entry);
+    }
+    std::stable_sort(missing.begin(), missing.end(), [this](const auto *a, const auto *b) {
+        return m_collator.compare(findBook(a->book)->sort, findBook(b->book)->sort) < 0;
+    });
+    for (const LibraryCheck::MissingFiles *entry : std::as_const(missing)) {
+        const Book *book = findBook(entry->book);
+        add({ { QStringLiteral("kind"), QStringLiteral("missing") },
+              { QStringLiteral("key"), LibraryCheck::key(*entry) },
+              { QStringLiteral("bookId"), entry->book },
+              { QStringLiteral("title"), book->title },
+              { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
+              { QStringLiteral("formats"), entry->formats },
+              { QStringLiteral("noFormats"), entry->noFormats },
+              { QStringLiteral("folderMissing"), entry->folderMissing } });
+    }
+
+    for (const LibraryCheck::OutsideFile &file : std::as_const(m_findings.outside)) {
+        add({ { QStringLiteral("kind"), QStringLiteral("outside") },
+              { QStringLiteral("key"), LibraryCheck::key(file) },
+              { QStringLiteral("path"), file.path },
+              { QStringLiteral("folder"), file.folder },
+              { QStringLiteral("size"), file.folder ? QString() : sizeText(file.size) },
+              { QStringLiteral("bookId"), file.book } });
+    }
+
+    const QVariantMap check{
+        { QStringLiteral("count"), rows.size() },
+        { QStringLiteral("checked"), m_checkedAt.isValid() ? QLocale().toString(m_checkedAt.time(), QLocale::ShortFormat)
+                                                           : QString() },
+        { QStringLiteral("caseDuplicates"), !m_findings.caseDuplicates.isEmpty() },
+        { QStringLiteral("ignored"), ignoredCount },
+        { QStringLiteral("rows"), rows },
+    };
+    if (check == m_check)
+        return;
+    m_check = check;
+    emit checkChanged();
 }
 
 void BookLibrary::rebuildTrash()

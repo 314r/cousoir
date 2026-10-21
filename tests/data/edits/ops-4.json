@@ -1,0 +1,6 @@
+[
+    {"copyFormats": {"from": 10, "to": 7}},
+    {"trash": [10]},
+    {"copyFormats": {"from": 8, "to": 13}},
+    {"trash": [8]}
+]

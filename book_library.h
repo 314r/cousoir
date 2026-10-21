@@ -14,6 +14,7 @@
 #include "book_operations.h"
 #include "calibre_config.h"
 #include "commit_engine.h"
+#include "library_check.h"
 
 namespace Conversion {
 struct Outcome;
@@ -24,7 +25,9 @@ struct Outcome;
 // library and reads the copy on a worker thread; a change to the database
 // reloads it after a moment. Edits are saved one after the other on a
 // worker thread through CommitEngine, while `writable` says the library may
-// be written.
+// be written. After each load, LibraryCheck looks for duplicates, author
+// name variants, missing files and files outside the database, on a worker
+// thread too.
 class BookLibrary : public QObject
 {
     Q_OBJECT
@@ -75,6 +78,15 @@ class BookLibrary : public QObject
     Q_PROPERTY(bool importing READ importing NOTIFY importChanged)
     Q_PROPERTY(int importDone READ importDone NOTIFY importChanged)
     Q_PROPERTY(int importTotal READ importTotal NOTIFY importChanged)
+    // What the last check found, but what the user ignored: { count,
+    // checked (the time it ran), caseDuplicates, ignored, rows }. A row is
+    // { kind, key } and, by kind: "duplicates" { sameTitle, isbns, books:
+    // [{ id, title, authors, formats, missing, added, cover, gains }] };
+    // "authors" { initials, ids, authors: [{ id, name, count }] };
+    // "missing" { bookId, title, authors, formats, noFormats, folderMissing };
+    // "outside" { path, folder, size, bookId }.
+    Q_PROPERTY(QVariantMap check READ check NOTIFY checkChanged)
+    Q_PROPERTY(bool checking READ checking NOTIFY checkingChanged)
 
 public:
     explicit BookLibrary(QObject *parent = nullptr);
@@ -97,8 +109,9 @@ public:
     int schemaVersion() const;
     bool schemaKnown() const;
     QVariantMap counts() const;
-    // "books", "authors", "series", "tags", "languages" or "publishers".
-    // Another section clears the filter and the search.
+    // "books", "authors", "series", "tags", "languages", "publishers",
+    // "trash" or "check". Another section clears the filter and the search;
+    // the check runs again.
     QString section() const;
     void setSection(const QString &section);
     QVariantMap filter() const;
@@ -133,6 +146,8 @@ public:
     bool importing() const;
     int importDone() const;
     int importTotal() const;
+    QVariantMap check() const;
+    bool checking() const;
 
     // Narrows the books to the item with `id` of the current browse section,
     // clearing the search.
@@ -185,6 +200,24 @@ public:
     // A book, or with `formats` some of its formats, back from the trash.
     Q_INVOKABLE QString restoreFromTrash(int bookId, const QStringList &formats = {});
 
+    // The fixes of the check, with updateBook()'s returns. Keeps one copy of
+    // a book and moves the others to the trash, with the formats it lacks
+    // copied from them first.
+    Q_INVOKABLE QString keepDuplicate(int keepId, const QVariantList &otherIds);
+    // Files the books of the authors `authorIds` under `keepAuthorId`'s name.
+    Q_INVOKABLE QString mergeAuthors(const QVariantList &authorIds, int keepAuthorId);
+    // Takes out of the database the book's formats whose file is gone.
+    Q_INVOKABLE QString removeMissingFormats(int bookId);
+    // Shows a file or folder of the library, relative to it, in the file
+    // manager. Returns an error message, empty on success.
+    Q_INVOKABLE QString showInFolder(const QString &path);
+    // Leaves a finding of the check out, by its row's key, until it changes;
+    // showIgnored() brings them all back.
+    Q_INVOKABLE void ignoreFinding(const QString &key);
+    Q_INVOKABLE void showIgnored();
+    // Checks the library again now.
+    Q_INVOKABLE void recheck();
+
     // A conversion's file as the book's `format`, as Calibre's convert
     // action adds it. Same returns as updateBook().
     QString addConversion(int bookId, const QString &format, const Conversion::Outcome &outcome);
@@ -216,6 +249,8 @@ signals:
     void recovered(const QString &message);
     void trashChanged();
     void importChanged();
+    void checkChanged();
+    void checkingChanged();
     // Books read to be added are already in the library: their titles,
     // among `total` books read.
     void duplicatesFound(const QStringList &titles, int total);
@@ -251,6 +286,10 @@ private:
     // Calibre fuzzily compares it, and the languages if any.
     QList<int> identicalBooks(const ImportedMetadata &metadata) const;
     void rebuildTrash();
+    // Checks the library once nothing is being saved.
+    void scheduleCheck();
+    void finishCheck();
+    void rebuildCheck();
     void startCommit();
     void finishCommit();
     void applyData(LibraryData data);
@@ -301,6 +340,12 @@ private:
     QList<NewBook> m_importedBooks;
     QList<bool> m_importedDuplicates;
     QVariantList m_trashEntries;
+    QFutureWatcher<LibraryCheck::Findings> m_checkWatcher;
+    // A check to run once the changes waiting are saved.
+    bool m_checkPending = false;
+    LibraryCheck::Findings m_findings;
+    QDateTime m_checkedAt;
+    QVariantMap m_check;
     bool m_backedUp = false;
     QString m_publishedKey;
     QString m_calibreLanguage;

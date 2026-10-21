@@ -30,6 +30,7 @@
 #include "kindle_send.h"
 #include "kobo.h"
 #include "kobo_send.h"
+#include "library_check.h"
 #include "mtp.h"
 #include "cousoir_paths.h"
 
@@ -96,6 +97,19 @@ int doctor(const QString &libraryPath)
     const QLocale c = QLocale::c();
     const QDir library(data.libraryPath);
 
+    // What the application's Check finds, but what was ignored there.
+    const CalibreConfig config = CalibreConfig::load();
+    LibraryCheck::Options options;
+    options.tweaks = config.tweaks;
+    options.interfaceLanguage = config.interfaceLanguage;
+    const LibraryCheck::Findings findings = LibraryCheck::check(data, options);
+    const QStringList ignored = LibraryCheck::ignoredKeys(data.uuid);
+    QHash<int, LibraryCheck::MissingFiles> missing;
+    for (const LibraryCheck::MissingFiles &entry : findings.missing) {
+        if (!ignored.contains(LibraryCheck::key(entry)))
+            missing.insert(entry.book, entry);
+    }
+
     qint64 files = 0;
     qint64 bytes = 0;
     int covers = 0;
@@ -105,14 +119,19 @@ int doctor(const QString &libraryPath)
         const QString name = QStringLiteral("Book %1 “%2”").arg(book.id).arg(book.title);
         const QString folder = library.filePath(book.path);
         if (book.path.isEmpty() || !QFileInfo(folder).isDir()) {
-            problems.append(QStringLiteral("%1: its folder is missing\n      %2").arg(name, book.path));
+            if (missing.contains(book.id))
+                problems.append(QStringLiteral("%1: its folder is missing\n      %2").arg(name, book.path));
             continue;
         }
+        if (missing.value(book.id).noFormats)
+            problems.append(QStringLiteral("%1: it has no file").arg(name));
         for (const BookFormat &format : book.formats) {
             const QString expected = QDir(folder).filePath(format.name + u'.' + format.format.toLower());
             if (format.file.isEmpty()) {
-                problems.append(QStringLiteral("%1: the %2 file is missing\n      %3")
-                                    .arg(name, format.format, relative(expected)));
+                if (missing.value(book.id).formats.contains(format.format)) {
+                    problems.append(QStringLiteral("%1: the %2 file is missing\n      %3")
+                                        .arg(name, format.format, relative(expected)));
+                }
                 continue;
             }
             ++files;
@@ -133,6 +152,58 @@ int doctor(const QString &libraryPath)
         problems.append(QStringLiteral("The database structure is unknown (schema %1, fingerprint %2): "
                                        "Cousoir stays read-only").arg(data.userVersion).arg(data.schemaFingerprint));
     }
+    const auto bookOf = [&data](int id) -> const Book * {
+        for (const Book &book : data.books) {
+            if (book.id == id)
+                return &book;
+        }
+        return nullptr;
+    };
+    for (const LibraryCheck::DuplicateGroup &group : findings.duplicates) {
+        if (ignored.contains(LibraryCheck::key(group)))
+            continue;
+        QStringList ids;
+        for (const int id : group.books)
+            ids.append(QString::number(id));
+        QStringList reasons;
+        if (group.sameTitle)
+            reasons.append(QStringLiteral("same title and authors"));
+        for (const QString &isbn : group.isbns)
+            reasons.append(QStringLiteral("same ISBN %1").arg(isbn));
+        const Book *first = bookOf(group.books.first());
+        problems.append(QStringLiteral("Duplicate books %1 (%2): “%3” by %4")
+                            .arg(ids.join(QStringLiteral(", ")), reasons.join(QStringLiteral(", ")), first->title,
+                                 first->authors.join(QStringLiteral(" & "))));
+    }
+    for (const LibraryCheck::AuthorGroup &group : findings.authorVariants) {
+        if (ignored.contains(LibraryCheck::key(group)))
+            continue;
+        QStringList names;
+        for (const int id : group.authors) {
+            for (const FacetItem &author : data.authors) {
+                if (author.id == id)
+                    names.append(QStringLiteral("“%1” (%2 book%3)").arg(author.name).arg(author.count)
+                                     .arg(author.count == 1 ? QString() : QStringLiteral("s")));
+            }
+        }
+        problems.append(QStringLiteral("Author name variants (%1): %2")
+                            .arg(group.initials ? QStringLiteral("possibly the same person")
+                                                : QStringLiteral("same name written differently"),
+                                 names.join(QStringLiteral(", "))));
+    }
+    if (!findings.caseDuplicates.isEmpty()) {
+        problems.append(QStringLiteral("Author names differ only by case, %1: no author can be changed until "
+                                       "Calibre merges them, the next time it saves an author")
+                            .arg(QStringLiteral("“") + findings.caseDuplicates.join(QStringLiteral("”, “"))
+                                 + QStringLiteral("”")));
+    }
+    for (const LibraryCheck::OutsideFile &file : findings.outside) {
+        if (!ignored.contains(LibraryCheck::key(file)))
+            problems.append(QStringLiteral("Outside the database: %1").arg(file.folder ? file.path + QStringLiteral("/ (folder)")
+                                                                                        : file.path));
+    }
+    for (const QString &folder : findings.unreadable)
+        problems.append(QStringLiteral("Cannot read the folder %1").arg(folder));
 
     // The guard answers about Dropbox asynchronously; give it a moment.
     ConcurrencyGuard guard;
@@ -482,6 +553,7 @@ int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine
 // Applies the changes of a JSON file, an array of:
 //   { "book": 1, "set": { "title": …, … } }   BookEdit's keys; a coverFile
 //                                               is relative to the JSON file
+//   { "copyFormats": { "from": 7, "to": 2 } }  the formats book 2 lacks
 //   { "removeFormats": { "book": 2, "formats": ["AZW3"] } }
 //   { "trash": [3, 4] }
 //   { "restore": 3 } or { "restore": { "book": 2, "format": "AZW3" } }
@@ -523,6 +595,11 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             continue;
         }
         libraryChanges = true;
+        if (op.contains(QLatin1String("copyFormats"))) {
+            const QJsonObject copy = op.value(QLatin1String("copyFormats")).toObject();
+            request.formatCopies.append({ copy.value(QLatin1String("from")).toInt(), copy.value(QLatin1String("to")).toInt() });
+            continue;
+        }
         if (op.contains(QLatin1String("removeFormats"))) {
             const QJsonObject removal = op.value(QLatin1String("removeFormats")).toObject();
             FormatRemoval formats{ removal.value(QLatin1String("book")).toInt(), {} };

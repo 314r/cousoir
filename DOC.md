@@ -30,10 +30,10 @@ The interface follows the Omarchy style: the system monospace font, square
 corners, hairline dividers, foreground-tinted hover and selection states
 instead of accent fills, and one accent per screen.
 
-The sidebar has the books and the trash, then the browse sections with their
-sizes: authors, series, tags, languages and publishers, then the Kobos and
-Kindles plugged in. A section lists its items with their number of books;
-Enter or a double click lists an item's books, with the item in the
+The sidebar has the books, the trash and the check, then the browse sections
+with their sizes: authors, series, tags, languages and publishers, then the
+Kobos and Kindles plugged in. A section lists its items with their number of
+books; Enter or a double click lists an item's books, with the item in the
 breadcrumb. Esc, Alt+Left or the back button goes back up one level.
 
 The books show as a table or, with Ctrl+G or the toolbar button, as a grid of
@@ -213,6 +213,48 @@ Cousoir departs from Calibre here too:
   where Calibre would also look for metadata in its text.
 - Page counts are left for Calibre, which counts the pages of the books
   Cousoir added or changed the next time it opens the library.
+
+## Checking the library
+
+The Check section lists what a library collects over time, and the sidebar
+counts it. Cousoir looks after each load, after each change and each time the
+section opens, on a worker thread; F5 or Check again looks again.
+
+- **Duplicate books.** Books with the same title and authors, as Calibre
+  compares them when adding (`find_identical_books()`: lower case, without
+  punctuation or a leading article), accents and the authors' name variants
+  aside, unless both have languages and they differ; and books with the same
+  ISBN, ISBN-10 and ISBN-13 alike. The same title by other authors, or by
+  more, is another book. Keep this one keeps a copy and moves the others to
+  the trash, once the formats it has no file for are copied to it from them,
+  as Calibre's Merge only formats does: Restore in the Trash undoes it.
+- **Author name variants.** One person under several names. The same words
+  in another order, case, accents or punctuation aside, "Vian, Boris" for
+  "Boris Vian", are the same name written differently. Initials, "B. Vian"
+  for "Boris Vian", make it possibly the same person, and only when they fit
+  one name of the library: "J. Smith" between "John Smith" and "Jane Smith"
+  stays apart. Use this name files their books under the name picked, in one
+  change, the book folders moving to match; only editing the authors again
+  undoes it. While two author names differ only by case, Calibre has to merge
+  them first, which it does the next time it saves an author: Cousoir
+  changes no author until then.
+- **Books without files.** A format whose file is gone, or a book with no
+  file at all. Remove missing entries takes the formats out of the database;
+  nothing is deleted from the disk. A Nextcloud or ownCloud placeholder for a
+  file kept online counts as the file. In a shared library, a file still on
+  its way from another computer looks missing: let the sync finish first.
+- **Files outside the database**, as Calibre's Check library finds them:
+  files at the top of the library, author folders without a book of the
+  library, book folders the database does not know and unknown files in a
+  book's folder. Hidden files, Calibre's own, the sync services' (conflict
+  copies included), `Thumbs.db` and `desktop.ini` are left out. Show in
+  folder shows them; Cousoir leaves them where they are, as a folder from
+  another computer may be a book whose database has not arrived yet.
+
+Ignore leaves a finding out until it changes, for a book kept without a file
+on purpose or two people who share a name; Show ignored brings them back.
+The fixes, like any change, wait for the library to be writable, and say so.
+Enter, Menu or Shift+F10 opens a finding's actions.
 
 ## Converting books
 
@@ -405,8 +447,9 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 all` does, byte for byte. `doctor` reports the library's books and files,
 the problems it finds (a file or folder the database lists but the disk does
 not have, a cover Calibre does not list, a conflict copy, an unknown
-structure), how the library is shared with other computers and the checks
-that would keep it read-only. It exits with 1 when it finds a problem. Both read a copy of the database in a temporary folder.
+structure, and what the Check section finds, but what was ignored there),
+how the library is shared with other computers and the checks that would
+keep it read-only. It exits with 1 when it finds a problem. Both read a copy of the database in a temporary folder.
 
 `apply` saves the edits of a JSON file as the application saves them, with
 the same checks unless `--force` skips them, all but Calibre's lock, which
@@ -419,10 +462,12 @@ the save still takes, and leaves the same heartbeat after a change:
 The keys are the details pane's: `title`, `sort`, `authors`, `authorSort`,
 `series`, `seriesIndex`, `tags`, `rating` (0 to 10), `publisher`, `languages`,
 `identifiers`, `pubdate`, `comments`, `coverFile` (relative to the JSON file)
-and `removeCover`. The other changes, after the edits and in this order:
+and `removeCover`. The other changes, after the edits and in this order,
+the formats a book has no file for copied to it from another first:
 
 ```json
-[{ "removeFormats": { "book": 2, "formats": ["AZW3"] } },
+[{ "copyFormats": { "from": 7, "to": 2 } },
+ { "removeFormats": { "book": 2, "formats": ["AZW3"] } },
  { "trash": [4] },
  { "restore": 4 }, { "restore": { "book": 2, "format": "AZW3" } },
  { "add": "book.epub" }, { "add": ["book.epub", "book.pdf"] },
@@ -479,6 +524,7 @@ reader `mtpdir:FOLDER` is a folder that stands for a Kindle over MTP.
 | Ctrl+V | Paste the clipboard's image as the cover |
 | Enter, Esc | Revert the book's changes or keep them, once asked |
 | Enter | Restore the selected entry of the trash |
+| Enter, Menu, Shift+F10 | A finding's actions, in the check |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
 
 ## Requirements
@@ -532,7 +578,12 @@ The tests check the port against Calibre itself:
   part way, a change started again over a concurrent one, and the recovery of
   a change interrupted before or after the database was replaced; and books
   added, moved to the trash and restored, a failing change of them undone
-  whole, and a file copied in before a crash removed on recovery.
+  whole, formats copied from a book before it goes to the trash, and a file
+  copied in before a crash removed on recovery.
+- `library_check_tests` checks the check: name variants and initials, the
+  names it must keep apart, duplicates by title and by ISBN, missing files and
+  the files outside a copy of the fixture with files planted in it, and the
+  changes its fixes make.
 - `tests/data/import` holds book files for the corners of Calibre's readers:
   EPUB package files of both versions, MOBI and AZW3 files made by
   `ebook-convert`, PDF files with an info dictionary and an XMP packet (one
@@ -556,7 +607,8 @@ The tests check the port against Calibre itself:
   (`tools/oracle/read_oracle.py`) on `tests/data/import` and the fixture's
   files, and on every file of the real library with
   `COUSOIR_GOLDEN_REAL=1`. Then it adds, removes and restores books and
-  formats in three steps (`tests/data/edits/ops-*.json`), each compared table
+  formats, and keeps one copy of a book with another's formats, in four steps
+  (`tests/data/edits/ops-*.json`), each compared table
   by table and file by file, the trash included, with page counts and the
   time and uuid of the books added left out; and has Calibre restore what
   Cousoir moved to the trash and Cousoir what Calibre did, each ending as the

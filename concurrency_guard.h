@@ -143,6 +143,8 @@ public:
     // The conflict copies of Dropbox, Syncthing, Nextcloud and ownCloud in
     // `folder`, by file name.
     static QStringList conflictCopies(const QString &folder);
+    // Whether `name` is the name of such a copy.
+    static bool isConflictCopy(const QString &name);
     // The Dropbox folders of info.json.
     static QStringList dropboxRoots(const QString &infoPath);
     // The request Dropbox's command socket takes for a file's status, and its
