@@ -564,6 +564,11 @@ are available as shortcuts. They pick the number the same way, and
 ctest --test-dir build --output-on-failure
 ```
 
+Besides what builds Cousoir, the tests need only Calibre, for the parts that
+run it. `cousoir-test-tool`, built with them, does the rest: it compares what
+Calibre and Cousoir wrote, stands in for the readers and for Calibre's
+sending job, and writes the book files of the fixtures.
+
 The tests check the port against Calibre itself:
 
 - `calibre_text_tests` and `calibre_paths_tests` compare the title and author
@@ -628,15 +633,19 @@ The tests check the port against Calibre itself:
   made from `tests/data/kobo.sql`, and Kindles, a folder each standing for
   one over MTP, which Calibre's MTP driver reaches with libmtp's calls done
   on the folder. Some books go, then more once the reader had them a while
-  (`tests/golden/kobo_import.py` does what a Kobo does once unplugged,
-  `tests/golden/kindle_sync.py` what Amazon does to a Kindle's covers), one
+  (`cousoir-test-tool kobo-import` does what a Kobo does once unplugged,
+  `kindle-sync` what Amazon does to a Kindle's covers), one
   of them again, then one is removed. Each step compares the readers' files,
   the books by content and `metadata.calibre` and `driveinfo.calibre` as
   JSON, without the times, random ids and temporary paths in them
-  (`tests/golden/compare_devices.py`); then Calibre connects to both, which
+  (`cousoir-test-tool compare-devices`); then Calibre connects to both, which
   must end alike, and each program must recognise the books the other sent.
   With `COUSOIR_GOLDEN_REAL=1`, books of the real library go too. It is
   skipped without Calibre.
+- `test_tool_tests` checks that the comparisons `golden_list` relies on find
+  what differs, a row, a file, a package file, a cover, a converted book, a
+  book on a reader or a field read, and let through what may: attributes in
+  another order, a cover encoded again, the time and ids of a conversion.
 - `conversion_tests` checks the OPF a conversion reads against Calibre's
   (`tests/data/oracle/conversion.json`, from `make oracle`), the job's files,
   how its outcome is read and added, and, with Calibre installed, converts a
@@ -652,7 +661,7 @@ The tests check the port against Calibre itself:
   removals with their covers, the covers put back, the jobs and how their
   operations reach the Kindle. `book_library_tests` and the UI tests drive
   readers with fake lists of mounted volumes and Kindles and
-  `tests/data/fake-calibre-send` standing in for Calibre; they never see the
+  `cousoir-test-tool` standing in for Calibre; they never see the
   readers plugged into the computer, which can stay plugged in.
 - `concurrency_guard_tests` drives the write checks with a fake
   `/proc/net/unix`, a fake Dropbox socket, Syncthing and Nextcloud folders

@@ -12,6 +12,13 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+# cousoir-test-tool writes the book files; make fixtures builds it first.
+tool=${COUSOIR_TEST_TOOL:-$root/build/cousoir-test-tool}
+case $tool in /*) ;; *) tool=$PWD/$tool ;; esac
+if [ ! -x "$tool" ]; then
+    echo "$tool is missing; build it with make build" >&2
+    exit 1
+fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export CALIBRE_CONFIG_DIRECTORY="$work/config"
@@ -22,7 +29,7 @@ sources="$work/sources"
 mkdir -p "$library" "$sources"
 cd "$sources"
 
-epub() { python3 "$root/tools/fixtures/make_epub.py" "$@"; }
+epub() { "$tool" make-epub "$@"; }
 cover() { magick -size 600x900 "xc:$2" -fill white -font "$(fc-match -f %{file} sans-serif)" -pointsize 54 -gravity center -annotate 0 "$3" "$1"; }
 db() { calibredb --with-library "$library" "$@" >/dev/null; }
 
@@ -30,7 +37,7 @@ epub ecume.epub "L'Écume des jours" "Boris Vian" fr "Colin possède un appartem
 epub black.epub "The Black Company" "Glen Cook" en "There were prodigies and portents enough."
 epub shadows.epub "Shadows Linger" "Glen Cook" en "Marron Shed was a soft man."
 epub omens.epub "Good Omens" "Terry Pratchett" en "In the beginning, it was a nice day."
-python3 "$root/tools/fixtures/make_pdf.py" manuel.pdf "Manuel technique"
+"$tool" make-pdf manuel.pdf "Manuel technique"
 ebook-convert black.epub black.azw3 >/dev/null
 cover ecume.jpg '#2f5d62' "L'Écume\ndes jours"
 cover black.jpg '#3a3a3a' "The Black\nCompany"
@@ -71,12 +78,5 @@ if [ -e "$library/metadata.db-journal" ]; then
 fi
 rm -rf "$root/tests/data/library"
 cp -a "$library" "$root/tests/data/library"
-python3 - "$work/list.json" "$library" "$root/tests/data/library-list.json" <<'EOF'
-import sys
-raw, library, out = sys.argv[1:]
-with open(raw, 'rb') as f:
-    data = f.read()
-with open(out, 'wb') as f:
-    f.write(data.replace(library.encode(), b'@LIBRARY@'))
-EOF
+sed "s|$library|@LIBRARY@|g" "$work/list.json" > "$root/tests/data/library-list.json"
 echo "Wrote tests/data/library and tests/data/library-list.json"

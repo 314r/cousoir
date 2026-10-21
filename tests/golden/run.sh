@@ -7,16 +7,23 @@
 # files and touches metadata.db even to list it, so neither ever runs on the
 # library itself.
 #
-#   tests/golden/run.sh build/cousoir-cli
+#   tests/golden/run.sh build/cousoir-cli [build/cousoir-test-tool]
 #
-# Exits 77, which ctest counts as skipped, without calibredb.
+# cousoir-test-tool, beside cousoir-cli unless given, does the comparing and
+# what the fake readers do between steps. Exits 77, which ctest counts as
+# skipped, without calibredb.
 set -euo pipefail
 
 cli=$1
+tool=${2:-$(dirname "$cli")/cousoir-test-tool}
 root=$(cd "$(dirname "$0")/../.." && pwd)
 if ! command -v calibredb >/dev/null; then
     echo "calibredb is not installed; skipping"
     exit 77
+fi
+if [ ! -x "$tool" ]; then
+    echo "$tool is missing; build it with make build"
+    exit 1
 fi
 
 # Under the home folder by default: on a copy-on-write filesystem the copies
@@ -89,7 +96,7 @@ reads() {
         status=1
         return 0
     fi
-    if python3 "$root/tests/golden/compare_reads.py" "$work/$name-read-calibre.json" "$work/$name-read-cousoir.json" \
+    if "$tool" compare-reads "$work/$name-read-calibre.json" "$work/$name-read-cousoir.json" \
         > "$work/$name-reads.txt"; then
         echo "$name reads: $(tail -1 "$work/$name-reads.txt")"
     else
@@ -115,7 +122,7 @@ edits() {
         status=1
         return 0
     fi
-    if ! python3 "$root/tests/golden/compare_libraries.py" "$work/edit-calibre" "$work/edit-cousoir"; then
+    if ! "$tool" compare-libraries "$work/edit-calibre" "$work/edit-cousoir"; then
         status=1
     fi
     # last_modified is the time of each side's write, a second apart at times.
@@ -157,7 +164,7 @@ operations() {
             status=1
             return
         fi
-        if ! python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/ops-calibre" "$work/ops-cousoir"; then
+        if ! "$tool" compare-libraries --added-from 7 "$work/ops-calibre" "$work/ops-cousoir"; then
             status=1
         fi
         for side in calibre cousoir; do
@@ -189,10 +196,10 @@ cross() {
         return 0
     fi
     echo "Calibre restoring Cousoir's trash:"
-    python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/after-ops-2-calibre" "$work/cross-calibre" \
+    "$tool" compare-libraries --added-from 7 "$work/after-ops-2-calibre" "$work/cross-calibre" \
         || status=1
     echo "Cousoir restoring Calibre's trash:"
-    python3 "$root/tests/golden/compare_libraries.py" --added-from 7 "$work/after-ops-2-cousoir" "$work/cross-cousoir" \
+    "$tool" compare-libraries --added-from 7 "$work/after-ops-2-cousoir" "$work/cross-cousoir" \
         || status=1
 }
 
@@ -217,7 +224,7 @@ conversions() {
         status=1
         return 0
     fi
-    if python3 "$root/tests/golden/compare_libraries.py" --converted "$converted" "$work/$name-calibre" \
+    if "$tool" compare-libraries --converted "$converted" "$work/$name-calibre" \
         "$work/$name-cousoir" > "$work/$name.txt"; then
         echo "$name: $(tail -1 "$work/$name.txt")"
     else
@@ -234,8 +241,10 @@ mkdir -p "$work/config/conversion"
 printf '%s' '{"disabled_color_themes": ["Grass", "Water", "Silver"], "disabled_styles": ["The Cross", "Half and Half", "Ornamental", "Blocks"]}' \
     > "$work/config/cover_generation.json"
 printf 'json:{\n  "output_profile": "tablet"\n}' > "$work/config/conversion/page_setup.py"
+# Some books keep the settings of earlier conversions.
+conversion_settings() { "$tool" conversion-settings "$1"; }
 conversions conversions "$root/tests/data/library" "$root/tests/data/edits/convert.json" 1:KEPUB,2:AZW3,3:AZW3,5:KEPUB \
-    "$root/tests/golden/conversion_settings.py"
+    conversion_settings
 
 # The round trip: Calibre writes again the metadata.opf files of the books
 # Cousoir changed, as its GUI does when it starts, and finds nothing to
@@ -246,9 +255,9 @@ round_trip() {
     cp -a --reflink=auto "$work/edit-cousoir" "$work/trip"
     cp -a --reflink=auto "$work/trip" "$work/trip-before"
     calibredb backup_metadata --with-library "$work/trip" >/dev/null
-    if ! python3 "$root/tests/golden/compare_libraries.py" --files-only "$work/trip" "$work/trip-before" >/dev/null; then
+    if ! "$tool" compare-libraries --files-only "$work/trip" "$work/trip-before" >/dev/null; then
         echo "round trip: Calibre writes the metadata.opf files differently:"
-        python3 "$root/tests/golden/compare_libraries.py" --files-only "$work/trip" "$work/trip-before" | head -20
+        "$tool" compare-libraries --files-only "$work/trip" "$work/trip-before" | head -20
         status=1
     fi
     calibredb set_metadata --with-library "$work/trip" 1 --field "title:Mood Indigo" --field "tags:Jazz,Roman" >/dev/null
@@ -269,8 +278,8 @@ round_trip
 # cousoir-cli, each on a fake reader of its own, a Kobo or a Kindle reached
 # over MTP, step by step: some sent, more sent once the reader had them a
 # while, one of them again, one removed. Between steps, a Kobo takes the
-# books in its database (tests/golden/kobo_import.py) and Amazon blanks a
-# Kindle's covers (tests/golden/kindle_sync.py), which both programs put
+# books in its database (cousoir-test-tool kobo-import) and Amazon blanks a
+# Kindle's covers (cousoir-test-tool kindle-sync), which both programs put
 # back. Removing, Cousoir leaves the other books' entries of
 # metadata.calibre as they are, which Calibre writes again whenever it
 # connects: only which books remain is compared then, and both readers once
@@ -288,8 +297,7 @@ devices() {
             mkdir -p "$work/$name-$side/.kobo"
             printf 'N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390' \
                 > "$work/$name-$side/.kobo/version"
-            python3 -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.executescript(open(sys.argv[2]).read())' \
-                "$work/$name-$side/.kobo/KoboReader.sqlite" "$root/tests/data/kobo.sql"
+            "$tool" run-sql "$work/$name-$side/.kobo/KoboReader.sqlite" "$root/tests/data/kobo.sql"
         else
             mkdir -p "$work/$name-$side/documents" "$work/$name-$side/system/thumbnails"
         fi
@@ -310,9 +318,7 @@ devices() {
                 > "$work/$name-ops-cousoir.json"
         else
             # The book's file as Calibre named it on its reader.
-            lpath=$(python3 -c 'import json, sys
-print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("application_id") == int(sys.argv[2])][:1]))' \
-                "$work/$name-calibre/metadata.calibre" "$6")
+            lpath=$("$tool" device-lpath "$work/$name-calibre/metadata.calibre" "$6")
             printf '[{"remove": %s}]' "$lpath" > "$work/$name-ops-calibre.json"
             printf '[{"removeFromDevice": {"lpaths": %s, "device": "%s"}}]' "$lpath" "$cousoir_device" \
                 > "$work/$name-ops-cousoir.json"
@@ -327,7 +333,7 @@ print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("app
         fi
         local only=()
         [ "$step" = 3 ] && only=(--lpaths-only)
-        if python3 "$root/tests/golden/compare_devices.py" "${only[@]}" "$work/$name-calibre" "$work/$name-cousoir" \
+        if "$tool" compare-devices "${only[@]}" "$work/$name-calibre" "$work/$name-cousoir" \
             > "$work/$name.txt"; then
             echo "$name step $step: $(tail -1 "$work/$name.txt")"
         else
@@ -337,9 +343,9 @@ print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("app
         fi
         for side in calibre cousoir; do
             if [ "$kind" = kobo ]; then
-                python3 "$root/tests/golden/kobo_import.py" "$work/$name-$side"
+                "$tool" kobo-import "$work/$name-$side"
             else
-                python3 "$root/tests/golden/kindle_sync.py" "$work/$name-$side"
+                "$tool" kindle-sync "$work/$name-$side"
             fi
         done
     done
@@ -355,13 +361,10 @@ print(json.dumps([b["lpath"] for b in json.load(open(sys.argv[1])) if b.get("app
         fi
         oracle "$root/tools/oracle/send_books.py" -- "$work/$name-library-calibre" "$read" "$product" \
             "$work/$name-ops-matches.json" || return 0
-        "$cli" device --library "$work/$name-library-cousoir" "$listed" \
-            | python3 -c 'import json, sys
-books = json.load(sys.stdin)["books"]
-for book in books: book.pop("size")
-print(json.dumps(sorted(books, key=lambda b: b["lpath"].lower()), indent=1))' > "$work/$name-listed-$side.json"
+        "$cli" device --library "$work/$name-library-cousoir" "$listed" | "$tool" device-books \
+            > "$work/$name-listed-$side.json"
     done
-    if python3 "$root/tests/golden/compare_devices.py" "$work/$name-read-calibre" "$work/$name-read-cousoir" \
+    if "$tool" compare-devices "$work/$name-read-calibre" "$work/$name-read-cousoir" \
         > "$work/$name.txt"; then
         echo "$name once Calibre connects: $(tail -1 "$work/$name.txt")"
     else
@@ -369,11 +372,7 @@ print(json.dumps(sorted(books, key=lambda b: b["lpath"].lower()), indent=1))' > 
         head -40 "$work/$name.txt"
         status=1
     fi
-    if ! python3 -c 'import json, sys
-for side in sys.argv[1:]:
-    matches = json.load(open(side))
-    assert matches and all(m[1] == "UUID" for m in matches), matches' \
-        "$work/$name-matches-calibre.json" "$work/$name-matches-cousoir.json" \
+    if ! "$tool" check-matches "$work/$name-matches-calibre.json" "$work/$name-matches-cousoir.json" \
         || ! cmp -s "$work/$name-matches-calibre.json" "$work/$name-matches-cousoir.json"; then
         echo "$name: Calibre does not take the books on both readers for the library's alike:"
         diff -u "$work/$name-matches-calibre.json" "$work/$name-matches-cousoir.json" | head -20
@@ -398,27 +397,7 @@ devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
 # before, so not locked by DRM.
 real_conversions() {
     local converted
-    converted=$(python3 - "$work/real-cousoir/metadata.db" "$work/convert-real.json" <<'PICK'
-import json, sqlite3, sys
-con = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True)
-formats = {}
-for book, fmt, size in con.execute('SELECT book, format, uncompressed_size FROM data'):
-    formats.setdefault(book, {})[fmt] = size
-converted = {book for (book,) in con.execute("SELECT book FROM conversion_options WHERE format='PIPE'")}
-def smallest(test, key):
-    found = sorted((f[key], book) for book, f in formats.items() if test(f))
-    return [book for _, book in found]
-epubs = smallest(lambda f: 'EPUB' in f, 'EPUB')
-kepubs = smallest(lambda f: 'EPUB' in f and 'KEPUB' in f, 'EPUB')
-azw3s = [book for book in smallest(lambda f: 'AZW3' in f and not ({'EPUB', 'MOBI', 'LIT', 'PRC', 'FB2', 'DOCX'} & set(f)),
-                                   'AZW3') if book in converted]
-picks = []
-for books, fmt in ((epubs[:1], 'KEPUB'), (epubs[1:2], 'AZW3'), (kepubs[:1], 'KEPUB'), (azw3s[:1], 'AZW3')):
-    picks += [(book, fmt) for book in books if (book, fmt) not in picks]
-json.dump([{'convert': {'book': book, 'format': fmt}} for book, fmt in picks], open(sys.argv[2], 'w'))
-print(','.join(f'{book}:{fmt}' for book, fmt in picks))
-PICK
-)
+    converted=$("$tool" pick-conversions "$work/real-cousoir/metadata.db" "$work/convert-real.json")
     # The user's conversion settings, without the rest of Calibre's.
     rm -rf "$work/config-real"
     mkdir -p "$work/config-real"
@@ -438,25 +417,7 @@ PICK
 real_devices() {
     local picks kind
     for kind in kobo kindle; do
-    picks=$(python3 - "$work/real-cousoir/metadata.db" "$kind" <<'PICK'
-import sqlite3, sys
-con = sqlite3.connect(f'file:{sys.argv[1]}?mode=ro', uri=True)
-formats = {}
-for book, fmt, size in con.execute('SELECT book, format, uncompressed_size FROM data'):
-    formats.setdefault(book, {})[fmt] = size
-def smallest(test, key):
-    found = sorted((f[key], book) for book, f in formats.items() if test(f))
-    return found[0][1] if found else None
-if sys.argv[2] == 'kobo':
-    picks = [smallest(lambda f: 'EPUB' in f and 'KEPUB' not in f, 'EPUB'), smallest(lambda f: 'KEPUB' in f, 'KEPUB'),
-             smallest(lambda f: 'PDF' in f and not {'KEPUB', 'EPUB'} & set(f), 'PDF')]
-else:
-    picks = [smallest(lambda f: 'AZW3' in f, 'AZW3'), smallest(lambda f: 'MOBI' in f and 'AZW3' not in f, 'MOBI'),
-             smallest(lambda f: 'PDF' in f and not {'AZW3', 'MOBI', 'AZW'} & set(f), 'PDF')]
-picks = list(dict.fromkeys(book for book in picks if book is not None))
-print(f'{picks} [{picks[0]}] {picks[1] if len(picks) > 1 else picks[0]}')
-PICK
-)
+    picks=$("$tool" pick-sends "$work/real-cousoir/metadata.db" "$kind")
     # The user's settings, without the rest of Calibre's.
     rm -rf "$work/config-devices"
     mkdir -p "$work/config-devices"
@@ -475,9 +436,7 @@ PICK
 }
 
 if [ "${COUSOIR_GOLDEN_REAL:-0}" = 1 ]; then
-    real=$(python3 -c "
-import json, sys
-print(json.load(open(sys.argv[1])).get('library_path') or '')" "$user_config/global.py.json")
+    real=$("$tool" json-get "$user_config/global.py.json" library_path)
     if [ -z "$real" ]; then
         echo "Calibre has no library on this computer"
         status=1

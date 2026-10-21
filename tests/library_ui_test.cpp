@@ -1019,7 +1019,8 @@ void LibraryUiTest::sendsToKobo()
     const QString root = QDir::cleanPath(kobo.path());
     QTemporaryDir config;
     devices->setConfigDirectory(config.path());
-    devices->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-send"));
+    // Run as calibre-debug, the test tool is a fake sending job.
+    devices->setProgram(QStringLiteral(COUSOIR_TEST_TOOL));
     devices->setEjector([](const Kobo::Device &, std::function<void(const QString &)> done) { done({}); });
     QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
     devices->setVolumeProvider([&volumes] { return volumes; }, 20);
@@ -1080,7 +1081,7 @@ void LibraryUiTest::sendsToKindle()
     QVERIFY(QDir(kindle.path()).mkpath(QStringLiteral("documents")));
     QTemporaryDir config;
     devices->setConfigDirectory(config.path());
-    devices->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-send"));
+    devices->setProgram(QStringLiteral(COUSOIR_TEST_TOOL));
     conversions->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
     QList<KindleSlot> kindles{ { 0, 0, 0x9981, kindle.path() } };
     devices->setKindleProvider([&kindles] { return kindles; });

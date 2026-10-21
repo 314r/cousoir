@@ -116,9 +116,9 @@ follows.
 
 ### Calibre's code in the tests and tools
 
-The oracle scripts in `tools/oracle` and the golden scripts in `tests/golden`
-run inside `calibre-debug` and call Calibre's own functions. A few lines in
-them come from Calibre and say so:
+The oracle scripts in `tools/oracle` run inside `calibre-debug` and call
+Calibre's own functions. A few lines in them, and in the test tool, come from
+Calibre and say so:
 
 - `tools/oracle/read_oracle.py` and `tools/oracle/apply_edits.py`: `book()`
   of `src/calibre/db/cli/cmd_add.py`; `apply_edits.py` also follows
@@ -128,7 +128,7 @@ them come from Calibre and say so:
 - `tools/oracle/send_books.py`: the methods of
   `src/calibre/devices/mtp/unix/driver.py` and `open()` of
   `src/calibre/devices/mtp/driver.py`;
-- `tests/golden/kobo_import.py`: `qhash()` and `imageid_from_contentid()` of
+- `tests/tool/readers.cpp`: `qhash()` and `imageid_from_contentid()` of
   `src/calibre/devices/kobo/driver.py`.
 
 The fixture library in `tests/data/library` was made by `calibredb`, and the
