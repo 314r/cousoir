@@ -57,9 +57,21 @@ a Kobo or a Kindle or moves it to the trash.
 
 When the library cannot be written right now, the status bar says why with a
 lock: Calibre open on this computer, Calibre writing, Dropbox syncing or not
-running, Cousoir editing on another computer, a change from elsewhere in the
-last two minutes, or a Dropbox conflict copy of the database. A click on the
-lock opens the library settings.
+running, Cousoir editing on another computer, a change in the last two
+minutes to a library shared with other computers, or a conflict copy of the
+database. A click on the lock opens the library settings.
+
+A library is shared with other computers when it is in a Dropbox folder
+(named in Dropbox's `info.json`), in a Syncthing folder (a `.stfolder` in
+the library or a folder above it) or a Nextcloud or ownCloud one (their
+`.sync_*.db` journal), or on a network file system: NFS, SMB, sshfs, rclone,
+GVfs or a virtual machine's shared folder. Anything else counts as only this
+computer: no wait after a change, as nothing but Calibre here can make one,
+and Calibre is seen. The library settings say what Cousoir found and correct
+it for a library shared some other way, OneDrive or Google Drive for
+instance, or one only this computer changes despite a sync folder; the
+choice is kept per library and `cousoir-cli` follows it. With Only this
+computer in a Dropbox folder, only a Dropbox sync under way still waits.
 
 ## Editing
 
@@ -115,10 +127,15 @@ A crash leaves the journal: the next start puts the library back as it was,
 or finishes the change if the new database was already in place, and says so.
 
 A change that sets values the book already has writes nothing. Cousoir's own
-change does not start the two-minute wait, and Dropbox sending it does not
-make the library read-only. After a change, Cousoir leaves a heartbeat in a
-`.cousoir` folder at the Dropbox root, outside the library: for ten minutes,
-the Cousoir of another computer sharing the library stays read-only.
+change does not start the two-minute wait, which only a shared library has,
+and Dropbox sending it does not make the library read-only. After a change,
+Cousoir leaves a heartbeat in a `.cousoir` folder at the root of the Dropbox,
+Syncthing or Nextcloud folder: for ten minutes, the Cousoir of another
+computer sharing the library stays read-only. When the Syncthing folder is
+the library itself, Calibre's Check library lists `.cousoir` as an extra
+folder, as it lists `.stfolder`; Nextcloud carries it only if it syncs
+hidden files. A network folder gets no heartbeat: close Cousoir and Calibre
+on the other computer before editing.
 
 Cousoir departs from Calibre on purpose in a few places:
 
@@ -324,14 +341,16 @@ Cousoir departs from Calibre here:
 Settings has three sections. Appearance picks the theme and the text size, as
 in JolieBulle. Library shows the library folder, lets you pick another one
 (Cousoir remembers it) or go back to the library Calibre opens; says whether
-the library can be written now and where the backups go; sets Calibre's
-interface language, which decides title sorts, the "Unknown" of a book without
-author and how names in other scripts become folder names, when Calibre runs
-in another language on the computers sharing the library; and lists the
-Dropbox conflict copies found beside `metadata.db`. A conflict copy of the
-database keeps the library read-only until you have checked in Calibre that
-no change is missing and pressed Ignore; another copy, or this one changed,
-counts again. About shows Cousoir's version, its credits, Calibre's first, and
+the library can be written now, on which rules, and where the backups go;
+says whether other computers share the library, as found or as set there
+(Automatic, Shared, Only this computer); sets Calibre's interface language,
+which decides title sorts, the "Unknown" of a book without author and how
+names in other scripts become folder names, when Calibre runs in another
+language on the computers sharing the library; and lists the conflict copies
+found beside `metadata.db`: Dropbox's, Syncthing's, Nextcloud's and
+ownCloud's. A conflict copy of the database keeps the library read-only until
+you have checked in Calibre that no change is missing and pressed Ignore;
+another copy, or this one changed, counts again. About shows Cousoir's version, its credits, Calibre's first, and
 its license.
 
 ## The library
@@ -386,11 +405,12 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 all` does, byte for byte. `doctor` reports the library's books and files,
 the problems it finds (a file or folder the database lists but the disk does
 not have, a cover Calibre does not list, a conflict copy, an unknown
-structure) and the checks that would keep it read-only. It exits with 1 when
-it finds a problem. Both read a copy of the database in a temporary folder.
+structure), how the library is shared with other computers and the checks
+that would keep it read-only. It exits with 1 when it finds a problem. Both read a copy of the database in a temporary folder.
 
 `apply` saves the edits of a JSON file as the application saves them, with
-the same checks unless `--force` skips the Dropbox and recent-change ones:
+the same checks unless `--force` skips them, all but Calibre's lock, which
+the save still takes, and leaves the same heartbeat after a change:
 
 ```json
 [{ "book": 1, "set": { "title": "Mood Indigo", "tags": ["Roman", "Jazz"], "coverFile": "cover.png" } }]
@@ -583,7 +603,9 @@ The tests check the port against Calibre itself:
   `tests/data/fake-calibre-send` standing in for Calibre; they never see the
   readers plugged into the computer, which can stay plugged in.
 - `concurrency_guard_tests` drives the write checks with a fake
-  `/proc/net/unix` and a fake Dropbox socket.
+  `/proc/net/unix`, a fake Dropbox socket, Syncthing and Nextcloud folders
+  made in a temporary folder and a file system type given in place of the
+  real one.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%
   scale, against a copy of the fixture library.
 

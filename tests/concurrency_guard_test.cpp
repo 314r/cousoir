@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include <QDirIterator>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSettings>
@@ -65,6 +66,9 @@ private slots:
     void findsConflictCopies();
     void parsesDropboxAnswers();
     void readsDropboxRoots();
+    void findsSharedFolders_data();
+    void findsSharedFolders();
+    void recognisesNetworkFileSystems();
     void writableWhenEverythingIsQuiet();
     void readOnlyUntilLoadedAndKnown();
     void readOnlyWhileCalibreRuns();
@@ -72,13 +76,25 @@ private slots:
     void readOnlyWhileDropboxSyncs();
     void readOnlyWithoutDropbox();
     void readOnlyAfterRecentChange();
+    void noWaitForLocalLibrary();
+    void readOnlyAfterRecentChangeWhenShared_data();
+    void readOnlyAfterRecentChangeWhenShared();
+    void followsSharingChoice();
+    void onlyThisComputerInDropbox();
     void readOnlyUntilConflictSeen();
     void ownChangeIsNoReasonToWait();
+    void readOnlyWhileEditedElsewhere_data();
     void readOnlyWhileEditedElsewhere();
 
 private:
     ConcurrencyGuard::Environment environment() const;
     std::unique_ptr<ConcurrencyGuard> guard(bool loaded = true);
+    std::unique_ptr<ConcurrencyGuard> guard(const ConcurrencyGuard::Environment &environment);
+    // Makes the library at `relative` under the root, its database changed
+    // `seconds` ago, and the one the guards check.
+    void makeLibrary(const QString &relative, int seconds);
+    // Writes `marker` under the root: a folder when it ends with "/".
+    void makeMarker(const QString &marker);
 
     std::unique_ptr<QTemporaryDir> m_root;
     QString m_library;
@@ -112,6 +128,8 @@ ConcurrencyGuard::Environment ConcurrencyGuardTest::environment() const
     environment.dropboxSocket = m_root->filePath(QStringLiteral("dropbox.sock"));
     environment.dropboxInfo = m_root->filePath(QStringLiteral("info.json"));
     environment.intervalMs = 60000;
+    // Whatever disk the temporary folder is on.
+    environment.fileSystemType = "ext4";
     return environment;
 }
 
@@ -122,6 +140,31 @@ std::unique_ptr<ConcurrencyGuard> ConcurrencyGuardTest::guard(bool loaded)
     result->setSchemaKnown(loaded);
     result->setLibraryPath(m_library);
     return result;
+}
+
+std::unique_ptr<ConcurrencyGuard> ConcurrencyGuardTest::guard(const ConcurrencyGuard::Environment &environment)
+{
+    auto result = std::make_unique<ConcurrencyGuard>(environment);
+    result->setLibraryReadable(true);
+    result->setSchemaKnown(true);
+    result->setLibraryPath(m_library);
+    return result;
+}
+
+void ConcurrencyGuardTest::makeLibrary(const QString &relative, int seconds)
+{
+    m_library = m_root->filePath(relative);
+    QVERIFY(QDir().mkpath(m_library));
+    QVERIFY(writeFile(QDir(m_library).filePath(QStringLiteral("metadata.db")), "db"));
+    age(QDir(m_library).filePath(QStringLiteral("metadata.db")), seconds);
+}
+
+void ConcurrencyGuardTest::makeMarker(const QString &marker)
+{
+    if (marker.endsWith(u'/'))
+        QVERIFY(QDir().mkpath(m_root->filePath(marker)));
+    else if (!marker.isEmpty())
+        QVERIFY(writeFile(m_root->filePath(marker), "x"));
 }
 
 void ConcurrencyGuardTest::detectsCalibre()
@@ -144,12 +187,23 @@ void ConcurrencyGuardTest::findsConflictCopies()
 {
     for (const char *name : { "metadata (conflicted copy 2024-11-14).db",
                               "metadata (Copie en conflit de Pierre 2024-11-14).db",
-                              "notes (Case Conflict).txt", "metadata.db", "metadata_db_prefs_backup.json" }) {
+                              "metadata (Pierre's conflicted copy 2024-11-14).db",
+                              "metadata (case clash from 2024-11-14 101500).db",
+                              "metadata.sync-conflict-20241114-101500-ABCDEFG.db",
+                              "metadata.sync-conflict-20241114-101500-.db",
+                              "metadata_conflict-20241114-101500.db",
+                              "notes (Case Conflict).txt", "metadata.db", "metadata_db_prefs_backup.json",
+                              "Conflict (2024).epub" }) {
         QVERIFY(writeFile(QDir(m_library).filePath(QString::fromUtf8(name)), "x"));
     }
     QCOMPARE(ConcurrencyGuard::conflictCopies(m_library),
              (QStringList{ QStringLiteral("metadata (Copie en conflit de Pierre 2024-11-14).db"),
+                           QStringLiteral("metadata (Pierre's conflicted copy 2024-11-14).db"),
+                           QStringLiteral("metadata (case clash from 2024-11-14 101500).db"),
                            QStringLiteral("metadata (conflicted copy 2024-11-14).db"),
+                           QStringLiteral("metadata.sync-conflict-20241114-101500-.db"),
+                           QStringLiteral("metadata.sync-conflict-20241114-101500-ABCDEFG.db"),
+                           QStringLiteral("metadata_conflict-20241114-101500.db"),
                            QStringLiteral("notes (Case Conflict).txt") }));
 }
 
@@ -167,6 +221,55 @@ void ConcurrencyGuardTest::readsDropboxRoots()
     QCOMPARE(ConcurrencyGuard::dropboxRoots(m_root->filePath(QStringLiteral("info.json"))),
              QStringList{ m_root->filePath(QStringLiteral("Dropbox")) });
     QVERIFY(ConcurrencyGuard::dropboxRoots(m_root->filePath(QStringLiteral("none.json"))).isEmpty());
+}
+
+void ConcurrencyGuardTest::findsSharedFolders_data()
+{
+    QTest::addColumn<QString>("library");
+    QTest::addColumn<QString>("marker");
+    QTest::addColumn<QByteArray>("type");
+    QTest::addColumn<QString>("service");
+    QTest::addColumn<QString>("root");
+    const auto row = [](const char *name, const char *library, const char *marker, const char *type,
+                        const char *service, const char *root) {
+        QTest::newRow(name) << QString::fromUtf8(library) << QString::fromUtf8(marker) << QByteArray(type)
+                            << QString::fromUtf8(service) << QString::fromUtf8(root);
+    };
+    row("dropbox", "Dropbox/Calibre", "", "ext4", "dropbox", "Dropbox");
+    row("syncthing", "Sync/Books/Calibre", "Sync/.stfolder/", "ext4", "syncthing", "Sync");
+    row("syncthing before 0.14.38", "Sync/Calibre", "Sync/.stfolder", "ext4", "syncthing", "Sync");
+    row("syncthing library", "Calibre", "Calibre/.stfolder/", "ext4", "syncthing", "Calibre");
+    row("nextcloud", "Nextcloud/Calibre", "Nextcloud/.sync_0a1b2c3d4e5f.db", "ext4", "nextcloud", "Nextcloud");
+    row("older nextcloud", "Nextcloud/Calibre", "Nextcloud/._sync_0a1b2c3d4e5f.db", "ext4", "nextcloud", "Nextcloud");
+    row("csync", "ownCloud/Calibre", "ownCloud/.csync_journal.db", "ext4", "nextcloud", "ownCloud");
+    row("network", "Share/Calibre", "", "nfs4", "network", "");
+    row("local", "Books/Calibre", "", "ext4", "", "");
+}
+
+void ConcurrencyGuardTest::findsSharedFolders()
+{
+    QFETCH(QString, library);
+    QFETCH(QString, marker);
+    QFETCH(QByteArray, type);
+    QFETCH(QString, service);
+    QFETCH(QString, root);
+    makeLibrary(library, 600);
+    makeMarker(marker);
+    const ConcurrencyGuard::Sharing found = ConcurrencyGuard::findSharing(
+        m_library, ConcurrencyGuard::dropboxRoots(m_root->filePath(QStringLiteral("info.json"))), type);
+    QCOMPARE(found.service, service);
+    QCOMPARE(found.root, root.isEmpty() ? QString() : QFileInfo(m_root->filePath(root)).canonicalFilePath());
+    QCOMPARE(found.fileSystemType, service == QLatin1String("network") || service.isEmpty() ? type : QByteArray());
+}
+
+void ConcurrencyGuardTest::recognisesNetworkFileSystems()
+{
+    for (const char *type : { "nfs", "nfs4", "cifs", "smb3", "9p", "virtiofs", "fuse.sshfs", "fuse.rclone",
+                              "fuse.gvfsd-fuse" })
+        QVERIFY2(ConcurrencyGuard::networkFileSystem(type), type);
+    for (const char *type : { "ext4", "btrfs", "xfs", "tmpfs", "overlay", "fuseblk", "fuse.mergerfs", "fuse.gocryptfs",
+                              "" })
+        QVERIFY2(!ConcurrencyGuard::networkFileSystem(type), type);
 }
 
 void ConcurrencyGuardTest::writableWhenEverythingIsQuiet()
@@ -257,6 +360,95 @@ void ConcurrencyGuardTest::readOnlyAfterRecentChange()
     QTRY_COMPARE(checks->state(), QStringLiteral("writable"));
 }
 
+void ConcurrencyGuardTest::noWaitForLocalLibrary()
+{
+    // Calibre just closed on a library no other computer changes.
+    makeLibrary(QStringLiteral("Books/Calibre"), 10);
+    auto checks = guard();
+    QVERIFY(checks->syncService().isEmpty());
+    QVERIFY(!checks->shared());
+    QCOMPARE(checks->state(), QStringLiteral("writable"));
+}
+
+void ConcurrencyGuardTest::readOnlyAfterRecentChangeWhenShared_data()
+{
+    QTest::addColumn<QString>("marker");
+    QTest::addColumn<QByteArray>("type");
+    QTest::newRow("syncthing") << QStringLiteral("Shared/.stfolder/") << QByteArray("ext4");
+    QTest::newRow("network") << QString() << QByteArray("nfs4");
+}
+
+void ConcurrencyGuardTest::readOnlyAfterRecentChangeWhenShared()
+{
+    QFETCH(QString, marker);
+    QFETCH(QByteArray, type);
+    makeLibrary(QStringLiteral("Shared/Calibre"), 40);
+    makeMarker(marker);
+    ConcurrencyGuard::Environment shared = environment();
+    shared.fileSystemType = type;
+    auto checks = guard(shared);
+    QVERIFY(checks->shared());
+    QCOMPARE(checks->state(), QStringLiteral("recent"));
+
+    // Heartbeats only go where a sync service carries them.
+    checks->setLibraryUuid(QStringLiteral("library-id"));
+    checks->noteWrite();
+    const bool beats = QDirIterator(m_root->path(), { QStringLiteral(".cousoir") }, QDir::Dirs | QDir::Hidden,
+                                    QDirIterator::Subdirectories).hasNext();
+    QCOMPARE(beats, !marker.isEmpty());
+}
+
+void ConcurrencyGuardTest::followsSharingChoice()
+{
+    makeLibrary(QStringLiteral("Books/Calibre"), 40);
+    const QString key = QStringLiteral("Library/sharing");
+    {
+        auto checks = guard();
+        QCOMPARE(checks->state(), QStringLiteral("writable"));
+        QSignalSpy changed(checks.get(), &ConcurrencyGuard::sharingChanged);
+        checks->setSharing(QStringLiteral("shared"));
+        QCOMPARE(changed.size(), 1);
+        QVERIFY(checks->shared());
+        QCOMPARE(checks->state(), QStringLiteral("recent"));
+        QCOMPARE(QSettings().value(key).toStringList(),
+                 QStringList{ QStringLiteral("shared|") + QFileInfo(m_library).canonicalFilePath() });
+        checks->setSharing(QStringLiteral("sometimes"));
+        QCOMPARE(checks->sharing(), QStringLiteral("shared"));
+    }
+
+    // Kept for the library.
+    auto again = guard();
+    QCOMPARE(again->sharing(), QStringLiteral("shared"));
+    QCOMPARE(again->state(), QStringLiteral("recent"));
+    again->setSharing(QStringLiteral("local"));
+    QVERIFY(!again->shared());
+    QCOMPARE(again->state(), QStringLiteral("writable"));
+    again->setSharing(QString());
+    QVERIFY(QSettings().value(key).toStringList().isEmpty());
+}
+
+void ConcurrencyGuardTest::onlyThisComputerInDropbox()
+{
+    // A Dropbox folder no Dropbox answers for any more.
+    age(QDir(m_library).filePath(QStringLiteral("metadata.db")), 40);
+    auto checks = guard();
+    QCOMPARE(checks->syncService(), QStringLiteral("dropbox"));
+    QTRY_COMPARE(checks->dropboxStatus(), QStringLiteral("unavailable"));
+    QCOMPARE(checks->state(), QStringLiteral("dropbox"));
+
+    checks->setSharing(QStringLiteral("local"));
+    QCOMPARE(checks->state(), QStringLiteral("writable"));
+    checks->setLibraryUuid(QStringLiteral("library-id"));
+    checks->noteWrite();
+    QVERIFY(!QFileInfo::exists(m_root->filePath(QStringLiteral("Dropbox/.cousoir"))));
+
+    // A sync under way still waits.
+    FakeDropbox dropbox(environment().dropboxSocket);
+    dropbox.status = "syncing";
+    checks->refresh();
+    QTRY_COMPARE(checks->state(), QStringLiteral("dropbox"));
+}
+
 void ConcurrencyGuardTest::readOnlyUntilConflictSeen()
 {
     FakeDropbox dropbox(environment().dropboxSocket);
@@ -266,6 +458,7 @@ void ConcurrencyGuardTest::readOnlyUntilConflictSeen()
     QVERIFY(writeFile(QDir(m_library).filePath(QStringLiteral("notes (conflicted copy).txt")), "x"));
     auto checks = guard();
     QTRY_COMPARE(checks->state(), QStringLiteral("conflict"));
+    QCOMPARE(checks->readOnlyReason(), QStringLiteral("Read-only: conflict copy of the database"));
     QCOMPARE(checks->conflicts().size(), 2);
 
     checks->acknowledgeConflict(copy);
@@ -302,8 +495,25 @@ void ConcurrencyGuardTest::ownChangeIsNoReasonToWait()
     QTRY_COMPARE(checks->state(), QStringLiteral("recent"));
 }
 
+void ConcurrencyGuardTest::readOnlyWhileEditedElsewhere_data()
+{
+    QTest::addColumn<QString>("library");
+    QTest::addColumn<QString>("marker");
+    QTest::addColumn<QString>("root");
+    QTest::newRow("dropbox") << QStringLiteral("Dropbox/Calibre") << QString() << QStringLiteral("Dropbox");
+    QTest::newRow("syncthing") << QStringLiteral("Sync/Calibre") << QStringLiteral("Sync/.stfolder/")
+                               << QStringLiteral("Sync");
+    QTest::newRow("nextcloud") << QStringLiteral("Nextcloud/Calibre")
+                               << QStringLiteral("Nextcloud/.sync_0a1b2c3d4e5f.db") << QStringLiteral("Nextcloud");
+}
+
 void ConcurrencyGuardTest::readOnlyWhileEditedElsewhere()
 {
+    QFETCH(QString, library);
+    QFETCH(QString, marker);
+    QFETCH(QString, root);
+    makeLibrary(library, 600);
+    makeMarker(marker);
     FakeDropbox dropbox(environment().dropboxSocket);
     ConcurrencyGuard::Environment here = environment();
     here.host = QStringLiteral("laptop");
@@ -318,11 +528,11 @@ void ConcurrencyGuardTest::readOnlyWhileEditedElsewhere()
         checks->setLibraryPath(m_library);
     }
     QTRY_COMPARE(laptop.state(), QStringLiteral("writable"));
+    QCOMPARE(laptop.syncRoot(), QFileInfo(m_root->filePath(root)).canonicalFilePath());
 
     // The desktop's heartbeat after a change keeps the laptop read-only.
     desktop.noteWrite();
-    const QString folder = ConcurrencyGuard::heartbeatFolder(m_root->filePath(QStringLiteral("Dropbox")),
-                                                             QStringLiteral("library-id"));
+    const QString folder = ConcurrencyGuard::heartbeatFolder(laptop.syncRoot(), QStringLiteral("library-id"));
     QVERIFY(QFileInfo::exists(QDir(folder).filePath(QStringLiteral("desktop.json"))));
     laptop.refresh();
     QCOMPARE(laptop.state(), QStringLiteral("elsewhere"));

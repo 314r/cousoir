@@ -375,6 +375,9 @@ void LibraryUiTest::opensAndClosesBook()
 
 void LibraryUiTest::showsBookDetails()
 {
+    // Shared with other computers, the copy just made is read-only for now.
+    guard()->setProperty("sharing", QStringLiteral("shared"));
+    QTRY_COMPARE(guard()->property("state").toString(), QStringLiteral("recent"));
     QTest::mouseDClick(m_window, Qt::LeftButton, Qt::NoModifier, center(control("bookRow1")));
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 1);
     QVERIFY(QQuickTest::qWaitForPolish(m_window));
@@ -390,7 +393,7 @@ void LibraryUiTest::showsBookDetails()
     QCOMPARE(control("identifier_isbn")->property("value").toString(), QStringLiteral("9782253140870"));
     QVERIFY(control("format_EPUB")->isEnabled());
     QTRY_COMPARE(control("bookCoverImage")->property("status").toInt(), 1);
-    // A copy just made changed a moment ago: read-only, metadata as text.
+    // Read-only: metadata as text.
     QVERIFY(!control("bookFields")->isVisible());
     QVERIFY(!control("coverButton")->isVisible());
 
@@ -505,10 +508,17 @@ void LibraryUiTest::opensInReader()
 
 void LibraryUiTest::showsWriteState()
 {
-    // The copied library just changed and is in no Dropbox folder.
-    QTRY_COMPARE(guard()->property("state").toString(), QStringLiteral("recent"));
+    // The copied library just changed. When only this computer changes it,
+    // that is no reason to wait.
+    guard()->setProperty("sharing", QStringLiteral("local"));
+    QTRY_COMPARE(guard()->property("state").toString(), QStringLiteral("writable"));
     QQuickItem *state = control("writeState");
-    QVERIFY(state && state->isVisible());
+    QVERIFY(state && !state->isVisible());
+
+    // Shared with other computers, it waits for the change to settle.
+    guard()->setProperty("sharing", QStringLiteral("shared"));
+    QTRY_COMPARE(guard()->property("state").toString(), QStringLiteral("recent"));
+    QTRY_VERIFY(state->isVisible());
     QVERIFY(state->property("text").toString().startsWith(QStringLiteral("Read-only: library changed")));
 
     // Calibre's journal takes over, and goes.
@@ -518,12 +528,18 @@ void LibraryUiTest::showsWriteState()
     guard()->metaObject()->invokeMethod(guard(), "refresh");
     QTRY_COMPARE(state->property("text").toString(), QStringLiteral("Read-only: Calibre is writing to the library"));
 
-    // A click shows why in the settings.
+    // A click shows why in the settings, and how the library is shared.
     QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(state));
     QQuickWindow *settings = m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
     QVERIFY(settings);
     QTRY_VERIFY(settings->isVisible());
     QCOMPARE(settings->property("currentSectionIndex").toInt(), 1);
+    const QList<QQuickItem *> shared = visualDescendants(settings->contentItem(), QStringLiteral("sharingOption_shared"));
+    QCOMPARE(shared.size(), 1);
+    QVERIFY(shared.constFirst()->property("selected").toBool());
+    const QList<QQuickItem *> sharing = visualDescendants(settings->contentItem(), QStringLiteral("sharingLabel"));
+    QCOMPARE(sharing.size(), 1);
+    QCOMPARE(sharing.constFirst()->property("text").toString(), QStringLiteral("In effect: shared with other computers"));
     settings->close();
 }
 

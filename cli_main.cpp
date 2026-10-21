@@ -138,6 +138,7 @@ int doctor(const QString &libraryPath)
     ConcurrencyGuard guard;
     guard.setLibraryReadable(true);
     guard.setSchemaKnown(data.schemaKnown);
+    guard.setLibraryUuid(data.uuid);
     guard.setLibraryPath(data.libraryPath);
     QEventLoop loop;
     QObject::connect(&guard, &ConcurrencyGuard::stateChanged, &loop, [&] {
@@ -145,13 +146,13 @@ int doctor(const QString &libraryPath)
             loop.quit();
     });
     QTimer::singleShot(3500, &loop, &QEventLoop::quit);
-    if (!ConcurrencyGuard::dropboxRoots(ConcurrencyGuard::Environment::system().dropboxInfo).isEmpty())
+    if (guard.syncService() == QLatin1String("dropbox"))
         loop.exec();
     for (const QVariant &value : guard.conflicts()) {
         const QVariantMap conflict = value.toMap();
         const bool seen = conflict.value(QStringLiteral("acknowledged")).toBool();
         const QDateTime modified = conflict.value(QStringLiteral("modified")).toDateTime();
-        problems.append(QStringLiteral("Dropbox conflict copy%1: %2, %3, %4")
+        problems.append(QStringLiteral("Conflict copy%1: %2, %3, %4")
                             .arg(seen ? QStringLiteral(" (ignored)") : QString(),
                                  conflict.value(QStringLiteral("file")).toString(),
                                  modified.toString(QStringLiteral("yyyy-MM-dd")),
@@ -185,8 +186,22 @@ int doctor(const QString &libraryPath)
                                        ? QStringLiteral("open on this computer") : QStringLiteral("not running here"));
     row(QStringLiteral("Journal"), QFileInfo::exists(database + QStringLiteral("-journal")) ? QStringLiteral("present")
                                                                                             : QStringLiteral("none"));
-    row(QStringLiteral("Dropbox"), guard.dropboxStatus().isEmpty() ? QStringLiteral("not in Dropbox")
-                                                                   : guard.dropboxStatus());
+    const QString service = guard.syncService();
+    const QString serviceName = service == QLatin1String("dropbox") ? QStringLiteral("Dropbox")
+        : service == QLatin1String("syncthing")                     ? QStringLiteral("Syncthing")
+        : service == QLatin1String("nextcloud")                     ? QStringLiteral("Nextcloud or ownCloud")
+                                                                    : QString();
+    const QString shared = !guard.shared() ? QStringLiteral("only this computer")
+        : !serviceName.isEmpty()
+            ? QStringLiteral("through %1 (%2)").arg(serviceName, QDir::toNativeSeparators(guard.syncRoot()))
+        : service == QLatin1String("network")
+            ? QStringLiteral("on a network folder (%1)")
+                  .arg(QString::fromLatin1(QStorageInfo(data.libraryPath).fileSystemType()))
+            : QStringLiteral("with other computers");
+    row(QStringLiteral("Shared"), shared + (guard.sharing().isEmpty() ? QString() : QStringLiteral(", as set in Cousoir")));
+    if (service == QLatin1String("dropbox"))
+        row(QStringLiteral("Dropbox"), guard.dropboxStatus().isEmpty() ? QStringLiteral("no answer")
+                                                                       : guard.dropboxStatus());
     row(QStringLiteral("Last change"), QStringLiteral("%1 (%2)").arg(changed.toString(QStringLiteral("yyyy-MM-dd HH:mm")),
                                                                      ago(changed.secsTo(QDateTime::currentDateTime()))));
     row(QStringLiteral("State"), guard.writable() ? QStringLiteral("Could be written") : guard.readOnlyReason());
@@ -203,6 +218,7 @@ QString readOnlyReason(const QString &libraryPath)
     ConcurrencyGuard guard;
     guard.setLibraryReadable(true);
     guard.setSchemaKnown(data.schemaKnown);
+    guard.setLibraryUuid(data.uuid);
     guard.setLibraryPath(data.libraryPath);
     if (guard.state() == QLatin1String("dropbox")) {
         QEventLoop loop;
@@ -444,6 +460,14 @@ int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine
         err() << result.error << Qt::endl;
         return 1;
     }
+    // The other computers sharing the library hold off, as after the
+    // application's change.
+    if (result.written) {
+        ConcurrencyGuard guard;
+        guard.setLibraryUuid(result.data.uuid);
+        guard.setLibraryPath(libraryPath);
+        guard.noteWrite();
+    }
     QStringList added;
     for (const int id : std::as_const(result.added))
         added.append(QString::number(id));
@@ -682,7 +706,8 @@ int main(int argc, char *argv[])
                                            QStringLiteral("path"));
     parser.addOption(libraryOption);
     const QCommandLineOption forceOption(QStringLiteral("force"),
-                                         QStringLiteral("apply: skip the Dropbox and recent-change checks."));
+                                         QStringLiteral("apply: skip the sync, recent-change and conflict checks; "
+                                                        "Calibre's lock still applies."));
     parser.addOption(forceOption);
     parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor, apply, read or device"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));

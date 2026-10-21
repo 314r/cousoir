@@ -49,8 +49,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
   exactly where Calibre puts them, and each app recognises the books the other
   sent.
-- 🛡️ **Safe with Dropbox.** Cousoir writes only when nothing else can:
-  Calibre closed, Dropbox done syncing, no other computer editing.
+- 🛡️ **Safe, shared or not.** Cousoir writes only when nothing else can:
+  Calibre closed and, for a library in Dropbox, Syncthing, Nextcloud or on a
+  network folder, no other computer editing.
 - 🎨 **Wears your Omarchy theme**, or follows your system's light or dark
   mode.
 - ⌨️ **Keyboard-first.** Every action has a shortcut, and the status bar shows
@@ -102,7 +103,8 @@ Cousoir installs under `~/.local` and appears in your app launcher. Set
    and press Ctrl+D to send it.
 
 > **Tip:** a lock in the status bar means the library is read-only right now,
-> because Calibre is open, Dropbox is syncing or another computer is editing.
+> because Calibre is open, Dropbox is syncing or another computer just changed
+> the library.
 > Click it to see why.
 
 <details>
@@ -158,15 +160,19 @@ The few places where Cousoir departs from Calibre on purpose are listed in
 
 ## 🔒 Your library stays (hopefully) safe
 
-- **Never opened in place.** Cousoir reads a copy of `metadata.db`, so Dropbox
-  has nothing to sync and Calibre nothing to notice.
+- **Never opened in place.** Cousoir reads a copy of `metadata.db`, so your
+  sync service has nothing to sync and Calibre nothing to notice.
 - **Backed up first.** Before its first change in a session, Cousoir copies
   the database to `~/.local/share/cousoir/backups/` and keeps the last 30
   copies.
 - **Crash-proof saves.** Every change is journaled. After a crash, the next
   start either rolls it back or finishes it, and tells you which.
-- **Dropbox-aware.** Syncs in progress, conflict copies and another computer
-  editing all keep the library read-only until it is safe to write.
+- **Sync-aware.** In Dropbox, Syncthing, Nextcloud or ownCloud, or on a
+  network folder, fresh changes, conflict copies and another computer editing
+  keep the library read-only until it is safe to write, and so do Dropbox's
+  syncs in progress. For OneDrive, Google Drive and the like, say so in the
+  library settings. A library only this computer changes is ready as soon as
+  Calibre closes.
 - **Hands off your Kobo's database.** Cousoir only reads it.
 - **Nothing leaves your computer.** No accounts, no telemetry, no internet
   access.
