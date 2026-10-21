@@ -7,6 +7,13 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
+# cousoir-test-tool writes the book files; make fixtures builds it first.
+tool=${COUSOIR_TEST_TOOL:-$root/build/cousoir-test-tool}
+case $tool in /*) ;; *) tool=$PWD/$tool ;; esac
+if [ ! -x "$tool" ]; then
+    echo "$tool is missing; build it with make build" >&2
+    exit 1
+fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export CALIBRE_CONFIG_DIRECTORY="$work/config"
@@ -18,7 +25,7 @@ mkdir -p "$out"
 
 magick -size 400x600 'xc:#4a3b6b' -fill white -font "$(fc-match -f %{file} sans-serif)" -pointsize 40 \
     -gravity center -annotate 0 "Cover" -quality 85 "$work/cover.jpg"
-python3 "$root/tools/fixtures/make_import_epubs.py" "$out" "$work/cover.jpg"
+"$tool" make-import-epubs "$out" "$work/cover.jpg"
 
 # MOBI and AZW3: their EXTH headers as Calibre writes them.
 ebook-convert "$out/Le Vicomte - Inconnu.epub" "$out/Vicomte.azw3" >/dev/null
@@ -55,16 +62,16 @@ cat > "$work/packet.xml" <<'EOF'
 </x:xmpmeta>
 <?xpacket end="w"?>
 EOF
-python3 "$root/tools/fixtures/make_pdf.py" "$out/relativity.pdf" "Relativity" "$work/info.json" "$work/packet.xml"
+"$tool" make-pdf "$out/relativity.pdf" "Relativity" "$work/info.json" "$work/packet.xml"
 
 # The same, but the info dictionary changed after the packet: its title,
 # authors and tags win.
 sed -e "s/D:20190401100000+02'00'\", \"ModDate\": \"D:20190401100000+02'00'\"/D:20190401100000+02'00'\", \"ModDate\": \"D:20200101000000Z\"/" \
     "$work/info.json" > "$work/info-newer.json"
-python3 "$root/tools/fixtures/make_pdf.py" "$out/Newer Info - Someone.pdf" "Newer" "$work/info-newer.json" "$work/packet.xml"
+"$tool" make-pdf "$out/Newer Info - Someone.pdf" "Newer" "$work/info-newer.json" "$work/packet.xml"
 
 # A PDF whose metadata Calibre wrote, XMP with its own namespace included.
-python3 "$root/tools/fixtures/make_pdf.py" "$out/calibre.pdf" "Calibre"
+"$tool" make-pdf "$out/calibre.pdf" "Calibre"
 ebook-meta "$out/calibre.pdf" --title "Écrit par Calibre" --authors "Kovid Goyal & Anne Autre" \
     --tags "Logiciel,Livres" --series "Outils" --index 3 --isbn 9782070360246 --rating 4 \
     --comments "<p>Un PDF.</p>" --date 2001-02-03 --publisher "Éditions Libres" --language fr >/dev/null

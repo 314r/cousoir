@@ -32,9 +32,9 @@ test: build
 
 # Rebuilds tests/data/library and its calibredb listing, and the book files of
 # tests/data/import, with Calibre.
-fixtures:
-	tools/make_fixture_library.sh
-	tools/make_import_fixtures.sh
+fixtures: build
+	COUSOIR_TEST_TOOL=$(abspath $(BUILD_DIR))/cousoir-test-tool tools/make_fixture_library.sh
+	COUSOIR_TEST_TOOL=$(abspath $(BUILD_DIR))/cousoir-test-tool tools/make_import_fixtures.sh
 
 # Records what Calibre computes, for the tests and the tables Cousoir takes
 # from it: title and author sorts, folder and file names, the transliteration

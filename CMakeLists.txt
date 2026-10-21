@@ -286,7 +286,29 @@ if(BUILD_TESTING)
         target_compile_definitions("${target}" PRIVATE
             COUSOIR_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
             COUSOIR_VERSION="${COUSOIR_PACKAGE_VERSION}")
+        if(NOT target STREQUAL "cousoir-test-tool")
+            target_compile_definitions("${target}" PRIVATE
+                COUSOIR_TEST_TOOL="$<TARGET_FILE:cousoir-test-tool>")
+            add_dependencies("${target}" cousoir-test-tool)
+        endif()
     endfunction()
+
+    # What the tests run besides Cousoir and Calibre: the golden tests'
+    # comparisons and fake readers, the fixtures' book files and the fake
+    # sending job.
+    qt_add_executable(cousoir-test-tool
+        tests/tool/common.cpp
+        tests/tool/common.h
+        tests/tool/compare.cpp
+        tests/tool/fixtures.cpp
+        tests/tool/library.cpp
+        tests/tool/main.cpp
+        tests/tool/readers.cpp
+        sqlite_db.cpp
+        sqlite_db.h
+    )
+    target_link_libraries(cousoir-test-tool PRIVATE Qt6::Core Qt6::Gui libzip::zip ${COUSOIR_SQLITE})
+    cousoir_configure_test_executable(cousoir-test-tool)
 
     set(COUSOIR_TEST_LOG_DIR "${CMAKE_BINARY_DIR}/test-results")
     file(MAKE_DIRECTORY "${COUSOIR_TEST_LOG_DIR}")
@@ -344,6 +366,15 @@ if(BUILD_TESTING)
     cousoir_configure_test_executable(concurrency_guard_tests)
     cousoir_add_logged_test(concurrency_guard_tests concurrency_guard_tests)
 
+    qt_add_executable(test_tool_tests
+        tests/test_tool_test.cpp
+        sqlite_db.cpp
+        sqlite_db.h
+    )
+    target_link_libraries(test_tool_tests PRIVATE Qt6::Core Qt6::Gui libzip::zip ${COUSOIR_SQLITE} Qt6::Test)
+    cousoir_configure_test_executable(test_tool_tests)
+    cousoir_add_logged_test(test_tool_tests test_tool_tests)
+
     qt_add_executable(book_library_tests
         tests/book_library_test.cpp
         ${COUSOIR_MODEL_SOURCES}
@@ -380,6 +411,7 @@ if(BUILD_TESTING)
     # libraries; skipped without Calibre.
     add_test(NAME golden_list
         COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/run.sh" "$<TARGET_FILE:cousoir-cli>"
+            "$<TARGET_FILE:cousoir-test-tool>"
     )
     set_tests_properties(golden_list PROPERTIES SKIP_RETURN_CODE 77)
 endif()
