@@ -18,6 +18,7 @@ struct Iso639
 {
     QHash<QString, QString> by3;
     QHash<QString, QString> twoToThree;
+    QHash<QString, QString> threeToTwo;
     QHash<QString, QString> nameMap;
 };
 

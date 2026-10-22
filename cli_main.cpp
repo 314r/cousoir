@@ -521,16 +521,23 @@ bool send(const QString &libraryPath, const CalibreConfig &config, const QString
     }
     QList<SendJob::Sent> sent;
     QStringList unsendable;
+    // Cousoir alone without Calibre, or when asked to.
+    const bool native = SendJob::program().isEmpty() || !qEnvironmentVariableIsEmpty("COUSOIR_NATIVE_SEND");
     if (reader.isKindle()) {
         // What Calibre does as it connects.
         Kindle::restoreThumbnails(*reader.files, &error);
-        if (!KindleSend::prepare(data, bookIds, *reader.files, reader.kindle,
-                                 Kindle::formatMap(CalibreConfig::configDirectory(), reader.kindle.serial), job.path(),
-                                 &error)) {
+        const QStringList formats = Kindle::formatMap(CalibreConfig::configDirectory(), reader.kindle.serial);
+        const bool prepared = native ? KindleSend::prepareNatively(data, bookIds, *reader.files, reader.kindle, formats,
+                                                                   CalibreConfig::configDirectory(),
+                                                                   config.interfaceLanguage, job.path(), &error)
+                                     : KindleSend::prepare(data, bookIds, *reader.files, reader.kindle, formats,
+                                                           job.path(), &error);
+        if (!prepared) {
             err() << error << Qt::endl;
             return false;
         }
-        const KindleSend::Outcome outcome = KindleSend::run(job.path(), config.interfaceLanguage);
+        const KindleSend::Outcome outcome = native ? KindleSend::outcome(job.path(), 0)
+                                                   : KindleSend::run(job.path(), config.interfaceLanguage);
         if (!outcome.ok || !KindleSend::apply(job.path(), outcome, *reader.files, &error)) {
             err() << (outcome.ok ? error : outcome.error) << Qt::endl;
             return false;
@@ -538,8 +545,6 @@ bool send(const QString &libraryPath, const CalibreConfig &config, const QString
         sent = outcome.sent;
         unsendable = outcome.unsendable;
     } else {
-        // Cousoir alone without Calibre, or when asked to.
-        const bool native = SendJob::program().isEmpty() || !qEnvironmentVariableIsEmpty("COUSOIR_NATIVE_SEND");
         const QStringList formats = Kobo::formatMap(CalibreConfig::configDirectory());
         const bool prepared = native ? KoboSend::prepareNatively(data, bookIds, reader.kobo, formats,
                                                                  CalibreConfig::configDirectory(),

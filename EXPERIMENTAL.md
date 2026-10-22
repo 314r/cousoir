@@ -259,7 +259,7 @@ Built only when Qt WebEngine is there.
 | 16. Metadata from the web without Calibre | done, with Open Library |
 | 17. Kindle highlights | done |
 | 13. Notes | planned |
-| 18. A Kindle without Calibre | planned |
+| 18. A Kindle without Calibre | done; a PDF goes without metadata |
 | 19. Reading in Cousoir | planned |
 
 ## Journal
@@ -883,4 +883,28 @@ as UTC and could show the day before (now with this computer's offset);
 and Open Library's dates without a day took the first, the day before in
 UTC east of Greenwich: now as Calibre's `parse_only_date()`, the 15th, never
 the first or last day of a month.
+
+### 2026-10-22 — goal 18, a Kindle without Calibre (`exp-kindle`)
+
+- `MobiMetadata` ports Calibre's `MetadataUpdater`: the EXTH records, the
+  title, the first record rebuilt and the records moved, the cover and
+  its thumbnail rescaled into their records. A new oracle has Calibre
+  write three metadata cases into five books (its conversions, one without
+  an ASIN, one without an EXTH header) with its random ASIN fixed: Cousoir's
+  books are Calibre's byte for byte, the cover images aside. The same
+  oracle found a Calibre bug: a MOBI without an EXTH header loses its text
+  (the file's slice keeps its first length); Cousoir keeps it. Calibre's
+  thumbnail names and fast APNX files match too.
+- `KindleSend::prepareNatively()` follows the MTP driver: its settings
+  (the Kindle's own, Amazon's defaults, the global ones), its folder and
+  template through the generic `create_upload_path()` now shared with the
+  Kobo (`NativeSend`), the thumbnail with its copy and index against
+  Amazon's bug, the APNX, metadata.calibre (lower case paths, as MTP books
+  have) and driveinfo.calibre with its `mtp_prefix`; then the job's own
+  operations, which `apply()` does over the kept connection.
+- The golden test sends to a Kindle natively too (`kindle-native`): every
+  step alike with Calibre's send, the AZW3 compared record by record, and
+  each program knows the other's books.
+- Without Calibre, sending now works to both readers; conversions to AZW3
+  still need Calibre.
 

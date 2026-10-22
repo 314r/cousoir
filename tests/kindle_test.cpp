@@ -3,6 +3,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDirIterator>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -13,6 +14,7 @@
 #include "kindle.h"
 #include "kindle_clippings.h"
 #include "kindle_send.h"
+#include "mobi_metadata.h"
 #include "test_support.h"
 
 namespace {
@@ -68,6 +70,63 @@ private slots:
         QVERIFY2(CalibreDb::loadLibrary(fixtureLibrary(), m_snapshotFolder.filePath(QStringLiteral("snapshot.db")), config,
                                         &m_data, &error),
                  qPrintable(error));
+    }
+
+    // Without Calibre: the AZW3 with the library's metadata, its cover
+    // thumbnail kept against Amazon's bug, its page numbers, a PDF as it is,
+    // and both in metadata.calibre; sent again, in place.
+    void sendsWithoutCalibre()
+    {
+        QTemporaryDir root;
+        QTemporaryDir config;
+        QVERIFY(makeKindle(root.path()));
+        const QStringList formats = Kindle::formatMap(config.path(), QStringLiteral("G000000000000000"));
+        for (int round = 0; round < 2; ++round) {
+            FolderFiles files(root.path(), true);
+            QString error;
+            QVERIFY2(files.scan(&error), qPrintable(error));
+            QTemporaryDir job;
+            QVERIFY2(KindleSend::prepareNatively(m_data, { 2, 5 }, files, KindleSend::standIn(), formats, config.path(),
+                                                 QStringLiteral("fr"), job.path(), &error),
+                     qPrintable(error));
+            const KindleSend::Outcome outcome = KindleSend::outcome(job.path(), 0);
+            QVERIFY2(outcome.ok, qPrintable(outcome.error));
+            QCOMPARE(outcome.sent.size(), 2);
+            QCOMPARE(outcome.sent.first().lpath, company);
+            QVERIFY2(KindleSend::apply(job.path(), outcome, files, &error), qPrintable(error));
+        }
+        const QByteArray book = readAll(root.filePath(company));
+        QHash<quint32, QByteArray> exth;
+        for (const auto &[id, content] : MobiMetadata::exthRecords(book))
+            exth.insert(id, content);
+        const Book *black = m_data.book(2);
+        QCOMPARE(exth.value(112), QStringLiteral("calibre:%1").arg(black->uuid).toUtf8());
+        QCOMPARE(exth.value(101), QByteArray("Tor"));
+        QCOMPARE(exth.value(105), QByteArray("Fantasy"));
+        const QString thumbnail = MobiMetadata::thumbnailName(book);
+        QVERIFY(!thumbnail.isEmpty());
+        const QImage cover(root.filePath(QStringLiteral("system/thumbnails/") + thumbnail));
+        QVERIFY(!cover.isNull());
+        QCOMPARE(cover.height(), 500);
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("amazon-cover-bug/") + thumbnail)));
+        QCOMPARE(readAll(root.filePath(QStringLiteral("amazon-cover-bug/") + QString::fromLatin1(index(company)))),
+                 thumbnail.toUtf8());
+        QVERIFY(QFileInfo::exists(root.filePath(
+            QStringLiteral("documents/Black Company, The - Glen Cook.sdr/Black Company, The - Glen Cook.apnx"))));
+        // The PDF as it is.
+        const QString manual = QStringLiteral("documents/Manuel technique - Jean-Pierre Dupont.pdf");
+        QCOMPARE(readAll(root.filePath(manual)), readAll(m_data.book(5)->formats.first().file));
+
+        const QJsonArray entries = QJsonDocument::fromJson(readAll(root.filePath(QStringLiteral("metadata.calibre")))).array();
+        QCOMPARE(entries.size(), 2);
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("lpath")).toString(), company.toLower());
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("uuid")).toString(), black->uuid);
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("size")).toInteger(), book.size());
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("thumbnail")).toArray().at(1).toInt(), 500);
+        const QJsonObject info = QJsonDocument::fromJson(readAll(root.filePath(QStringLiteral("driveinfo.calibre")))).object();
+        QCOMPARE(info.value(QLatin1String("device_name")).toString(), QStringLiteral("Kindle"));
+        QCOMPARE(info.value(QLatin1String("last_library_uuid")).toString(), m_data.uuid);
+        QVERIFY(info.value(QLatin1String("mtp_prefix")).toString().startsWith(QLatin1String("mtp:::")));
     }
 
     // My Clippings.txt as Kindles write it, in their languages and their

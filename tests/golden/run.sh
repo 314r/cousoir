@@ -529,6 +529,7 @@ devices kobo kobo "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
 # The same, Cousoir sending without Calibre.
 COUSOIR_NATIVE_SEND=1 devices kobo kobo-native "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
 devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
+COUSOIR_NATIVE_SEND=1 devices kindle kindle-native "$root/tests/data/library" '[2, 5]' '[2]' 5
 
 # What a Kobo knows of the reading of its books, read by Calibre's Kobo
 # Bookmark (tools/oracle/kobo_reading.py) and by `cousoir-cli device`, on a

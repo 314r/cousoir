@@ -336,6 +336,7 @@ std::shared_ptr<const Iso639> iso639()
         auto made = std::make_shared<Iso639>();
         made->by3 = textMap(raw.value(raw.contains(QStringLiteral("by_3")) ? QStringLiteral("by_3") : QStringLiteral("by_3t")));
         made->twoToThree = textMap(raw.value(QStringLiteral("2to3")));
+        made->threeToTwo = textMap(raw.value(QStringLiteral("3to2")));
         made->nameMap = textMap(raw.value(QStringLiteral("name_map")));
         if (!made->by3.isEmpty())
             table = made;

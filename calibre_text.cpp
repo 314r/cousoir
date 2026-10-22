@@ -519,6 +519,35 @@ QString checkDoi(const QString &text)
     return doi.match(text).captured(0);
 }
 
+QString languageAsIso6391(const QString &language)
+{
+    const QString code = canonicalizeLanguage(language);
+    if (code.isEmpty())
+        return {};
+    if (const std::shared_ptr<const CalibreLanguages::Iso639> table = CalibreLanguages::iso639();
+        table && !table->threeToTwo.isEmpty())
+        return table->threeToTwo.value(code);
+    // Without Calibre's table, Qt's, which has the languages with two letter
+    // codes it knows.
+    const QLocale::Language qtLanguage = QLocale::codeToLanguage(code, QLocale::ISO639Part3);
+    return qtLanguage == QLocale::AnyLanguage ? QString() : QLocale::languageToCode(qtLanguage, QLocale::ISO639Part1);
+}
+
+QByteArray mobiLanguageCode(const QString &language)
+{
+    const QString two = languageAsIso6391(language);
+    int main = mobiCodes[0].main;
+    int sub = mobiCodes[0].sub;
+    for (const auto &entry : mobiCodes) {
+        if (!two.isEmpty() && two == QLatin1String(entry.language)) {
+            main = entry.main;
+            sub = entry.sub;
+        }
+    }
+    // pack('>HBB', 0, sub, main).
+    return QByteArray("\0\0", 2) + char(sub) + char(main);
+}
+
 QString seriesIndexText(double index)
 {
     if (!std::isfinite(index) || index == std::floor(index))
