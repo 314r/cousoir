@@ -19,6 +19,7 @@ Item {
     property string name: "cover"
     property alias currentIndex: view.currentIndex
     property int selectionCount: 0
+    property bool selectable: false
     readonly property int coverWidth: Math.round(120 * Theme.spacingScale)
     readonly property int coverHeight: Math.round(coverWidth * 1.5)
 
@@ -121,7 +122,7 @@ Item {
             required property int index
             required property var modelData
             readonly property bool current: GridView.isCurrentItem
-            readonly property bool selected: current || modelData.selected === true
+            readonly property bool selected: grid.selectable ? modelData.selected === true : current
 
             objectName: grid.name + "Cell" + index
             width: view.cellWidth

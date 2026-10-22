@@ -43,8 +43,9 @@ public:
 
     // Shows `books` in `order`, indexes into them, with covers under
     // `coverKey` in CoverCache. The same books in the same order only tell
-    // the views that their values changed, keeping their place.
-    void setRows(const QList<Book> &books, QList<qsizetype> order, const QString &coverKey);
+    // the views that their values changed, keeping their place. Returns
+    // whether the rows changed.
+    bool setRows(const QList<Book> &books, QList<qsizetype> order, const QString &coverKey);
 
     int count() const;
     // The ids of the rows, in order.

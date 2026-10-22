@@ -86,6 +86,7 @@ private slots:
     void welcomesWithoutLibrary();
     void editsDetailsInPlace();
     void revertsBookChanges();
+    void keepsWhatIsTyped();
     void refusesInvalidValues();
     void changesRating();
     void editsDescription();
@@ -732,6 +733,27 @@ void LibraryUiTest::editsDetailsInPlace()
     }));
 }
 
+void LibraryUiTest::keepsWhatIsTyped()
+{
+    openWritable(2);
+    // Typing in the title sort while a change of the title, which it
+    // follows, is saved.
+    retype("field_sort", QStringLiteral("Mon tri"));
+    const QVariantMap title{ { QStringLiteral("title"), QStringLiteral("The White Rose") } };
+    QCOMPARE(QMetaObject::invokeMethod(library(), "updateBook", Q_ARG(int, 2), Q_ARG(QVariantMap, title)), true);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("sort")).toString(),
+                 QStringLiteral("White Rose, The"));
+    QCOMPARE(text("field_sort"), QStringLiteral("Mon tri"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("sort")).toString(),
+                 QStringLiteral("Mon tri"));
+    // The field shows what was saved, its focus kept.
+    QTRY_COMPARE(text("field_sort"), QStringLiteral("Mon tri"));
+    QVERIFY(control("field_sort")->hasActiveFocus());
+}
+
 void LibraryUiTest::revertsBookChanges()
 {
     openWritable(2);
@@ -1014,6 +1036,14 @@ void LibraryUiTest::editsManyBooks()
     // back to one.
     QTest::mouseClick(m_window, Qt::LeftButton, Qt::ControlModifier, center(control("bookRow1")));
     QTRY_COMPARE(books->property("selectedCount").toInt(), 2);
+    // The current book, taken out, is not what Del acts on.
+    QCOMPARE(list->property("currentIndex").toInt(), 1);
+    QTest::keyClick(m_window, Qt::Key_Delete);
+    QTRY_VERIFY(object("trashDialog")->property("opened").toBool());
+    QCOMPARE(object("trashDialog")->property("title").toString(), QStringLiteral("Move 2 books to the trash?"));
+    QCOMPARE(object("trashDialog")->property("bookIds").toList(), (QVariantList{ 2, 4 }));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!object("trashDialog")->property("opened").toBool());
     QTest::mouseClick(m_window, Qt::LeftButton, Qt::ControlModifier, center(control("bookRow5")));
     QTRY_COMPARE(books->property("selectedCount").toInt(), 3);
     QCOMPARE(books->property("selectedIds").toList(),

@@ -87,6 +87,12 @@ FocusScope {
             pane.reset()
     }
 
+    // What was typed for other books is not kept for the next ones.
+    onVisibleChanged: {
+        if (!visible)
+            reset()
+    }
+
     readonly property bool valid: (!pubdateField.text.trim() || pubdateRow.cleared || library.isDate(pubdateField.text))
         && (numberingBox.currentValue !== "from" || (startField.text.trim().length > 0
             && isFinite(Number(startField.text.trim().replace(",", ".")))

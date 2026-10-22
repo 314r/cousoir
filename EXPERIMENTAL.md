@@ -288,3 +288,39 @@ language, as Swedish tells "a" from "å" and Spanish "n" from "ñ";
   unchanged is not rewritten, and one holding a table or an image says so
   before it is saved.
 - Revert changes now puts the description back too.
+
+### 2026-10-22 — a review of goals 1 to 3 (`exp-review`)
+
+An agent reviewed `master...experimental` with fresh eyes. What it found,
+each checked against the code and fixed:
+
+- The current row was always drawn selected, but actions used the selection
+  only when the current row was in it: Ctrl+click the current book out of
+  three selected, and Del or Ctrl+D acted on that book alone, the one
+  unselected. Now the selection is what actions act on, always, and a
+  current row outside it is outlined; after a search, the current row is the
+  first book still selected. Tested.
+- Undo of a bulk edit put back every field it could change, from values
+  read before the edit was even saved: a rating changed since was undone
+  too, and two bulk edits in a row were undone as one. The commit now keeps
+  the books as they were inside its transaction; the library keeps the
+  fields the edit set, before and after; undo puts back a field only while
+  it still holds what the edit left. Tested.
+- A virtual library Cousoir cannot search (a custom column's, until goal 5)
+  showed no book at all, silently; it now leaves the books whole and says
+  why, and a saved search that cannot run says so instead of "No books
+  here".
+- When the saved search shown disappeared, the library went back to its
+  books but the window's section did not follow.
+- The row menu acted on a row number: a list changing while it was open
+  moved the action to a neighbour. It keeps the books as it opens.
+- The bulk pane kept what was typed for the books before.
+- The load and save watchers kept the previous result, a whole library and
+  its index, alive; `rebuildRows` compared every id twice; the counts with a
+  virtual library walked every book on each read.
+
+And one more, found while chasing a test that failed once: a detail field
+bound its text to the stored value, which typing does not break, so a field
+that follows another, the title sort its title, lost what was being typed in
+it when the other's save ended. The field takes the stored value only while
+nothing is typed. A test fails without the fix.

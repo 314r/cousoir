@@ -78,6 +78,7 @@ private slots:
     void searchesBooks();
     void keepsRowsInPlace();
     void keepsVirtualLibraryChoice();
+    void undoesOnlyBulkEdits();
     void browsesSections();
     void filtersByItem();
     void describesCurrentBook();
@@ -294,7 +295,8 @@ void BookLibraryTest::keepsVirtualLibraryChoice()
             "INSERT OR REPLACE INTO preferences(key, val) VALUES "
             "('virtual_libraries', '{\"Fantasy\": \"tags:fantasy\", \"Broken\": \"(tags:x\"}'),"
             "('virtual_lib_on_startup', '\"Fantasy\"'),"
-            "('saved_searches', '{\"Cook\": \"author:cook\"}');"), &error), qPrintable(error));
+            "('saved_searches', '{\"Cook\": \"author:cook\", \"Read\": \"rating:many\"}');"), &error),
+                 qPrintable(error));
     }
     QSettings().remove(QStringLiteral("Library/virtualLibrary"));
 
@@ -309,12 +311,22 @@ void BookLibraryTest::keepsVirtualLibraryChoice()
     QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 4, 3 }));
     QCOMPARE(library->savedSearches().value(0).toMap().value(QStringLiteral("count")).toInt(), 2);
 
-    // A virtual library Calibre cannot search shows nothing.
+    // A virtual library Cousoir cannot search leaves the books whole, and
+    // says why.
     library->setVirtualLibrary(QStringLiteral("Broken"));
-    QVERIFY(bookRows(*library).isEmpty());
+    QCOMPARE(bookRows(*library).size(), 6);
+    QCOMPARE(library->virtualLibraryError(), QStringLiteral("missing )"));
     library->setVirtualLibrary(QString());
+    QVERIFY(library->virtualLibraryError().isEmpty());
     QCOMPARE(bookRows(*library).size(), 6);
     QCOMPARE(library->savedSearches().value(0).toMap().value(QStringLiteral("count")).toInt(), 2);
+    // A saved search Cousoir cannot run has no count, but its reason.
+    const QVariantMap read = library->savedSearches().value(1).toMap();
+    QCOMPARE(read.value(QStringLiteral("count")).toString(), QString());
+    QVERIFY(!read.value(QStringLiteral("error")).toString().isEmpty());
+    library->setSection(QStringLiteral("search:Read"));
+    QVERIFY(bookRows(*library).isEmpty());
+    QCOMPARE(library->sectionError(), read.value(QStringLiteral("error")).toString());
     library.reset();
 
     // None is a choice too.
@@ -553,6 +565,48 @@ QString title(BookLibrary *library)
 }
 
 } // namespace
+
+void BookLibraryTest::undoesOnlyBulkEdits()
+{
+    QTemporaryDir copy;
+    QVERIFY(copyTree(fixtureLibrary(), copy.path()));
+    auto library = open(copy.path());
+    QVERIFY(library);
+    library->setWritable(true);
+    const auto field = [&library](int id, const char *key) {
+        library->setCurrentBookId(id);
+        const QVariant value = library->currentBook().value(QLatin1String(key));
+        library->setCurrentBookId(0);
+        return value;
+    };
+    const QVariant publisher2 = field(2, "publisher");
+
+    QCOMPARE(library->updateBooks({ 1, 2 }, { { QStringLiteral("publisher"), QStringLiteral("Folio") },
+                                              { QStringLiteral("rating"), 6 } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->bulkUndoCount(), 2);
+    QCOMPARE(field(1, "publisher").toString(), QStringLiteral("Folio"));
+    // A field edited since stays as it is edited.
+    QCOMPARE(library->updateBook(1, { { QStringLiteral("rating"), 2 } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    library->undoBulkEdit();
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(field(1, "publisher").toString(), QStringLiteral("Gallimard"));
+    QCOMPARE(field(1, "rating").toString(), QStringLiteral("★"));
+    QCOMPARE(field(2, "publisher"), publisher2);
+    QCOMPARE(library->bulkUndoCount(), 0);
+
+    // Two in a row: the undo puts back the second only.
+    QCOMPARE(library->updateBooks({ 3 }, { { QStringLiteral("publisher"), QStringLiteral("A") } }), QString());
+    QCOMPARE(library->updateBooks({ 3 }, { { QStringLiteral("publisher"), QStringLiteral("B") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_VERIFY_WITH_TIMEOUT(!library->saving(), 15000);
+    QTRY_COMPARE(field(3, "publisher").toString(), QStringLiteral("B"));
+    QCOMPARE(library->bulkUndoCount(), 1);
+    library->undoBulkEdit();
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(field(3, "publisher").toString(), QStringLiteral("A"));
+}
 
 void BookLibraryTest::editsBooks()
 {

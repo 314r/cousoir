@@ -32,6 +32,9 @@ Item {
     property alias currentIndex: list.currentIndex
     // How many rows are selected: past one, the current row is outlined.
     property int selectionCount: 0
+    // Whether the rows say which are selected: then the current row is
+    // filled only when it is one of them, else outlined.
+    property bool selectable: false
     // The scroll bar's lane, right of the rows while it shows, so it never
     // lies over a row's highlight.
     readonly property real scrollRoom: scrollBar.size < 1.0 ? scrollBar.width : 0
@@ -233,14 +236,14 @@ Item {
                 required property int index
                 required property var modelData
                 readonly property bool current: ListView.isCurrentItem
-                readonly property bool selected: current || modelData.selected === true
+                readonly property bool selected: table.selectable ? modelData.selected === true : current
 
                 objectName: table.name + "Row" + index
                 width: list.width - table.scrollRoom
                 height: Theme.rowHeight
                 color: selected ? Theme.selected
                     : rowMouse.containsMouse ? Theme.hover : "transparent"
-                border.width: current && table.selectionCount > 1 && list.activeFocus ? 1 : 0
+                border.width: current && list.activeFocus && (table.selectionCount > 1 || !selected) ? 1 : 0
                 border.color: Theme.accent
                 Accessible.role: Accessible.ListItem
                 Accessible.name: table.columns.length > 0 ? table.cellText(modelData, table.columns[0]) : ""

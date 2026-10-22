@@ -68,7 +68,13 @@ class BookLibrary : public QObject
     // start.
     Q_PROPERTY(QStringList virtualLibraries READ virtualLibraries NOTIFY libraryChanged)
     Q_PROPERTY(QString virtualLibrary READ virtualLibrary WRITE setVirtualLibrary NOTIFY virtualLibraryChanged)
-    // The saved searches of the library, { name, query, count }, by name;
+    // Why the virtual library chosen cannot narrow the books, which then
+    // show all; empty when it does.
+    Q_PROPERTY(QString virtualLibraryError READ virtualLibraryError NOTIFY virtualLibraryChanged)
+    // Why the saved search the section lists cannot run; empty when it can.
+    Q_PROPERTY(QString sectionError READ sectionError NOTIFY rowsChanged)
+    // The saved searches of the library, { name, query, count, error }, by
+    // name, the count empty when the search cannot run;
     // the section "search:<name>" lists a saved search's books.
     Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
     Q_PROPERTY(QString sortOption READ sortOption WRITE setSortOption NOTIFY sortOptionChanged)
@@ -148,6 +154,8 @@ public:
     QStringList virtualLibraries() const;
     QString virtualLibrary() const;
     void setVirtualLibrary(const QString &name);
+    QString virtualLibraryError() const;
+    QString sectionError() const;
     QVariantList savedSearches() const;
     // "title", "authors", "series", "added" or "rating", with "Desc" for the
     // reverse order.
@@ -328,11 +336,20 @@ private:
         bool ok = false;
     };
 
-    // A save, and the index of the books it leaves.
+    // A save, the index of the books it leaves, and its bulk edits.
     struct CommitResult
     {
         CommitEngine::Result result;
         BookIndex index;
+        QList<BulkEdit> bulkEdits;
+    };
+
+    // A field of a book a bulk edit set: as it was before, and as the edit
+    // left it.
+    struct BulkUndo
+    {
+        QVariantMap before;
+        QVariantMap after;
     };
 
     struct ImportResult
@@ -358,6 +375,9 @@ private:
     void startCommit();
     void finishCommit();
     void applyData(LibraryData data, BookIndex index);
+    // The undo of a bulk edit just saved: the fields it set, before and
+    // after, by book.
+    void keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before);
     static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config);
     // The rows of the virtual library, or all, and the saved searches'
     // counts in it, after a load or another choice.
@@ -366,8 +386,8 @@ private:
     // The rows the search text finds within the virtual library, searched
     // again only when the text or the books change.
     const QBitArray &searchRows();
-    // The rows of a saved search, within the virtual library.
-    QBitArray savedSearchRows(const QString &name);
+    // A saved search, within the virtual library.
+    CalibreSearch::Result savedSearch(const QString &name);
     // The items of a browse section, counted within the virtual library:
     // those without a book there are left out.
     QList<FacetItem> visibleItems(const QString &kind) const;
@@ -400,6 +420,9 @@ private:
     QCollator m_collator;
     BookIndex m_index;
     QString m_virtualLibrary;
+    QString m_virtualLibraryError;
+    // visibleItems() by kind, for the virtual library and books shown.
+    mutable QHash<QString, QList<FacetItem>> m_visibleItems;
     // The library the choice of virtual library was read for.
     QString m_virtualLibraryOf;
     QBitArray m_restriction;
@@ -407,8 +430,10 @@ private:
     QBitArray m_searchRows;
     std::optional<QString> m_searchedText;
     QString m_searchError;
-    // The rows of the saved search the section lists.
+    // The rows of the saved search the section lists, and why it could not
+    // run.
     QBitArray m_sectionRows;
+    QString m_sectionError;
     QVariantList m_savedSearches;
     // sortedBooks(), and the sort it is for; empty until asked.
     QList<qsizetype> m_sorted;
@@ -444,8 +469,8 @@ private:
     bool m_backedUp = false;
     QString m_publishedKey;
     QString m_calibreLanguage;
-    // The books of the last bulk edit as they were before it.
-    QHash<int, QVariantMap> m_bulkOriginals;
+    // The books of the last bulk edit, in the fields it set.
+    QHash<int, BulkUndo> m_bulkUndo;
     // The current book as it was opened, kept at its first change.
     int m_originalBookId = 0;
     QVariantMap m_original;
