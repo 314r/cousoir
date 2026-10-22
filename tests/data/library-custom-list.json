@@ -31,7 +31,7 @@
     "languages": [
       "fra"
     ],
-    "last_modified": "2026-10-22T10:55:50+00:00",
+    "last_modified": "2026-10-22T12:29:33+00:00",
     "pubdate": "1947-03-20T00:00:00+00:00",
     "publisher": "Gallimard",
     "rating": 8,
@@ -69,7 +69,7 @@
     "languages": [
       "eng"
     ],
-    "last_modified": "2026-10-22T10:55:50+00:00",
+    "last_modified": "2026-10-22T12:29:33+00:00",
     "pubdate": "1984-05-02T00:00:00+00:00",
     "publisher": "Tor",
     "rating": 10,
@@ -103,7 +103,7 @@
     "languages": [
       "eng"
     ],
-    "last_modified": "2026-10-22T10:55:50+00:00",
+    "last_modified": "2026-10-22T12:29:33+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "series": "Chronicles of the Black Company",
     "series_index": 2.0,
@@ -124,6 +124,7 @@
     ],
     "*pagecount": 0,
     "*people": [],
+    "*price": 100000.0,
     "*started": "None",
     "author_sort": "Pratchett, Terry & Gaiman, Neil",
     "authors": "Terry Pratchett & Neil Gaiman",
@@ -141,7 +142,7 @@
     "languages": [
       "eng"
     ],
-    "last_modified": "2026-10-22T10:55:50+00:00",
+    "last_modified": "2026-10-22T12:29:33+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "publisher": "Gollancz",
     "rating": 7,
@@ -159,6 +160,7 @@
     "*computed": "Manuel technique by Jean-Pierre Dupont",
     "*genre": [],
     "*people": [],
+    "*price": 1e-05,
     "*started": "1999-12-30T23:00:00+00:00",
     "author_sort": "Dupont, Jean-Pierre",
     "authors": "Jean-Pierre Dupont",
@@ -171,7 +173,7 @@
     "languages": [
       "fra"
     ],
-    "last_modified": "2026-10-22T10:55:50+00:00",
+    "last_modified": "2026-10-22T12:29:33+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "series_index": 1.0,
     "size": 591,
@@ -199,7 +201,7 @@
     "languages": [
       "fra"
     ],
-    "last_modified": "2026-10-22T10:55:50+00:00",
+    "last_modified": "2026-10-22T12:29:33+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "series": "Contes",
     "series_index": 1.5,

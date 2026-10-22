@@ -12,6 +12,7 @@
 #include "field_writers.h"
 #include "file_transaction.h"
 #include "opf_reader.h"
+#include "python_json.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -67,6 +68,8 @@ private slots:
     void cleansValues();
     void parsesDates_data();
     void parsesDates();
+    void parsesCustomDates();
+    void writesFloatsAsPython();
     void writesCovers();
     void changesNothingForSameValues();
     void refusesWhileCalibreRuns();
@@ -271,6 +274,37 @@ void CommitEngineTest::parsesDates()
     QFETCH(QString, stored);
     const std::optional<QDateTime> date = FieldWriters::parseOnlyDate(text, m_now);
     QCOMPARE(date ? FieldWriters::sqliteDate(*date) : QString(), stored);
+}
+
+void CommitEngineTest::parsesCustomDates()
+{
+    // As Calibre's parse_date(assume_utc=False): a time without a zone is
+    // local, one with a zone is as written, a date alone is local midnight.
+    QCOMPARE(FieldWriters::parseCustomDate(QStringLiteral("2024-03-06 02:00")),
+             std::optional(QDateTime(QDate(2024, 3, 6), QTime(2, 0)).toUTC()));
+    QCOMPARE(FieldWriters::parseCustomDate(QStringLiteral("2024-03-06T02:00:00+02:00")),
+             std::optional(QDateTime(QDate(2024, 3, 6), QTime(0, 0), QTimeZone::UTC)));
+    QCOMPARE(FieldWriters::parseCustomDate(QStringLiteral("2024/3/6")),
+             std::optional(QDateTime(QDate(2024, 3, 6), QTime(0, 0)).toUTC()));
+    // Calibre's undefined date, as the pane keeps it, stays undefined.
+    QCOMPARE(FieldWriters::parseCustomDate(QStringLiteral("0101-01-01T00:00:00+00:00")),
+             std::optional(CalibreDb::undefinedDate()));
+    QVERIFY(!FieldWriters::parseCustomDate(QStringLiteral("soon")));
+}
+
+void CommitEngineTest::writesFloatsAsPython()
+{
+    // repr() of a float: positional from 1e-4 to 1e16, an exponent beyond.
+    const QList<std::pair<double, QString>> floats{
+        { 3, QStringLiteral("3.0") }, { 12.5, QStringLiteral("12.5") }, { -0.5, QStringLiteral("-0.5") },
+        { 100000, QStringLiteral("100000.0") }, { 1e15, QStringLiteral("1000000000000000.0") },
+        { 1e16, QStringLiteral("1e+16") }, { 1.5e16, QStringLiteral("1.5e+16") },
+        { 1.2345678901234568e17, QStringLiteral("1.2345678901234568e+17") }, { 0.0001, QStringLiteral("0.0001") },
+        { 0.00001, QStringLiteral("1e-05") }, { 1.5e-7, QStringLiteral("1.5e-07") }, { 0.1, QStringLiteral("0.1") },
+        { 1.0 / 3, QStringLiteral("0.3333333333333333") }, { 0, QStringLiteral("0.0") }, { 1e300, QStringLiteral("1e+300") },
+    };
+    for (const auto &[value, repr] : floats)
+        QCOMPARE(PythonJson::floatRepr(value), repr);
 }
 
 void CommitEngineTest::writesCovers()
