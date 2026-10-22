@@ -11,26 +11,9 @@
 #include "device_files.h"
 #include "kindle.h"
 #include "kindle_send.h"
+#include "test_support.h"
 
 namespace {
-
-QString fixtureLibrary()
-{
-    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
-}
-
-QByteArray readAll(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
-
-bool writeAll(const QString &path, const QByteArray &data)
-{
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
-}
 
 QStringList filesUnder(const QString &root)
 {

@@ -47,16 +47,15 @@ class DeviceLibrary : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
-    // The readers: { root, name, kind, ejectable, freeBytes, free,
-    // totalBytes }, with root naming the reader here: the folder a Kobo is
-    // mounted on, or "mtp:BUS:NUMBER" for a Kindle; kind "kobo" or
-    // "kindle"; free the room left as text.
+    // The readers: { root, name, kind, ejectable, free }, with root naming
+    // the reader here: the folder a Kobo is mounted on, or "mtp:BUS:NUMBER"
+    // for a Kindle; kind "kobo" or "kindle"; free the room left as text.
     Q_PROPERTY(QVariantList devices READ devices NOTIFY devicesChanged)
     // The reader the device page shows, by its root.
     Q_PROPERTY(QString currentRoot READ currentRoot WRITE setCurrentRoot NOTIFY currentChanged)
     Q_PROPERTY(QVariantMap current READ current NOTIFY currentChanged)
     // Its books, by title: { lpath, title, authors, format, size, bookId,
-    // purchased, imported }, with size as text.
+    // purchased }, with size as text.
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY rowsChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY rowsChanged)
@@ -118,14 +117,13 @@ public:
     Q_INVOKABLE void refresh();
 
     // For the tests: where volumes and Kindles come from and how often to
-    // look, the program run in place of calibre-debug, how ejecting is done,
-    // Linux's /sys and Calibre's configuration folder. In QStandardPaths'
-    // test mode, there are no volumes or Kindles until a test gives some.
+    // look, the program run in place of calibre-debug, how ejecting is done
+    // and Calibre's configuration folder. In QStandardPaths' test mode, there
+    // are no volumes or Kindles until a test gives some.
     void setVolumeProvider(VolumeProvider provider, int intervalMs);
     void setKindleProvider(KindleProvider provider);
     void setProgram(const QString &program);
     void setEjector(Ejector ejector);
-    void setSysRoot(const QString &sysRoot);
     void setConfigDirectory(const QString &directory);
 
 signals:
@@ -150,7 +148,6 @@ private:
         QString root;
         QString name;
         qint64 freeBytes = 0;
-        qint64 totalBytes = 0;
         Kobo::Device kobo;
         KindleSlot slot;
         // A Kindle's, once read: Calibre keeps its settings by it.
@@ -171,7 +168,6 @@ private:
         QString name;
         Kind kind = Kind::Kobo;
         double progress = 0;
-        bool copying = false;
         QStringList unsendable;
         std::shared_ptr<KindleLink> link;
     };
@@ -196,7 +192,6 @@ private:
     QTimer m_scanTimer;
     QString m_program;
     Ejector m_ejector;
-    QString m_sysRoot = QStringLiteral("/sys");
     QString m_configDirectory;
     QList<Connected> m_devices;
     QString m_currentRoot;

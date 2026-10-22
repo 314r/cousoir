@@ -47,6 +47,8 @@ struct Outcome
 
 // What the job in `folder` came to; `exitCode` is calibre-debug's.
 Outcome outcome(const QString &folder, int exitCode);
+// The same from the job's result as SendJob read it.
+Outcome outcome(const SendJob::Result &result);
 
 // Puts what the job wrote on `device`, unless the Kobo's metadata.calibre
 // changed since prepare(). `progress` hears of the bytes copied.

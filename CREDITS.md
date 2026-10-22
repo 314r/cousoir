@@ -73,7 +73,6 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | `field_writers.cpp` | `src/calibre/db/write.py`: the field writers, `one_one_in_books()`, `many_one()`, `many_many()`, `identifiers()`, with `get_db_id()`, `change_case()`, `get_series_values()`, `clean_identifier()` and the `adapt_*()` functions |
 | | `src/calibre/db/fields.py`: `author_sort_for_book()` |
 | | `src/calibre/db/cache.py`: `set_field()`, `set_metadata()` |
-| | `src/calibre/utils/date.py`: `fix_only_date()` |
 | `commit_engine.cpp` | `src/calibre/__init__.py`: `fit_image()`; `src/calibre/utils/img.py`: `save_cover_data_to()` |
 | `calibre_db.cpp` | `src/calibre/db/backend.py`: the SQL functions, aggregates and temporary author triggers of a connection, `format_abspath()` |
 | `book_library.cpp` | `src/calibre/db/utils.py`: `find_identical_books()`; `src/calibre/ebooks/__init__.py`: `BOOK_EXTENSIONS`; `src/calibre/ebooks/metadata/__init__.py`: `fmt_sidx()`, `rating_to_stars()` |

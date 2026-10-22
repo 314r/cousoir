@@ -257,9 +257,8 @@ bool prepare(const LibraryData &data, const QList<int> &bookIds, DeviceFiles &fi
     return SendJob::writeJob(folder, job, bookIds, sendScript, error);
 }
 
-Outcome outcome(const QString &folder, int exitCode)
+Outcome outcome(const SendJob::Result &result)
 {
-    const SendJob::Result result = SendJob::result(folder, exitCode);
     Outcome outcome;
     outcome.ok = result.ok;
     outcome.error = result.error;
@@ -275,6 +274,11 @@ Outcome outcome(const QString &folder, int exitCode)
                                     operation.value(QLatin1String("file")).toString() });
     }
     return outcome;
+}
+
+Outcome outcome(const QString &folder, int exitCode)
+{
+    return outcome(SendJob::result(folder, exitCode));
 }
 
 bool apply(const QString &folder, const Outcome &outcome, DeviceFiles &files, QString *error,
@@ -328,13 +332,7 @@ bool apply(const QString &folder, const Outcome &outcome, DeviceFiles &files, QS
 
 Outcome run(const QString &folder, const QString &interfaceLanguage, const std::function<void(double)> &progress)
 {
-    const SendJob::Result result = SendJob::run(folder, interfaceLanguage, progress);
-    if (!result.ok) {
-        Outcome failed;
-        failed.error = result.error;
-        return failed;
-    }
-    return outcome(folder, 0);
+    return outcome(SendJob::run(folder, interfaceLanguage, progress));
 }
 
 } // namespace KindleSend

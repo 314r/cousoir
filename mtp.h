@@ -22,8 +22,6 @@ struct RawDevice
     quint8 number = 0;
     quint16 vendorId = 0;
     quint16 productId = 0;
-    QString vendor;
-    QString product;
 };
 
 // The devices libmtp finds, by its list of known devices and by asking
@@ -43,7 +41,6 @@ struct Object
 {
     quint32 id = 0;
     quint32 parent = 0;
-    quint32 storage = 0;
     QString name;
     bool folder = false;
     qint64 size = 0;
@@ -66,11 +63,9 @@ public:
     // leaves it on the bus, ready to be opened again.
     bool open(quint32 bus, quint8 number, QString *error);
     void close();
-    bool isOpen() const;
 
     QString friendlyName() const;
     QString modelName() const;
-    QString manufacturer() const;
     // As Calibre has it: the one the device gives over MTP, or else over USB.
     QString serialNumber() const;
 
@@ -96,7 +91,6 @@ private:
     LIBMTP_mtpdevice_struct *m_device = nullptr;
     QString m_friendlyName;
     QString m_modelName;
-    QString m_manufacturer;
     QString m_serialNumber;
 };
 

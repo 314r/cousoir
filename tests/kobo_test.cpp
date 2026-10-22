@@ -9,51 +9,13 @@
 #include <zip.h>
 
 #include "calibre_db.h"
+#include "calibre_job.h"
 #include "kobo.h"
 #include "kobo_send.h"
 #include "sqlite_db.h"
+#include "test_support.h"
 
 namespace {
-
-QString fixtureLibrary()
-{
-    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
-}
-
-QByteArray readAll(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
-
-bool writeAll(const QString &path, const QByteArray &data)
-{
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
-}
-
-const Book *bookWithId(const LibraryData &data, int id)
-{
-    for (const Book &book : data.books) {
-        if (book.id == id)
-            return &book;
-    }
-    return nullptr;
-}
-
-// A folder made to look like a mounted Kobo Libra 2 with firmware 4.38: its
-// version file and an empty database with the tables Calibre uses.
-bool makeKobo(const QString &root, QString *error)
-{
-    if (!writeAll(QDir(root).filePath(QStringLiteral(".kobo/version")),
-                  "N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390"))
-        return false;
-    const QString database = QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
-    SqliteDb db;
-    return writeAll(database, {}) && db.open(database, SqliteDb::Mode::ReadWrite, error)
-        && db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"))), error);
-}
 
 // A row of the Kobo's database, as the Kobo writes it for a book it took in.
 bool addRow(const QString &root, const QString &contentId, const QString &mimeType, const QString &title,
@@ -228,7 +190,7 @@ private slots:
         QString error;
         QVERIFY2(makeKobo(kobo.path(), &error), qPrintable(error));
         const QDir root(kobo.path());
-        const Book &ecume = *bookWithId(m_data, 1);
+        const Book &ecume = *m_data.book(1);
         QVERIFY(writeAll(root.filePath(vian), "kepub"));
         QVERIFY(addRow(kobo.path(), QStringLiteral("file:///mnt/onboard/") + vian, QStringLiteral("application/x-kobo-epub+zip"),
                        QStringLiteral("L'Ecume"), QStringLiteral("B. Vian")));
@@ -291,8 +253,8 @@ private slots:
     // authors, the author sort or one of the authors.
     void matchesBooks()
     {
-        const Book &ecume = *bookWithId(m_data, 1);
-        const Book &omens = *bookWithId(m_data, 4);
+        const Book &ecume = *m_data.book(1);
+        const Book &omens = *m_data.book(4);
         QList<DeviceBook> books(7);
         books[0].title = QStringLiteral("Anything");
         books[0].uuid = ecume.uuid;
@@ -371,7 +333,7 @@ private slots:
         QString error;
         QVERIFY2(makeKobo(kobo.path(), &error), qPrintable(error));
         const QDir root(kobo.path());
-        const Book &ecume = *bookWithId(m_data, 1);
+        const Book &ecume = *m_data.book(1);
         QVERIFY(writeAll(root.filePath(vian), "kepub"));
         QVERIFY(writeAll(root.filePath(QStringLiteral("Cook, Glen/Shadows Linger - Glen Cook.kepub.epub")), "kepub"));
         QVERIFY(writeAll(root.filePath(QStringLiteral(".kobo/kepub/abc-123")), "bought"));
@@ -439,11 +401,11 @@ private slots:
         // the file it sends and the cover.
         const QDir library(folder.filePath(QStringLiteral("library")));
         QVERIFY(QFileInfo(library.filePath(QStringLiteral("metadata.db"))).size() > 0);
-        const Book &company = *bookWithId(m_data, 2);
+        const Book &company = *m_data.book(2);
         QCOMPARE(filesUnder(library.filePath(company.path)),
                  QStringList({ QStringLiteral("The Black Company - Glen Cook.epub"), QStringLiteral("cover.jpg") }));
         QCOMPARE(readAll(library.filePath(company.path + QStringLiteral("/cover.jpg"))), readAll(company.coverFile));
-        QVERIFY(QFileInfo::exists(library.filePath(bookWithId(m_data, 5)->path + QStringLiteral("/Manuel technique - Jean-Pierre Dupont.pdf"))));
+        QVERIFY(QFileInfo::exists(library.filePath(m_data.book(5)->path + QStringLiteral("/Manuel technique - Jean-Pierre Dupont.pdf"))));
         // Of the Kobo, copies of what Calibre reads there.
         QCOMPARE(filesUnder(folder.filePath(QStringLiteral("device"))),
                  QStringList({ QStringLiteral(".kobo/KoboReader.sqlite"), QStringLiteral(".kobo/version"),
@@ -469,8 +431,8 @@ private slots:
 
     void readsSendOutcomes()
     {
-        QCOMPARE(SendJob::progress("{\"progress\": 0.25}\n"), 0.25);
-        QCOMPARE(SendJob::progress("DEBUG: something\n"), -1.0);
+        QCOMPARE(CalibreJob::progress("{\"progress\": 0.25}\n"), 0.25);
+        QCOMPARE(CalibreJob::progress("DEBUG: something\n"), -1.0);
         QTemporaryDir folder;
         const QString result = folder.filePath(QStringLiteral("result.json"));
         QVERIFY(writeAll(result, "{\"sent\": [{\"book\": 1, \"lpath\": \"A/B.kepub.epub\"}], \"unsendable\": [\"T\"],"
@@ -582,8 +544,8 @@ private slots:
         QCOMPARE(metadata.size(), 1);
         const QJsonObject book = metadata.first().toObject();
         QCOMPARE(book.value(QLatin1String("lpath")).toString(), vian);
-        QCOMPARE(book.value(QLatin1String("uuid")).toString(), bookWithId(m_data, 1)->uuid);
-        QCOMPARE(book.value(QLatin1String("title")).toString(), bookWithId(m_data, 1)->title);
+        QCOMPARE(book.value(QLatin1String("uuid")).toString(), m_data.book(1)->uuid);
+        QCOMPARE(book.value(QLatin1String("title")).toString(), m_data.book(1)->title);
         const QJsonObject driveInfo = Kobo::readDriveInfo(kobo.path());
         QCOMPARE(driveInfo.value(QLatin1String("device_name")).toString(), QStringLiteral("Kobo Libra 2"));
         QCOMPARE(driveInfo.value(QLatin1String("last_library_uuid")).toString(), m_data.uuid);

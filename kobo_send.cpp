@@ -170,9 +170,8 @@ bool prepare(const LibraryData &data, const QList<int> &bookIds, const Kobo::Dev
     return SendJob::writeJob(folder, job, bookIds, sendScript, error);
 }
 
-Outcome outcome(const QString &folder, int exitCode)
+Outcome outcome(const SendJob::Result &result)
 {
-    const SendJob::Result result = SendJob::result(folder, exitCode);
     Outcome outcome;
     outcome.ok = result.ok;
     outcome.error = result.error;
@@ -182,6 +181,11 @@ Outcome outcome(const QString &folder, int exitCode)
         outcome.files.append(value.toString());
     outcome.clearCovers = result.json.value(QLatin1String("clear_covers")).toBool(true);
     return outcome;
+}
+
+Outcome outcome(const QString &folder, int exitCode)
+{
+    return outcome(SendJob::result(folder, exitCode));
 }
 
 bool apply(const QString &folder, const Outcome &outcome, const Kobo::Device &device, QString *error,
@@ -236,13 +240,7 @@ bool apply(const QString &folder, const Outcome &outcome, const Kobo::Device &de
 
 Outcome run(const QString &folder, const QString &interfaceLanguage, const std::function<void(double)> &progress)
 {
-    const SendJob::Result result = SendJob::run(folder, interfaceLanguage, progress);
-    if (!result.ok) {
-        Outcome failed;
-        failed.error = result.error;
-        return failed;
-    }
-    return outcome(folder, 0);
+    return outcome(SendJob::run(folder, interfaceLanguage, progress));
 }
 
 } // namespace KoboSend

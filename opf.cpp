@@ -16,33 +16,6 @@
 
 namespace {
 
-// clean_ascii_chars(): the control characters but tab, line feed and
-// carriage return go, as they do when lxml refuses them.
-QString cleanText(const QString &text)
-{
-    QString result;
-    result.reserve(text.size());
-    for (const QChar character : text) {
-        const char16_t code = character.unicode();
-        if ((code < 32 && code != u'\t' && code != u'\n' && code != u'\r') || code == 127)
-            continue;
-        result.append(character);
-    }
-    return result;
-}
-
-QString pythonStrip(const QString &text)
-{
-    qsizetype start = 0;
-    qsizetype end = text.size();
-    const auto space = [](QChar c) { return c.isSpace() || (c.unicode() >= 0x1c && c.unicode() <= 0x1f); };
-    while (start < end && space(text.at(start)))
-        ++start;
-    while (end > start && space(text.at(end - 1)))
-        --end;
-    return text.mid(start, end - start);
-}
-
 // libxml2's escaping of element text and of attribute values.
 QString escapeText(const QString &text)
 {
@@ -165,13 +138,13 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
     QStringList lines;
     // factory(): an element of the metadata, its text stripped.
     const auto element = [&lines](const QString &tag, const QString &text, const QString &attributes = {}) {
-        const QString value = pythonStrip(cleanText(text));
+        const QString value = CalibreText::strip(CalibreText::cleanAsciiChars(text));
         const QString open = u'<' + tag + attributes;
         lines.append(value.isEmpty() ? open + QStringLiteral("/>")
                                      : open + u'>' + escapeText(value) + QStringLiteral("</") + tag + u'>');
     };
     const auto attribute = [](const QString &name, const QString &value) {
-        return QStringLiteral(" %1=\"%2\"").arg(name, escapeAttribute(cleanText(value)));
+        return QStringLiteral(" %1=\"%2\"").arg(name, escapeAttribute(CalibreText::cleanAsciiChars(value)));
     };
     const auto meta = [&](const QString &name, const QString &content) {
         lines.append(QStringLiteral("<meta") + attribute(QStringLiteral("name"), name)

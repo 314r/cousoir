@@ -22,17 +22,15 @@
 #include <QRandomGenerator>
 
 #include <cmath>
+#include <cstdio>
 
 #ifdef Q_OS_UNIX
-#include <fcntl.h>
 #include <sys/xattr.h>
-#include <unistd.h>
 #endif
 
 #include "book_operations.h"
 #include "calibre_db.h"
 #include "calibre_lock.h"
-#include "calibre_paths.h"
 #include "field_writers.h"
 #include "file_transaction.h"
 #include "opf.h"
@@ -58,26 +56,6 @@ QByteArray readFile(const QString &path, QString *error = nullptr)
         return {};
     }
     return file.readAll();
-}
-
-bool writeFile(const QString &path, const QByteArray &contents, QString *error)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(contents) != contents.size()
-        || !file.flush()) {
-        if (error)
-            *error = QObject::tr("Cannot write %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
-        return false;
-    }
-#ifdef Q_OS_UNIX
-    ::fsync(file.handle());
-#endif
-    return true;
-}
-
-bool hasJournal(const QString &database)
-{
-    return QFileInfo::exists(database + QStringLiteral("-journal")) || QFileInfo::exists(database + QStringLiteral("-wal"));
 }
 
 // Copies the extended attributes of `from` to `to`: Dropbox keeps its own
@@ -106,19 +84,6 @@ void copyAttributes(const QString &from, const QString &to)
 #else
     Q_UNUSED(from);
     Q_UNUSED(to);
-#endif
-}
-
-void syncFolder(const QString &folder)
-{
-#ifdef Q_OS_UNIX
-    const int fd = ::open(QFile::encodeName(folder).constData(), O_RDONLY);
-    if (fd >= 0) {
-        ::fsync(fd);
-        ::close(fd);
-    }
-#else
-    Q_UNUSED(folder);
 #endif
 }
 
@@ -174,7 +139,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
                         .arg(request.config.interfaceLanguage));
     if (!lock.acquire())
         return fail(QObject::tr("Calibre is open on this computer: close it to change the library."));
-    if (hasJournal(database))
+    if (CalibreDb::hasJournal(database))
         return fail(QObject::tr("Calibre is writing to the library. Try again in a moment."));
 
     const FileIdentity before = CalibreDb::identify(database);
@@ -185,8 +150,8 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     if (backup && !request.backupFolder.isEmpty()) {
         QDir().mkpath(request.backupFolder);
         const QString copy = QDir(request.backupFolder).filePath(
-            QStringLiteral("metadata-%1.db").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"))));
-        if (!writeFile(copy, original, &error))
+            QStringLiteral("metadata-%1.db").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz"))));
+        if (!FileTransaction::writeDurably(copy, original, &error))
             return fail(error);
         result->backup = copy;
         pruneBackups(request.backupFolder);
@@ -194,7 +159,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
 
     QDir().mkpath(request.cacheFolder);
     QFile::remove(work + QStringLiteral("-journal"));
-    if (!writeFile(work, original, &error))
+    if (!FileTransaction::writeDurably(work, original, &error))
         return fail(error);
 
     SqliteDb db;
@@ -224,14 +189,14 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         return fail(message);
     };
     for (const BookEdit &edit : request.edits) {
-        const QSet<int> before = std::exchange(state.dirtied, {});
+        const QSet<int> dirtiedBefore = std::exchange(state.dirtied, {});
         if (!FieldWriters::apply(db, edit, context, &state, &error))
             return undo(error);
         // Cache.set_field() moves the files of every book a title or author
         // change touched.
         if (edit.movesFiles())
             moved.unite(state.dirtied);
-        state.dirtied.unite(before);
+        state.dirtied.unite(dirtiedBefore);
     }
     for (const int book : std::as_const(moved)) {
         if (!BookOperations::updatePath(db, files, request.libraryPath, book, unknown, &error))
@@ -282,9 +247,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     QSet<int> dirtied = state.dirtied;
     dirtied.unite(done.dirtied);
     const QSet<int> touched = done.touched - dirtied;
-    const bool operated = !request.formatCopies.isEmpty() || !request.formatRemovals.isEmpty() || !request.trash.isEmpty()
-        || !request.restorations.isEmpty() || !request.newBooks.isEmpty() || !request.newFormats.isEmpty()
-        || !request.conversionOptions.isEmpty();
+    const bool operated = request.hasOperations();
     // Books removed are no longer there to write.
     for (const int book : request.trash)
         dirtied.remove(book);
@@ -325,15 +288,8 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     }
     db.close();
 
-    const auto bookWithId = [&data](int id) -> const Book * {
-        for (const Book &book : std::as_const(data.books)) {
-            if (book.id == id)
-                return &book;
-        }
-        return nullptr;
-    };
     for (const BookEdit &edit : request.edits) {
-        const Book *book = bookWithId(edit.bookId);
+        const Book *book = data.book(edit.bookId);
         if (!edit.cover || !book || book->path.isEmpty())
             continue;
         const QString cover = QDir(library.filePath(book->path)).filePath(QStringLiteral("cover.jpg"));
@@ -351,7 +307,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         }
     }
     for (const int id : std::as_const(dirtied)) {
-        const Book *book = bookWithId(id);
+        const Book *book = data.book(id);
         if (!book || book->path.isEmpty())
             continue;
         const QString path = QDir(library.filePath(book->path)).filePath(QStringLiteral("metadata.opf"));
@@ -369,7 +325,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     const QByteArray sha256 = QCryptographicHash::hash(written, QCryptographicHash::Sha256);
     const QString incoming = library.filePath(QStringLiteral(".~cousoir-%1-metadata.db")
                                                   .arg(QRandomGenerator::global()->generate(), 0, 16));
-    if (written.isEmpty() || !files.addScratch(incoming, &error) || !writeFile(incoming, written, &error)) {
+    if (written.isEmpty() || !files.addScratch(incoming, &error) || !FileTransaction::writeDurably(incoming, written, &error)) {
         files.rollback(nullptr);
         return fail(error);
     }
@@ -377,7 +333,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     copyAttributes(database, incoming);
     if (request.beforePublish)
         request.beforePublish();
-    if (CalibreDb::identify(database) != before || hasJournal(database)) {
+    if (CalibreDb::identify(database) != before || CalibreDb::hasJournal(database)) {
         files.rollback(nullptr);
         *retry = true;
         return fail(QObject::tr("The library changed while it was being saved."));
@@ -387,15 +343,14 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         files.rollback(nullptr);
         return fail(error.isEmpty() ? QObject::tr("Cannot replace %1.").arg(database) : error);
     }
-    syncFolder(request.libraryPath);
-    files.finish(nullptr);
+    FileTransaction::sync(request.libraryPath);
+    files.finish();
 
     // The copy is now what the library reads from.
     const QString snapshot = QDir(request.cacheFolder).filePath(QStringLiteral("snapshot.db"));
     QFile::remove(snapshot);
     QFile::rename(work, snapshot);
     data.source = CalibreDb::identify(database);
-    data.sourceSha256 = sha256;
     CalibreDb::findFiles(&data);
     result->data = data;
     result->written = true;

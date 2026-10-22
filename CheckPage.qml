@@ -16,6 +16,11 @@ Rectangle {
     required property BookLibrary library
     required property ConcurrencyGuard guard
     readonly property var rows: library.check.rows || []
+    // The number of findings of each kind, for the group headings.
+    readonly property var kindCounts: rows.reduce((counts, row) => {
+        counts[row.kind] = (counts[row.kind] || 0) + 1
+        return counts
+    }, {})
     readonly property bool canFix: library.writable && !library.saving
     readonly property var groupTitles: ({
         "duplicates": qsTr("Duplicate books"),
@@ -30,11 +35,6 @@ Rectangle {
     color: Theme.canvas
 
     function focusList() {
-        checkList.forceActiveFocus()
-    }
-
-    function moveCurrent(delta) {
-        checkList.currentIndex = Math.max(0, Math.min(checkList.count - 1, checkList.currentIndex + delta))
         checkList.forceActiveFocus()
     }
 
@@ -274,8 +274,7 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.topMargin: finding.index > 0 ? Theme.gutter : 0
                         visible: finding.firstOfKind
-                        text: page.groupTitles[finding.modelData.kind] + " · "
-                            + page.rows.filter(row => row.kind === finding.modelData.kind).length
+                        text: page.groupTitles[finding.modelData.kind] + " · " + page.kindCounts[finding.modelData.kind]
                     }
 
                     RowLayout {

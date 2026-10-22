@@ -17,7 +17,6 @@ public:
     // on macOS, which Cousoir does not check yet.
     bool acquire();
     void release();
-    bool held() const;
     // Whether this process holds the lock: the lock seen from outside is
     // then Cousoir's own.
     static bool heldHere();

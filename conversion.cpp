@@ -14,13 +14,12 @@
 
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QObject>
-#include <QProcess>
 
 #include "book_import.h"
+#include "calibre_job.h"
 #include "commit_engine.h"
 #include "opf.h"
 
@@ -289,27 +288,6 @@ sys.stdout.flush()
 os._exit(1 if 'error' in result else 0)
 )";
 
-bool writeFile(const QString &path, const QByteArray &data, QString *error)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size()) {
-        if (error)
-            *error = QObject::tr("Cannot write %1: %2").arg(path, file.errorString());
-        return false;
-    }
-    return true;
-}
-
-// The last lines of Calibre's log that say what went wrong.
-QString logTail(const QString &folder)
-{
-    QFile file(QDir(folder).filePath(QStringLiteral("log.txt")));
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    const QStringList lines = QString::fromUtf8(file.readAll()).trimmed().split(u'\n');
-    return lines.mid(qMax(0, int(lines.size()) - 3)).join(u'\n').trimmed();
-}
-
 } // namespace
 
 namespace Conversion {
@@ -383,7 +361,7 @@ bool prepare(const LibraryData &data, const Book &book, const QString &format, c
     settings.coverReference = false;
     QFile previous(QDir(QDir(data.libraryPath).filePath(book.path)).filePath(QStringLiteral("metadata.opf")));
     const QByteArray kept = previous.open(QIODevice::ReadOnly) ? previous.readAll() : QByteArray();
-    if (!writeFile(dir.filePath(QStringLiteral("book.opf")), Opf::metadataToOpf(data, book, settings, kept), error))
+    if (!CalibreJob::writeFile(dir.filePath(QStringLiteral("book.opf")), Opf::metadataToOpf(data, book, settings, kept), error))
         return false;
     if (!book.coverFile.isEmpty()) {
         QFile cover(book.coverFile);
@@ -392,12 +370,12 @@ bool prepare(const LibraryData &data, const Book &book, const QString &format, c
                 *error = QObject::tr("Cannot read the cover of “%1”.").arg(book.title);
             return false;
         }
-        if (!writeFile(dir.filePath(QStringLiteral("cover.jpeg")), cover.readAll(), error))
+        if (!CalibreJob::writeFile(dir.filePath(QStringLiteral("cover.jpeg")), cover.readAll(), error))
             return false;
         job.insert(QStringLiteral("cover"), QStringLiteral("cover.jpeg"));
     }
-    return writeFile(dir.filePath(QStringLiteral("convert.py")), convertScript, error)
-        && writeFile(dir.filePath(QStringLiteral("job.json")), QJsonDocument(job).toJson(), error);
+    return CalibreJob::writeFile(dir.filePath(QStringLiteral("convert.py")), convertScript, error)
+        && CalibreJob::writeFile(dir.filePath(QStringLiteral("job.json")), QJsonDocument(job).toJson(), error);
 }
 
 QStringList arguments(const QString &folder)
@@ -405,31 +383,12 @@ QStringList arguments(const QString &folder)
     return { QStringLiteral("-e"), QDir(folder).filePath(QStringLiteral("convert.py")), QStringLiteral("--"), folder };
 }
 
-QProcessEnvironment environment(const QString &folder, const QString &interfaceLanguage)
-{
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    // Calibre's temporary files go with the job's.
-    const QString temporary = QDir(folder).filePath(QStringLiteral("tmp"));
-    QDir().mkpath(temporary);
-    environment.insert(QStringLiteral("TMPDIR"), temporary);
-    if (!interfaceLanguage.isEmpty())
-        environment.insert(QStringLiteral("CALIBRE_OVERRIDE_LANG"), interfaceLanguage);
-    return environment;
-}
-
-double progress(const QByteArray &line)
-{
-    const QJsonObject object = QJsonDocument::fromJson(line.trimmed()).object();
-    const QJsonValue value = object.value(QLatin1String("progress"));
-    return value.isDouble() ? qBound(0.0, value.toDouble(), 1.0) : -1;
-}
-
 Outcome outcome(const QString &folder, int exitCode)
 {
     Outcome result;
     QFile file(QDir(folder).filePath(QStringLiteral("result.json")));
     if (!file.open(QIODevice::ReadOnly)) {
-        const QString tail = logTail(folder);
+        const QString tail = CalibreJob::logTail(folder);
         result.error = tail.isEmpty() ? QObject::tr("Calibre stopped before the end of the conversion.")
                                       : QObject::tr("Calibre stopped before the end of the conversion: %1").arg(tail);
         return result;
@@ -449,7 +408,7 @@ Outcome outcome(const QString &folder, int exitCode)
         else if (error == QLatin1String("drm"))
             result.error = QObject::tr("The book's file is locked by DRM, which Calibre does not convert.");
         else
-            result.error = QObject::tr("Calibre could not convert the book: %1").arg(detail.isEmpty() ? logTail(folder) : detail);
+            result.error = QObject::tr("Calibre could not convert the book: %1").arg(detail.isEmpty() ? CalibreJob::logTail(folder) : detail);
         return result;
     }
     result.ok = true;
@@ -468,27 +427,9 @@ Outcome run(const QString &folder, const QString &interfaceLanguage, const std::
         result.error = QObject::tr("Converting needs Calibre, which is not installed.");
         return result;
     }
-    QProcess process;
-    process.setProcessEnvironment(environment(folder, interfaceLanguage));
-    process.setStandardErrorFile(QProcess::nullDevice());
-    process.start(calibre, arguments(folder));
-    if (!process.waitForStarted()) {
-        result.error = QObject::tr("Cannot run %1.").arg(calibre);
-        return result;
-    }
-    const auto readLines = [&] {
-        while (process.canReadLine()) {
-            const double fraction = Conversion::progress(process.readLine());
-            if (fraction >= 0 && progress)
-                progress(fraction);
-        }
-    };
-    while (process.state() != QProcess::NotRunning) {
-        process.waitForReadyRead(200);
-        readLines();
-    }
-    readLines();
-    return outcome(folder, process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1);
+    const std::optional<int> exitCode = CalibreJob::run(
+        calibre, arguments(folder), CalibreJob::environment(folder, interfaceLanguage), progress, &result.error);
+    return exitCode ? outcome(folder, *exitCode) : result;
 }
 
 void addTo(CommitEngine::Request *request, const Book &book, const QString &format, const Outcome &outcome)

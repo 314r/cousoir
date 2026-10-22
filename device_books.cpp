@@ -12,6 +12,7 @@
 #include <QSet>
 
 #include "book.h"
+#include "calibre_text.h"
 
 namespace {
 
@@ -27,17 +28,6 @@ QString clean(const QString &text)
             cleaned.append(c);
     }
     return cleaned;
-}
-
-// authors_to_string().
-QString authorsToString(const QStringList &authors)
-{
-    QStringList parts;
-    for (const QString &author : authors) {
-        if (!author.isEmpty())
-            parts.append(QString(author).replace(u'&', QLatin1String("&&")));
-    }
-    return parts.join(QLatin1String(" & "));
 }
 
 } // namespace
@@ -58,7 +48,7 @@ void match(QList<DeviceBook> *books, const LibraryData &data)
     // the same as far as anyone can tell.
     for (const Book &book : data.books) {
         Titled &titled = byTitle[clean(book.title)];
-        const QString authors = clean(authorsToString(book.authors));
+        const QString authors = clean(CalibreText::authorsToString(book.authors));
         if (!authors.isEmpty())
             titled.authors.insert(authors, book.id);
         if (!book.authorSort.isEmpty())
@@ -85,7 +75,7 @@ void match(QList<DeviceBook> *books, const LibraryData &data)
                 book.bookId = id;
             return id != 0;
         };
-        if (!book.authors.isEmpty() && !byAuthor(clean(authorsToString(book.authors)))) {
+        if (!book.authors.isEmpty() && !byAuthor(clean(CalibreText::authorsToString(book.authors)))) {
             for (const QString &author : std::as_const(book.authors)) {
                 if (byAuthor(clean(author)))
                     break;

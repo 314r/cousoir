@@ -20,20 +20,6 @@
 
 namespace {
 
-// Flushes a file, or a folder's entries, to the disk.
-void sync(const QString &path)
-{
-#ifdef Q_OS_UNIX
-    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY);
-    if (fd >= 0) {
-        ::fsync(fd);
-        ::close(fd);
-    }
-#else
-    Q_UNUSED(path);
-#endif
-}
-
 bool rename(const QString &from, const QString &to, QString *error)
 {
     // std::rename replaces `to`; QFile::rename would refuse it.
@@ -97,16 +83,15 @@ QString FileTransaction::keptName(const QString &path)
 bool FileTransaction::log(const Step &step, QString *error)
 {
     QDir().mkpath(QFileInfo(m_journal).absolutePath());
+    const QJsonObject line{ { QStringLiteral("op"), step.op }, { QStringLiteral("path"), step.path },
+                            { QStringLiteral("other"), step.other } };
+    const QByteArray entry = QJsonDocument(line).toJson(QJsonDocument::Compact) + '\n';
     QFile file(m_journal);
-    if (!file.open(QIODevice::Append)) {
+    if (!file.open(QIODevice::Append) || file.write(entry) != entry.size() || !file.flush()) {
         if (error)
             *error = QObject::tr("Cannot write the journal %1: %2").arg(m_journal, file.errorString());
         return false;
     }
-    const QJsonObject line{ { QStringLiteral("op"), step.op }, { QStringLiteral("path"), step.path },
-                            { QStringLiteral("other"), step.other } };
-    file.write(QJsonDocument(line).toJson(QJsonDocument::Compact) + '\n');
-    file.flush();
 #ifdef Q_OS_UNIX
     ::fsync(file.handle());
 #endif
@@ -162,16 +147,7 @@ bool FileTransaction::place(const QString &path, const std::function<bool(const 
 bool FileTransaction::write(const QString &path, const QByteArray &contents, QString *error)
 {
     return place(path, [&contents](const QString &fresh, QString *error) {
-        QFile file(fresh);
-        if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size() || !file.flush()) {
-            if (error)
-                *error = QObject::tr("Cannot write %1: %2").arg(fresh, file.errorString());
-            return false;
-        }
-#ifdef Q_OS_UNIX
-        ::fsync(file.handle());
-#endif
-        return true;
+        return writeDurably(fresh, contents, error);
     }, error);
 }
 
@@ -240,6 +216,20 @@ bool FileTransaction::undo(const Step &step, QString *error)
     return true;
 }
 
+bool FileTransaction::undoAll(const QList<Step> &steps, QString *error)
+{
+    bool ok = true;
+    for (qsizetype index = steps.size() - 1; index >= 0; --index) {
+        QString stepError;
+        if (!undo(steps.at(index), &stepError)) {
+            ok = false;
+            if (error && error->isEmpty())
+                *error = stepError;
+        }
+    }
+    return ok;
+}
+
 void FileTransaction::cleanUp(const QList<Step> &steps)
 {
     for (const Step &step : steps) {
@@ -262,15 +252,7 @@ void FileTransaction::cleanUp(const QList<Step> &steps)
 
 bool FileTransaction::rollback(QString *error)
 {
-    bool ok = true;
-    for (qsizetype index = m_steps.size() - 1; index >= 0; --index) {
-        QString stepError;
-        if (!undo(m_steps.at(index), &stepError)) {
-            ok = false;
-            if (error && error->isEmpty())
-                *error = stepError;
-        }
-    }
+    const bool ok = undoAll(m_steps, error);
     m_steps.clear();
     m_finished = true;
     if (ok)
@@ -283,7 +265,7 @@ bool FileTransaction::aboutToPublish(const QByteArray &sha256, QString *error)
     return log({ QStringLiteral("publish"), {}, QString::fromLatin1(sha256.toHex()) }, error);
 }
 
-bool FileTransaction::finish(QString *)
+void FileTransaction::finish()
 {
     cleanUp(m_steps);
     QStringList folders;
@@ -297,7 +279,6 @@ bool FileTransaction::finish(QString *)
     m_steps.clear();
     m_finished = true;
     QFile::remove(m_journal);
-    return true;
 }
 
 void FileTransaction::abandon()
@@ -338,18 +319,38 @@ bool FileTransaction::recover(const QString &journal, const QString &database, Q
         QFile::remove(journal);
         return true;
     }
-    bool ok = true;
-    for (qsizetype index = steps.size() - 1; index >= 0; --index) {
-        QString stepError;
-        if (!undo(steps.at(index), &stepError)) {
-            ok = false;
-            if (error && error->isEmpty())
-                *error = stepError;
-        }
-    }
+    const bool ok = undoAll(steps, error);
     if (done)
         *done = QObject::tr("undid a change that was interrupted before the database was saved");
     if (ok)
         QFile::remove(journal);
     return ok;
+}
+
+bool FileTransaction::writeDurably(const QString &path, const QByteArray &contents, QString *error)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(contents) != contents.size()
+        || !file.flush()) {
+        if (error)
+            *error = QObject::tr("Cannot write %1: %2").arg(QDir::toNativeSeparators(path), file.errorString());
+        return false;
+    }
+#ifdef Q_OS_UNIX
+    ::fsync(file.handle());
+#endif
+    return true;
+}
+
+void FileTransaction::sync(const QString &path)
+{
+#ifdef Q_OS_UNIX
+    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY);
+    if (fd >= 0) {
+        ::fsync(fd);
+        ::close(fd);
+    }
+#else
+    Q_UNUSED(path);
+#endif
 }

@@ -16,13 +16,14 @@ namespace CalibreDb {
 inline constexpr int SchemaVersion = 28;
 
 FileIdentity identify(const QString &path);
+// Whether SQLite's journal of `database` is there: Calibre is writing to it.
+bool hasJournal(const QString &database);
 
 // Copies <library>/metadata.db to `snapshotPath` as one consistent file. The
 // copy is retried while Calibre's journal is there, while the database
 // changes during the copy, or when the copy fails SQLite's quick check.
-// `source` gets the database as it was copied, `sha256` the copy's hash.
-bool takeSnapshot(const QString &libraryPath, const QString &snapshotPath, FileIdentity *source,
-                  QByteArray *sha256, QString *error);
+// `source` gets the database as it was copied.
+bool takeSnapshot(const QString &libraryPath, const QString &snapshotPath, FileIdentity *source, QString *error);
 
 // Sets a connection up like Calibre's Connection class in db/backend.py: its
 // SQL functions and aggregates, the temporary author triggers, foreign keys

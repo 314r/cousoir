@@ -38,10 +38,6 @@ Rectangle {
         facetTable.focusList()
     }
 
-    function moveCurrent(delta) {
-        facetTable.moveCurrent(delta)
-    }
-
     function activate(index) {
         const row = page.library.facetRows[index]
         if (!row)

@@ -4,14 +4,9 @@
 
 #include "calibre_db.h"
 #include "opf.h"
+#include "test_support.h"
 
 namespace {
-
-QByteArray readAll(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
 
 // What Calibre 9.16 signs its files with.
 const Opf::Settings calibreSettings{ QStringLiteral("fr"), QStringLiteral("calibre (9.16.0) [https://calibre-ebook.com]"),

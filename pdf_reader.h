@@ -14,10 +14,6 @@
 // else the system's.
 namespace PdfReader {
 
-// pdfinfo and pdftoppm, empty when neither Calibre nor poppler is installed.
-QString pdfinfo();
-QString pdftoppm();
-
 // False with `error` when the tools are missing or cannot read the file.
 bool read(const QString &path, const QString &interfaceLanguage, ImportedMetadata *metadata, QString *error);
 

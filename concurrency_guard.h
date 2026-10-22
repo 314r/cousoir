@@ -171,6 +171,8 @@ private:
     QString settingsPath() const;
     void askDropbox();
     void finishDropbox(const QString &status);
+    // The request under way, if any, dropped unanswered.
+    void dropDropboxRequest();
     bool inDropbox() const;
 
     Environment m_environment;

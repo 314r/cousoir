@@ -84,8 +84,7 @@ void ConcurrencyGuard::setLibraryPath(const QString &path)
         return;
     m_libraryPath = cleaned;
     m_dropboxStatus.clear();
-    if (m_socket)
-        m_socket->abort();
+    dropDropboxRequest();
     QString choice;
     if (!m_libraryPath.isEmpty()) {
         const QString library = settingsPath();
@@ -495,14 +494,21 @@ void ConcurrencyGuard::finishDropbox(const QString &status)
 {
     if (!m_socket)
         return;
-    QLocalSocket *socket = m_socket;
-    m_socket = nullptr;
-    socket->disconnect(this);
-    socket->abort();
-    socket->deleteLater();
+    dropDropboxRequest();
     // "notok" comes back for a file Dropbox does not know yet.
     m_dropboxStatus = status.isEmpty() ? QStringLiteral("unknown") : status;
     evaluate();
+}
+
+void ConcurrencyGuard::dropDropboxRequest()
+{
+    if (!m_socket)
+        return;
+    QLocalSocket *socket = m_socket;
+    m_socket = nullptr;
+    socket->disconnect();
+    socket->abort();
+    socket->deleteLater();
 }
 
 void ConcurrencyGuard::evaluate()
@@ -552,8 +558,7 @@ void ConcurrencyGuard::evaluate()
     } else if (calibreRunning(m_environment.procNetUnix, currentUid()) && !CalibreLock::heldHere()) {
         state = QStringLiteral("calibre");
         reason = tr("Read-only: Calibre is open on this computer");
-    } else if (QFileInfo::exists(database + QStringLiteral("-journal"))
-               || QFileInfo::exists(database + QStringLiteral("-wal"))) {
+    } else if (CalibreDb::hasJournal(database)) {
         state = QStringLiteral("journal");
         reason = tr("Read-only: Calibre is writing to the library");
     } else if (dropbox && m_dropboxStatus != QLatin1String("up to date")

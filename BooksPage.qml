@@ -70,10 +70,6 @@ Rectangle {
         page.view.focusList()
     }
 
-    function moveCurrent(delta) {
-        page.view.moveCurrent(delta)
-    }
-
     // Makes the book's row current, when it is shown.
     function select(bookId) {
         const index = page.library.rows.findIndex(row => row.id === bookId)

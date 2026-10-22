@@ -411,8 +411,8 @@ FocusScope {
                             iconOnly: true
                             text: qsTr("Move the %1 file to the trash").arg(formatRow.modelData.format)
                             icon.source: "assets/icons/trash.svg"
-                            icon.width: Math.round(Theme.iconSize * 0.85)
-                            icon.height: Math.round(Theme.iconSize * 0.85)
+                            icon.width: Theme.smallIconSize
+                            icon.height: Theme.smallIconSize
                             onClicked: pane.removeFormat(formatRow.modelData.format)
                         }
                     }

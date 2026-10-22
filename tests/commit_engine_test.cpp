@@ -12,31 +12,9 @@
 #include "field_writers.h"
 #include "file_transaction.h"
 #include "sqlite_db.h"
+#include "test_support.h"
 
 namespace {
-
-QString fixtureLibrary()
-{
-    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
-}
-
-QByteArray readAll(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
-
-bool copyTree(const QString &from, const QString &to)
-{
-    QDirIterator it(from, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString source = it.next();
-        const QString target = QDir(to).filePath(QDir(from).relativeFilePath(source));
-        if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !QFile::copy(source, target))
-            return false;
-    }
-    return true;
-}
 
 // Every file under `folder` with its hash.
 QStringList tree(const QString &folder)

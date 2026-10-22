@@ -7,7 +7,8 @@
 #include <QMutex>
 #include <QRunnable>
 #include <QSaveFile>
-#include <QThreadPool>
+
+#include <climits>
 
 namespace {
 
@@ -65,10 +66,14 @@ private:
             return;
         }
 
-        const bool scaled = m_requestedSize.isValid() && !m_requestedSize.isEmpty();
+        // An Image with only sourceSize.width or height set leaves the other
+        // side at 0 or less: the cover keeps its proportions on that side.
+        const int width = qMax(0, m_requestedSize.width());
+        const int height = qMax(0, m_requestedSize.height());
+        const bool scaled = width > 0 || height > 0;
         const QString thumbnail = scaled && !library.thumbnailFolder.isEmpty()
             ? QDir(library.thumbnailFolder).filePath(QStringLiteral("%1-%2-%3x%4.jpg").arg(bookId).arg(cover.modifiedMs)
-                                                         .arg(m_requestedSize.width()).arg(m_requestedSize.height()))
+                                                         .arg(width).arg(height))
             : QString();
         if (!thumbnail.isEmpty() && m_image.load(thumbnail))
             return;
@@ -78,7 +83,7 @@ private:
         if (scaled) {
             QSize size = reader.size();
             if (size.isValid()) {
-                size.scale(m_requestedSize, Qt::KeepAspectRatio);
+                size.scale(width > 0 ? width : INT_MAX, height > 0 ? height : INT_MAX, Qt::KeepAspectRatio);
                 // Decoding straight to the smaller size is much faster for JPEG.
                 if (size.width() < reader.size().width())
                     reader.setScaledSize(size);
@@ -127,6 +132,6 @@ QString CoverCache::url(const QString &key, int bookId, qint64 modifiedMs)
 QQuickImageResponse *CoverCache::requestImageResponse(const QString &id, const QSize &requestedSize)
 {
     auto *response = new CoverResponse(id, requestedSize);
-    QThreadPool::globalInstance()->start(response);
+    m_pool.start(response);
     return response;
 }

@@ -144,23 +144,9 @@ Rectangle {
                             Layout.preferredHeight: cover.status === Image.Ready && cover.implicitWidth > 0
                                 ? Math.round(page.coverWidth * cover.implicitHeight / cover.implicitWidth) + 2
                                 : Math.round(page.coverWidth * 1.5)
-                            color: coverDrop.containsDrag || pageDrop.containsDrag ? Theme.hover : Theme.fill
+                            color: pageDrop.containsDrag ? Theme.hover : Theme.fill
                             border.width: 1
-                            border.color: coverDrop.containsDrag || pageDrop.containsDrag ? Theme.accent : Theme.divider
-
-                            DropArea {
-                                id: coverDrop
-
-                                anchors.fill: parent
-                                enabled: page.library.writable
-                                onEntered: function(drag) {
-                                    drag.accepted = drag.hasUrls
-                                }
-                                onDropped: function(drop) {
-                                    if (drop.hasUrls)
-                                        page.dropFile(drop.urls[0])
-                                }
-                            }
+                            border.color: pageDrop.containsDrag ? Theme.accent : Theme.divider
 
                             Image {
                                 id: cover

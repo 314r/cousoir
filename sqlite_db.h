@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QVariant>
 
@@ -27,14 +28,17 @@ public:
 
     bool open(const QString &path, Mode mode, QString *error);
     void close();
-    bool isOpen() const;
     sqlite3 *handle() const;
 
     // Runs statements that return no rows.
     bool exec(const QString &sql, QString *error);
+    // Runs one statement with `values` bound in order, as
+    // SqliteStatement::bind() binds them.
+    bool run(const QString &sql, const QVariantList &values, QString *error);
+    // The rows of `sql` with `values` bound, each as a list of its columns.
+    QList<QVariantList> rows(const QString &sql, const QVariantList &values = {});
     // The first column of the first row of `sql`, or an invalid QVariant.
     QVariant value(const QString &sql, QString *error = nullptr);
-    QString lastError() const;
     // The rowid of the last row an INSERT added.
     qint64 lastInsertRowId() const;
 
@@ -61,6 +65,9 @@ public:
     // A BLOB.
     void bind(int index, const QByteArray &value);
     void bindNull(int index);
+    // `values` from index 1 on: a null QVariant as NULL, integers, doubles,
+    // a QByteArray as a BLOB, anything else as text.
+    void bind(const QVariantList &values);
 
     // True while there is a row; false at the end or on an error.
     bool step();

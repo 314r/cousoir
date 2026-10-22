@@ -57,6 +57,14 @@ struct Request
     // Called just before metadata.db is replaced, for tests that change it
     // there as Dropbox could.
     std::function<void()> beforePublish;
+
+    // Whether it does more than edit books: any of the changes after the
+    // edits.
+    bool hasOperations() const
+    {
+        return !formatCopies.isEmpty() || !formatRemovals.isEmpty() || !trash.isEmpty() || !restorations.isEmpty()
+            || !newBooks.isEmpty() || !newFormats.isEmpty() || !conversionOptions.isEmpty();
+    }
 };
 
 struct Result

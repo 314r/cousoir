@@ -111,7 +111,6 @@ public:
                const std::function<void(qint64, qint64)> &progress = {}) override;
     bool makeFolder(const QString &path, QString *error) override;
     bool remove(const QString &path, QString *error) override;
-    QString root() const;
 
 private:
     void scanFolder(const QString &path, quint32 parent);

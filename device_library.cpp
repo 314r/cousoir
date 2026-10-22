@@ -1,7 +1,6 @@
 #include "device_library.h"
 
 #include <QCollator>
-#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QLocale>
@@ -13,8 +12,6 @@
 #include <cctype>
 #include <utility>
 
-#include <signal.h>
-
 #ifdef Q_OS_LINUX
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -25,6 +22,7 @@
 
 #include "book_library.h"
 #include "calibre_config.h"
+#include "calibre_job.h"
 #include "calibre_lock.h"
 #include "concurrency_guard.h"
 #include "conversion.h"
@@ -112,29 +110,10 @@ void udisksEject(const Kobo::Device &device, std::function<void(const QString &)
 }
 #endif
 
-// Folders a send left behind, a crash or a kill, a day old.
-void removeStaleFolders(const QString &base)
-{
-    const QDateTime dayAgo = QDateTime::currentDateTime().addDays(-1);
-    for (const QFileInfo &folder : QDir(base).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-        if (folder.lastModified() < dayAgo)
-            QDir(folder.filePath()).removeRecursively();
-    }
-}
-
 // As the library shows the size of its files.
 QString sizeText(qint64 size)
 {
     return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
-}
-
-const Book *bookIn(const LibraryData &data, int bookId)
-{
-    for (const Book &book : data.books) {
-        if (book.id == bookId)
-            return &book;
-    }
-    return nullptr;
 }
 
 QStringList formatsOf(const Book &book)
@@ -272,9 +251,7 @@ QVariantList DeviceLibrary::devices() const
             { QStringLiteral("name"), connected.name },
             { QStringLiteral("kind"), connected.kind == Kind::Kobo ? QStringLiteral("kobo") : QStringLiteral("kindle") },
             { QStringLiteral("ejectable"), connected.kind == Kind::Kobo },
-            { QStringLiteral("freeBytes"), connected.freeBytes },
             { QStringLiteral("free"), sizeText(connected.freeBytes) },
-            { QStringLiteral("totalBytes"), connected.totalBytes },
         });
     }
     return list;
@@ -325,7 +302,6 @@ QVariantList DeviceLibrary::rows() const
             { QStringLiteral("size"), sizeText(book.size) },
             { QStringLiteral("bookId"), book.bookId },
             { QStringLiteral("purchased"), book.purchased },
-            { QStringLiteral("imported"), book.imported },
         });
     }
     return rows;
@@ -411,7 +387,7 @@ QString DeviceLibrary::sendFormat(int bookId, const QString &root) const
     const Connected *connected = find(root);
     if (!m_library || !connected)
         return {};
-    const Book *book = bookIn(m_library->data(), bookId);
+    const Book *book = m_library->data().book(bookId);
     return book ? DeviceBooks::sendFormat(formatsOf(*book), formatMap(*connected)) : QString();
 }
 
@@ -448,7 +424,7 @@ QString DeviceLibrary::send(const QVariantList &bookIds, const QString &root)
     Job job{ {}, {}, root, connected->name, connected->kind };
     const QStringList formats = formatMap(*connected);
     for (const QVariant &value : bookIds) {
-        const Book *book = bookIn(m_library->data(), value.toInt());
+        const Book *book = m_library->data().book(value.toInt());
         if (!book)
             return tr("This book is no longer in the library.");
         if (DeviceBooks::sendFormat(formatsOf(*book), formats).isEmpty())
@@ -598,11 +574,6 @@ void DeviceLibrary::setEjector(Ejector ejector)
     m_ejector = std::move(ejector);
 }
 
-void DeviceLibrary::setSysRoot(const QString &sysRoot)
-{
-    m_sysRoot = sysRoot;
-}
-
 void DeviceLibrary::setConfigDirectory(const QString &directory)
 {
     m_configDirectory = directory;
@@ -641,10 +612,9 @@ void DeviceLibrary::scan()
         }
         Connected connected;
         connected.root = volume.root;
-        connected.kobo = Kobo::describe(volume.root, volume.node, m_sysRoot);
+        connected.kobo = Kobo::describe(volume.root, volume.node);
         connected.name = connected.kobo.name;
         connected.freeBytes = connected.kobo.freeBytes;
-        connected.totalBytes = connected.kobo.totalBytes;
         m_devices.append(connected);
         changed = true;
         load(volume.root);
@@ -716,7 +686,6 @@ void DeviceLibrary::load(const QString &root)
         QString name;
         QString serial;
         qint64 freeBytes = 0;
-        qint64 totalBytes = 0;
     };
     connected->loading = true;
     auto *watcher = new QFutureWatcher<Read>(this);
@@ -733,7 +702,6 @@ void DeviceLibrary::load(const QString &root)
             loaded->name = read.name;
             loaded->serial = read.serial;
             loaded->freeBytes = read.freeBytes;
-            loaded->totalBytes = read.totalBytes;
         }
         if (m_library)
             DeviceBooks::match(&loaded->books, m_library->data());
@@ -753,7 +721,6 @@ void DeviceLibrary::load(const QString &root)
         read.name = Kindle::name(Kindle::readDriveInfo(*link->files), link->device.friendlyName, link->device.modelName);
         read.serial = link->device.serial;
         read.freeBytes = link->files->freeBytes();
-        read.totalBytes = link->files->totalBytes();
         return read;
     }));
 }
@@ -802,7 +769,7 @@ void DeviceLibrary::startNext()
         return;
     const Job job = m_jobs.first();
     const Connected *connected = find(job.root);
-    const auto fail = [this, &job](const QString &error) {
+    const auto fail = [this](const QString &error) {
         m_jobs.removeFirst();
         m_folder.reset();
         emit jobsChanged();
@@ -815,7 +782,7 @@ void DeviceLibrary::startNext()
     }
     const QString base = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("sends"));
     QDir().mkpath(base);
-    removeStaleFolders(base);
+    CalibreJob::removeStaleFolders(base);
     m_folder = std::make_shared<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
     if (!m_folder->isValid()) {
         fail(tr("Cannot create a folder for sending in %1.").arg(base));
@@ -871,7 +838,7 @@ void DeviceLibrary::startNext()
 void DeviceLibrary::startProcess(const QString &folder)
 {
     m_process = new QProcess(this);
-    m_process->setProcessEnvironment(SendJob::environment(folder, m_library ? m_library->interfaceLanguage() : QString()));
+    m_process->setProcessEnvironment(CalibreJob::environment(folder, m_library ? m_library->interfaceLanguage() : QString()));
     m_process->setStandardErrorFile(QProcess::nullDevice());
     // A session of its own: stopping it stops Calibre's workers with it.
     m_process->setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
@@ -897,7 +864,7 @@ void DeviceLibrary::readProgress()
         return;
     bool changed = false;
     while (m_process->canReadLine()) {
-        const double fraction = SendJob::progress(m_process->readLine());
+        const double fraction = CalibreJob::progress(m_process->readLine());
         if (fraction >= 0 && !m_jobs.isEmpty()) {
             // Calibre's part, then the copy.
             m_jobs.first().progress = 0.8 * fraction;
@@ -919,7 +886,6 @@ void DeviceLibrary::finishJob()
     const Connected *connected = find(running.root);
     // The books Calibre found nothing to send of are told apart.
     const auto keepSent = [&running](const QList<SendJob::Sent> &sent, const QStringList &unsendable) {
-        running.copying = true;
         running.unsendable = unsendable;
         QStringList titles;
         for (const SendJob::Sent &book : sent) {
@@ -954,6 +920,8 @@ void DeviceLibrary::finishJob()
         const KindleSend::Outcome outcome = KindleSend::outcome(folder, exitCode);
         std::shared_ptr<KindleLink> link = std::exchange(running.link, nullptr);
         if (!outcome.ok || !link) {
+            // Closed before finishCopy() reads the Kindle again.
+            link.reset();
             finishCopy(false, outcome.ok ? tr("%1 is no longer connected.").arg(running.name) : outcome.error);
             return;
         }
@@ -984,7 +952,7 @@ void DeviceLibrary::finishCopy(bool ok, const QString &error)
     if (!ok)
         emit failed(tr("“%1” was not sent to %2: %3").arg(job.titles.join(QLatin1String("”, “")), job.name, error));
     else if (!job.unsendable.isEmpty())
-        emit failed(tr("“%1” was not sent to %2: it has none of the formats the Kobo reads.")
+        emit failed(tr("“%1” was not sent to %2: it has none of the formats %2 reads.")
                         .arg(job.unsendable.join(QLatin1String("”, “")), job.name));
     else if (!job.titles.isEmpty())
         emit sent(job.titles, job.name);
@@ -997,13 +965,7 @@ void DeviceLibrary::stopProcess()
     if (!m_process)
         return;
     m_process->disconnect(this);
-    const pid_t pid = pid_t(m_process->processId());
-    if (pid > 0)
-        ::kill(-pid, SIGTERM);
-    if (!m_process->waitForFinished(3000) && pid > 0) {
-        ::kill(-pid, SIGKILL);
-        m_process->waitForFinished(1000);
-    }
+    CalibreJob::stopProcessGroup(m_process);
     delete m_process;
     m_process = nullptr;
 }

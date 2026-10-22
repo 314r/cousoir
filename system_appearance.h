@@ -10,7 +10,6 @@ class SystemAppearance : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QVariantMap palette READ palette NOTIFY paletteChanged)
-    Q_PROPERTY(QFont uiFont READ uiFont NOTIFY fontsChanged)
     Q_PROPERTY(QFont fixedFont READ fixedFont NOTIFY fontsChanged)
     Q_PROPERTY(qreal uiFontPointSize READ uiFontPointSize NOTIFY fontsChanged)
     Q_PROPERTY(bool dark READ dark NOTIFY paletteChanged)
@@ -19,7 +18,6 @@ public:
     explicit SystemAppearance(QObject *parent = nullptr);
 
     QVariantMap palette() const;
-    QFont uiFont() const;
     QFont fixedFont() const;
     qreal uiFontPointSize() const;
     bool dark() const;
@@ -30,7 +28,7 @@ public:
 
     static QVariantMap paletteFrom(const QPalette &palette, bool dark);
 
-    Q_INVOKABLE void reload();
+    void reload();
 
 signals:
     void paletteChanged();

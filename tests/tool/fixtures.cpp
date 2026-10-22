@@ -30,7 +30,7 @@ const char container[] = R"(<?xml version="1.0" encoding="utf-8"?>
 // their order. Its container lists a missing package file first.
 bool writeImportEpub(const QString &path, const QString &opf, const ZipEntries &files)
 {
-    const QString container = QStringLiteral(R"(<?xml version="1.0" encoding="utf-8"?>
+    const QString importContainer = QStringLiteral(R"(<?xml version="1.0" encoding="utf-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles>
     <rootfile full-path="OEBPS/missing.opf" media-type="application/oebps-package+xml"/>
@@ -40,7 +40,7 @@ bool writeImportEpub(const QString &path, const QString &opf, const ZipEntries &
 )");
     ZipEntries entries{
         { QStringLiteral("mimetype"), "application/epub+zip" },
-        { QStringLiteral("META-INF/container.xml"), container.toUtf8() },
+        { QStringLiteral("META-INF/container.xml"), importContainer.toUtf8() },
         { QStringLiteral("OEBPS/content.opf"), opf.toUtf8() },
     };
     entries.append(files);
@@ -117,19 +117,12 @@ int makeEpub(const QStringList &arguments)
     QString body;
     for (const QString &paragraph : arguments.mid(4))
         body += QStringLiteral("<p>") + escape(paragraph) + QStringLiteral("</p>");
-    const QString text = QStringLiteral(R"(<?xml version="1.0" encoding="utf-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head><title>%1</title></head>
-<body><h1>%1</h1>%2</body>
-</html>
-)")
-                               .arg(escape(title), body);
     const ZipEntries entries{
         { QStringLiteral("mimetype"), "application/epub+zip" },
         { QStringLiteral("META-INF/container.xml"), container },
         { QStringLiteral("OEBPS/content.opf"), opf.toUtf8() },
         { QStringLiteral("OEBPS/nav.xhtml"), nav.toUtf8() },
-        { QStringLiteral("OEBPS/text.xhtml"), text.toUtf8() },
+        { QStringLiteral("OEBPS/text.xhtml"), page(escape(title), body) },
     };
     return writeZip(arguments.at(0), entries, { QStringLiteral("mimetype") }) ? 0 : 1;
 }
@@ -156,12 +149,12 @@ int makeImportEpubs(const QStringList &arguments)
     <dc:identifier id="uid">urn:uuid:2a7d1c3e-8b2f-4a39-9e65-0f4c1d2b3a4f</dc:identifier>
     <dc:identifier id="isbn">urn:isbn:978-2-07-036024-5</dc:identifier>
     <dc:identifier>doi:10.1000/182</dc:identifier>
-    <dc:title id="main">Le  Vicomte)" " " R"(de Bragelonne</dc:title>
+    <dc:title id="main">Le  Vicomte)" "\u00A0" R"(de Bragelonne</dc:title>
     <meta refines="#main" property="title-type">main</meta>
     <meta refines="#main" property="file-as">Vicomte de Bragelonne, Le</meta>
     <dc:title id="sub">Tome premier</dc:title>
     <meta refines="#sub" property="title-type">subtitle</meta>
-    <dc:creator id="a1">Alexandre)" " " R"(Dumas</dc:creator>
+    <dc:creator id="a1">Alexandre)" "\u00A0" R"(Dumas</dc:creator>
     <meta refines="#a1" property="role" scheme="marc:relators">aut</meta>
     <meta refines="#a1" property="file-as">Dumas, Alexandre</meta>
     <meta refines="#a1" property="display-seq">2</meta>

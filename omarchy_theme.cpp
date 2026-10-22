@@ -67,14 +67,6 @@ QVariantMap fallbackPalette()
     };
 }
 
-QString readTextFile(const QString &path)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-        return {};
-    return QString::fromUtf8(file.readAll()).trimmed();
-}
-
 } // namespace
 
 OmarchyTheme::OmarchyTheme(QObject *parent)
@@ -99,11 +91,6 @@ QVariantMap OmarchyTheme::palette() const
 bool OmarchyTheme::dark() const
 {
     return m_dark;
-}
-
-QString OmarchyTheme::name() const
-{
-    return m_name;
 }
 
 bool OmarchyTheme::available() const
@@ -169,20 +156,15 @@ void OmarchyTheme::reload()
     }
 
     const bool dark = mode.compare(QLatin1String("dark"), Qt::CaseInsensitive) == 0;
-    const QString name = readTextFile(QDir(m_stateRoot).filePath(QStringLiteral("theme.name")));
     const bool paletteDidChange = m_palette != palette || m_dark != dark;
-    const bool nameDidChange = m_name != name;
     const bool availabilityDidChange = m_available != available;
 
     m_palette = std::move(palette);
     m_dark = dark;
-    m_name = name;
     m_available = available;
 
     if (paletteDidChange)
         emit paletteChanged();
-    if (nameDidChange)
-        emit nameChanged();
     if (availabilityDidChange)
         emit availableChanged();
 }

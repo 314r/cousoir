@@ -60,7 +60,10 @@ struct Outcome
     QList<Operation> operations;
 };
 
+// What the job in `folder` came to; `exitCode` is calibre-debug's.
 Outcome outcome(const QString &folder, int exitCode);
+// The same from the job's result as SendJob read it.
+Outcome outcome(const SendJob::Result &result);
 
 // Does the job's operations on the Kindle through `files`, a file put twice
 // only the last time. `progress` hears of the bytes copied.

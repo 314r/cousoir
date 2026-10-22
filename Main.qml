@@ -7,7 +7,7 @@ import QtCore
 
 import Cousoir
 
-ApplicationWindow {
+ThemedWindow {
     id: window
 
     // The details pane hides on narrow windows unless the toggle forces it.
@@ -42,24 +42,6 @@ ApplicationWindow {
         : session.filterOpen ? qsTr("%1 — Cousoir").arg(filter.name)
         : section !== "books" ? qsTr("%1 — Cousoir").arg(sidebar.current.title)
         : qsTr("Cousoir")
-    color: Theme.canvas
-    font.family: Theme.uiFont
-    font.pointSize: Theme.fontPointSizeBody
-
-    palette.window: Theme.canvas
-    palette.windowText: Theme.text
-    palette.base: Theme.canvas
-    palette.text: Theme.text
-    palette.button: Theme.canvas
-    palette.buttonText: Theme.text
-    palette.highlight: Theme.textSelection
-    palette.highlightedText: Theme.textBright
-    palette.placeholderText: Theme.textFaint
-    palette.toolTipBase: Theme.canvas
-    palette.toolTipText: Theme.text
-    palette.dark: Theme.controlBorder
-    palette.mid: Theme.divider
-    palette.link: Theme.accent
 
     function applyOmarchyTheme() {
         Theme.omarchyDark = omarchyTheme.dark
@@ -158,7 +140,7 @@ ApplicationWindow {
 
     function focusSearch() {
         if (session.bookOpen)
-            session.closeBook()
+            closeBook()
         searchField.forceActiveFocus(Qt.ShortcutFocusReason)
         searchField.selectAll()
     }
@@ -176,15 +158,6 @@ ApplicationWindow {
             booksPage.focusList()
     }
 
-    function moveCurrent(delta) {
-        if (facetShown)
-            facetPage.moveCurrent(delta)
-        else if (checkShown)
-            checkPage.moveCurrent(delta)
-        else
-            booksPage.moveCurrent(delta)
-    }
-
     function pageIndex() {
         if (session.bookOpen)
             return 2
@@ -200,7 +173,7 @@ ApplicationWindow {
     // The open book, or the current row's, converted to `format`; asks first
     // when the book has a file of that format.
     function convertBook(bookId, format) {
-        const row = bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+        const row = bookRow(bookId)
         if (!row || !library.writable)
             return
         // The open book lists its files; a row joins their formats.
@@ -230,6 +203,11 @@ ApplicationWindow {
         return session.bookOpen ? book.id : booksShown ? booksPage.currentBookId() : 0
     }
 
+    // The open book, or the row of a book listed, by id.
+    function bookRow(bookId) {
+        return bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+    }
+
     // Sends the book to the reader on `root`, the first one connected by
     // default. A book without a format the reader reads is converted first,
     // after asking, as Calibre offers to.
@@ -241,7 +219,7 @@ ApplicationWindow {
         const format = devices.convertFormat(target)
         if (devices.sendFormat(bookId, target) === "" && format && library.writable && conversions.available
             && conversions.formatsFor(bookId).length > 0) {
-            const row = bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+            const row = bookRow(bookId)
             convertAndSendDialog.bookId = bookId
             convertAndSendDialog.root = target
             convertAndSendDialog.format = format
@@ -266,10 +244,13 @@ ApplicationWindow {
             return
         const waiting = []
         for (const pending of pendingSends) {
-            if (devices.sendFormat(pending.bookId, pending.root) !== "")
-                devices.send([pending.bookId], pending.root)
-            else if (conversions.jobs.some(job => job.bookId === pending.bookId))
+            if (devices.sendFormat(pending.bookId, pending.root) !== "") {
+                const error = devices.send([pending.bookId], pending.root)
+                if (error)
+                    showNotice(error)
+            } else if (conversions.jobs.some(job => job.bookId === pending.bookId)) {
                 waiting.push(pending)
+            }
         }
         pendingSends = waiting
     }
@@ -303,7 +284,7 @@ ApplicationWindow {
 
     // Asks before moving a book to the trash.
     function trashBook(bookId) {
-        const row = bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+        const row = bookRow(bookId)
         if (!row || !library.writable)
             return
         trashDialog.bookId = bookId
@@ -313,7 +294,7 @@ ApplicationWindow {
 
     // Opens the open book, or the current row's, in the desktop's reader.
     function openInReader() {
-        const bookId = session.bookOpen ? book.id : booksShown ? booksPage.currentBookId() : 0
+        const bookId = currentBookId()
         if (!bookId)
             return
         const error = library.openFormat(bookId, "")
@@ -393,7 +374,7 @@ ApplicationWindow {
             return (job.running ? qsTr("Converting “%1” to %2 · %3%").arg(job.title).arg(job.format)
                                       .arg(Math.round(job.progress * 100))
                                 : qsTr("Converting “%1” to %2 after the changes…").arg(job.title).arg(job.format))
-                + (waiting > 0 ? " " + plural(waiting, qsTr("(%1 more waiting)"), qsTr("(%1 more waiting)")) : "")
+                + (waiting > 0 ? " " + qsTr("(%1 more waiting)").arg(waiting) : "")
         }
         if (devices.busy) {
             const job = devices.jobs[0]
@@ -402,7 +383,7 @@ ApplicationWindow {
             const waiting = devices.jobs.length - 1
             return (job.running ? qsTr("Sending %1 to %2 · %3%").arg(what).arg(job.name).arg(Math.round(job.progress * 100))
                                 : qsTr("Sending %1 to %2 after the changes…").arg(what).arg(job.name))
-                + (waiting > 0 ? " " + plural(waiting, qsTr("(%1 more waiting)"), qsTr("(%1 more waiting)")) : "")
+                + (waiting > 0 ? " " + qsTr("(%1 more waiting)").arg(waiting) : "")
         }
         if (library.saving)
             return qsTr("Saving…")
@@ -437,9 +418,18 @@ ApplicationWindow {
             + trash
     }
 
+    // An icon button of the status bar.
+    component StatusButton: FlatButton {
+        implicitWidth: implicitHeight
+        implicitHeight: Theme.statusHeight - 6
+        iconOnly: true
+        icon.width: Theme.smallIconSize
+        icon.height: Theme.smallIconSize
+        icon.color: Theme.textMuted
+    }
+
     AppSession {
         id: session
-        adaptiveTypography: true
         libraryPath: librarySettings.path
         calibreLanguage: librarySettings.calibreLanguage
     }
@@ -470,7 +460,7 @@ ApplicationWindow {
         }
 
         function onBooksAdded(bookIds) {
-            window.showNotice(plural(bookIds.length, qsTr("Added %1 book."), qsTr("Added %1 books.")), false)
+            window.showNotice(window.plural(bookIds.length, qsTr("Added %1 book."), qsTr("Added %1 books.")), false)
             if (window.booksShown)
                 booksPage.select(bookIds[0])
         }
@@ -482,7 +472,7 @@ ApplicationWindow {
                                          : qsTr("%1 of these books are already in the library").arg(titles.length)
             duplicatesDialog.message = (one ? "" : titles.length > 4 ? qsTr("%1 and %2 more.").arg(shown).arg(titles.length - 4)
                                                                      : shown + ".")
-                + (total > titles.length ? (one ? "" : " ") + plural(total - titles.length,
+                + (total > titles.length ? (one ? "" : " ") + window.plural(total - titles.length,
                     qsTr("The other book is added either way."), qsTr("The %1 other books are added either way.")) : "")
             duplicatesDialog.acceptText = one ? qsTr("Add it anyway") : qsTr("Add them anyway")
             duplicatesDialog.rejectText = one ? qsTr("Skip it") : qsTr("Skip them")
@@ -642,7 +632,7 @@ ApplicationWindow {
 
     Shortcut {
         sequences: [StandardKey.Paste]
-        enabled: session.bookOpen && library.writable && !bookPage.editing
+        enabled: session.bookOpen && window.library.writable && !bookPage.editing
         onActivated: bookPage.pasteCover()
     }
 
@@ -676,32 +666,32 @@ ApplicationWindow {
 
     Shortcut {
         sequences: [StandardKey.New]
-        enabled: library.writable && !library.importing
+        enabled: window.library.writable && !window.library.importing
         onActivated: addBooksDialog.open()
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+K"
-        enabled: (session.bookOpen || window.booksShown) && library.writable && conversions.available
+        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
         onActivated: window.convertBook(window.currentBookId(), "KEPUB")
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+A"
-        enabled: (session.bookOpen || window.booksShown) && library.writable && conversions.available
+        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
         onActivated: window.convertBook(window.currentBookId(), "AZW3")
     }
 
     Shortcut {
         sequence: "Ctrl+D"
-        enabled: (session.bookOpen || window.booksShown) && devices.devices.length > 0 && devices.available
-            && devices.writable
+        enabled: (session.bookOpen || window.booksShown) && window.devices.devices.length > 0
+            && window.devices.available && window.devices.writable
         onActivated: window.sendBook(window.currentBookId(), "")
     }
 
     Shortcut {
         sequences: [StandardKey.Delete]
-        enabled: window.booksShown && library.writable
+        enabled: window.booksShown && window.library.writable
         onActivated: window.trashBook(booksPage.currentBookId())
     }
 
@@ -893,8 +883,8 @@ ApplicationWindow {
                     tip: window.guard.readOnlyReason
                     font.pointSize: Theme.fontPointSizeCaption
                     icon.source: "assets/icons/lock.svg"
-                    icon.width: Math.round(Theme.iconSize * 0.85)
-                    icon.height: Math.round(Theme.iconSize * 0.85)
+                    icon.width: Theme.smallIconSize
+                    icon.height: Theme.smallIconSize
                     icon.color: Theme.textMuted
                     palette.buttonText: Theme.textMuted
                     onClicked: window.openSettings("library")
@@ -920,56 +910,39 @@ ApplicationWindow {
                     }
                 }
 
-                FlatButton {
+                StatusButton {
                     id: stopConversions
                     objectName: "stopConversions"
 
                     visible: window.conversions.busy
-                    implicitWidth: implicitHeight
-                    implicitHeight: Theme.statusHeight - 6
-                    iconOnly: true
                     text: qsTr("Stop converting")
                     tip: window.conversions.jobs.length === 1 ? qsTr("Stop the conversion")
                         : qsTr("Stop the %1 conversions").arg(window.conversions.jobs.length)
                     icon.source: "assets/icons/close.svg"
-                    icon.width: Math.round(Theme.iconSize * 0.85)
-                    icon.height: Math.round(Theme.iconSize * 0.85)
-                    icon.color: Theme.textMuted
                     onClicked: window.conversions.cancel(0)
                 }
 
-                FlatButton {
+                StatusButton {
                     id: stopSending
                     objectName: "stopSending"
 
                     visible: window.devices.busy
-                    implicitWidth: implicitHeight
-                    implicitHeight: Theme.statusHeight - 6
-                    iconOnly: true
                     text: qsTr("Stop sending")
                     tip: window.devices.jobs.length === 1 ? qsTr("Stop sending")
                         : qsTr("Stop the %1 sendings").arg(window.devices.jobs.length)
                     icon.source: "assets/icons/close.svg"
-                    icon.width: Math.round(Theme.iconSize * 0.85)
-                    icon.height: Math.round(Theme.iconSize * 0.85)
-                    icon.color: Theme.textMuted
                     onClicked: window.devices.cancel(0)
                 }
 
-                FlatButton {
+                StatusButton {
                     id: detailsToggle
                     objectName: "detailsToggle"
 
                     visible: session.bookOpen
-                    implicitWidth: implicitHeight
-                    implicitHeight: Theme.statusHeight - 6
-                    iconOnly: true
                     selected: window.detailsVisible
                     text: window.detailsVisible ? qsTr("Hide details") : qsTr("Show details")
                     tip: qsTr("Details (Ctrl+I)")
                     icon.source: "assets/icons/panel-right.svg"
-                    icon.width: Math.round(Theme.iconSize * 0.85)
-                    icon.height: Math.round(Theme.iconSize * 0.85)
                     icon.color: selected ? Theme.text : Theme.textMuted
                     onClicked: window.toggleDetails()
                 }
@@ -1382,7 +1355,7 @@ ApplicationWindow {
                     Rectangle {
                         anchors.fill: parent
                         visible: bookDrop.containsDrag
-                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.08)
+                        color: Theme.withAlpha(Theme.accent, 0.08)
                         border.width: 2
                         border.color: Theme.accent
 
