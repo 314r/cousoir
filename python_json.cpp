@@ -66,13 +66,82 @@ void Value::insert(const QString &key, const Value &value)
     fields.append({ key, value });
 }
 
-const Value *Value::find(const QString &key) const
+void Value::remove(const QString &key)
+{
+    fields.removeIf([&key](const auto &field) { return field.first == key; });
+}
+
+const Value *Value::find(const QString &key) const &
 {
     for (const auto &field : fields) {
         if (field.first == key)
             return &field.second;
     }
     return nullptr;
+}
+
+QString Value::text(const QString &key) const
+{
+    const Value *value = find(key);
+    return value && value->kind == Kind::String ? value->string : QString();
+}
+
+bool truthy(const Value &value)
+{
+    switch (value.kind) {
+    case Value::Kind::Null: return false;
+    case Value::Kind::Boolean: return value.boolean;
+    case Value::Kind::Integer: return value.integer != 0;
+    case Value::Kind::Float: return value.real != 0;
+    case Value::Kind::String: return !value.string.isEmpty();
+    case Value::Kind::List: return !value.items.isEmpty();
+    case Value::Kind::Dict: return !value.fields.isEmpty();
+    }
+    return false;
+}
+
+bool equals(const Value &a, const Value &b)
+{
+    const auto number = [](const Value &value) {
+        return value.kind == Value::Kind::Boolean || value.kind == Value::Kind::Integer
+            || value.kind == Value::Kind::Float;
+    };
+    const auto real = [](const Value &value) {
+        return value.kind == Value::Kind::Boolean ? double(value.boolean)
+            : value.kind == Value::Kind::Integer  ? double(value.integer)
+                                                  : value.real;
+    };
+    if (number(a) && number(b)) {
+        if (a.kind != Value::Kind::Float && b.kind != Value::Kind::Float)
+            return (a.kind == Value::Kind::Boolean ? qint64(a.boolean) : a.integer)
+                == (b.kind == Value::Kind::Boolean ? qint64(b.boolean) : b.integer);
+        return real(a) == real(b);
+    }
+    if (a.kind != b.kind)
+        return false;
+    switch (a.kind) {
+    case Value::Kind::Null: return true;
+    case Value::Kind::String: return a.string == b.string;
+    case Value::Kind::List:
+        if (a.items.size() != b.items.size())
+            return false;
+        for (qsizetype index = 0; index < a.items.size(); ++index) {
+            if (!equals(a.items.at(index), b.items.at(index)))
+                return false;
+        }
+        return true;
+    case Value::Kind::Dict:
+        if (a.fields.size() != b.fields.size())
+            return false;
+        for (const auto &field : a.fields) {
+            const Value *other = b.find(field.first);
+            if (!other || !equals(field.second, *other))
+                return false;
+        }
+        return true;
+    default:
+        return false;
+    }
 }
 
 namespace {

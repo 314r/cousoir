@@ -130,8 +130,6 @@ QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book 
         const QString &type = column.datatype;
         const bool composite = type == QLatin1String("composite");
         const PythonJson::Value display = PythonJson::parse(column.display);
-        const bool names = display.find(QStringLiteral("is_names"))
-            && display.find(QStringLiteral("is_names"))->boolean;
 
         PythonJson::Value field = PythonJson::Value::dict();
         field.insert(QStringLiteral("table"), PythonJson::Value::from(QStringLiteral("custom_column_%1").arg(column.id)));
@@ -190,15 +188,7 @@ QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book 
                                                         ? PythonJson::Value::from(value.seriesIndex)
                                                         : PythonJson::Value::null());
         }
-        PythonJson::Value separators = PythonJson::Value::dict();
-        if (column.multiple) {
-            separators.insert(QStringLiteral("cache_to_list"), PythonJson::Value::from(QStringLiteral("|")));
-            separators.insert(QStringLiteral("ui_to_list"), PythonJson::Value::from(names ? QStringLiteral("&")
-                                                                                          : QStringLiteral(",")));
-            separators.insert(QStringLiteral("list_to_ui"), PythonJson::Value::from(names ? QStringLiteral(" & ")
-                                                                                          : QStringLiteral(", ")));
-        }
-        field.insert(QStringLiteral("is_multiple2"), separators);
+        field.insert(QStringLiteral("is_multiple2"), CalibreDb::multipleSeparators(column));
         result.append({ QStringLiteral("calibre:user_metadata:") + key, PythonJson::dumps(field) });
     }
     return result;

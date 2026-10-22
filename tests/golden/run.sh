@@ -183,12 +183,18 @@ edits "$root/tests/data/edits/bulk.json"
 edits "$root/tests/data/edits/custom.json" "$root/tests/data/library-custom"
 
 # Books and formats added, moved to the trash and restored, then one copy of
-# a book kept with the formats of another, step by step on both copies, each
-# step compared.
+# a book kept with the formats of another, step by step on both copies of
+# LIBRARY, each step compared. PREPARE, if not empty, runs on each copy
+# first.
 operations() {
+    local library=$1 prepare=$2
+    shift 2
     for side in calibre cousoir; do
         rm -rf "$work/ops-$side"
-        cp -a --reflink=auto "$root/tests/data/library" "$work/ops-$side"
+        cp -a --reflink=auto "$library" "$work/ops-$side"
+        if [ -n "$prepare" ]; then
+            "$prepare" "$work/ops-$side"
+        fi
     done
     local ops
     for ops in "$@"; do
@@ -215,29 +221,41 @@ operations() {
     done
 }
 
-operations "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" "$root/tests/data/edits/ops-3.json" \
-    "$root/tests/data/edits/ops-4.json"
+operations "$root/tests/data/library" "" "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" \
+    "$root/tests/data/edits/ops-3.json" "$root/tests/data/edits/ops-4.json"
 
-# Each restores what the other moved to the trash: the second step applied by
-# Calibre to Cousoir's copy, and by Cousoir to Calibre's, ends as the other.
+# Each restores what the other moved to the trash: the step SECOND applied by
+# Calibre to Cousoir's copy after FIRST, and by Cousoir to Calibre's, ends as
+# the other.
 cross() {
+    local first=$1 second=$2
     rm -rf "$work/cross-calibre" "$work/cross-cousoir"
-    cp -a --reflink=auto "$work/after-ops-1-cousoir" "$work/cross-calibre"
-    cp -a --reflink=auto "$work/after-ops-1-calibre" "$work/cross-cousoir"
-    oracle "$root/tools/oracle/apply_edits.py" -- "$work/cross-calibre" "$root/tests/data/edits/ops-2.json" || return 0
-    if ! "$cli" apply --force --library "$work/cross-cousoir" "$root/tests/data/edits/ops-2.json" >/dev/null; then
+    cp -a --reflink=auto "$work/after-$first-cousoir" "$work/cross-calibre"
+    cp -a --reflink=auto "$work/after-$first-calibre" "$work/cross-cousoir"
+    oracle "$root/tools/oracle/apply_edits.py" -- "$work/cross-calibre" "$root/tests/data/edits/$second.json" \
+        || return 0
+    if ! "$cli" apply --force --library "$work/cross-cousoir" "$root/tests/data/edits/$second.json" >/dev/null; then
         status=1
         return 0
     fi
     echo "Calibre restoring Cousoir's trash:"
-    "$tool" compare-libraries --added-from 7 "$work/after-ops-2-calibre" "$work/cross-calibre" \
+    "$tool" compare-libraries --added-from 7 "$work/after-$second-calibre" "$work/cross-calibre" \
         || status=1
     echo "Cousoir restoring Calibre's trash:"
-    "$tool" compare-libraries --added-from 7 "$work/after-ops-2-cousoir" "$work/cross-cousoir" \
+    "$tool" compare-libraries --added-from 7 "$work/after-$second-cousoir" "$work/cross-cousoir" \
         || status=1
 }
 
-cross
+cross ops-1 ops-2
+
+# The same on custom columns: books added with the values their files hold
+# and those the columns give new books, then restored with theirs.
+custom_defaults() {
+    "$tool" run-sql "$1/metadata.db" "$root/tests/data/edits/defaults.sql"
+}
+operations "$root/tests/data/library-custom" custom_defaults "$root/tests/data/edits/ops-custom-1.json" \
+    "$root/tests/data/edits/ops-custom-2.json"
+cross ops-custom-1 ops-custom-2
 
 # Books converted by Calibre's convert action and by cousoir-cli, compared:
 # the files of conversions by their content, without the time each stamps

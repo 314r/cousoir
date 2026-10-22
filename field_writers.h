@@ -34,6 +34,9 @@ struct Context
     // Whether a value differing from an item only by case renames the item,
     // as the editor does; set_metadata() for a new book keeps the item's.
     bool allowCaseChange = true;
+    // set_metadata(ignore_errors=True) of a new book: a custom column's
+    // value that its adapter rejects is left out.
+    bool ignoreCustomErrors = false;
 };
 
 struct Result

@@ -494,6 +494,28 @@ bool isKnownSchema(int userVersion, const QString &fingerprint)
     });
 }
 
+PythonJson::Value multipleSeparators(const CustomColumn &column)
+{
+    PythonJson::Value separators = PythonJson::Value::dict();
+    if (!column.multiple)
+        return separators;
+    const PythonJson::Value display = PythonJson::parse(column.display);
+    const PythonJson::Value *names = display.find(QStringLiteral("is_names"));
+    QString cache = QStringLiteral("|");
+    QString ui = QStringLiteral(",");
+    QString list = QStringLiteral(", ");
+    if (names && PythonJson::truthy(*names)) {
+        ui = QStringLiteral("&");
+        list = QStringLiteral(" & ");
+    } else if (column.datatype == QLatin1String("composite")) {
+        cache = QStringLiteral(",");
+    }
+    separators.insert(QStringLiteral("cache_to_list"), PythonJson::Value::from(cache));
+    separators.insert(QStringLiteral("ui_to_list"), PythonJson::Value::from(ui));
+    separators.insert(QStringLiteral("list_to_ui"), PythonJson::Value::from(list));
+    return separators;
+}
+
 // The custom columns and each book's values, as Calibre's tables read them
 // in db/tables.py: a normalized column's items by link order, a series'
 // number from its link's extra, the others one row per book. A composite's

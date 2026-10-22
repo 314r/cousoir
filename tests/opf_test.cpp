@@ -4,6 +4,7 @@
 
 #include "calibre_db.h"
 #include "opf.h"
+#include "opf_reader.h"
 #include "test_support.h"
 
 namespace {
@@ -27,6 +28,7 @@ private slots:
     void keepsWhatItDoesNotWrite();
     void escapesAndLinks();
     void defaultsTheLanguage();
+    void readsUserMetadata();
 
 private:
     LibraryData m_data;
@@ -136,6 +138,71 @@ void OpfTest::defaultsTheLanguage()
     const QString opf = QString::fromUtf8(Opf::metadataToOpf(m_data, book, settings));
     QVERIFY(opf.contains(QStringLiteral("<dc:language>pt</dc:language>")));
     QVERIFY(opf.contains(QStringLiteral("title=\"Capa\"")));
+}
+
+void OpfTest::readsUserMetadata()
+{
+    // OPF 2: meta elements anywhere, the last of a key winning; an old field
+    // with a character for is_multiple takes the separators of its kind; a
+    // field without a value takes none, a list for multiple text; what is no
+    // field is left out.
+    const QByteArray opf2 = R"(<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>T</dc:title>
+    <meta name="calibre:user_metadata:#people" content='{"datatype": "text", "is_multiple": "|", "display": {"is_names": true}, "#value#": ["A", "B"]}'/>
+    <meta name="calibre:user_metadata:#genre" content='{"datatype": "text", "is_multiple": "|"}'/>
+    <meta name="calibre:user_metadata:#note" content='{"datatype": "text", "#value#": "first"}'/>
+    <meta name="calibre:user_metadata:#note" content='{"datatype": "text", "#value#": "second"}'/>
+    <meta name="calibre:user_metadata:#broken" content='{"datatype": '/>
+    <meta name="calibre:user_metadata:#typeless" content='{"is_multiple": null}'/>
+    <meta name="calibre:user_metadata:label" content='{"datatype": "text"}'/>
+  </metadata>
+</package>)";
+    OpfReader::Package package;
+    QString error;
+    QVERIFY2(OpfReader::read(opf2, &package, &error), qPrintable(error));
+    const ImportedMetadata &mi = package.metadata;
+    QStringList keys;
+    for (const auto &field : mi.userMetadata)
+        keys.append(field.first);
+    QCOMPARE(keys, QStringList({ QStringLiteral("#people"), QStringLiteral("#genre"), QStringLiteral("#note") }));
+    QCOMPARE(PythonJson::dumps(*mi.userField(QStringLiteral("#people"))->find(QStringLiteral("is_multiple"))),
+             QStringLiteral(R"({"cache_to_list": "|", "ui_to_list": "&", "list_to_ui": ", "})"));
+    QCOMPARE(PythonJson::dumps(*mi.userField(QStringLiteral("#genre"))->find(QStringLiteral("#value#"))),
+             QStringLiteral("[]"));
+    QCOMPARE(mi.userField(QStringLiteral("#note"))->text(QStringLiteral("#value#")), QStringLiteral("second"));
+
+    // OPF 3: the JSON of calibre:user_metadata, before the meta elements;
+    // an empty one gives way to them.
+    const auto opf3 = [](const QByteArray &json) {
+        return R"(<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" prefix="calibre: https://calibre-ebook.com">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>T</dc:title>
+    <meta name="calibre:user_metadata:#old" content='{"datatype": "int", "#value#": 1}'/>
+    <meta property="calibre:user_metadata">)" + json + R"(</meta>
+  </metadata>
+</package>)";
+    };
+    QVERIFY(OpfReader::read(opf3(R"({"#new": {"datatype": "float", "#value#": 2.5}})"), &package, &error));
+    QCOMPARE(package.metadata.userMetadata.size(), 1);
+    QCOMPARE(package.metadata.userMetadata.first().first, QStringLiteral("#new"));
+    QVERIFY(OpfReader::read(opf3("{}"), &package, &error));
+    QCOMPARE(package.metadata.userMetadata.size(), 1);
+    QCOMPARE(package.metadata.userMetadata.first().first, QStringLiteral("#old"));
+
+    // smart_update(): multiple text from a string goes by its characters, as
+    // Python iterates it.
+    ImportedMetadata merged;
+    ImportedMetadata other;
+    PythonJson::Value field;
+    QVERIFY(OpfReader::readUserField(QStringLiteral(R"({"datatype": "text", "is_multiple": "|", "#value#": "ab"})"),
+                                     &field));
+    QVERIFY(other.setUserMetadata(QStringLiteral("#genre"), field));
+    merged.updateUserMetadata(other);
+    QCOMPARE(PythonJson::dumps(*merged.userField(QStringLiteral("#genre"))->find(QStringLiteral("#value#"))),
+             QStringLiteral(R"(["a", "b"])"));
 }
 
 QTEST_GUILESS_MAIN(OpfTest)

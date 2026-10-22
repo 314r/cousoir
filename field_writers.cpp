@@ -483,6 +483,8 @@ bool setCustom(SqliteDb &db, const CustomColumn &column, int bookId, const QVari
 {
     const QString &type = column.datatype;
     const auto fail = [&](const QString &message) {
+        if (context.ignoreCustomErrors)
+            return true;
         if (error)
             *error = message;
         return false;
@@ -503,8 +505,11 @@ bool setCustom(SqliteDb &db, const CustomColumn &column, int bookId, const QVari
         QVariant value;
         std::optional<double> index;
         if (type == QLatin1String("rating")) {
+            // int() of a number drops its fraction.
             bool ok = true;
-            const int rating = noneText(raw) ? 0 : raw.toString().trimmed().toInt(&ok);
+            const int rating = noneText(raw)                       ? 0
+                : raw.typeId() == QMetaType::QString ? raw.toString().trimmed().toInt(&ok)
+                                                     : int(std::trunc(raw.toDouble()));
             if (!ok)
                 return fail(QObject::tr("A rating goes from 0 to 10."));
             if (rating != 0)
@@ -590,7 +595,7 @@ bool setCustom(SqliteDb &db, const CustomColumn &column, int bookId, const QVari
                 return fail(QObject::tr("“%1” is not a date for #%2.").arg(text, column.label));
             value = CalibreDb::isUndefinedDate(*date) ? CalibreDb::undefinedDate() : *date;
         } else if (!raw.isNull()) {
-            value = raw.toDateTime();
+            value = CalibreDb::isUndefinedDate(raw.toDateTime()) ? CalibreDb::undefinedDate() : raw.toDateTime();
         }
     } else {
         // long_text().
@@ -759,6 +764,8 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
             }
             bool ok = true;
             const double index = noneText(it.value()) ? 1.0 : it.value().toString().trimmed().toDouble(&ok);
+            if (!ok && context.ignoreCustomErrors)
+                continue;
             if (!ok) {
                 if (error)
                     *error = QObject::tr("“%1” is not a series number.").arg(it.value().toString());

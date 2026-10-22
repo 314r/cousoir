@@ -762,6 +762,18 @@ int read(const QStringList &paths)
                                  { QStringLiteral("width"), size.width() },
                                  { QStringLiteral("height"), size.height() } };
         }
+        // The custom columns' fields as adding the book reads them.
+        QJsonObject userMetadata;
+        for (const auto &[key, field] : mi.userMetadata) {
+            QJsonObject read;
+            for (const QString &name : { QStringLiteral("datatype"), QStringLiteral("is_multiple"),
+                                         QStringLiteral("#value#"), QStringLiteral("#extra#") }) {
+                const PythonJson::Value *value = field.find(name);
+                const QByteArray json = '[' + (value ? PythonJson::dumps(*value) : QStringLiteral("null")).toUtf8() + ']';
+                read.insert(name, QJsonDocument::fromJson(json).array().at(0));
+            }
+            userMetadata.insert(key, read);
+        }
         books.append(QJsonObject{
             { QStringLiteral("file"), QFileInfo(path).fileName() },
             { QStringLiteral("title"), mi.title },
@@ -781,6 +793,7 @@ int read(const QStringList &paths)
             { QStringLiteral("rating"), mi.rating ? QJsonValue(*mi.rating) : QJsonValue() },
             { QStringLiteral("book_producer"), mi.bookProducer },
             { QStringLiteral("cover"), cover },
+            { QStringLiteral("user_metadata"), userMetadata },
         });
     }
     const QByteArray json = QJsonDocument(books).toJson(QJsonDocument::Indented);

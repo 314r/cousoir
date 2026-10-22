@@ -34,8 +34,20 @@ struct Value
 
     // Sets a key of a dict, at its place, or last when new.
     void insert(const QString &key, const Value &value);
-    const Value *find(const QString &key) const;
+    void remove(const QString &key);
+    const Value *find(const QString &key) const &;
+    // A pointer into a temporary would dangle.
+    const Value *find(const QString &key) const && = delete;
+    // The string a key holds, empty when it holds none.
+    QString text(const QString &key) const;
 };
+
+// bool() of the value: false for null, false, zero and what is empty.
+bool truthy(const Value &value);
+
+// Python's ==: numbers by value whatever their kind, dicts whatever their
+// keys' order.
+bool equals(const Value &a, const Value &b);
 
 // Reads a JSON text, objects keeping their keys' order; empty with `ok`
 // false when it is no JSON.

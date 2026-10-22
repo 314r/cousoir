@@ -76,6 +76,65 @@ ebook-meta "$out/calibre.pdf" --title "Écrit par Calibre" --authors "Kovid Goya
     --tags "Logiciel,Livres" --series "Outils" --index 3 --isbn 9782070360246 --rating 4 \
     --comments "<p>Un PDF.</p>" --date 2001-02-03 --publisher "Éditions Libres" --language fr >/dev/null
 
+# Books whose metadata Calibre wrote with custom columns' values, as
+# calibredb export embeds them: an EPUB 3, an EPUB 2 and a PDF. The columns
+# are those of tools/make_custom_library.sh but for a few, which adding the
+# books to that library leaves out: People without names' separators, Half
+# a number, Shelf with a value more, Elsewhere none of its columns.
+custom="$work/custom"
+mkdir -p "$custom"
+db() { calibredb --with-library "$custom" "$@" >/dev/null; }
+db add_custom_column genre Genre text --is-multiple
+db add_custom_column people People text --is-multiple
+db add_custom_column note Note text
+db add_custom_column read Lu bool
+db add_custom_column myrating "My rating" rating
+db add_custom_column half Half int
+db add_custom_column pagecount Pages int
+db add_custom_column price Price float
+db add_custom_column started Started datetime
+db add_custom_column review Review comments
+db add_custom_column shelf Shelf enumeration --display '{"enum_values": ["A", "B", "C", "D"]}'
+db add_custom_column saga Saga series
+db add_custom_column elsewhere Elsewhere text
+db add --duplicates "$out/Le Vicomte - Inconnu.epub"
+db add --duplicates "$out/Black Company 2.epub"
+db add --duplicates "$out/calibre.pdf"
+db set_custom genre 1 "SF,Classique"
+db set_custom people 1 "Jean Dupont,Marie Curie"
+db set_custom note 1 "Une note"
+db set_custom read 1 true
+db set_custom myrating 1 8
+db set_custom half 1 7
+db set_custom pagecount 1 320
+db set_custom price 1 12.5
+db set_custom started 1 2024-03-05
+db set_custom review 1 "<p>Bien</p>"
+db set_custom shelf 1 D
+db set_custom saga 1 "Cycle [3.5]"
+db set_custom elsewhere 1 "Ailleurs"
+db set_custom genre 2 Humour
+db set_custom note 2 "Autre note"
+db set_custom read 2 false
+db set_custom myrating 2 4
+db set_custom pagecount 2 0
+db set_custom price 2 3
+db set_custom started 2 1999-12-31
+db set_custom shelf 2 B
+db set_custom saga 2 Autre
+db set_custom genre 3 SF
+db set_custom note 3 "Note du PDF"
+db set_custom read 3 true
+db set_custom pagecount 3 12
+db set_custom shelf 3 A
+db set_custom saga 3 "Cycle [2]"
+for book in 1 2 3; do
+    calibredb --with-library "$custom" export "$book" --to-dir "$work/export-$book" --single-dir >/dev/null
+done
+cp "$(find "$work/export-1" -name '*.epub')" "$out/Custom 3.epub"
+cp "$(find "$work/export-2" -name '*.epub')" "$out/Custom 2.epub"
+cp "$(find "$work/export-3" -name '*.pdf')" "$out/Custom.pdf"
+
 # Formats Cousoir leaves to Calibre, and one Calibre has no reader for.
 printf 'Chapter one.\n' > "$out/Plain Notes - Jane Doe.txt"
 printf 'nothing to read\n' > "$out/data.xyz"
