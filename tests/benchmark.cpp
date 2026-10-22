@@ -94,6 +94,17 @@ int benchmarkModel(const QString &path)
     library.setSearchText({});
     report(QStringLiteral("search cleared"), timer.nsecsElapsed());
 
+    // The command palette, letter by letter.
+    slowest = 0;
+    int hits = 0;
+    for (qsizetype i = 1; i <= typed.size(); ++i) {
+        QElapsedTimer key;
+        key.start();
+        hits = int(library.paletteSearch(typed.left(i), {}).size());
+        slowest = std::max(slowest, key.nsecsElapsed());
+    }
+    report(QStringLiteral("palette, slowest letter (%1 shown)").arg(hits), slowest);
+
     for (const char *option : { "authors", "series", "added", "rating", "titleDesc", "title" }) {
         timer.restart();
         library.setSortOption(QString::fromLatin1(option));
@@ -290,6 +301,9 @@ struct Shot
     QStringList clicks;
     // A folder that stands for a Kobo plugged in.
     QString kobo;
+    // Keys pressed, then text typed, after the clicks.
+    QStringList keys;
+    QString typed;
 };
 
 int screenshot(const QString &path, const Shot &shot)
@@ -335,6 +349,15 @@ int screenshot(const QString &path, const Shot &shot)
         QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                           item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
     }
+    for (const QString &key : shot.keys) {
+        drawn(window);
+        QTest::keySequence(window, QKeySequence(key));
+    }
+    if (!shot.typed.isEmpty()) {
+        drawn(window);
+        for (const QChar character : shot.typed)
+            QTest::keyClick(window, character.toLatin1());
+    }
     // The covers load on their own threads.
     QTest::qWait(300);
     drawn(window);
@@ -373,6 +396,9 @@ int main(int argc, char *argv[])
                        QStringLiteral("name") });
     parser.addOption({ QStringLiteral("kobo"), QStringLiteral("A folder standing for a Kobo plugged in."),
                        QStringLiteral("folder") });
+    parser.addOption({ QStringLiteral("key"), QStringLiteral("Keys to press, Ctrl+K, after the clicks."),
+                       QStringLiteral("sequence") });
+    parser.addOption({ QStringLiteral("type"), QStringLiteral("Text to type, after the keys."), QStringLiteral("text") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -395,6 +421,8 @@ int main(int argc, char *argv[])
         shot.selected = parser.value(QStringLiteral("select")).toInt();
         shot.clicks = parser.values(QStringLiteral("click"));
         shot.kobo = parser.value(QStringLiteral("kobo"));
+        shot.keys = parser.values(QStringLiteral("key"));
+        shot.typed = parser.value(QStringLiteral("type"));
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);

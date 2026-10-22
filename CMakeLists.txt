@@ -106,6 +106,8 @@ qt_add_library(cousoir_core STATIC
     opf.h
     opf_reader.cpp
     opf_reader.h
+    palette.cpp
+    palette.h
     pdf_reader.cpp
     pdf_reader.h
     python_json.cpp
@@ -156,6 +158,7 @@ set(COUSOIR_QML_FILES
     BulkEditPane.qml
     CheckPage.qml
     ChoiceBox.qml
+    CommandPalette.qml
     ConfirmDialog.qml
     CoverGrid.qml
     DevicePage.qml

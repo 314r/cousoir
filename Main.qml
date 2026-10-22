@@ -386,6 +386,98 @@ ThemedWindow {
         layoutSettings.gridMode = !layoutSettings.gridMode
     }
 
+    // What the command palette offers besides the library's books and
+    // items: the sidebar's sections, the virtual libraries, and the actions
+    // that can be done now, with their shortcut.
+    function paletteCommands() {
+        const commands = sidebar.items.map(item => ({
+            kind: "section", key: item.key, title: item.title, detail: "", icon: item.icon
+        }))
+        const targets = targetIds()
+        const books = targets.length
+        const add = (key, title, detail, icon, enabled) => {
+            if (enabled)
+                commands.push({ kind: "action", key: key, title: title, detail: detail || "", icon: icon || "search" })
+        }
+        add("add", qsTr("Add books…"), "Ctrl+N", "plus", library.writable && !library.importing)
+        add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
+        add("kepub", books > 1 ? qsTr("Convert %1 books to KEPUB").arg(books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
+            "refresh", books > 0 && library.writable && conversions.available)
+        add("azw3", books > 1 ? qsTr("Convert %1 books to AZW3").arg(books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
+            "refresh", books > 0 && library.writable && conversions.available)
+        for (const device of devices.devices) {
+            add("send:" + device.root, books > 1 ? qsTr("Send %1 books to %2").arg(books).arg(device.name)
+                                                 : qsTr("Send to %1").arg(device.name),
+                device === devices.devices[0] ? "Ctrl+D" : "", "ereader",
+                books > 0 && devices.available && devices.writable)
+            add("eject:" + device.root, qsTr("Eject %1").arg(device.name), "", "eject", device.ejectable === true)
+        }
+        add("trash", books > 1 ? qsTr("Move %1 books to the trash").arg(books) : qsTr("Move to the trash"), "Del",
+            "trash", books > 0 && library.writable)
+        add("grid", layoutSettings.gridMode ? qsTr("Show the list") : qsTr("Show the covers"), "Ctrl+G",
+            layoutSettings.gridMode ? "list" : "grid", booksShown)
+        add("details", detailsVisible ? qsTr("Hide the details") : qsTr("Show the details"), "Ctrl+I", "panel-right",
+            session.bookOpen || editingMany)
+        add("search", qsTr("Search the books"), "Ctrl+F", "search", true)
+        if (library.virtualLibrary)
+            add("vl:", qsTr("Virtual library: none"), "", "layers", true)
+        for (const name of library.virtualLibraries)
+            add("vl:" + name, qsTr("Virtual library: %1").arg(name), "", "layers", name !== library.virtualLibrary)
+        add("reload", qsTr("Reload the library"), "Ctrl+R", "refresh", true)
+        add("settings", qsTr("Settings"), "", "settings", true)
+        for (const mode of availableThemeModes()) {
+            const titles = { system: qsTr("System theme"), light: qsTr("Light theme"), dark: qsTr("Dark theme"),
+                             omarchy: qsTr("Omarchy theme") }
+            add("theme:" + mode, titles[mode], "", "theme-" + mode, true)
+        }
+        add("backups", qsTr("Show the backups of the library"), "", "folder", library.loaded)
+        return commands
+    }
+
+    function runPaletteHit(hit) {
+        if (hit.kind === "book") {
+            openBook(hit.id)
+        } else if (hit.kind === "section") {
+            section = hit.key
+            focusCurrentList()
+        } else if (hit.kind !== "action") {
+            // An author, series, tag or publisher: its books.
+            section = hit.kind
+            library.openFacetItem(hit.id)
+            booksPage.focusList()
+        } else if (hit.key === "add") {
+            addBooksDialog.open()
+        } else if (hit.key === "reader") {
+            openInReader()
+        } else if (hit.key === "kepub" || hit.key === "azw3") {
+            convertBooks(targetIds(), hit.key.toUpperCase())
+        } else if (hit.key.startsWith("send:")) {
+            sendBooks(targetIds(), hit.key.slice(5))
+        } else if (hit.key.startsWith("eject:")) {
+            const error = devices.eject(hit.key.slice(6))
+            if (error)
+                showNotice(error)
+        } else if (hit.key === "trash") {
+            trashBooks(targetIds())
+        } else if (hit.key === "grid") {
+            toggleGrid()
+        } else if (hit.key === "details") {
+            toggleDetails()
+        } else if (hit.key === "search") {
+            focusSearch()
+        } else if (hit.key.startsWith("vl:")) {
+            library.virtualLibrary = hit.key.slice(3)
+        } else if (hit.key === "reload") {
+            reload()
+        } else if (hit.key === "settings") {
+            openSettings("")
+        } else if (hit.key.startsWith("theme:")) {
+            setThemeMode(hit.key.slice(6))
+        } else if (hit.key === "backups") {
+            library.openBackupFolder()
+        }
+    }
+
     function showNotice(message, isError = true) {
         notice = message
         noticeIsError = isError
@@ -490,10 +582,10 @@ ThemedWindow {
                 : devices.writable ? qsTr("↑↓ move · Enter show in library · Del remove from %1").arg(devices.current.name)
                 : qsTr("↑↓ move · Enter show in library")
         if (facetShown)
-            return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search")
-                                                : qsTr("Ctrl+F search · F5 reload")
+            return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search · Ctrl+K find")
+                                                : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
         if (library.books.count === 0)
-            return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · F5 reload")
+            return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
         if (editingMany)
             return qsTr("Esc one book · Shift+↑↓ more · Ctrl+A all") + (library.writable ? qsTr(" · Del trash") : "")
                 + (devices.devices.length > 0 ? qsTr(" · Ctrl+D send") : "")
@@ -728,6 +820,26 @@ ThemedWindow {
     Shortcut {
         sequences: [StandardKey.Find]
         onActivated: window.focusSearch()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+K"
+        enabled: window.library.loaded
+        onActivated: {
+            commandPalette.commands = window.paletteCommands()
+            commandPalette.show()
+        }
+    }
+
+    CommandPalette {
+        id: commandPalette
+
+        library: window.library
+        onChosen: function(hit) { window.runPaletteHit(hit) }
+        onClosed: {
+            if (!session.bookOpen && !searchField.activeFocus)
+                window.focusCurrentList()
+        }
     }
 
     Shortcut {

@@ -42,6 +42,7 @@
 #include "field_writers.h"
 #include "cousoir_paths.h"
 #include "description.h"
+#include "palette.h"
 
 namespace {
 
@@ -1292,6 +1293,31 @@ QVariantMap BookLibrary::editableValues(const Book &book) const
 QString BookLibrary::textToHtml(const QString &text) const
 {
     return Description::toHtml(text);
+}
+
+QVariantList BookLibrary::paletteSearch(const QString &text, const QVariantList &commands, int limit) const
+{
+    // A command's key rides in the hit's title's place while it is matched.
+    QList<Palette::Hit> given;
+    QStringList keys;
+    for (const QVariant &command : commands) {
+        const QVariantMap map = command.toMap();
+        given.append({ map.value(QStringLiteral("kind")).toString(), int(keys.size()),
+                       map.value(QStringLiteral("title")).toString(), map.value(QStringLiteral("detail")).toString(), 0 });
+        keys.append(map.value(QStringLiteral("key")).toString());
+    }
+    QVariantList hits;
+    for (const Palette::Hit &hit : Palette::search(m_index.search, text, limit, given)) {
+        const bool command = hit.kind == QLatin1String("action") || hit.kind == QLatin1String("section");
+        hits.append(QVariantMap{
+            { QStringLiteral("kind"), hit.kind },
+            { QStringLiteral("id"), command ? 0 : hit.id },
+            { QStringLiteral("key"), command ? keys.value(hit.id) : QString() },
+            { QStringLiteral("title"), hit.title },
+            { QStringLiteral("detail"), hit.detail },
+        });
+    }
+    return hits;
 }
 
 bool BookLibrary::isDate(const QString &text) const

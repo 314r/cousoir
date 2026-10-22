@@ -226,6 +226,11 @@ public:
     // the fields it could change.
     Q_INVOKABLE void undoBulkEdit();
     // Whether `text` is a date updateBook() takes for pubdate.
+    // What the command palette finds for `text`: { kind, id, key, title,
+    // detail }, the window's `commands`, { kind, key, title, detail }, then
+    // the library's authors, series, tags, publishers and books. See
+    // Palette::search().
+    Q_INVOKABLE QVariantList paletteSearch(const QString &text, const QVariantList &commands, int limit = 40) const;
     Q_INVOKABLE bool isDate(const QString &text) const;
     // Whether a custom column takes the text as a date, as its writer reads
     // it.
