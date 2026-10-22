@@ -52,6 +52,7 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | | `src/calibre/utils/localization.py`: `canonicalize_lang()` |
 | | `src/calibre/utils/cleantext.py`: `clean_xml_chars()`, `clean_ascii_chars()` |
 | `calibre_paths.cpp` | `src/calibre/db/backend.py`: `construct_path_name()`, `construct_file_name()`, `WINDOWS_RESERVED_NAMES` |
+| `book_sort.cpp` | `src/calibre/db/cache.py`: `multisort()`; `src/calibre/db/fields.py`: each field's `sort_keys_for_books()`, sort and default keys, `SeriesField`'s title sort in the book's language, `CompositeField`'s number, date, bool and list keys; `src/calibre/db/view.py`: `add_to_sort_history()`; `src/calibre/gui2/library/views.py`: the list's saved state, `cleanup_sort_history()` and `apply_sort_history()` |
 | `calibre_search.cpp` | `src/calibre/utils/search_query_parser.py`: `Parser`, `SearchQueryParser`'s evaluation, saved searches |
 | | `src/calibre/db/search.py`: `_matchkind()`, `_match()`, `DateSearch`, `NumericSearch`, `KeyPairSearch`, `Parser.get_matches()`, `get_user_category_matches()`, `Search._do_search()` |
 | | `src/calibre/db/fields.py`: the values each field searches, custom columns' included, `iter_searchable_values_for_sort()` |

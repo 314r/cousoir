@@ -186,9 +186,9 @@ Calibre 7 keeps notes on authors, series, tags and publishers in
 | 7. A command palette | done |
 | 8. Calibre's templates | done |
 | 9. Metadata from the web | done for one book; several at once, later |
-| 10. The list's columns | next |
+| 10. The list's columns | done |
 | 11. Instant saves | planned |
-| 12. Language names | planned |
+| 12. Language names | next |
 | 13. Notes | planned |
 
 ## Journal
@@ -658,4 +658,32 @@ fixed:
 - Smaller: entities in a plain summary, a description of spaces taken as
   one to add to, empty author sorts, the log of a search that found
   nothing, errors of the job's Python past its first part.
+
+### 2026-10-22 — goal 10, the list's columns (`exp-columns`)
+
+- `BookSort` ports Calibre's `Cache.multisort()` and the sort keys of each
+  field (`db/fields.py`). `tools/oracle/sort_oracle.py` sorts the books
+  with Calibre for 90 sort histories, every field and custom column both
+  ways and multi-level ones, and `cousoir-test-tool sort-books` with
+  Cousoir: all alike on the fixture, the custom library and the generated
+  one. The comparison found what reading the code had not: the formats
+  table names no items, so books sort by how many formats they have;
+  Calibre reads dates to the second, so books added the same second tie;
+  the built-in description is collated as text while a custom column of
+  comments compares as raw text.
+- Two orders change to Calibre's: books in no series come first in an
+  ascending series sort, and a reversed sort keeps ties in place.
+- The list keeps a sort history as Calibre's view does (five levels, the
+  `maximum_resort_levels` tweak), so ties fall to the sorts before. Keys are
+  made for a field the first time it sorts, on the load's thread for the
+  history's fields: 38 ms the first sort by authors at 50 000 books, 5 to
+  11 ms after.
+- Any of Calibre's columns can show, custom ones included, from a header's
+  right click: show, hide, move, sort. The columns and the sort are kept per
+  library; the first time, Calibre's saved list state (`library_view books
+  view state`) gives them.
+- The comparison runs in English until goal 12: Calibre sorts languages by
+  their names in its interface language, which Cousoir does not have yet.
+
+Left for later: column widths of one's own, and the cover grid's sort.
 

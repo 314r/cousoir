@@ -32,8 +32,10 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 📚 **Your Calibre library, as it is.** Cousoir opens the library Calibre
   opens and works on Calibre's own `metadata.db`. Nothing to import, no second
   database.
-- 🖼️ **A table or a wall of covers.** Sort by title, author, series, date added or rating, in Calibre's own order:
-  *Le Petit Prince* files under "Petit Prince, Le".
+- 🖼️ **A table or a wall of covers.** Pick the columns, custom ones
+  included, and sort by any of them in Calibre's own order: *Le Petit
+  Prince* files under "Petit Prince, Le". Each library keeps its columns,
+  Calibre's at first.
 - 🔍 **Search like Calibre.** Calibre's own search language, `tag:sf
   rating:>=4 not author:vian`, templates included, finding exactly the
   books Calibre finds, with
