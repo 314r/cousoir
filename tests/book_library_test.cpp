@@ -77,6 +77,7 @@ private slots:
     void searchesBooks_data();
     void searchesBooks();
     void keepsRowsInPlace();
+    void keepsVirtualLibraryChoice();
     void browsesSections();
     void filtersByItem();
     void describesCurrentBook();
@@ -278,6 +279,49 @@ void BookLibraryTest::browsesSections()
     QCOMPARE(library->facetCount(), 3);
     library->setSection(QStringLiteral("nowhere"));
     QCOMPARE(library->section(), QStringLiteral("publishers"));
+}
+
+void BookLibraryTest::keepsVirtualLibraryChoice()
+{
+    QTemporaryDir copy;
+    QVERIFY(copyTree(fixtureLibrary(), copy.path()));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY(db.open(QDir(copy.path()).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error));
+        // Broken's search misses its closing parenthesis.
+        QVERIFY2(db.exec(QStringLiteral(
+            "INSERT OR REPLACE INTO preferences(key, val) VALUES "
+            "('virtual_libraries', '{\"Fantasy\": \"tags:fantasy\", \"Broken\": \"(tags:x\"}'),"
+            "('virtual_lib_on_startup', '\"Fantasy\"'),"
+            "('saved_searches', '{\"Cook\": \"author:cook\"}');"), &error), qPrintable(error));
+    }
+    QSettings().remove(QStringLiteral("Library/virtualLibrary"));
+
+    // Calibre's choice at the library's start, until one is made here.
+    auto library = open(copy.path());
+    QVERIFY(library);
+    QCOMPARE(library->virtualLibraries(), (QStringList{ QStringLiteral("Broken"), QStringLiteral("Fantasy") }));
+    QCOMPARE(library->virtualLibrary(), QStringLiteral("Fantasy"));
+    QCOMPARE(library->counts().value(QStringLiteral("books")).toInt(), 3);
+    // Fantasy and Humour.
+    QCOMPARE(library->counts().value(QStringLiteral("tags")).toInt(), 2);
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 4, 3 }));
+    QCOMPARE(library->savedSearches().value(0).toMap().value(QStringLiteral("count")).toInt(), 2);
+
+    // A virtual library Calibre cannot search shows nothing.
+    library->setVirtualLibrary(QStringLiteral("Broken"));
+    QVERIFY(bookRows(*library).isEmpty());
+    library->setVirtualLibrary(QString());
+    QCOMPARE(bookRows(*library).size(), 6);
+    QCOMPARE(library->savedSearches().value(0).toMap().value(QStringLiteral("count")).toInt(), 2);
+    library.reset();
+
+    // None is a choice too.
+    library = open(copy.path());
+    QVERIFY(library);
+    QCOMPARE(library->virtualLibrary(), QString());
+    QCOMPARE(library->counts().value(QStringLiteral("books")).toInt(), 6);
 }
 
 void BookLibraryTest::filtersByItem()

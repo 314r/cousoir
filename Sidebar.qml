@@ -16,6 +16,8 @@ Item {
     property var counts: ({})
     // The readers connected, { root, name }: each is "device:<root>".
     property var devices: []
+    // The library's saved searches, { name }: each is "search:<name>".
+    property var savedSearches: []
     readonly property var places: [
         { title: qsTr("Library"), items: [
             { key: "books", title: qsTr("Books"), icon: "book" },
@@ -30,7 +32,11 @@ Item {
             { key: "publishers", title: qsTr("Publishers"), icon: "building" }
         ] }
     ]
-    readonly property var groups: places.concat(devices.length > 0 ? [
+    readonly property var groups: places.concat(savedSearches.length > 0 ? [
+        { title: qsTr("Searches"), items: savedSearches.map(search => ({
+            key: "search:" + search.name, title: search.name, icon: "search"
+        })) }
+    ] : []).concat(devices.length > 0 ? [
         { title: qsTr("Devices"), items: devices.map(device => ({
             key: "device:" + device.root, title: device.name, icon: "ereader"
         })) }
@@ -41,8 +47,8 @@ Item {
     signal activated(string key)
 
     // Wide enough for the longest place and a count, plus its icon and
-    // paddings. A reader's name, which may be long, never widens it: it is
-    // cut short.
+    // paddings. A reader's or a search's name, which may be long, never
+    // widens it: it is cut short.
     implicitWidth: Math.ceil((places.reduce((all, group) => all.concat(group.items), [])
         .reduce((longest, item) => Math.max(longest, item.title.length), 0) + 6)
         * Theme.charWidth) + Theme.iconSize + 5 * Theme.gutter

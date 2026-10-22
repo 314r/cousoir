@@ -24,6 +24,7 @@
 #include <QUrl>
 #include <QPromise>
 #include <QSet>
+#include <QSettings>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
@@ -252,6 +253,8 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::finished, this, &BookLibrary::finishImport);
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::progressValueChanged, this, &BookLibrary::importChanged);
     connect(&m_checkWatcher, &QFutureWatcher<LibraryCheck::Findings>::finished, this, &BookLibrary::finishCheck);
+    connect(this, &BookLibrary::libraryChanged, this, &BookLibrary::countsChanged);
+    connect(this, &BookLibrary::trashChanged, this, &BookLibrary::countsChanged);
     // QML may still set another library; only the last one loads.
     QMetaObject::invokeMethod(this, &BookLibrary::startLoad, Qt::QueuedConnection);
 }
@@ -289,6 +292,9 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_index = {};
     m_sorted.clear();
     m_sortedBy.clear();
+    m_restriction.clear();
+    m_searchedText.reset();
+    m_sectionRows.clear();
     m_loaded = false;
     m_filterKind.clear();
     m_filterId = 0;
@@ -343,13 +349,17 @@ bool BookLibrary::schemaKnown() const
 
 QVariantMap BookLibrary::counts() const
 {
+    const bool restricted = !m_virtualLibrary.isEmpty();
+    const auto items = [&](const char *kind) {
+        return restricted ? visibleItems(QLatin1String(kind)).size() : facetItems(QLatin1String(kind))->size();
+    };
     return {
-        { QStringLiteral("books"), m_data.books.size() },
-        { QStringLiteral("authors"), m_data.authors.size() },
-        { QStringLiteral("series"), m_data.series.size() },
-        { QStringLiteral("tags"), m_data.tags.size() },
-        { QStringLiteral("languages"), m_data.languages.size() },
-        { QStringLiteral("publishers"), m_data.publishers.size() },
+        { QStringLiteral("books"), restricted ? m_restriction.count(true) : m_data.books.size() },
+        { QStringLiteral("authors"), items("authors") },
+        { QStringLiteral("series"), items("series") },
+        { QStringLiteral("tags"), items("tags") },
+        { QStringLiteral("languages"), items("languages") },
+        { QStringLiteral("publishers"), items("publishers") },
         // Nothing for an empty trash.
         { QStringLiteral("trash"), m_trashEntries.isEmpty() ? QVariant(QString()) : QVariant(m_trashEntries.size()) },
     };
@@ -362,9 +372,12 @@ QString BookLibrary::section() const
 
 void BookLibrary::setSection(const QString &section)
 {
-    if (m_section == section || !sections().contains(section))
+    const bool savedSearch = section.startsWith(QLatin1String("search:"))
+        && m_index.search.preferences().savedSearches.contains(section.mid(7));
+    if (m_section == section || !(sections().contains(section) || savedSearch))
         return;
     m_section = section;
+    m_sectionRows = savedSearch ? savedSearchRows(section.mid(7)) : QBitArray();
     const bool hadFilter = !m_filterKind.isEmpty();
     m_filterKind.clear();
     m_filterId = 0;
@@ -416,8 +429,7 @@ QVariantList BookLibrary::facetRows() const
 
 int BookLibrary::facetCount() const
 {
-    const QList<FacetItem> *items = facetItems(m_section);
-    return items ? int(items->size()) : 0;
+    return int(visibleItems(m_section).size());
 }
 
 QString BookLibrary::searchText() const
@@ -433,6 +445,143 @@ void BookLibrary::setSearchText(const QString &searchText)
     emit searchTextChanged();
     rebuildRows();
     rebuildFacetRows();
+}
+
+QString BookLibrary::searchError() const
+{
+    return m_searchError;
+}
+
+QStringList BookLibrary::virtualLibraries() const
+{
+    QStringList names = m_index.search.preferences().virtualLibraries.keys();
+    std::sort(names.begin(), names.end(), [this](const QString &a, const QString &b) {
+        return m_collator.compare(a, b) < 0;
+    });
+    return names;
+}
+
+QString BookLibrary::virtualLibrary() const
+{
+    return m_virtualLibrary;
+}
+
+void BookLibrary::setVirtualLibrary(const QString &name)
+{
+    const QString chosen = m_index.search.preferences().virtualLibraries.contains(name) ? name : QString();
+    if (!m_data.uuid.isEmpty())
+        QSettings().setValue(QStringLiteral("Library/virtualLibrary/%1").arg(m_data.uuid), chosen);
+    if (chosen == m_virtualLibrary)
+        return;
+    m_virtualLibrary = chosen;
+    emit virtualLibraryChanged();
+    applyVirtualLibrary();
+    rebuildRows();
+    rebuildFacetRows();
+}
+
+QVariantList BookLibrary::savedSearches() const
+{
+    return m_savedSearches;
+}
+
+void BookLibrary::applyVirtualLibrary()
+{
+    m_restriction = QBitArray(m_data.books.size(), true);
+    const QString query = m_index.search.preferences().virtualLibraries.value(m_virtualLibrary);
+    if (!m_virtualLibrary.isEmpty()) {
+        const CalibreSearch::Result result = CalibreSearch::search(m_index.search, QString(), query);
+        // A virtual library Calibre cannot search either shows nothing, as
+        // in Calibre.
+        m_restriction = result.rows;
+    }
+    m_searchedText.reset();
+    if (m_section.startsWith(QLatin1String("search:")))
+        m_sectionRows = savedSearchRows(m_section.mid(7));
+    rebuildSavedSearches();
+    emit countsChanged();
+}
+
+void BookLibrary::rebuildSavedSearches()
+{
+    const QMap<QString, QString> &saved = m_index.search.preferences().savedSearches;
+    QStringList names = saved.keys();
+    std::sort(names.begin(), names.end(), [this](const QString &a, const QString &b) {
+        return m_collator.compare(a, b) < 0;
+    });
+    QVariantList rows;
+    for (const QString &name : std::as_const(names)) {
+        rows.append(QVariantMap{
+            { QStringLiteral("name"), name },
+            { QStringLiteral("query"), saved.value(name) },
+            { QStringLiteral("count"), savedSearchRows(name).count(true) },
+        });
+    }
+    if (rows == m_savedSearches)
+        return;
+    m_savedSearches = rows;
+    emit savedSearchesChanged();
+}
+
+const QBitArray &BookLibrary::searchRows()
+{
+    if (m_searchedText == m_searchText && m_searchRows.size() == m_data.books.size())
+        return m_searchRows;
+    const CalibreSearch::Result result = CalibreSearch::search(m_index.search, m_searchText, m_restriction);
+    m_searchRows = result.rows;
+    m_searchedText = m_searchText;
+    if (m_searchError != result.error) {
+        m_searchError = result.error;
+        emit searchErrorChanged();
+    }
+    return m_searchRows;
+}
+
+QBitArray BookLibrary::savedSearchRows(const QString &name)
+{
+    QString quoted = name;
+    quoted.replace(u'\\', QStringLiteral("\\\\")).replace(u'"', QStringLiteral("\\\""));
+    const CalibreSearch::Result result =
+        CalibreSearch::search(m_index.search, QStringLiteral("search:\"=%1\"").arg(quoted), m_restriction);
+    return result.rows;
+}
+
+QList<FacetItem> BookLibrary::visibleItems(const QString &kind) const
+{
+    const QList<FacetItem> *all = facetItems(kind);
+    if (!all)
+        return {};
+    if (m_virtualLibrary.isEmpty())
+        return *all;
+    QHash<int, int> counts;
+    for (qsizetype row = 0; row < m_data.books.size(); ++row) {
+        if (row >= m_restriction.size() || !m_restriction.testBit(row))
+            continue;
+        const Book &book = m_data.books.at(row);
+        if (kind == QLatin1String("authors")) {
+            for (const int id : book.authorIds)
+                ++counts[id];
+        } else if (kind == QLatin1String("series")) {
+            if (book.seriesId > 0)
+                ++counts[book.seriesId];
+        } else if (kind == QLatin1String("tags")) {
+            for (const int id : book.tagIds)
+                ++counts[id];
+        } else if (kind == QLatin1String("languages")) {
+            for (const int id : book.languageIds)
+                ++counts[id];
+        } else if (kind == QLatin1String("publishers")) {
+            if (book.publisherId > 0)
+                ++counts[book.publisherId];
+        }
+    }
+    QList<FacetItem> items;
+    for (FacetItem item : *all) {
+        item.count = counts.value(item.id);
+        if (item.count > 0)
+            items.append(item);
+    }
+    return items;
 }
 
 QString BookLibrary::sortOption() const
@@ -606,7 +755,7 @@ void BookLibrary::startLoad()
         result.ok = CalibreDb::loadLibrary(path, cache + QStringLiteral("/snapshot.db"), config, &result.data,
                                            &result.error);
         if (result.ok)
-            result.index = indexBooks(result.data);
+            result.index = indexBooks(result.data, config);
         return result;
     }));
     emit loadingChanged();
@@ -647,23 +796,22 @@ void BookLibrary::finishLoad()
     startCommit();
 }
 
-BookLibrary::BookIndex BookLibrary::indexBooks(const LibraryData &data)
+BookLibrary::BookIndex BookLibrary::indexBooks(const LibraryData &data, const CalibreConfig &config)
 {
     const QCollator collator = listCollator();
     QHash<int, QString> seriesSorts;
     for (const FacetItem &item : data.series)
         seriesSorts.insert(item.id, item.sort.isEmpty() ? item.name : item.sort);
     BookIndex index;
+    index.search = CalibreSearch::Index(data, CalibreSearch::Preferences::fromRows(data.preferences), config.tweaks,
+                                        config.interfaceLanguage);
     const qsizetype count = data.books.size();
-    index.searchTexts.reserve(count);
     index.titleKeys.reserve(count);
     index.authorKeys.reserve(count);
     index.seriesKeys.reserve(count);
     index.rowOf.reserve(count);
     for (qsizetype row = 0; row < count; ++row) {
         const Book &book = data.books.at(row);
-        const QStringList searched{ book.title, book.authors.join(u' '), book.series, book.tags.join(u' ') };
-        index.searchTexts.append(CalibreText::foldForSearch(searched.join(u' ')));
         index.titleKeys.push_back(collator.sortKey(book.sort));
         index.authorKeys.push_back(collator.sortKey(book.authorSort));
         index.seriesKeys.push_back(collator.sortKey(seriesSorts.value(book.seriesId)));
@@ -695,6 +843,27 @@ void BookLibrary::applyData(LibraryData data, BookIndex index)
     }
     if (!findBook(m_currentBookId))
         m_currentBookId = 0;
+
+    // The choice made for this library, or Calibre's at its start.
+    const CalibreSearch::Preferences &preferences = m_index.search.preferences();
+    if (m_virtualLibraryOf != m_data.uuid) {
+        m_virtualLibraryOf = m_data.uuid;
+        const QVariant chosen = QSettings().value(QStringLiteral("Library/virtualLibrary/%1").arg(m_data.uuid));
+        const QString name = chosen.isValid() ? chosen.toString() : preferences.virtualLibraryOnStartup;
+        if (name != m_virtualLibrary) {
+            m_virtualLibrary = name;
+            emit virtualLibraryChanged();
+        }
+    }
+    if (!m_virtualLibrary.isEmpty() && !preferences.virtualLibraries.contains(m_virtualLibrary)) {
+        m_virtualLibrary.clear();
+        emit virtualLibraryChanged();
+    }
+    if (m_section.startsWith(QLatin1String("search:")) && !preferences.savedSearches.contains(m_section.mid(7))) {
+        m_section = QStringLiteral("books");
+        emit sectionChanged();
+    }
+    applyVirtualLibrary();
 
     rebuildTrash();
     emit libraryChanged();
@@ -790,18 +959,21 @@ const QList<qsizetype> &BookLibrary::sortedBooks()
 void BookLibrary::rebuildRows()
 {
     // A browse section lists its items until one is opened.
-    const bool listed = m_section == QLatin1String("books") || !m_filterKind.isEmpty();
-    const QStringList words = searchWords(m_searchText);
+    const bool savedSearch = m_section.startsWith(QLatin1String("search:"));
+    const bool listed = m_section == QLatin1String("books") || !m_filterKind.isEmpty() || savedSearch;
     static const QList<qsizetype> none;
     const QList<qsizetype> &sorted = listed ? sortedBooks() : none;
+    static const QBitArray nothing;
+    const QBitArray &found = listed ? searchRows() : nothing;
+    const bool searching = !m_searchText.trimmed().isEmpty();
     QList<qsizetype> order;
     int scopeCount = 0;
     const auto add = [&](qsizetype row) {
-        const Book &book = m_data.books.at(row);
-        if (!inFilter(book))
+        if (row >= m_restriction.size() || !m_restriction.testBit(row) || !inFilter(m_data.books.at(row))
+            || (savedSearch && !m_sectionRows.testBit(row)))
             return;
         ++scopeCount;
-        if (words.isEmpty() || matchesAll(m_index.searchTexts.at(row), words))
+        if (!searching || found.testBit(row))
             order.append(row);
     };
     // The reverse order is the order reversed, ties included.
@@ -820,9 +992,7 @@ void BookLibrary::rebuildRows()
 
 void BookLibrary::rebuildFacetRows()
 {
-    QList<FacetItem> items;
-    if (const QList<FacetItem> *all = facetItems(m_section))
-        items = *all;
+    QList<FacetItem> items = visibleItems(m_section);
 
     const QStringList words = searchWords(m_searchText);
     if (!words.isEmpty() && m_filterKind.isEmpty()) {
@@ -1182,7 +1352,7 @@ void BookLibrary::startCommit()
     m_commitWatcher.setFuture(QtConcurrent::run([request] {
         CommitResult committed{ CommitEngine::commit(request), {} };
         if (committed.result.ok && committed.result.written)
-            committed.index = indexBooks(committed.result.data);
+            committed.index = indexBooks(committed.result.data, request.config);
         return committed;
     }));
     // The files move meanwhile: the check waits for the library saved.

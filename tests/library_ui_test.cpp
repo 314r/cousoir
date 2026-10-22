@@ -76,6 +76,7 @@ private slots:
     void showsBookDetails();
     void switchesToCovers();
     void browsesByAuthor();
+    void searchesAsCalibre();
     void opensInReader();
     void showsWriteState();
     void picksLibraryInSettings();
@@ -314,12 +315,11 @@ void LibraryUiTest::listsSearchesAndSortsBooks()
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTRY_COMPARE(list->property("count").toInt(), 6);
 
-    // A header click sorts, a second one reverses.
-    QQuickItem *added = control("bookAddedColumn");
-    QVERIFY(added);
-    QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(added));
+    // A header click sorts, a second one reverses. The header shows again
+    // with the books: once it is laid out.
+    click("bookAddedColumn");
     QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("added"));
-    QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(added));
+    click("bookAddedColumn");
     QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("addedDesc"));
     QCOMPARE(bookRows().first().toMap().value(QStringLiteral("title")).toString(),
              QStringLiteral("Le Petit Prince"));
@@ -465,6 +465,62 @@ void LibraryUiTest::browsesByAuthor()
     click("sidebar_books");
     QTRY_COMPARE(text("bookCount"), QStringLiteral("6 books"));
     QVERIFY(library()->property("searchText").toString().isEmpty());
+}
+
+void LibraryUiTest::searchesAsCalibre()
+{
+    // The library's saved searches and virtual libraries, as Calibre keeps
+    // them; the library reloads when its database changes.
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QStringLiteral(R"SQL(
+            INSERT OR REPLACE INTO preferences(key, val) VALUES ('saved_searches', '{"Cook": "author:cook", "Rated": "rating:>=4"}');
+            INSERT OR REPLACE INTO preferences(key, val) VALUES ('virtual_libraries', '{"Fantasy": "tags:fantasy"}');
+        )SQL"), &error), qPrintable(error));
+    }
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY(control("sidebar_search:Cook"));
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
+
+    // A saved search is a section of its own, with its count.
+    click("sidebar_search:Cook");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Cook"));
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("2 books"));
+    QCOMPARE(m_window->title(), QStringLiteral("Cook — Cousoir"));
+
+    // Calibre's search language, and what it cannot read.
+    click("sidebar_books");
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("6 books"));
+    QTest::keyClick(m_window, Qt::Key_F, Qt::ControlModifier);
+    QTRY_VERIFY(control("searchField")->hasActiveFocus());
+    typeText(QStringLiteral("rating:>3 not author:vian"));
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("1 of 6 books"));
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    typeText(QStringLiteral("(vian"));
+    QTRY_COMPARE(text("emptyTitle"), QStringLiteral("Calibre's search cannot read “(vian”"));
+    QCOMPARE(text("emptyMessage"), QStringLiteral("missing )"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("6 books"));
+
+    // A virtual library narrows every section and their counts.
+    QQuickItem *box = control("virtualLibraryBox");
+    QTRY_VERIFY(box && box->isVisible());
+    click("virtualLibraryBox");
+    QTRY_VERIFY(box->property("popup").value<QObject *>()->property("visible").toBool());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(library()->property("virtualLibrary").toString(), QStringLiteral("Fantasy"));
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("3 books"));
+    QCOMPARE(library()->property("counts").toMap().value(QStringLiteral("authors")).toInt(), 3);
+    click("sidebar_search:Cook");
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("2 books"));
+    // The choice stays with the library.
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Library/virtualLibrary/%1")
+                                       .arg(library()->property("libraryUuid").toString())).toString(),
+                 QStringLiteral("Fantasy"));
 }
 
 void LibraryUiTest::opensInReader()

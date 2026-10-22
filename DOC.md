@@ -41,8 +41,9 @@ covers; both keep the same book selected. Click the Title, Authors, Series,
 Added or Rating column header to sort, and click it again to reverse the
 order. Titles sort by Calibre's title sort, "Petit Prince, Le", and authors by
 their author sort, as Calibre sorts them. Columns leave a narrow window in a
-set order, Formats first. The search, Ctrl+F, finds every word typed in a
-book's title, authors, series or tags, with or without accents.
+set order, Formats first. The search, Ctrl+F, is Calibre's: see
+[Searching](#searching). In a browse section, it finds the items whose name
+has every word typed.
 
 A book opens with Enter, Space or a double click. Its page shows the cover,
 the title, authors, series and rating, and the description, beside a details
@@ -72,6 +73,57 @@ it for a library shared some other way, OneDrive or Google Drive for
 instance, or one only this computer changes despite a sync folder; the
 choice is kept per library and `cousoir-cli` follows it. With Only this
 computer in a Dropbox folder, only a Dropbox sync under way still waits.
+
+## Searching
+
+The search box takes Calibre's search language and finds the books Calibre
+finds; the golden test checks it on a battery of searches against Calibre's
+own. Words are looked for in every field, each one somewhere, ignoring case,
+accents, spaces and punctuation as Calibre does: `ecume` finds "L'Écume
+des jours". Then, as in Calibre:
+
+- `title:prince`, `author:vian`, `tags:fantasy`, `series:`, `publisher:`,
+  `comments:`, `formats:epub`, `languages:fra` or `languages:french`,
+  `author_sort:`, `title_sort:`, `series_sort:`, `uuid:`; `"quoted words"`;
+- `=` for an exact value, `tags:=fiction`, and `tags:=.fiction` for a tag
+  and the tags under it; `~` for a regular expression, `title:~^the`; `^`
+  to keep punctuation;
+- `and`, `or`, `not` and parentheses, `and` when nothing is written;
+- `rating:>=4` in stars, `size:>1m`, `id:<100`, `series_index:2`,
+  `pages:>300`, `cover:true`; `date:2020`, `pubdate:<1900`,
+  `last_modified:>2024-03`, `date:today`, `date:<30daysago`, `thismonth`;
+- `true` and `false`, `series:false` for a book in no series; `#` counts,
+  `tags:#>3`, `formats:#=0`;
+- `identifiers:isbn:978`, `isbn:true`, `identifiers:goodreads:false`;
+- `search:"name"` for a saved search, `vl:name` for a virtual library's
+  books, the library's grouped search terms, and `@category:true` for its
+  user categories.
+
+A search Calibre cannot read, a parenthesis missing for instance, lists
+nothing and says why.
+
+The saved searches of the library, which Calibre keeps in `metadata.db`,
+show in the sidebar under Searches, each with its count; one lists its
+books like a section, and the search box searches within them. The
+library's virtual libraries are in the box beside the search: one narrows
+every section, its counts and the saved searches' to its books, as in
+Calibre. Cousoir remembers the choice per library; until one is made, it
+opens with the virtual library Calibre opens the library with.
+
+Cousoir departs from Calibre's search in a few places:
+
+- Custom columns cannot be searched yet; a search on one says so.
+- Calibre's templates, `template:`, are not run.
+- A language is found by its code or its English name; Calibre also takes
+  its name in Calibre's language, "anglais", and the names of the rarest
+  languages.
+- How text matches was taken from Calibre's collator for French, which
+  English and most other languages share; Calibre in Swedish, say, also
+  tells "a" from "å" in a search.
+- Regular expressions are PCRE's, Calibre's Python's: the common ones are
+  the same.
+- A date is a year, a month or a day, `2020-03-15`, or a day and month in
+  the system's order; Calibre also reads "March 2020".
 
 ## Editing
 
@@ -437,6 +489,7 @@ renames such a file when it finds it; Cousoir only reads it.
 
 ```bash
 cousoir-cli list [--library PATH]
+cousoir-cli search [--library PATH] [--limit N] EXPRESSION…
 cousoir-cli doctor [--library PATH]
 cousoir-cli apply [--library PATH] [--force] changes.json
 cousoir-cli read FILE…
@@ -444,7 +497,9 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 ```
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
-all` does, byte for byte. `doctor` reports the library's books and files,
+all` does, byte for byte. `search` prints the ids of the books an
+expression finds, comma-separated, as `calibredb search` does, and fails
+the same way when it finds none or cannot read the expression. `doctor` reports the library's books and files,
 the problems it finds (a file or folder the database lists but the disk does
 not have, a cover Calibre does not list, a conflict copy, an unknown
 structure, and what the Check section finds, but what was ignored there),
@@ -584,6 +639,11 @@ The tests check the port against Calibre itself:
   same names, in `tests/data/oracle/`, written by `make oracle`, which also
   generates `calibre_unidecode.inc` and `calibre_strings.inc`, the
   transliteration table and Calibre's translations Cousoir uses.
+- `calibre_search_tests` checks that the search's folds agree with Calibre's
+  collators on every pair of `tests/data/oracle/search.json`, written by
+  `make oracle`, which also generates `calibre_search.inc`, the folds; then
+  parses and runs searches on the fixture, with saved searches, virtual
+  libraries, grouped search terms and user categories.
 - `opf_tests` checks that Cousoir writes the `metadata.opf` files of the
   fixture library exactly as Calibre wrote them.
 - `commit_engine_tests` saves edits to copies of the fixture: folders moving,
@@ -609,7 +669,12 @@ The tests check the port against Calibre itself:
   that reading leaves every file of the library as it was.
 - `golden_list` runs `calibredb list` and `cousoir-cli list` on separate
   copies of the fixture and compares them, and on 2000 made-up books from
-  `cousoir-test-tool make-library`, below; with `COUSOIR_GOLDEN_REAL=1` it
+  `cousoir-test-tool make-library`, below. On both, with saved searches,
+  virtual libraries, groups and categories added
+  (`tests/data/search/preferences.sql`), it runs the searches of
+  `tests/data/search/queries.txt` through Calibre's search
+  (`tools/oracle/search_books.py`) and Cousoir's, which must find the same
+  books or both refuse the search. With `COUSOIR_GOLDEN_REAL=1` it
   does the same with the library Calibre opens. It then applies the edits of
   `tests/data/edits/edits.json` with Calibre's own writers
   (`tools/oracle/apply_edits.py`) and with `cousoir-cli apply`, and compares

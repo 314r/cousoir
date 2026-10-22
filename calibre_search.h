@@ -115,6 +115,8 @@ struct Result
 // library's search, for instance. An empty query finds the restriction's
 // books, all of them without one.
 Result search(const Index &index, const QString &query, const QString &restriction = {});
+// The same among `universe`, the rows a restriction found already.
+Result search(const Index &index, const QString &query, const QBitArray &universe);
 
 // The search terms the parser knows as fields, "title", "author", "#genre",
 // "vl", "search", and the library's grouped search terms and user

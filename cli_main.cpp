@@ -22,6 +22,7 @@
 #include "book_import.h"
 #include "calibre_db.h"
 #include "calibre_list.h"
+#include "calibre_search.h"
 #include "commit_engine.h"
 #include "concurrency_guard.h"
 #include "conversion.h"
@@ -70,6 +71,37 @@ int list(const QString &libraryPath)
         return 2;
     const QByteArray json = CalibreList::machineList(data);
     std::fwrite(json.constData(), 1, size_t(json.size()), stdout);
+    return 0;
+}
+
+// calibredb search: the ids of the books found, by Calibre's search
+// language, comma-separated and in order; at most `limit` of them unless
+// it is negative.
+int search(const QString &libraryPath, const QString &query, int limit)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 2;
+    const CalibreConfig config = CalibreConfig::load();
+    const CalibreSearch::Index index(data, CalibreSearch::Preferences::fromRows(data.preferences), config.tweaks,
+                                     config.interfaceLanguage);
+    const CalibreSearch::Result result = CalibreSearch::search(index, query);
+    if (!result.ok()) {
+        err() << QStringLiteral("Failed to parse search query: (%1) with error: %2").arg(query, result.error)
+              << Qt::endl;
+        return 1;
+    }
+    QStringList ids;
+    for (qsizetype row = 0; row < result.rows.size() && (limit < 0 || ids.size() < limit); ++row) {
+        if (result.rows.testBit(row))
+            ids.append(QString::number(data.books.at(row).id));
+    }
+    if (ids.isEmpty()) {
+        err() << QStringLiteral("No books matching the search expression: %1").arg(query) << Qt::endl;
+        return 1;
+    }
+    out() << ids.join(u',');
+    out().flush();
     return 0;
 }
 
@@ -759,6 +791,8 @@ int main(int argc, char *argv[])
         "Reads a Calibre library without changing it, unless told to apply changes.\n\n"
         "Commands:\n"
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
+        "  search  Print the ids of the books an expression of Calibre's search\n"
+        "          language finds, as `calibredb search` does.\n"
         "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
         "  apply   Apply the changes of a JSON file (edits, added and removed books and\n"
         "          formats, restorations, conversions, books sent to or removed from a\n"
@@ -778,7 +812,12 @@ int main(int argc, char *argv[])
                                          QStringLiteral("apply: skip the sync, recent-change and conflict checks; "
                                                         "Calibre's lock still applies."));
     parser.addOption(forceOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor, apply, read or device"));
+    const QCommandLineOption limitOption(QStringList{ QStringLiteral("l"), QStringLiteral("limit") },
+                                         QStringLiteral("search: the most ids to print."), QStringLiteral("n"),
+                                         QStringLiteral("-1"));
+    parser.addOption(limitOption);
+    parser.addPositionalArgument(QStringLiteral("command"),
+                                 QStringLiteral("list, search, doctor, apply, read or device"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -786,6 +825,19 @@ int main(int argc, char *argv[])
     const QStringList arguments = parser.positionalArguments();
     if (arguments.value(0) == QLatin1String("read") && arguments.size() > 1)
         return read(arguments.mid(1));
+    if (arguments.value(0) == QLatin1String("search")) {
+        if (arguments.size() < 2) {
+            err() << QStringLiteral("Error: You must specify the search expression") << Qt::endl;
+            return 2;
+        }
+        const QString path = parser.isSet(libraryOption) ? parser.value(libraryOption)
+                                                         : CalibreConfig::defaultLibraryPath();
+        if (path.isEmpty()) {
+            err() << QStringLiteral("Calibre has no library on this computer; pass --library.") << Qt::endl;
+            return 2;
+        }
+        return search(path, arguments.mid(1).join(u' '), parser.value(limitOption).toInt());
+    }
     const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device");
     if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != takesOne)
         parser.showHelp(2);

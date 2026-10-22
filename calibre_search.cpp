@@ -1608,12 +1608,18 @@ Result search(const Index &index, const QString &query, const QString &restricti
             return result;
         }
     }
+    return search(index, query, restricted);
+}
+
+Result search(const Index &index, const QString &query, const QBitArray &universe)
+{
+    Result result;
     const QString trimmed = query.trimmed();
     if (trimmed.isEmpty()) {
-        result.rows = restricted;
+        result.rows = universe;
         return result;
     }
-    Search search(index, restricted);
+    Search search(index, universe);
     result.rows = search.parse(trimmed);
     result.error = search.error();
     if (!result.ok())
