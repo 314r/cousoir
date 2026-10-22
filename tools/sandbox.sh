@@ -24,6 +24,8 @@ export XDG_CONFIG_HOME="$sandbox/config"
 export XDG_STATE_HOME="$sandbox/state"
 export CALIBRE_CONFIG_DIRECTORY="$sandbox/config/calibre"
 export COUSOIR_GOLDEN_TMP="$sandbox/golden"
+# Qt logs to the journal when its error output is no terminal: keep it here.
+export QT_FORCE_STDERR_LOGGING=1
 # Python's own cache of compiled files, should Calibre write one.
 export PYTHONPYCACHEPREFIX="$sandbox/cache/pycache"
 

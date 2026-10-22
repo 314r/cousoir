@@ -121,8 +121,8 @@ letters. Keyboard-first, as the rest of Cousoir.
 | Goal | State |
 |---|---|
 | 0. Sandbox and baseline | done |
-| 1. A large library stays instant | next |
-| 2. Search like Calibre | planned |
+| 1. A large library stays instant | done (see the journal); memory left for later |
+| 2. Search like Calibre | next |
 | 3. Many books at once | planned |
 | 4. Editing the description | planned |
 | 5. Custom columns | planned |
@@ -143,3 +143,61 @@ letters. Keyboard-first, as the rest of Cousoir.
 - Calibre is installed as its binary build, whose Python sources are
   frozen: the sources ported from are fetched from Calibre's repository,
   at the tag of the version installed, into `build/sandbox/calibre-src`.
+
+### 2026-10-22 — goal 1, a large library (`exp-scale`)
+
+`cousoir-test-tool make-library` writes libraries of made-up books through
+Calibre's schema and triggers (50 000 books in 7 s, 350 MB, covers
+hard-linked). Calibre lists a generated library exactly as Cousoir does: the
+golden test now compares 2000 generated books too. `cousoir-benchmark`
+measures the model and, with `--ui`, the window until each frame is drawn.
+
+At 50 000 books, before and after (ms; the window's figures include
+drawing, offscreen with the software renderer):
+
+| Step | Before | After |
+|---|---|---|
+| load, worker thread | 874 | 780 |
+| check, worker thread | 8851 | 793 |
+| search, slowest letter, model | 144 | 7 |
+| search, slowest letter, window | 427 | 46 |
+| clear the search, window | 517 | 20 |
+| sort, model | 115–162 | 1–27 |
+| sort, window | 496–513 | 24–60 |
+| save an edit, worker thread | 1012 | 916 |
+
+What was slow, and what changed:
+
+- The books reached QML as a list of maps, built again for every book on
+  every keystroke and sort, and the views took it whole. They are now a
+  `BookListModel`, whose rows point into the library's books (shared, not
+  copied) and make a row's map only when a row is shown. The same books in
+  the same order only update their values, so a save keeps the list where
+  it was.
+- Sorting compared strings with the collator, a million times for 50 000
+  books. The collation keys are made once per load, on the worker thread
+  with the folded search texts, and the sorted order is kept until the sort
+  or the books change: a search only filters it.
+- `findBook()` walked the books; it uses the index's id table.
+- The check compared author names through initials by working out both
+  names' author sorts and words in the innermost loop: quadratic in the
+  authors sharing a surname. It now compares parts worked out once.
+- The views kept their place on a new list because a new array reset them;
+  a model reset does not, so the books page keeps the current row, or the
+  first, itself.
+
+Found on the way:
+
+- Qt logs to the system journal when its error output is not a terminal;
+  `tools/sandbox.sh` sets `QT_FORCE_STDERR_LOGGING`.
+- A save at 50 000 books once took 24 s: the `fsync()` of the library's
+  folder, on btrfs, also commits whatever else is pending, here the copy of
+  120 000 files the benchmark had just made. Not Cousoir's to fix; the
+  benchmark flushes first.
+- The lists do not handle Page Up, Page Down, Home and End: left for goal 3,
+  with the selection keys.
+
+Left for later: a save reads the whole library again (readLibrary 240 ms,
+findFiles 210 ms, the index 100 ms at 50 000 books), on the worker thread;
+and a save holds two copies of the books and of the database at once, 700
+MB at 50 000 books.

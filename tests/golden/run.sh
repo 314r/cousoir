@@ -74,6 +74,10 @@ compare() {
 }
 
 compare fixture "$root/tests/data/library"
+# Two thousand made-up books, for the names, titles and files six books
+# leave out: names in other scripts, long titles, the same book twice.
+"$tool" make-library "$work/generated" 2000 7 > /dev/null
+compare generated "$work/generated"
 
 # What adding a file reads from it, Calibre's readers against Cousoir's, on
 # the book files of folders: the fixture library's and tests/data/import.

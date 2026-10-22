@@ -61,8 +61,7 @@ Rectangle {
 
     function focusList() {
         // Keep the book that was just closed under the cursor.
-        const rows = page.library.rows
-        const index = rows.findIndex(row => row.id === page.library.currentBookId)
+        const index = page.library.books.indexOf(page.library.currentBookId)
         if (index >= 0) {
             bookTable.currentIndex = index
             coverGrid.currentIndex = index
@@ -72,7 +71,7 @@ Rectangle {
 
     // Makes the book's row current, when it is shown.
     function select(bookId) {
-        const index = page.library.rows.findIndex(row => row.id === bookId)
+        const index = page.library.books.indexOf(bookId)
         if (index < 0)
             return
         bookTable.currentIndex = index
@@ -81,11 +80,11 @@ Rectangle {
     }
 
     function activate(index) {
-        if (index < 0 || index >= page.library.rows.length)
+        if (index < 0 || index >= page.library.books.count)
             return
         bookTable.currentIndex = index
         coverGrid.currentIndex = index
-        page.bookActivated(page.library.rows[index].id)
+        page.bookActivated(page.library.books.idAt(index))
     }
 
     function sortBy(key) {
@@ -95,13 +94,12 @@ Rectangle {
 
     // The current book's id, or 0.
     function currentBookId() {
-        const row = page.library.rows[page.currentIndex]
-        return row ? row.id : 0
+        return page.library.books.idAt(page.currentIndex)
     }
 
     function runAction(key, index) {
-        const row = page.library.rows[index]
-        if (!row)
+        const row = page.library.books.get(index)
+        if (!row.id)
             return
         if (key === "open") {
             page.activate(index)
@@ -145,6 +143,25 @@ Rectangle {
             : qsTr("Cousoir opens the library Calibre opens on this computer, and Calibre has none yet. Choose a library's folder, the one holding metadata.db, or make one in Calibre and press Reload.")
     }
 
+    // A new list keeps the current row where it was, or starts at the first,
+    // in both views.
+    Connections {
+        target: page.library.books
+
+        property int before: -1
+
+        function onModelAboutToBeReset() {
+            before = page.currentIndex
+        }
+
+        function onModelReset() {
+            const count = page.library.books.count
+            const index = before >= 0 && before < count ? before : count > 0 ? 0 : -1
+            bookTable.currentIndex = index
+            coverGrid.currentIndex = index
+        }
+    }
+
     // Both views follow the same row, so switching keeps the selection.
     onGridModeChanged: {
         if (gridMode)
@@ -166,7 +183,7 @@ Rectangle {
             visible: !page.gridMode
             name: "book"
             columns: page.columns
-            rows: page.library.rows
+            rows: page.library.books
             sortOption: page.library.sortOption
             Accessible.name: qsTr("Books")
             onActivated: function(index) { page.activate(index) }
@@ -183,7 +200,7 @@ Rectangle {
             anchors.fill: parent
             visible: page.gridMode
             name: "cover"
-            rows: page.library.rows
+            rows: page.library.books
             Accessible.name: qsTr("Book covers")
             onActivated: function(index) { page.activate(index) }
             onMenuRequested: function(index, cell, x, y) {
@@ -195,7 +212,7 @@ Rectangle {
         ColumnLayout {
             anchors.centerIn: parent
             width: Math.min(parent.width - 2 * Theme.panePadding, Math.round(420 * Theme.spacingScale))
-            visible: page.library.rows.length === 0
+            visible: page.library.books.count === 0
             spacing: Theme.gutter
 
             Label {

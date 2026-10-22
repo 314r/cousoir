@@ -37,6 +37,7 @@ const Command commands[] = {
     { "make-epub", Tool::makeEpub, 4, -1, "OUT.epub TITLE AUTHOR LANGUAGE PARAGRAPH..." },
     { "make-import-epubs", Tool::makeImportEpubs, 2, 2, "FOLDER COVER.jpg" },
     { "make-pdf", Tool::makePdf, 2, 4, "OUT.pdf TEXT [INFO.json [PACKET.xml]]" },
+    { "make-library", Tool::makeLibrary, 2, 3, "FOLDER BOOKS [SEED]" },
 };
 
 } // namespace

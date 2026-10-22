@@ -205,7 +205,10 @@ ThemedWindow {
 
     // The open book, or the row of a book listed, by id.
     function bookRow(bookId) {
-        return bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+        if (bookId === book.id)
+            return book
+        const index = library.books.indexOf(bookId)
+        return index >= 0 ? library.books.get(index) : undefined
     }
 
     // Sends the book to the reader on `root`, the first one connected by
@@ -358,7 +361,7 @@ ThemedWindow {
             const total = library.facetCount
             return shown !== total ? nouns[2].arg(shown).arg(total) : plural(total, nouns[0], nouns[1])
         }
-        const shown = library.rows.length
+        const shown = library.books.count
         const total = library.scopeCount
         if (shown !== total)
             return qsTr("%1 of %2 books").arg(shown).arg(total)
@@ -409,7 +412,7 @@ ThemedWindow {
         if (facetShown)
             return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search")
                                                 : qsTr("Ctrl+F search · F5 reload")
-        if (library.rows.length === 0)
+        if (library.books.count === 0)
             return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · F5 reload")
         const back = session.filterOpen ? qsTr("Esc back · ") : ""
         const trash = library.writable ? qsTr(" · Del trash") : ""

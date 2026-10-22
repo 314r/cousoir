@@ -117,6 +117,8 @@ target_link_libraries(cousoir_core
 qt_add_library(cousoir_models STATIC
     book_library.cpp
     book_library.h
+    book_list_model.cpp
+    book_list_model.h
     conversion_service.cpp
     conversion_service.h
     cover_cache.cpp
@@ -300,6 +302,7 @@ if(BUILD_TESTING)
         tests/tool/common.h
         tests/tool/compare.cpp
         tests/tool/fixtures.cpp
+        tests/tool/large.cpp
         tests/tool/library.cpp
         tests/tool/main.cpp
         tests/tool/readers.cpp
@@ -352,6 +355,20 @@ if(BUILD_TESTING)
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale}"
         )
     endforeach()
+
+    # Measures loading, searching, sorting and saving on a library, and the
+    # window with --ui; run by hand on a large library, not by ctest.
+    qt_add_executable(cousoir-benchmark tests/benchmark.cpp)
+    target_link_libraries(cousoir-benchmark PRIVATE
+        cousoir_models Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
+    )
+    cousoir_configure_test_executable(cousoir-benchmark)
+    qt_add_resources(cousoir-benchmark "benchmark_ui"
+        PREFIX "/qt/qml/Cousoir"
+        FILES
+            ${COUSOIR_QML_FILES}
+            ${COUSOIR_ICON_FILES}
+    )
 
     # Compares cousoir-cli list with calibredb's own output on copies of the
     # libraries; skipped without Calibre.
