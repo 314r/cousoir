@@ -382,6 +382,26 @@ ThemedWindow {
             showNotice(error)
     }
 
+    // Reads the open book, or the current row's, in Cousoir's own reader:
+    // its EPUB, else its PDF.
+    function readBook() {
+        const bookId = currentBookId()
+        if (!bookId || !library.readerAvailable)
+            return
+        const format = library.readableFormat(bookId)
+        if (!format) {
+            showNotice(qsTr("This book has no EPUB or PDF to read."))
+            return
+        }
+        const loader = format === "PDF" ? pdfReaderLoader : readerLoader
+        if (!loader.item)
+            loader.setSource(format === "PDF" ? "PdfReaderWindow.qml" : "ReaderWindow.qml", { library: window.library })
+        if (loader.item)
+            loader.item.openBook(bookId)
+        else
+            showNotice(qsTr("The reader cannot be opened."))
+    }
+
     function toggleGrid() {
         layoutSettings.gridMode = !layoutSettings.gridMode
     }
@@ -400,6 +420,7 @@ ThemedWindow {
                 commands.push({ kind: "action", key: key, title: title, detail: detail || "", icon: icon || "search" })
         }
         add("add", qsTr("Add books…"), "Ctrl+N", "plus", library.writable && !library.importing)
+        add("read", qsTr("Read in Cousoir"), "Ctrl+Shift+O", "book", currentBookId() > 0 && library.readerAvailable)
         add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
         add("download", qsTr("Download metadata and covers"), "", "globe",
             session.bookOpen && library.writable && downloads.available)
@@ -457,6 +478,8 @@ ThemedWindow {
             booksPage.focusList()
         } else if (hit.key === "add") {
             addBooksDialog.open()
+        } else if (hit.key === "read") {
+            readBook()
         } else if (hit.key === "reader") {
             openInReader()
         } else if (hit.key === "download") {
@@ -901,6 +924,40 @@ ThemedWindow {
         sequence: "Ctrl+O"
         enabled: session.bookOpen || window.booksShown
         onActivated: window.openInReader()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+O"
+        enabled: (session.bookOpen || window.booksShown) && library.readerAvailable
+        onActivated: window.readBook()
+    }
+
+    // Cousoir's reader, made the first time a book is read; built only with
+    // Qt WebEngine.
+    Loader {
+        id: readerLoader
+    }
+
+    Loader {
+        id: pdfReaderLoader
+    }
+
+    Connections {
+        target: readerLoader.item
+        ignoreUnknownSignals: true
+
+        function onFailed(message) {
+            window.showNotice(message)
+        }
+    }
+
+    Connections {
+        target: pdfReaderLoader.item
+        ignoreUnknownSignals: true
+
+        function onFailed(message) {
+            window.showNotice(message)
+        }
     }
 
     Shortcut {
@@ -1450,6 +1507,19 @@ ThemedWindow {
                         text: qsTr("Move to Trash")
                         icon.source: "assets/icons/trash.svg"
                         onClicked: window.trashBook(window.book.id)
+                    }
+
+                    FlatButton {
+                        objectName: "readButton"
+
+                        visible: session.bookOpen && !bookPage.confirmingRevert && library.readerAvailable
+                        enabled: (window.book.formats || []).some(format => !format.missing
+                                                                   && ["EPUB", "KEPUB", "PDF"].includes(format.format))
+                        variant: "outline"
+                        text: qsTr("Read")
+                        tip: qsTr("Read in Cousoir (Ctrl+Shift+O)")
+                        icon.source: "assets/icons/book.svg"
+                        onClicked: window.readBook()
                     }
 
                     FlatButton {

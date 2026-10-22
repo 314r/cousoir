@@ -34,6 +34,9 @@
 #include <numeric>
 
 #include "book_import.h"
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
 #include "calibre_db.h"
 #include "calibre_text.h"
 #include "concurrency_guard.h"
@@ -44,6 +47,7 @@
 #include "cousoir_paths.h"
 #include "description.h"
 #include "palette.h"
+#include "sqlite_db.h"
 
 namespace {
 
@@ -1272,6 +1276,16 @@ void BookLibrary::rebuildCurrentBook()
     emit currentBookChanged();
 }
 
+bool BookLibrary::readerAvailable() const
+{
+#ifdef COUSOIR_READER
+    // Set up before the application, as main() does.
+    return BookReader::ready();
+#else
+    return false;
+#endif
+}
+
 bool BookLibrary::writable() const
 {
     return m_writable;
@@ -1804,6 +1818,57 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     emit savingChanged();
     startCommit();
     return {};
+}
+
+QString BookLibrary::readableFormat(int bookId) const
+{
+    const Book *book = findBook(bookId);
+    if (!book || !readerAvailable())
+        return {};
+    for (const char *wanted : { "EPUB", "KEPUB", "PDF" }) {
+        for (const BookFormat &format : book->formats) {
+            if (format.format == QLatin1String(wanted) && !format.file.isEmpty())
+                return format.format;
+        }
+    }
+    return {};
+}
+
+void BookLibrary::saveReadPosition(int bookId, const ReadPosition &position)
+{
+    if (!m_writable || !findBook(bookId) || position.cfi.isEmpty())
+        return;
+    CommitEngine::Request request;
+    request.readPositions.append({ bookId, position });
+    queueChange(request);
+}
+
+void BookLibrary::saveAnnotation(int bookId, const Annotation &annotation)
+{
+    if (!m_writable || !findBook(bookId))
+        return;
+    CommitEngine::Request request;
+    request.annotations.append({ bookId, annotation });
+    queueChange(request);
+}
+
+QList<Annotation> BookLibrary::annotations(int bookId, const QString &format) const
+{
+    // From the copy of the database the library was read from.
+    QList<Annotation> found;
+    SqliteDb db;
+    QString error;
+    if (m_libraryPath.isEmpty()
+        || !db.open(cacheFolder(m_libraryPath) + QStringLiteral("/snapshot.db"), SqliteDb::Mode::Immutable, &error))
+        return found;
+    for (const QVariantList &row :
+         db.rows(QStringLiteral("SELECT annot_type, annot_id, timestamp, annot_data, searchable_text FROM annotations "
+                                "WHERE book=? AND format=? AND user_type='local' AND user='viewer'"),
+                 { bookId, format.toUpper() })) {
+        found.append({ format.toUpper(), row.value(0).toString(), row.value(1).toString(), row.value(2).toDouble(),
+                       row.value(3).toString().toUtf8(), row.value(4).toString() });
+    }
+    return found;
 }
 
 QString BookLibrary::queueChange(const CommitEngine::Request &change)

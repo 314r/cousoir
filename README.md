@@ -72,6 +72,10 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   catalog, and a phone's camera opens its web page from a QR code, to
   search the books and download them. No Calibre needed, and
   `cousoir-cli serve` does it on a server.
+- 📖 **Read in Cousoir.** EPUBs a page at a time in your theme, with their
+  table of contents, and PDFs. Your place and your highlights are kept
+  where Calibre's viewer keeps its own: each opens where the other stopped
+  and shows the other's highlights.
 - 🖍️ **Your reading, back from the Kobo and the Kindle.** How far you got in
   each book on a Kobo, and your highlights and notes, by chapter on a Kobo
   and from "My Clippings" on a Kindle, copied or saved as Markdown, still
@@ -97,20 +101,21 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 On Arch Linux and Omarchy:
 
 ```bash
-sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg sqlite libzip libmtp calibre
+sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine sqlite libzip libmtp calibre
 git clone https://github.com/314r/cousoir.git
 cd cousoir
 make install
 ```
 
 On other distributions, you need Qt 6.9 or later, SQLite, libzip, CMake 3.21
-or later and a C++20 compiler; libmtp for a Kindle. [DOC.md](DOC.md) has the
-details.
+or later and a C++20 compiler; libmtp for a Kindle; Qt WebEngine for the
+reader. [DOC.md](DOC.md) has the details.
 
-> **About Calibre:** Cousoir browses and edits a library on its own, but
-> Calibre itself converts books, sends them to a reader, downloads metadata
-> and reads the metadata of formats other than EPUB, KEPUB, MOBI, AZW3 and
-> PDF, so install it too.
+> **About Calibre:** Cousoir browses, edits and shares a library, sends to a
+> Kobo or a Kindle, downloads metadata and reads books on its own. Calibre
+> itself converts to AZW3, downloads metadata from its own sources, and reads
+> the metadata of formats other than EPUB, KEPUB, MOBI, AZW3 and PDF: install
+> it too if you need those.
 
 Cousoir installs under `~/.local` and appears in your app launcher. Set
 `PREFIX` to install it somewhere else.

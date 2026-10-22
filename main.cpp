@@ -12,8 +12,16 @@
 #include "omarchy_theme.h"
 #include "system_appearance.h"
 
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef COUSOIR_READER
+    // Before the application: the books' addresses, and WebEngine.
+    BookReader::initialize();
+#endif
     QGuiApplication app(argc, argv);
 
     app.setOrganizationName(QStringLiteral("cousoir"));
@@ -30,6 +38,9 @@ int main(int argc, char *argv[])
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<LibraryShare>("Cousoir", 1, 0, "LibraryShare");
+#ifdef COUSOIR_READER
+    qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
+#endif
     qmlRegisterType<OmarchyTheme>("Cousoir", 1, 0, "OmarchyTheme");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
 

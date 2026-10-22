@@ -95,6 +95,8 @@ class BookLibrary : public QObject
     Q_PROPERTY(QVariantMap currentBook READ currentBook NOTIFY currentBookChanged)
     // Set by the session from the guard: edits are refused otherwise.
     Q_PROPERTY(bool writable READ writable WRITE setWritable NOTIFY writableChanged)
+    // Cousoir was built with its reader, and Qt WebEngine is there.
+    Q_PROPERTY(bool readerAvailable READ readerAvailable CONSTANT)
     Q_PROPERTY(bool saving READ saving NOTIFY savingChanged)
     // The current book has changed since it was opened.
     Q_PROPERTY(bool canRevert READ canRevert NOTIFY canRevertChanged)
@@ -196,6 +198,7 @@ public:
     QVariantList downloadFields(int bookId, const MetadataDownload::Found &found, const QStringList &ignored,
                                 bool appendComments) const;
     bool writable() const;
+    bool readerAvailable() const;
     void setWritable(bool writable);
     bool saving() const;
     bool canRevert() const;
@@ -225,6 +228,18 @@ public:
     // or the first of EPUB, KEPUB, AZW3, MOBI and PDF it has. Returns an
     // error message, empty on success.
     Q_INVOKABLE QString openFormat(int bookId, const QString &format = {});
+    // The format Cousoir's reader reads the book in: EPUB, KEPUB, then PDF;
+    // empty for none.
+    Q_INVOKABLE QString readableFormat(int bookId) const;
+    // Keeps in the library where Cousoir's reader stopped in the book, as
+    // Calibre keeps its viewer's; nothing while it cannot be written.
+    void saveReadPosition(int bookId, const ReadPosition &position);
+    // Keeps a highlight made in Cousoir's reader where Calibre's viewer
+    // keeps its own; nothing while the library cannot be written.
+    void saveAnnotation(int bookId, const Annotation &annotation);
+    // The highlights and bookmarks of Calibre's viewer in the book's format,
+    // as last read from the library.
+    QList<Annotation> annotations(int bookId, const QString &format) const;
     // Shows the book's folder in the file manager. Returns an error message,
     // empty on success.
     Q_INVOKABLE QString openFolder(int bookId);

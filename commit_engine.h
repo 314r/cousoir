@@ -51,6 +51,9 @@ struct Request
     // Last, the settings of conversions, for the books' next ones: book and
     // conversion_options data.
     QList<QPair<int, QByteArray>> conversionOptions;
+    // And where a reader stopped in books, and highlights made there.
+    QList<QPair<int, ReadPosition>> readPositions;
+    QList<QPair<int, Annotation>> annotations;
     // The software writing the metadata.opf files: name and version, and the
     // short name it files under.
     QString producer;
@@ -66,7 +69,8 @@ struct Request
     bool hasOperations() const
     {
         return !formatCopies.isEmpty() || !formatRemovals.isEmpty() || !trash.isEmpty() || !restorations.isEmpty()
-            || !newBooks.isEmpty() || !newFormats.isEmpty() || !conversionOptions.isEmpty();
+            || !newBooks.isEmpty() || !newFormats.isEmpty() || !conversionOptions.isEmpty() || !readPositions.isEmpty()
+            || !annotations.isEmpty();
     }
 };
 

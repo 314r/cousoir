@@ -260,7 +260,7 @@ Built only when Qt WebEngine is there.
 | 17. Kindle highlights | done |
 | 13. Notes | planned |
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
-| 19. Reading in Cousoir | planned |
+| 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
 
 ## Journal
 
@@ -918,4 +918,31 @@ as Calibre's job does, tested with a file that cannot be read. And every
 book was read whole into memory, a MOBI up to three times over: now only a
 MOBI is read, to write into it, with one copy at most as its records move;
 a PDF or a comic goes as a file copy.
+
+### 2026-10-22 — goal 19, reading in Cousoir (`exp-reader`)
+
+- `EpubBook` reads an EPUB's container, package, spine and table of
+  contents (EPUB 3 nav or NCX, nested), and its files on demand.
+  `BookReader` serves them to Qt WebEngine under `cousoir-book://`, and
+  `ReaderWindow` shows them a screen at a time: CSS columns a page wide, the
+  keys, clicks and wheel, the theme's colours, the table of contents with
+  the section being read, text sizes, links. Built only with Qt WebEngine;
+  PDFs through Qt Pdf's `PdfMultiPageView`.
+- Positions as Calibre's viewer counts them: its `cfi.pyj` ported to
+  `assets/reader/reader.js`. Calibre's renderer, run on the fixture, keeps
+  each document's elements and text nodes, so the CFIs count the same
+  nodes. Cousoir keeps its position, writes it to `last_read_positions` when
+  the book closes (a new commit operation, as Calibre's
+  `save_last_read_position_to_cursor()`), and opens where the newest
+  position, its own or the viewer's, left it.
+- Highlights as the viewer keeps them: rows of `annotations`, user type
+  `local`, user `viewer`, the viewer's JSON, searchable text and
+  `annotations_dirtied`; their ranges found before any is wrapped, as a
+  wrapper would shift the text a later CFI points to; removed as the
+  viewer removes one.
+- Tests: `epub_book_tests`; in the UI tests, the reader on a new fixture
+  book (`tools/make_reader_fixture.py`): pages, the position kept in the
+  library and found again, a newer one of Calibre's viewer taken, a
+  highlight made, written as the viewer writes it, shown again and
+  removed; and a PDF.
 

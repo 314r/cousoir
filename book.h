@@ -127,6 +127,38 @@ struct FileIdentity
     bool operator==(const FileIdentity &) const = default;
 };
 
+// Where a reader stopped in a book, as Calibre keeps it in
+// last_read_positions: its viewer (user "local", device
+// "calibre-desktop-viewer"), its content server, or Cousoir's reader.
+struct ReadPosition
+{
+    QString format;
+    QString user;
+    QString device;
+    // "epubcfi(/6/2/4/2/1:120)".
+    QString cfi;
+    // Seconds since 1970.
+    double epoch = 0;
+    // How far into the book, 0 to 1.
+    double fraction = 0;
+};
+
+// A highlight or bookmark of Calibre's viewer, a row of its annotations
+// table: user type "local", user "viewer".
+struct Annotation
+{
+    QString format;
+    // "highlight" or "bookmark".
+    QString type;
+    QString id;
+    // Seconds since 1970.
+    double timestamp = 0;
+    // Its JSON, as the viewer keeps it.
+    QByteArray data;
+    // The text a search finds it by.
+    QString searchable;
+};
+
 struct LibraryData
 {
     QString libraryPath;
@@ -148,6 +180,8 @@ struct LibraryData
     FileIdentity source;
     // The custom columns, by id.
     QList<CustomColumn> customColumns;
+    // Where readers stopped, by book.
+    QHash<int, QList<ReadPosition>> readPositions;
     // The preferences a search reads, by key, as JSON: saved searches,
     // virtual libraries, grouped search terms and user categories; and the
     // columns and sort Calibre's list last had.
