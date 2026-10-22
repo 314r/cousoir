@@ -13,7 +13,7 @@ trash and restored from it; Calibre converts books to KEPUB for a Kobo and
 AZW3 for a Kindle; books go to a Kobo or a Kindle plugged in, and come off
 it, and what a Kobo knows of their reading, highlights and notes included,
 comes back. Ctrl+K finds a book, an item, a section or an action by a few
-letters.
+letters. Calibre's templates run, for composite columns and searches.
 
 Calibre stays the library's owner and keeps working as before. Cousoir reads
 and writes Calibre's own `metadata.db` and, wherever it computes something
@@ -90,6 +90,40 @@ items, then books. Up and Down choose, Enter goes to the book, lists the
 item's books or does the action, Esc closes. Before anything is typed, it
 lists the sections and the actions.
 
+## Templates
+
+Calibre's template language is ported from Calibre's own code
+(`utils/formatter.py` and `formatter_functions.py`): the single function
+mode, `{title} by {authors}`, `{series_index:0>2s}`, `{series:|[|]}`,
+`{tags:sublist(0,1,\,)}`, `{title:'uppercase($)'}`; and the program mode,
+`program: if $series then strcat($series, ' #', $series_index) fi`, with
+its operators, `if`, `for`, `def`, `return`, globals and `with`, and the
+functions Calibre has. A book's fields read as Calibre shows them to a
+template, dates in the format of each field and the names of months in
+Calibre's interface language.
+
+Composite columns are computed with it when the library loads, and again
+for the books a change writes the `metadata.opf` of: they show in the
+details pane, the lists and the OPF files as Calibre computes them, and
+searches find them. `template:` searches run a template on each book. The
+golden test runs a battery of templates through Calibre's formatter and
+Cousoir's, on three libraries, with the same results.
+
+Cousoir departs from Calibre here:
+
+- Python templates, `python:`, are not run; they fail.
+- The functions that need Calibre's window fail, as they do in `calibredb`:
+  `virtual_libraries()`, `annotation_count()`, `book_count()`, notes and
+  extra files among them; `user_categories()`, `get_link()` and
+  `author_links()` give nothing, and `language_strings()` English names.
+- The template functions a library stores, Calibre's "Stored templates",
+  are not read: a template calling one fails.
+- An error says what went wrong in English, after Calibre's "TEMPLATE
+  ERROR" in Calibre's language.
+- A date given to `format_date()`, `days_between()` and the like reads as
+  ISO dates do, or as day, month and year with English month names, the
+  ones Calibre's dateutil reads most.
+
 ## Searching
 
 The search box takes Calibre's search language and finds the books Calibre
@@ -113,7 +147,11 @@ des jours". Then, as in Calibre:
 - `identifiers:isbn:978`, `isbn:true`, `identifiers:goodreads:false`;
 - custom columns by their search term, `#genre:sf`, `#pagecount:>300`,
   `#read:false`, `#started:2024`, `#saga_index:2`, `#myrating:>=4` in
-  stars;
+  stars; a composite column as text, or as a number or a date when its
+  sort says so;
+- `template:"{series} {title}#@#:t:omens"`: a template's text for each
+  book, compared as text (`t`), a number (`n`), a date (`d`) or yes or no
+  (`b`), see [Templates](#templates);
 - `search:"name"` for a saved search, `vl:name` for a virtual library's
   books, the library's grouped search terms, and `@category:true` for its
   user categories.
@@ -131,9 +169,6 @@ opens with the virtual library Calibre opens the library with.
 
 Cousoir departs from Calibre's search in a few places:
 
-- A composite column, which Calibre builds from a template, cannot be
-  searched, and words alone do not look in it; a search on one says so.
-- Calibre's templates, `template:`, are not run.
 - A language is found by its code or its English name; Calibre also takes
   its name in Calibre's language, "anglais", and the names of the rarest
   languages.
@@ -162,8 +197,10 @@ separated by commas (`&` for names), numbers, dates and long text in a
 field, a series with its number below it, and ratings, yes or no and lists
 of fixed values as a choice. A value is saved as Calibre's writers save it:
 a number Calibre cannot read shows in red, a series written `Cycle [3]`
-takes its number, and a list of fixed values takes only those. A composite
-column, whose value Calibre computes from a template, is not shown.
+takes its number, and a list of fixed values takes only those. A long text
+holding more than text, a table or an image, is read-only there and says
+so, as saving it from its text would leave that out. A composite column
+shows as its template makes it, and cannot be edited.
 
 As in Calibre's editor, a title sort that followed the title keeps following
 it, with the book's language for its articles, and an author sort that
@@ -574,6 +611,7 @@ cousoir-cli doctor [--library PATH]
 cousoir-cli apply [--library PATH] [--force] changes.json
 cousoir-cli read FILE…
 cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
+cousoir-cli template [--library PATH] templates.json
 ```
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
@@ -642,6 +680,10 @@ their path on the reader:
 
 Calibre's log of a conversion or a sending is in its job's folder, in a
 temporary folder removed at the end unless `COUSOIR_KEEP_JOBS` is set.
+
+`template` prints, as JSON, what each template of a JSON array makes of
+each book of the library, by book id, or `{"error": message}`, as
+`tools/oracle/template_oracle.py` prints Calibre's.
 
 `device` prints, as JSON, the books on a reader, named as above, the
 library book each one is and, for a Kobo, what it knows of their reading,
@@ -739,7 +781,8 @@ The tests check the port against Calibre itself:
   same names, in `tests/data/oracle/`, written by `make oracle`, which also
   generates `calibre_unidecode.inc` and `calibre_strings.inc`, the
   transliteration table and Calibre's translations Cousoir uses.
-- `calibre_search_tests` checks that the search's folds agree with Calibre's
+- `calibre_search_tests` checks the palette's search, and that the search's
+  folds agree with Calibre's
   collators on every pair of `tests/data/oracle/search.json`, written by
   `make oracle`, which also generates `calibre_search.inc`, the folds; then
   parses and runs searches on the fixture, with saved searches, virtual
@@ -762,6 +805,9 @@ The tests check the port against Calibre itself:
   names it must keep apart, duplicates by title and by ISBN, missing files and
   the files outside a copy of the fixture with files planted in it, and the
   changes its fixes make.
+- The template language's tables, the built-in fields and Calibre's names
+  of days and months in every language, are `calibre_template.inc`, written
+  by `make oracle`.
 - `tests/data/import` holds book files for the corners of Calibre's readers:
   EPUB package files of both versions, MOBI and AZW3 files made by
   `ebook-convert`, PDF files with an info dictionary and an XMP packet (one
@@ -783,7 +829,11 @@ The tests check the port against Calibre itself:
   (`tests/data/search/preferences.sql`), it runs the searches of
   `tests/data/search/queries.txt` through Calibre's search
   (`tools/oracle/search_books.py`) and Cousoir's, which must find the same
-  books or both refuse the search. With `COUSOIR_GOLDEN_REAL=1` it
+  books or both refuse the search. It runs the templates of
+  `tests/data/templates/templates.json` through Calibre's formatter
+  (`tools/oracle/template_oracle.py`) and `cousoir-cli template` on the
+  same three libraries, which must make the same text of each book, or
+  both fail. With `COUSOIR_GOLDEN_REAL=1` it
   does the same with the library Calibre opens. It then applies the edits of
   `tests/data/edits/edits.json`, and apart the bulk edits of
   `tests/data/edits/bulk.json` and the custom columns' edits of

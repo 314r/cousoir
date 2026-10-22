@@ -15,6 +15,7 @@
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
 #include "calibre_search.h"
+#include "calibre_template.h"
 
 #include <QCoreApplication>
 #include <QJsonArray>
@@ -949,13 +950,12 @@ private:
             const QString &type = custom->column->datatype;
             if (custom->seriesIndex)
                 return numericSearch(location, lower(query), DataType::Float, candidates);
-            if (type == QLatin1String("composite")) {
-                fail(tr("Cousoir does not compute composite columns, which Calibre's templates make: %1").arg(location));
-                return found;
-            }
-            if (type == QLatin1String("datetime"))
+            // A composite is searched as its sort says: a date, a number or
+            // text.
+            if (type == QLatin1String("datetime") || custom->type == DataType::DateTime)
                 return dateSearch(location, lower(query), candidates);
-            if (type == QLatin1String("int") || type == QLatin1String("float") || type == QLatin1String("rating"))
+            if (type == QLatin1String("int") || type == QLatin1String("float") || type == QLatin1String("rating")
+                || custom->type == DataType::Float)
                 return numericSearch(location, lower(query), custom->type, candidates);
             if (custom->column->multiple && query.size() > 1 && query.at(0) == u'#'
                 && QStringView(u"=<>!").contains(query.at(1)))
@@ -983,10 +983,8 @@ private:
         if (location.size() >= 2 && location.startsWith(u'@'))
             return userCategory(location.mid(1), lower(query), candidates);
 
-        if (location == QLatin1String("template")) {
-            fail(tr("Cousoir does not run Calibre's templates in searches"));
-            return found;
-        }
+        if (location == QLatin1String("template"))
+            return templateSearch(query, candidates);
         return textSearch(location, query, candidates);
     }
 
@@ -1110,12 +1108,17 @@ private:
                 for (const auto &identifier : book.identifiers)
                     hit = hit || test(identifier.first, nullptr);
             } else if (const std::optional<Custom> custom = customOf(location)) {
-                const QVariant value = customValue(book, *custom);
-                if (custom->column->multiple) {
-                    for (const QString &item : value.toStringList())
+                if (custom->column->datatype == QLatin1String("composite")) {
+                    for (const QString &item : compositeValues(book, *custom))
                         hit = hit || test(item, nullptr);
-                } else if (!value.isNull()) {
-                    hit = test(value.toString(), nullptr);
+                } else {
+                    const QVariant value = customValue(book, *custom);
+                    if (custom->column->multiple) {
+                        for (const QString &item : value.toStringList())
+                            hit = hit || test(item, nullptr);
+                    } else if (!value.isNull()) {
+                        hit = test(value.toString(), nullptr);
+                    }
                 }
             }
             if (hit)
@@ -1155,20 +1158,118 @@ private:
                 custom.type = DataType::Rating;
             else if (type == QLatin1String("datetime"))
                 custom.type = DataType::DateTime;
-            else if (type == QLatin1String("bool") || type == QLatin1String("composite"))
+            else if (type == QLatin1String("bool"))
                 custom.type = DataType::None;
+            else if (type == QLatin1String("composite")) {
+                const QString sort = QJsonDocument::fromJson(column.display).object()
+                                         .value(QLatin1String("composite_sort")).toString();
+                custom.type = sort == QLatin1String("number") ? DataType::Float
+                    : sort == QLatin1String("date")         ? DataType::DateTime
+                                                            : DataType::Text;
+            }
             return custom;
         }
         return std::nullopt;
     }
 
-    // A book's value of a custom column: null when it has none.
+    // The pseudo field a template search compares, its values by book id.
+    static QString templateField() { return QStringLiteral("\x01template"); }
+    QHash<int, QString> m_templateValues;
+
+    // The template search of get_matches(): TEMPLATE#@#:t:QUERY, the
+    // template's text of each book compared as text (t), a number (n), a
+    // date (d) or yes or no (b). A template that fails fails the search.
+    QBitArray templateSearch(const QString &raw, const QBitArray &candidates)
+    {
+        QBitArray found = empty(m_books.size());
+        static const QRegularExpression separator(QStringLiteral("#@#:([tdnb]):"),
+                                                  QRegularExpression::CaseInsensitiveOption);
+        QList<QRegularExpressionMatch> separators;
+        QRegularExpressionMatchIterator it = separator.globalMatch(raw);
+        while (it.hasNext())
+            separators.append(it.next());
+        if (separators.size() != 1) {
+            fail(tr("search template: missing or invalid separator. Valid separators are: %1")
+                     .arg(QStringLiteral("#@#:[tdnb]:")));
+            return found;
+        }
+        const QRegularExpressionMatch &match = separators.first();
+        const QString templateText = raw.left(match.capturedStart());
+        const QChar kind = match.captured(1).toLower().at(0);
+        const QString query = raw.mid(match.capturedEnd());
+        const CalibreTemplate::Library library(m_index.m_data, m_index.m_interfaceLanguage);
+        m_templateValues.clear();
+        QBitArray valued = empty(m_books.size());
+        for (qsizetype row = 0; row < m_books.size(); ++row) {
+            if (!candidates.testBit(row))
+                continue;
+            QString error;
+            const QString value = CalibreTemplate::evaluate(templateText, library, m_books.at(row), &error);
+            if (!error.isNull()) {
+                fail(error);
+                return found;
+            }
+            m_templateValues.insert(m_books.at(row).id, value);
+            if (!value.isEmpty())
+                valued.setBit(row);
+        }
+        if (kind == u't') {
+            const auto [matchKindOf, text] = matchKind(query);
+            const TextQuery textQuery(matchKindOf, text);
+            if (const QString error = textQuery.error(); !error.isEmpty()) {
+                fail(error);
+                return found;
+            }
+            for (qsizetype row = 0; row < m_books.size(); ++row) {
+                if (candidates.testBit(row) && textQuery.matches(m_templateValues.value(m_books.at(row).id), nullptr))
+                    found.setBit(row);
+            }
+        } else if (kind == u'n') {
+            found = numericSearch(templateField(), lower(query), DataType::Float, valued);
+        } else if (kind == u'd') {
+            found = dateSearch(templateField(), lower(query), valued);
+        } else {
+            found = booleanSearch(templateField(), lower(query), candidates);
+        }
+        m_templateValues.clear();
+        return found;
+    }
+
+    // A book's value of a custom column: null when it has none. A
+    // composite's text, or its values between commas for a column of
+    // several, or the date it is for one sorted by date.
     QVariant customValue(const Book &book, const Custom &custom) const
     {
         const CustomValue value = book.custom.value(custom.index);
         if (custom.seriesIndex)
             return value.value.isNull() ? QVariant() : QVariant(value.seriesIndex);
+        if (custom.column->datatype == QLatin1String("composite")) {
+            const QStringList values = compositeValues(book, custom);
+            if (values.isEmpty())
+                return {};
+            if (custom.column->multiple)
+                return values;
+            if (custom.type == DataType::DateTime) {
+                const std::optional<QDateTime> date = CalibreTemplate::parseDate(values.first());
+                return date ? QVariant(*date) : QVariant();
+            }
+            return values.first();
+        }
         return value.value;
+    }
+
+    // CompositeField.iter_searchable_values(): the text split at its commas
+    // for a column of several values, the values that are not empty.
+    static QStringList compositeValues(const Book &book, const Custom &custom)
+    {
+        const QString text = book.custom.value(custom.index).value.toString();
+        QStringList values;
+        for (const QString &item : custom.column->multiple ? text.split(u',') : QStringList{ text }) {
+            const QString value = custom.column->multiple ? item.trimmed() : item;
+            if (!value.isEmpty())
+                values.append(value);
+        }
+        return values;
     }
 
     // Whether a custom column's rating counts half stars, which a search
@@ -1210,12 +1311,14 @@ private:
             fail(tr("Invalid boolean query \"%1\"").arg(query));
             return found;
         }
-        const Custom custom = *customOf(field);
-        const bool tristate = m_index.m_preferences.boolsAreTristate;
+        // A template's text is yes when it is not empty, never none.
+        const std::optional<Custom> custom = customOf(field);
+        const bool tristate = custom && m_index.m_preferences.boolsAreTristate;
         for (qsizetype row = 0; row < m_books.size(); ++row) {
             if (!candidates.testBit(row))
                 continue;
-            const QVariant value = customValue(m_books.at(row), custom);
+            const QVariant value = custom ? customValue(m_books.at(row), *custom)
+                                          : QVariant(!m_templateValues.value(m_books.at(row).id).isEmpty());
             bool hit = false;
             if (!tristate)
                 hit = value.isNull() || !value.toBool() ? noAndFalse.contains(query) : yes.contains(query);
@@ -1250,12 +1353,8 @@ private:
                     && !virtualField(key))
                     locations.append(key);
             }
-            // The custom columns but a composite, which Cousoir cannot
-            // compute.
-            for (const QString &term : m_index.m_customTerms) {
-                if (customOf(term)->column->datatype != QLatin1String("composite"))
-                    locations.append(term);
-            }
+            for (const QString &term : m_index.m_customTerms)
+                locations.append(term);
         } else {
             locations.append(location);
         }
@@ -1283,7 +1382,10 @@ private:
 
             const Field *metadata = fieldOf(field);
             const std::optional<Custom> custom = customOf(field);
-            const DataType type = custom ? custom->type
+            // Words look in a composite as text, whatever its sort.
+            const bool composite = custom && custom->column->datatype == QLatin1String("composite");
+            const DataType type = composite ? DataType::Text
+                : custom                    ? custom->type
                 : metadata && field != QLatin1String("series_sort") ? metadata->type : DataType::None;
             if (type == DataType::Rating || type == DataType::Float || type == DataType::Int) {
                 if (intQuery || numberOk)
@@ -1353,7 +1455,9 @@ private:
                 present = book.seriesId > 0;
             else if (const std::optional<Custom> custom = customOf(field)) {
                 const QVariant value = customValue(book, *custom);
-                if (custom->column->multiple) {
+                if (custom->column->datatype == QLatin1String("composite")) {
+                    present = !compositeValues(book, *custom).isEmpty();
+                } else if (custom->column->multiple) {
                     const QStringList items = value.toStringList();
                     present = std::any_of(items.cbegin(), items.cend(), [](const QString &item) { return !blank(item); });
                 } else if (custom->type == DataType::Text) {
@@ -1421,8 +1525,16 @@ private:
         return size;
     }
 
-    QDateTime dateOf(const Book &book, const QString &field) const
+    QDateTime dateOf(const Book &book, const QString &field)
     {
+        if (field == templateField()) {
+            // parse_date() of the text, which fails the search when it is
+            // no date.
+            const std::optional<QDateTime> date = CalibreTemplate::parseDate(m_templateValues.value(book.id));
+            if (!date)
+                fail(tr("Invalid date: %1").arg(m_templateValues.value(book.id)));
+            return date.value_or(QDateTime());
+        }
         if (const std::optional<Custom> custom = customOf(field))
             return customValue(book, *custom).toDateTime();
         if (field == QLatin1String("timestamp"))
@@ -1557,6 +1669,26 @@ private:
         const bool half = custom && halfStars(*custom->column);
         const bool many = field == QLatin1String("rating") || (custom && custom->type == DataType::Rating);
         const auto value = [&](const Book &book) -> std::optional<double> {
+            if (field == templateField()) {
+                const QString text = m_templateValues.value(book.id);
+                bool ok = false;
+                const double number = text.trimmed().toDouble(&ok);
+                if (!ok)
+                    fail(tr("Non-numeric value in column %1: %2").arg(QString(), text));
+                return number;
+            }
+            if (custom && custom->column->datatype == QLatin1String("composite")) {
+                // float() of its text, which fails the search when it is
+                // no number.
+                const QStringList values = compositeValues(book, *custom);
+                if (values.isEmpty())
+                    return std::nullopt;
+                bool ok = false;
+                const double number = values.first().trimmed().toDouble(&ok);
+                if (!ok)
+                    fail(tr("Non-numeric value in column %1: %2").arg(field, values.first()));
+                return number;
+            }
             if (custom) {
                 const QVariant value = customValue(book, *custom);
                 return value.isNull() ? std::nullopt : std::optional<double>(value.toDouble());

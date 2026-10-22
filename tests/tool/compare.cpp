@@ -18,7 +18,6 @@
 #include <functional>
 
 #include "common.h"
-#include "python_json.h"
 #include "sqlite_db.h"
 
 namespace Tool {
@@ -35,8 +34,7 @@ namespace {
 //   for books added, from id --added-from, the time and the random uuid they
 //   got;
 // - the files: metadata.opf as parsed XML, without the producer, which names
-//   the program, or the values of composite columns, which Cousoir does not
-//   compute; cover.jpg by its size and pixels, as two JPEG encoders may
+//   the program; cover.jpg by its size and pixels, as two JPEG encoders may
 //   differ by a few bits; anything else byte for byte;
 // - but the files of conversions, each book and format listed by --converted:
 //   an EPUB or KEPUB by its entries, an AZW3 or MOBI by the files Calibre
@@ -345,15 +343,6 @@ std::optional<QStringList> opf(const QString &path, bool added)
             for (auto &[key, value] : attributes) {
                 if (key == QLatin1String("content"))
                     value = QStringLiteral("<now>");
-            }
-        }
-        if (element.attribute(QStringLiteral("name")).startsWith(QLatin1String("calibre:user_metadata:"))) {
-            for (auto &[key, value] : attributes) {
-                PythonJson::Value field = PythonJson::parse(value.toUtf8());
-                if (key == QLatin1String("content") && field.text(QStringLiteral("datatype")) == QLatin1String("composite")) {
-                    field.insert(QStringLiteral("#value#"), PythonJson::Value::from(QStringLiteral("<computed>")));
-                    value = PythonJson::dumps(field);
-                }
             }
         }
         std::sort(attributes.begin(), attributes.end());
@@ -909,6 +898,51 @@ int compareReads(const QStringList &arguments)
     if (!counts.isEmpty())
         out() << " {" << counts.join(QStringLiteral(", ")) << '}';
     out() << '\n';
+    return differences ? 1 : 0;
+}
+
+// --- compare-templates ---------------------------------------------------
+
+// Compares what tools/oracle/template_oracle.py and `cousoir-cli template`
+// make of each template on each book: the same text, or an error on both
+// sides, whatever its message, which Calibre writes in its own language.
+
+int compareTemplates(const QStringList &arguments)
+{
+    const std::optional<QJsonValue> calibreRead = readJson(arguments.at(0));
+    const std::optional<QJsonValue> cousoirRead = readJson(arguments.at(1));
+    if (!calibreRead || !cousoirRead)
+        return 1;
+    const QJsonArray calibre = calibreRead->toArray();
+    const QJsonArray cousoir = cousoirRead->toArray();
+    if (calibre.size() != cousoir.size()) {
+        err() << calibre.size() << " templates for Calibre, " << cousoir.size() << " for Cousoir" << Qt::endl;
+        return 1;
+    }
+    int differences = 0;
+    int alike = 0;
+    for (qsizetype i = 0; i < calibre.size(); ++i) {
+        const QJsonObject theirs = calibre.at(i).toObject();
+        const QJsonObject ours = cousoir.at(i).toObject();
+        const QJsonObject theirBooks = theirs.value(QLatin1String("books")).toObject();
+        const QJsonObject ourBooks = ours.value(QLatin1String("books")).toObject();
+        bool same = true;
+        for (auto it = theirBooks.constBegin(); it != theirBooks.constEnd(); ++it) {
+            const QJsonValue a = it.value();
+            const QJsonValue b = ourBooks.value(it.key());
+            if (a == b || (a.isObject() && b.isObject()))
+                continue;
+            if (same) {
+                out() << display(theirs.value(QLatin1String("template"))) << '\n';
+                same = false;
+            }
+            ++differences;
+            out() << "  book " << it.key() << "\n    calibre " << display(a) << "\n    cousoir " << display(b) << '\n';
+        }
+        if (same)
+            ++alike;
+    }
+    out() << '\n' << alike << " of " << calibre.size() << " templates alike, " << differences << " differences\n";
     return differences ? 1 : 0;
 }
 

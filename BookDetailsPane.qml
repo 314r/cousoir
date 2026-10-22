@@ -483,10 +483,22 @@ FocusScope {
                             }
                         }
 
+                        // A composite's value, which its template computes.
+                        Component {
+                            id: computedField
+
+                            MetaRow {
+                                objectName: "field_" + customField.modelData
+                                label: customField.field.name || ""
+                                value: customField.field.text || ""
+                            }
+                        }
+
                         // Only the control its kind uses.
                         Loader {
                             Layout.fillWidth: true
-                            sourceComponent: customField.choice ? choiceField : textField
+                            sourceComponent: customField.type === "composite" ? computedField
+                                : customField.choice ? choiceField : textField
                         }
 
                         Label {

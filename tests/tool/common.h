@@ -56,6 +56,7 @@ int compareLibraries(const QStringList &arguments);
 int compareDevices(const QStringList &arguments);
 int compareReads(const QStringList &arguments);
 int compareReading(const QStringList &arguments);
+int compareTemplates(const QStringList &arguments);
 
 // readers.cpp
 int koboImport(const QStringList &arguments);

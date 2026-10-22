@@ -105,10 +105,9 @@ QString seriesIndexText(double index)
 constexpr int builtInFields = 23;
 
 // serialize_user_metadata(): each custom column, by key, as its field
-// metadata with the book's value, in json.dumps()'s spelling. A composite's
-// value is Calibre's to compute: the one `previous` holds stays.
-QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book &book,
-                                            const QHash<QString, QString> &previous)
+// metadata with the book's value, in json.dumps()'s spelling; a composite's
+// as its template made it.
+QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book &book)
 {
     // rec_index: the columns by label, a series' numbers next to it.
     QList<qsizetype> order(data.customColumns.size());
@@ -158,11 +157,8 @@ QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book 
         const CustomValue value = book.custom.value(index);
         PythonJson::Value stored;
         if (composite) {
-            stored = PythonJson::Value::from(QString());
-            bool ok = false;
-            const PythonJson::Value before = PythonJson::parse(previous.value(key).toUtf8(), &ok);
-            if (ok && before.find(QStringLiteral("#value#")))
-                stored = *before.find(QStringLiteral("#value#"));
+            // The value computed from the template, as text.
+            stored = PythonJson::Value::from(value.value.toString());
         } else if (column.multiple) {
             stored = PythonJson::Value::from(value.value.toStringList());
         } else if (value.value.isNull()) {
@@ -284,14 +280,11 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
     // The user categories, the custom columns, then the annotations, as
     // metadata_to_opf() writes them.
     const QList<QPair<QString, QString>> kept = keptMetadata(previous);
-    QHash<QString, QString> previousColumns;
     for (const auto &[name, content] : kept) {
         if (name == QLatin1String("calibre:user_categories"))
             meta(name, content);
-        else if (name.startsWith(QLatin1String("calibre:user_metadata:")))
-            previousColumns.insert(name.mid(22), content);
     }
-    for (const auto &[name, content] : userMetadata(data, book, previousColumns))
+    for (const auto &[name, content] : userMetadata(data, book))
         meta(name, content);
     for (const auto &[name, content] : kept) {
         if (name == QLatin1String("calibre:annotation"))

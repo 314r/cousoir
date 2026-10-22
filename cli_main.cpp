@@ -24,6 +24,7 @@
 #include "calibre_db.h"
 #include "calibre_list.h"
 #include "calibre_search.h"
+#include "calibre_template.h"
 #include "commit_engine.h"
 #include "concurrency_guard.h"
 #include "conversion.h"
@@ -556,6 +557,41 @@ int device(const QString &libraryPath, const QString &spec)
     return 0;
 }
 
+// What each template of a JSON array makes of each book, as
+// tools/oracle/template_oracle.py prints Calibre's: by book id, the text or
+// {"error": message}.
+int templates(const QString &libraryPath, const QString &file)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 1;
+    QFile in(file);
+    if (!in.open(QIODevice::ReadOnly)) {
+        err() << QStringLiteral("Cannot read %1.").arg(file) << Qt::endl;
+        return 1;
+    }
+    const QJsonArray list = QJsonDocument::fromJson(in.readAll()).array();
+    const CalibreTemplate::Library library(data, CalibreConfig::load().interfaceLanguage);
+    QList<const Book *> books;
+    for (const Book &book : data.books)
+        books.append(&book);
+    std::sort(books.begin(), books.end(), [](const Book *a, const Book *b) { return a->id < b->id; });
+    QJsonArray results;
+    for (const QJsonValue &value : list) {
+        const QString text = value.toString();
+        QJsonObject row;
+        for (const Book *book : std::as_const(books)) {
+            QString error;
+            const QString result = CalibreTemplate::evaluate(text, library, *book, &error);
+            row.insert(QString::number(book->id), error.isNull() ? QJsonValue(result)
+                                                                 : QJsonValue(QJsonObject{ { QStringLiteral("error"), error } }));
+        }
+        results.append(QJsonObject{ { QStringLiteral("template"), text }, { QStringLiteral("books"), row } });
+    }
+    out() << QJsonDocument(results).toJson();
+    return 0;
+}
+
 // A device of an apply file, its folders relative to the file.
 QString deviceSpec(const QDir &base, const QString &device)
 {
@@ -865,7 +901,7 @@ int main(int argc, char *argv[])
                                          QStringLiteral("-1"));
     parser.addOption(limitOption);
     parser.addPositionalArgument(QStringLiteral("command"),
-                                 QStringLiteral("list, search, doctor, apply, read or device"));
+                                 QStringLiteral("list, search, doctor, apply, read, device or template"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -886,7 +922,8 @@ int main(int argc, char *argv[])
         }
         return search(path, arguments.mid(1).join(u' '), parser.value(limitOption).toInt());
     }
-    const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device");
+    const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device")
+        || arguments.value(0) == QLatin1String("template");
     if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != takesOne)
         parser.showHelp(2);
     const QString libraryPath = parser.isSet(libraryOption) ? parser.value(libraryOption)
@@ -903,6 +940,8 @@ int main(int argc, char *argv[])
         return apply(libraryPath, arguments.at(1), parser.isSet(forceOption));
     if (arguments.first() == QLatin1String("device"))
         return device(libraryPath, arguments.at(1));
+    if (arguments.first() == QLatin1String("template"))
+        return templates(libraryPath, arguments.at(1));
     err() << QStringLiteral("Unknown command “%1”.").arg(arguments.first()) << Qt::endl;
     return 2;
 }

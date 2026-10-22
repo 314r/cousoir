@@ -33,6 +33,7 @@
 #endif
 
 #include "calibre_date.h"
+#include "calibre_template.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -794,10 +795,12 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
     return true;
 }
 
-void findFiles(LibraryData *data)
+void findFiles(LibraryData *data, const QSet<int> *only)
 {
     const QDir library(data->libraryPath);
     for (Book &book : data->books) {
+        if (only && !only->contains(book.id))
+            continue;
         const QString folder = library.filePath(book.path);
         const QFileInfo cover(QDir(folder).filePath(QStringLiteral("cover.jpg")));
         book.coverFile = !book.path.isEmpty() && cover.isFile() ? cover.filePath() : QString();
@@ -848,6 +851,7 @@ bool loadLibrary(const QString &libraryPath, const QString &snapshotPath, const 
     }
     db.close();
     findFiles(&loaded);
+    CalibreTemplate::computeComposites(&loaded, config.interfaceLanguage);
     *data = std::move(loaded);
     return true;
 }

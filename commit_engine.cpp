@@ -31,6 +31,7 @@
 #include "book_operations.h"
 #include "calibre_db.h"
 #include "calibre_lock.h"
+#include "calibre_template.h"
 #include "field_writers.h"
 #include "file_transaction.h"
 #include "opf.h"
@@ -38,6 +39,18 @@
 #include "sqlite_db.h"
 
 namespace {
+
+// The composite columns' values of the books whose metadata.opf is
+// written: found with their files, which templates may read.
+void withComposites(LibraryData *data, const QString &interfaceLanguage, const QSet<int> &books)
+{
+    const bool composites = std::any_of(data->customColumns.cbegin(), data->customColumns.cend(),
+                                        [](const CustomColumn &c) { return c.datatype == QLatin1String("composite"); });
+    if (!composites)
+        return;
+    CalibreDb::findFiles(data, &books);
+    CalibreTemplate::computeComposites(data, interfaceLanguage, &books);
+}
 
 using CommitEngine::Request;
 using CommitEngine::Result;
@@ -244,6 +257,8 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         trashed.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
         if (!CalibreDb::readLibrary(db, &trashed, &error))
             return undo(error);
+        withComposites(&trashed, request.config.interfaceLanguage,
+                       QSet<int>(request.trash.cbegin(), request.trash.cend()));
         operations.before = &trashed;
         if (!BookOperations::removeBooks(db, files, request.trash, operations, &done, &error))
             return undo(error);
@@ -299,6 +314,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         files.rollback(nullptr);
         return fail(error);
     }
+    withComposites(&data, request.config.interfaceLanguage, dirtied);
     QHash<int, Opf::ExactDates> exactDates;
     for (const int id : done.added + done.restored) {
         SqliteStatement dates(db, QStringLiteral("SELECT pubdate, timestamp FROM books WHERE id=?"));

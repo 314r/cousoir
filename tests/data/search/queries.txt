@@ -395,6 +395,44 @@ words:montagne
 #saga_index:>1
 #saga_index:true
 #saga_index:false
+# Composite columns: text, a number, a date, values between commas; words
+# alone look in them as text.
+#computed:vian
+#computed:"=Good Omens by Terry Pratchett & Neil Gaiman"
+#computed:~^le
+#computed:true
+#computed:false
+#pagesort:320
+#pagesort:>100
+#pagesort:0
+#pagesort:true
+#pagesort:false
+#started2:2024
+#started2:<2000
+#started2:true
+#started2:false
+#labels:sf
+#labels:=SF
+#labels:fantasy
+#labels:#>2
+#labels:true
+#labels:false
+by terry
+# Templates: their text compared as text, a number, a date, yes or no.
+template:"{title}#@#:t:omens"
+template:"{title} {authors}#@#:t:=Good Omens Terry Pratchett & Neil Gaiman"
+template:"{tags:uppercase()}#@#:t:~^ROMAN"
+template:"program: $#pagecount#@#:n:>100"
+template:"program: $#pagecount#@#:n:0"
+template:"program: format_date($$#started, 'yyyy-MM-dd')#@#:d:2024"
+template:"program: format_date($$#started, 'yyyy-MM-dd')#@#:d:<2000"
+template:"{series}#@#:b:yes"
+template:"{series}#@#:b:false"
+template:"{series}#@#:B:true"
+template:"{title}"
+template:"{title}#@#:x:a"
+template:"program: nosuchfunction()#@#:t:x"
+template:"{title}#@#:n:>1"
 #nothing:x
 #genre:sf and not #read:yes
 bien

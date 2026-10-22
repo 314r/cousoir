@@ -35,12 +35,13 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 🖼️ **A table or a wall of covers.** Sort by title, author, series, date added or rating, in Calibre's own order:
   *Le Petit Prince* files under "Petit Prince, Le".
 - 🔍 **Search like Calibre.** Calibre's own search language, `tag:sf
-  rating:>=4 not author:vian`, finding exactly the books Calibre finds, with
+  rating:>=4 not author:vian`, templates included, finding exactly the
+  books Calibre finds, with
   your saved searches in the sidebar and your virtual libraries a click
   away. Or browse by author, series, tag, language and publisher.
 - ✏️ **Edit in place.** Title, authors, series, tags, rating, publisher,
   languages, dates, identifiers and your custom columns save as you leave
-  the field; the description edits as text, with **bold**, *italics*, lists
+  the field, and composite columns compute as in Calibre; the description edits as text, with **bold**, *italics*, lists
   and links.
   Drop or paste an image to change the cover.
 - 📚 **Many books at once.** Select with Ctrl, Shift or Ctrl+A, then trash,
