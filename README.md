@@ -71,9 +71,10 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   catalog, and a phone's camera opens its web page from a QR code, to
   search the books and download them. No Calibre needed, and
   `cousoir-cli serve` does it on a server.
-- 🖍️ **Your reading, back from the Kobo.** How far you got in each book, and
-  your highlights and notes by chapter, copied or saved as Markdown, still
-  there once the Kobo is unplugged.
+- 🖍️ **Your reading, back from the Kobo and the Kindle.** How far you got in
+  each book on a Kobo, and your highlights and notes, by chapter on a Kobo
+  and from "My Clippings" on a Kindle, copied or saved as Markdown, still
+  there once the reader is unplugged.
 - 🛡️ **Safe, shared or not.** Cousoir writes only when nothing else can:
   Calibre closed and, for a library in Dropbox, Syncthing, Nextcloud or on a
   network folder, no other computer editing.

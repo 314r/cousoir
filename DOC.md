@@ -642,6 +642,19 @@ The Calibre job runs the MTP driver on a stand-in for the Kindle, its files
 as Cousoir listed them, and notes what the driver would do to them, which
 Cousoir then does over the connection it kept open from the listing on.
 
+The highlights, notes and bookmarks made on the Kindle show as the Kobo's
+do, read from `documents/My Clippings.txt`, which the Kindle writes in its
+own language (English, French, German, Spanish, Italian, Portuguese and
+Dutch dates are read): on a book's page, each with its page and location
+and the day it was made, copied or saved as Markdown, and kept once the
+Kindle is unplugged. A highlight changed on the Kindle leaves its old
+version in the file: the last one shows. A note shows under the highlight
+it was made on. The books are matched with the library's by title and
+authors, as Calibre matches a reader's books, including books no longer
+on the Kindle, whose clippings stay. The Kindle writes there neither how
+far a book is read nor for how long. Calibre reads no clippings; the file
+shows among the Kindle's books, as in Calibre.
+
 Cousoir departs from Calibre here:
 
 - The books Calibre has not seen yet, bought from Amazon or copied by hand,
@@ -1080,7 +1093,8 @@ The tests check the port against Calibre itself:
   the fixture. `kindle_tests` does the same for Kindles, on folders that
   stand for them: Calibre's rules for the folders it ignores, the books,
   removals with their covers, the covers put back, the jobs and how their
-  operations reach the Kindle. `book_library_tests` and the UI tests drive
+  operations reach the Kindle, and "My Clippings.txt" in three of the
+  Kindle's languages (`tests/data/kindle`). `book_library_tests` and the UI tests drive
   readers with fake lists of mounted volumes and Kindles and
   `cousoir-test-tool` standing in for Calibre; they never see the
   readers plugged into the computer, which can stay plugged in.

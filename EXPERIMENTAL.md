@@ -224,7 +224,7 @@ copied or saved as Markdown.
 | 3. Many books at once | done |
 | 4. Editing the description | done |
 | 5. Custom columns | done; as table columns, later |
-| 6. Reading life from the readers | done for the Kobo; a Kindle's clippings, later |
+| 6. Reading life from the readers | done for the Kobo; a Kindle's clippings with goal 17 |
 | 7. A command palette | done |
 | 8. Calibre's templates | done |
 | 9. Metadata from the web | done for one book; several at once, later |
@@ -234,7 +234,7 @@ copied or saved as Markdown.
 | 14. A Kobo without Calibre | done; a PDF goes without metadata |
 | 15. The library on the network | done |
 | 16. Metadata from the web without Calibre | done, with Open Library |
-| 17. Kindle highlights | planned |
+| 17. Kindle highlights | done |
 | 13. Notes | planned |
 
 ## Journal
@@ -826,4 +826,23 @@ the Network section.
   end-to-end download saved to a copy of the library in
   `book_library_tests`. One manual run against the real site found
   *Shadows Linger* with its publisher, date, series and description.
+
+### 2026-10-22 — goal 17, highlights from a Kindle (`exp-clippings`)
+
+- `KindleClippings` reads "My Clippings.txt": the book's title and
+  authors ("Vian, Boris" or "Pratchett, Terry;Gaiman, Neil" made names and
+  an author sort), the kind, page and location (with the older "Loc.
+  1702-05"), the date in seven of the Kindle's languages, the text. By
+  book: a highlight's last version over the ones it replaced, a note on
+  the highlight it was made on, notes alone, bookmarks, in the book's
+  order; emptied highlights left out.
+- The Kindle's clippings become its books' notes, matched with the library
+  as Calibre matches a reader's books (curly apostrophes and all); those of
+  books gone from the Kindle are kept too, and the reading log keeps both
+  once it is unplugged. A note's place shows as "page 12, location
+  170-172", on the book's page and in the Markdown.
+- Tests: the parser and grouping on a fixture in three languages
+  (`kindle_tests`), and a folder standing for a Kindle in
+  `book_library_tests`: the notes on the book's page and the Kindle's, and
+  after unplugging.
 

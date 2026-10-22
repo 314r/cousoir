@@ -106,6 +106,8 @@ qt_add_library(cousoir_core STATIC
     kepub.h
     kindle.cpp
     kindle.h
+    kindle_clippings.cpp
+    kindle_clippings.h
     kindle_send.cpp
     kindle_send.h
     kobo.cpp

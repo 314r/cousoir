@@ -156,7 +156,8 @@ QString notesMarkdown(const QString &title, const QStringList &authors, const QL
                 blocks.append(QStringLiteral("## ") + note.chapterTitle);
         }
         if (note.type == QLatin1String("Bookmark")) {
-            blocks.append(QObject::tr("*Bookmark, %1 % into the chapter*").arg(note.chapterProgress));
+            blocks.append(note.position.isEmpty() ? QObject::tr("*Bookmark, %1 % into the chapter*").arg(note.chapterProgress)
+                                                  : QObject::tr("*Bookmark, %1*").arg(note.position));
             continue;
         }
         if (!note.text.trimmed().isEmpty())

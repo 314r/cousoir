@@ -21,6 +21,7 @@
 #include <QTemporaryDir>
 
 #include "device_files.h"
+#include "kindle_clippings.h"
 
 namespace {
 
@@ -184,6 +185,41 @@ QList<DeviceBook> books(DeviceFiles &files, QString *error)
         found.append(book);
     }
     return found;
+}
+
+QList<DeviceBook> clippings(DeviceFiles &files, QString *error)
+{
+    const QString path = QStringLiteral("documents/My Clippings.txt");
+    QList<DeviceBook> books;
+    for (const KindleClippings::Book &clipped : KindleClippings::byBook(KindleClippings::parse(readWhole(files, path, error)))) {
+        DeviceBook book;
+        book.lpath = path;
+        book.title = clipped.title;
+        book.authors = clipped.authors;
+        book.authorSort = clipped.authorSort;
+        // Highlighted, so begun; how far, the Kindle does not write there.
+        book.reading.status = 1;
+        book.reading.notes = clipped.notes;
+        books.append(book);
+    }
+    return books;
+}
+
+void attachClippings(QList<DeviceBook> *books, QList<DeviceBook> *clippings)
+{
+    for (DeviceBook &book : *books)
+        book.reading = {};
+    for (qsizetype i = clippings->size() - 1; i >= 0; --i) {
+        const DeviceBook &clipped = clippings->at(i);
+        if (clipped.bookId <= 0)
+            continue;
+        const auto on = std::find_if(books->begin(), books->end(),
+                                     [&clipped](const DeviceBook &book) { return book.bookId == clipped.bookId; });
+        if (on == books->end())
+            continue;
+        on->reading = clipped.reading;
+        clippings->removeAt(i);
+    }
 }
 
 bool removeBooks(DeviceFiles &files, const QList<DeviceBook> &books, QString *error)

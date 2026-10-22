@@ -176,6 +176,10 @@ private:
         // A Kindle's, once read: Calibre keeps its settings by it.
         QString serial;
         QList<DeviceBook> books;
+        // A Kindle's clippings of library books no longer on it, and, as
+        // read, of all; their notes go to the books on it.
+        QList<DeviceBook> clippings;
+        QList<DeviceBook> allClippings;
         QString error;
         bool loading = false;
     };
@@ -196,6 +200,8 @@ private:
     };
 
     void scan();
+    // Matches a Kindle's books and clippings with the library's books.
+    void matchKindle(Connected &connected);
     void load(const QString &root);
     // Keeps what a reader tells of the reading of the library's books.
     void recordReading(const Connected &connected);

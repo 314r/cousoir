@@ -41,6 +41,16 @@ QList<DeviceBook> books(DeviceFiles &files, QString *error);
 // metadata.calibre, whose others stay as written.
 bool removeBooks(DeviceFiles &files, const QList<DeviceBook> &books, QString *error);
 
+// The books of documents/My Clippings.txt, each with its highlights, notes
+// and bookmarks, as books of the Kindle at that file's path; none when
+// there is no such file.
+QList<DeviceBook> clippings(DeviceFiles &files, QString *error);
+
+// Gives the Kindle's books the notes of `clippings` of the same library
+// book, matched both; the others' stay in `clippings`, for books gone from
+// the Kindle.
+void attachClippings(QList<DeviceBook> *books, QList<DeviceBook> *clippings);
+
 // _sync_kindle_thumbnails(): puts back the covers in system/thumbnails that
 // Amazon replaced, from amazon-cover-bug. Returns how many.
 int restoreThumbnails(DeviceFiles &files, QString *error);

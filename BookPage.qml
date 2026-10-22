@@ -540,7 +540,8 @@ Rectangle {
 
                                         Label {
                                             Layout.fillWidth: true
-                                            text: [qsTr("%1 % into the chapter").arg(note.modelData.progress),
+                                            text: [note.modelData.position
+                                                       || qsTr("%1 % into the chapter").arg(note.modelData.progress),
                                                    note.modelData.created].filter(part => part.length > 0).join("  ·  ")
                                             color: Theme.textFaint
                                             font.pointSize: Theme.fontPointSizeCaption
