@@ -39,11 +39,24 @@ books; Enter or a double click lists an item's books, with the item in the
 breadcrumb. Esc, Alt+Left or the back button goes back up one level.
 
 The books show as a table or, with Ctrl+G or the toolbar button, as a grid of
-covers; both keep the same book selected. Click the Title, Authors, Series,
-Added or Rating column header to sort, and click it again to reverse the
-order. Titles sort by Calibre's title sort, "Petit Prince, Le", and authors by
-their author sort, as Calibre sorts them. Columns leave a narrow window in a
-set order, Formats first. The search, Ctrl+F, is Calibre's: see
+covers; both keep the same book selected. Click a column's header to sort,
+and click it again to reverse the order. The list sorts as Calibre's does
+(`multisort()`), each field by the keys Calibre makes of it: titles by their
+title sort, "Petit Prince, Le", authors by their author sort, a series by its
+name sorted as a title in the book's language then the book's number, tags
+and languages by their sorted names, formats by how many a book has, dates to
+the second, a book without a number as the tweak says. Books alike keep the
+order the sorts before gave them, Calibre's sort history: sorted by author
+after a sort by title, an author's books come by title. The golden test
+compares 90 sorts with Calibre's on three libraries.
+
+A right click on a header shows, hides or moves its column and sorts by it;
+any of Calibre's columns can show: title, authors, series, rating, tags,
+publisher, published, added, modified, size, languages, formats,
+identifiers, pages, id, path and the library's custom columns. The columns
+and the sort are kept for each library; the first time, they are those
+Calibre's list last had for it, if Calibre saved them. Columns leave a narrow
+window from the right. The search, Ctrl+F, is Calibre's: see
 [Searching](#searching). In a browse section, it finds the items whose name
 has every word typed.
 
@@ -899,7 +912,10 @@ The tests check the port against Calibre itself:
   `tests/data/templates/templates.json` through Calibre's formatter
   (`tools/oracle/template_oracle.py`) and `cousoir-cli template` on the
   same three libraries, which must make the same text of each book, or
-  both fail. With `COUSOIR_GOLDEN_REAL=1` it
+  both fail. It sorts them by the sort histories of
+  `tests/data/sort/sorts.json` with Calibre's `multisort()`
+  (`tools/oracle/sort_oracle.py`) and `cousoir-test-tool sort-books`, which
+  must give the same order. With `COUSOIR_GOLDEN_REAL=1` it
   does the same with the library Calibre opens. It then applies the edits of
   `tests/data/edits/edits.json`, and apart the bulk edits of
   `tests/data/edits/bulk.json` and the custom columns' edits of

@@ -168,6 +168,30 @@ searches fixture "$root/tests/data/library"
 searches custom "$root/tests/data/library-custom"
 searches generated "$work/generated"
 
+# The sorts of tests/data/sort/sorts.json, sort histories as Calibre's list
+# keeps them, through Calibre's multisort() and Cousoir's, on the three
+# libraries; in English, the language whose names Cousoir has for now.
+sorts() {
+    local name=$1 source=$2
+    rm -rf "$work/$name-sort"
+    cp -a --reflink=auto "$source" "$work/$name-sort"
+    CALIBRE_OVERRIDE_LANG=en oracle "$root/tools/oracle/sort_oracle.py" -- "$work/$name-sort" \
+        "$root/tests/data/sort/sorts.json" "$work/$name-sort-calibre.json" || return 0
+    CALIBRE_OVERRIDE_LANG=en "$tool" sort-books "$work/$name-sort" "$root/tests/data/sort/sorts.json" \
+        "$work/$name-sort-cousoir.json"
+    if "$tool" compare-sorts "$work/$name-sort-calibre.json" "$work/$name-sort-cousoir.json" > "$work/$name-sorts.txt"; then
+        echo "$name sorts: $(tail -1 "$work/$name-sorts.txt")"
+    else
+        echo "$name sorts: Cousoir sorts the books otherwise than Calibre:"
+        grep -v "not compared" "$work/$name-sorts.txt" | head -40
+        status=1
+    fi
+}
+
+sorts fixture "$root/tests/data/library"
+sorts custom "$root/tests/data/library-custom"
+sorts generated "$work/generated"
+
 # The same edits written by Calibre and by Cousoir, then compared table by
 # table and file by file; calibredb then checks Cousoir's copy and lists it as
 # it lists Calibre's.

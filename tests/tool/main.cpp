@@ -42,6 +42,8 @@ const Command commands[] = {
     { "make-library", Tool::makeLibrary, 2, 3, "FOLDER BOOKS [SEED]" },
     { "search-books", Tool::searchBooks, 3, 3, "LIBRARY QUERIES.txt OUT.json" },
     { "compare-searches", Tool::compareSearches, 2, 2, "CALIBRE.json COUSOIR.json" },
+    { "sort-books", Tool::sortBooks, 3, 3, "LIBRARY SORTS.json OUT.json" },
+    { "compare-sorts", Tool::compareSorts, 2, 2, "CALIBRE.json COUSOIR.json" },
 };
 
 } // namespace

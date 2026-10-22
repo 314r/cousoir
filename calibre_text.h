@@ -35,6 +35,10 @@ struct Tweaks
     // "first_free", "next_free", "last_free", or a number.
     QString seriesIndexAutoIncrement = QStringLiteral("next");
     std::optional<double> seriesIndexAutoIncrementNumber;
+    // The list's sort: the value of a number a book lacks, and how many of
+    // the last sorts it keeps for ties.
+    double valueForUndefinedNumbers = 0;
+    int maximumResortLevels = 5;
 
     static Tweaks defaults();
 };

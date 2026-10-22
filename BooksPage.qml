@@ -18,14 +18,42 @@ Rectangle {
 
     required property BookLibrary library
     property bool gridMode: false
-    readonly property var columns: [
-        { key: "title", title: qsTr("Title"), sort: "title" },
-        { key: "authors", title: qsTr("Authors"), sort: "authors", chars: 18, drop: 5 },
-        { key: "series", title: qsTr("Series"), sort: "series", chars: 16, drop: 2 },
-        { key: "formats", title: qsTr("Formats"), chars: 12, drop: 1 },
-        { key: "added", title: qsTr("Added"), sort: "added", chars: 10, drop: 4 },
-        { key: "rating", title: qsTr("Rating"), sort: "rating", chars: 6, drop: 3 }
-    ]
+    // The library's columns, the title stretching, those on the right
+    // leaving first when the window is narrow.
+    readonly property var columns: {
+        const shown = page.library.availableColumns.filter(column => column.shown)
+        return shown.map((column, index) => ({
+            key: column.key,
+            title: column.title,
+            sort: column.key,
+            chars: index === 0 ? 0 : page.columnChars(column),
+            right: column.kind === "number",
+            drop: shown.length - index
+        }))
+    }
+    // The column whose menu is open, and its actions.
+    property string menuColumn: ""
+    readonly property var columnActions: {
+        if (!page.menuColumn)
+            return []
+        const all = page.library.availableColumns
+        const shown = all.filter(column => column.shown).map(column => column.key)
+        const at = shown.indexOf(page.menuColumn)
+        const actions = [
+            { key: "sort:asc", title: qsTr("Sort A to Z, 1 to 9") },
+            { key: "sort:desc", title: qsTr("Sort Z to A, 9 to 1") }
+        ]
+        if (at > 0) {
+            if (at > 1)
+                actions.push({ key: "left", title: qsTr("Move left") })
+            if (at < shown.length - 1)
+                actions.push({ key: "right", title: qsTr("Move right") })
+            actions.push({ key: "hide", title: qsTr("Hide this column") })
+        }
+        for (const column of all.filter(column => !column.shown))
+            actions.push({ key: "show:" + column.key, title: qsTr("Show “%1”").arg(column.title) })
+        return actions
+    }
     property ConversionService conversions: null
     property DeviceLibrary devices: null
     readonly property bool canConvert: library.writable && conversions !== null && conversions.available
@@ -127,8 +155,37 @@ Rectangle {
     }
 
     function sortBy(key) {
-        const option = page.library.sortOption
-        page.library.sortOption = option === key ? key + "Desc" : key
+        page.library.sortBy(key)
+    }
+
+    // How many caption characters a column of that kind takes.
+    function columnChars(column) {
+        const widths = { authors: 18, series: 16, formats: 12, publisher: 14, languages: 12, pubdate: 9, size: 9,
+                         id: 6, pages: 6, tags: 18, identifiers: 22, path: 24 }
+        if (widths[column.key] !== undefined)
+            return widths[column.key]
+        return { date: 10, rating: 7, number: 8, long: 20 }[column.kind] || 14
+    }
+
+    function runColumnAction(key) {
+        const shown = page.library.columns.slice()
+        const at = shown.indexOf(page.menuColumn)
+        if (key === "sort:asc" || key === "sort:desc") {
+            page.library.sortOption = page.menuColumn + (key === "sort:desc" ? "Desc" : "")
+        } else if (key === "left" || key === "right") {
+            const to = key === "left" ? at - 1 : at + 1
+            shown.splice(at, 1)
+            shown.splice(to, 0, page.menuColumn)
+            page.library.columns = shown
+        } else if (key === "hide") {
+            shown.splice(at, 1)
+            page.library.columns = shown
+        } else if (key.startsWith("show:")) {
+            // Beside the column asked about.
+            shown.splice(at + 1, 0, key.slice(5))
+            page.library.columns = shown
+        }
+        page.focusList()
     }
 
     // The current book's id, or 0.
@@ -260,6 +317,10 @@ Rectangle {
                 Accessible.name: qsTr("Books")
                 onActivated: function(index) { page.activate(index) }
                 onSortRequested: function(sort) { page.sortBy(sort) }
+                onColumnMenuRequested: function(key, header, x, y) {
+                    page.menuColumn = key
+                    columnMenu.popup(header, x, y)
+                }
                 onMenuRequested: function(index, row, x, y) { page.openMenu(row, x, y) }
                 onSelectRequested: function(index, mode) { page.selectRow(index, mode) }
                 onSelectAllRequested: page.library.books.selectAll()
@@ -352,6 +413,14 @@ Rectangle {
             bookIds: visible ? page.library.books.selectedIds : []
             onFailed: function(message) { page.failed(message) }
         }
+    }
+
+    ActionMenu {
+        id: columnMenu
+        objectName: "columnMenu"
+
+        actions: page.columnActions
+        onChosen: function(key) { page.runColumnAction(key) }
     }
 
     ActionMenu {
