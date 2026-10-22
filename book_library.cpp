@@ -270,6 +270,8 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_restriction.clear();
     m_searchedText.reset();
     m_sectionRows.clear();
+    m_sectionError.clear();
+    m_visibleItems.clear();
     m_loaded = false;
     m_filterKind.clear();
     m_filterId = 0;
@@ -282,7 +284,7 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_importedBooks.clear();
     m_importedDuplicates.clear();
     m_backedUp = false;
-    m_bulkOriginals.clear();
+    m_bulkUndo.clear();
     emit bulkUndoChanged();
     rebuildCheck();
     emit libraryChanged();
@@ -326,7 +328,7 @@ bool BookLibrary::schemaKnown() const
 
 QVariantMap BookLibrary::counts() const
 {
-    const bool restricted = !m_virtualLibrary.isEmpty();
+    const bool restricted = !m_virtualLibrary.isEmpty() && m_virtualLibraryError.isEmpty();
     const auto items = [&](const char *kind) {
         return restricted ? visibleItems(QLatin1String(kind)).size() : facetItems(QLatin1String(kind))->size();
     };
@@ -354,7 +356,9 @@ void BookLibrary::setSection(const QString &section)
     if (m_section == section || !(sections().contains(section) || savedSearch))
         return;
     m_section = section;
-    m_sectionRows = savedSearch ? savedSearchRows(section.mid(7)) : QBitArray();
+    const CalibreSearch::Result found = savedSearch ? this->savedSearch(section.mid(7)) : CalibreSearch::Result();
+    m_sectionRows = found.rows;
+    m_sectionError = found.error;
     const bool hadFilter = !m_filterKind.isEmpty();
     m_filterKind.clear();
     m_filterId = 0;
@@ -464,19 +468,41 @@ QVariantList BookLibrary::savedSearches() const
 
 void BookLibrary::applyVirtualLibrary()
 {
+    m_visibleItems.clear();
     m_restriction = QBitArray(m_data.books.size(), true);
+    QString error;
     const QString query = m_index.search.preferences().virtualLibraries.value(m_virtualLibrary);
     if (!m_virtualLibrary.isEmpty()) {
         const CalibreSearch::Result result = CalibreSearch::search(m_index.search, QString(), query);
-        // A virtual library Calibre cannot search either shows nothing, as
-        // in Calibre.
-        m_restriction = result.rows;
+        // One Cousoir cannot search, a custom column's for instance, leaves
+        // the books whole rather than hide them, and says so.
+        if (result.ok())
+            m_restriction = result.rows;
+        else
+            error = result.error;
+    }
+    if (error != m_virtualLibraryError) {
+        m_virtualLibraryError = error;
+        emit virtualLibraryChanged();
     }
     m_searchedText.reset();
-    if (m_section.startsWith(QLatin1String("search:")))
-        m_sectionRows = savedSearchRows(m_section.mid(7));
+    if (m_section.startsWith(QLatin1String("search:"))) {
+        const CalibreSearch::Result found = savedSearch(m_section.mid(7));
+        m_sectionRows = found.rows;
+        m_sectionError = found.error;
+    }
     rebuildSavedSearches();
     emit countsChanged();
+}
+
+QString BookLibrary::virtualLibraryError() const
+{
+    return m_virtualLibraryError;
+}
+
+QString BookLibrary::sectionError() const
+{
+    return m_sectionError;
 }
 
 void BookLibrary::rebuildSavedSearches()
@@ -488,10 +514,12 @@ void BookLibrary::rebuildSavedSearches()
     });
     QVariantList rows;
     for (const QString &name : std::as_const(names)) {
+        const CalibreSearch::Result found = savedSearch(name);
         rows.append(QVariantMap{
             { QStringLiteral("name"), name },
             { QStringLiteral("query"), saved.value(name) },
-            { QStringLiteral("count"), savedSearchRows(name).count(true) },
+            { QStringLiteral("count"), found.ok() ? QVariant(found.rows.count(true)) : QVariant(QString()) },
+            { QStringLiteral("error"), found.error },
         });
     }
     if (rows == m_savedSearches)
@@ -514,13 +542,11 @@ const QBitArray &BookLibrary::searchRows()
     return m_searchRows;
 }
 
-QBitArray BookLibrary::savedSearchRows(const QString &name)
+CalibreSearch::Result BookLibrary::savedSearch(const QString &name)
 {
     QString quoted = name;
     quoted.replace(u'\\', QStringLiteral("\\\\")).replace(u'"', QStringLiteral("\\\""));
-    const CalibreSearch::Result result =
-        CalibreSearch::search(m_index.search, QStringLiteral("search:\"=%1\"").arg(quoted), m_restriction);
-    return result.rows;
+    return CalibreSearch::search(m_index.search, QStringLiteral("search:\"=%1\"").arg(quoted), m_restriction);
 }
 
 QList<FacetItem> BookLibrary::visibleItems(const QString &kind) const
@@ -528,8 +554,10 @@ QList<FacetItem> BookLibrary::visibleItems(const QString &kind) const
     const QList<FacetItem> *all = facetItems(kind);
     if (!all)
         return {};
-    if (m_virtualLibrary.isEmpty())
+    if (m_virtualLibrary.isEmpty() || !m_virtualLibraryError.isEmpty())
         return *all;
+    if (const auto cached = m_visibleItems.constFind(kind); cached != m_visibleItems.cend())
+        return *cached;
     QHash<int, int> counts;
     for (qsizetype row = 0; row < m_data.books.size(); ++row) {
         if (row >= m_restriction.size() || !m_restriction.testBit(row))
@@ -558,6 +586,7 @@ QList<FacetItem> BookLibrary::visibleItems(const QString &kind) const
         if (item.count > 0)
             items.append(item);
     }
+    m_visibleItems.insert(kind, items);
     return items;
 }
 
@@ -740,7 +769,8 @@ void BookLibrary::startLoad()
 
 void BookLibrary::finishLoad()
 {
-    LoadResult result = m_loadWatcher.result();
+    // Taken, not copied: the watcher would keep a whole library alive.
+    LoadResult result = m_loadWatcher.future().takeResult();
     emit loadingChanged();
     if (!result.recovered.isEmpty())
         emit recovered(result.recovered);
@@ -959,9 +989,8 @@ void BookLibrary::rebuildRows()
     else
         std::for_each(sorted.cbegin(), sorted.cend(), add);
 
-    const QList<int> before = m_bookList.ids();
-    m_bookList.setRows(m_data.books, std::move(order), coverKeyOf(m_libraryPath));
-    if (m_scopeCount == scopeCount && m_bookList.ids() == before)
+    const bool changed = m_bookList.setRows(m_data.books, std::move(order), coverKeyOf(m_libraryPath));
+    if (m_scopeCount == scopeCount && !changed)
         return;
     m_scopeCount = scopeCount;
     emit rowsChanged();
@@ -1297,7 +1326,7 @@ void BookLibrary::revertCurrentBook()
 
 int BookLibrary::bulkUndoCount() const
 {
-    return int(m_bulkOriginals.size());
+    return int(m_bulkUndo.size());
 }
 
 QString BookLibrary::updateBooks(const QVariantList &bookIds, const QVariantMap &changes)
@@ -1315,21 +1344,12 @@ QString BookLibrary::updateBooks(const QVariantList &bookIds, const QVariantMap 
     bulk.bookIds.removeIf([this](int id) { return !findBook(id); });
     if (bulk.isEmpty())
         return {};
-    // What the edit can change, as it was, for undoBulkEdit().
-    static const QStringList fields = { QStringLiteral("authors"), QStringLiteral("authorSort"),
-                                        QStringLiteral("series"), QStringLiteral("seriesIndex"),
-                                        QStringLiteral("tags"), QStringLiteral("rating"),
-                                        QStringLiteral("publisher"), QStringLiteral("languages"),
-                                        QStringLiteral("pubdate") };
-    m_bulkOriginals.clear();
-    for (const int id : std::as_const(bulk.bookIds)) {
-        const QVariantMap values = editableValues(*findBook(id));
-        QVariantMap kept;
-        for (const QString &field : fields)
-            kept.insert(field, values.value(field));
-        m_bulkOriginals.insert(id, kept);
+    // The undo of an earlier one gives way; this one's comes once it is
+    // saved.
+    if (!m_bulkUndo.isEmpty()) {
+        m_bulkUndo.clear();
+        emit bulkUndoChanged();
     }
-    emit bulkUndoChanged();
     CommitEngine::Request request;
     request.bulkEdits.append(bulk);
     return queueChange(request);
@@ -1337,17 +1357,18 @@ QString BookLibrary::updateBooks(const QVariantList &bookIds, const QVariantMap 
 
 void BookLibrary::undoBulkEdit()
 {
-    if (m_bulkOriginals.isEmpty() || !m_writable)
+    if (m_bulkUndo.isEmpty() || !m_writable)
         return;
     CommitEngine::Request request;
-    for (auto it = m_bulkOriginals.constBegin(); it != m_bulkOriginals.constEnd(); ++it) {
+    for (auto it = m_bulkUndo.constBegin(); it != m_bulkUndo.constEnd(); ++it) {
         const Book *book = findBook(it.key());
         if (!book)
             continue;
+        // A field changed since, by Cousoir or by Calibre, stays as it is.
         const QVariantMap current = editableValues(*book);
         QVariantMap changes;
-        for (auto field = it.value().constBegin(); field != it.value().constEnd(); ++field) {
-            if (current.value(field.key()) != field.value())
+        for (auto field = it->before.constBegin(); field != it->before.constEnd(); ++field) {
+            if (current.value(field.key()) == it->after.value(field.key()) && field.value() != it->after.value(field.key()))
                 changes.insert(field.key(), field.value());
         }
         BookEdit edit;
@@ -1355,10 +1376,48 @@ void BookLibrary::undoBulkEdit()
         if (BookEdit::fromVariantMap(it.key(), changes, &edit, &error) && !edit.isEmpty())
             request.edits.append(edit);
     }
-    m_bulkOriginals.clear();
+    m_bulkUndo.clear();
     emit bulkUndoChanged();
     if (!request.edits.isEmpty())
         queueChange(request);
+}
+
+void BookLibrary::keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before)
+{
+    // The fields the edits set.
+    QStringList fields;
+    for (const BulkEdit &bulk : bulkEdits) {
+        if (bulk.authors)
+            fields << QStringLiteral("authors") << QStringLiteral("authorSort");
+        if (bulk.series)
+            fields << QStringLiteral("series") << QStringLiteral("seriesIndex");
+        if (bulk.removeAllTags || !bulk.addTags.isEmpty() || !bulk.removeTags.isEmpty())
+            fields << QStringLiteral("tags");
+        if (bulk.rating)
+            fields << QStringLiteral("rating");
+        if (bulk.publisher)
+            fields << QStringLiteral("publisher");
+        if (bulk.languages)
+            fields << QStringLiteral("languages");
+        if (bulk.pubdate)
+            fields << QStringLiteral("pubdate");
+    }
+    m_bulkUndo.clear();
+    for (const Book &old : before) {
+        const Book *now = findBook(old.id);
+        if (!now)
+            continue;
+        const QVariantMap was = editableValues(old);
+        const QVariantMap is = editableValues(*now);
+        BulkUndo undo;
+        for (const QString &field : std::as_const(fields)) {
+            undo.before.insert(field, was.value(field));
+            undo.after.insert(field, is.value(field));
+        }
+        if (undo.before != undo.after)
+            m_bulkUndo.insert(old.id, undo);
+    }
+    emit bulkUndoChanged();
 }
 
 QString BookLibrary::queueEdit(const BookEdit &edit)
@@ -1409,7 +1468,7 @@ void BookLibrary::startCommit()
     request.producer = version.isEmpty() ? QStringLiteral("Cousoir") : QStringLiteral("Cousoir (%1)").arg(version);
     request.producerId = QStringLiteral("cousoir");
     m_commitWatcher.setFuture(QtConcurrent::run([request] {
-        CommitResult committed{ CommitEngine::commit(request), {} };
+        CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits };
         if (committed.result.ok && committed.result.written)
             committed.index = indexBooks(committed.result.data, request.config);
         return committed;
@@ -1424,12 +1483,14 @@ void BookLibrary::startCommit()
 
 void BookLibrary::finishCommit()
 {
-    CommitResult committed = m_commitWatcher.result();
+    CommitResult committed = m_commitWatcher.future().takeResult();
     const CommitEngine::Result &result = committed.result;
     if (!result.ok) {
         // What follows was made on what failed; the library shows what it
         // holds.
         m_pending.clear();
+        m_bulkUndo.clear();
+        emit bulkUndoChanged();
         emit saveFailed(result.error);
         m_reloadPending = true;
     } else if (result.data.libraryPath == m_libraryPath) {
@@ -1440,6 +1501,8 @@ void BookLibrary::finishCommit()
             m_loaded = true;
             m_lastError.clear();
             applyData(result.data, std::move(committed.index));
+            if (!committed.bulkEdits.isEmpty())
+                keepBulkUndo(committed.bulkEdits, result.bulkBefore);
             m_publishedKey = ConcurrencyGuard::changeKey(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")));
             emit publishedKeyChanged();
         }

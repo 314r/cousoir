@@ -31,9 +31,12 @@ Rectangle {
     readonly property bool canConvert: library.writable && conversions !== null && conversions.available
     readonly property bool canSend: devices !== null && devices.available && devices.writable
     readonly property int selectedCount: library.books.selectedCount
-    // The menu's actions: on its row, or on every book selected when its row
-    // is one of several.
-    readonly property bool menuOnSelection: selectedCount > 1 && library.books.isSelected(menuIndex)
+    // The menu's actions: on its book, or on every book selected when they
+    // are several; both kept as the menu opens, should the list change
+    // meanwhile.
+    readonly property bool menuOnSelection: menuTargets.length > 1
+    property int menuBookId: 0
+    property var menuTargets: []
     readonly property var actions: (menuOnSelection ? [] : [
         { key: "open", title: qsTr("Open") },
         { key: "read", title: qsTr("Open in reader") },
@@ -54,8 +57,6 @@ Rectangle {
     property bool paneShown: true
     readonly property var view: gridMode ? coverGrid : bookTable
     readonly property int currentIndex: view.currentIndex
-    // The row whose menu is open.
-    property int menuIndex: -1
     // A virtual library or a saved search narrows the books listed.
     readonly property bool narrowed: library.virtualLibrary !== "" || library.section.startsWith("search:")
 
@@ -119,14 +120,10 @@ Rectangle {
             page.library.books.select(page.currentIndex, "only")
     }
 
-    // The books an action on the row at `index` acts on: every book selected
-    // when the row is one of them, else the row's.
-    function targetIds(index) {
-        const books = page.library.books
-        if (books.selectedCount > 1 && books.isSelected(index))
-            return books.selectedIds
-        const id = books.idAt(index)
-        return id ? [id] : []
+    // The books an action acts on: those selected, which a click on a row
+    // outside them made the row alone; none when none is.
+    function targetIds() {
+        return page.library.books.selectedIds
     }
 
     function sortBy(key) {
@@ -139,33 +136,41 @@ Rectangle {
         return page.library.books.idAt(page.currentIndex)
     }
 
-    function runAction(key, index) {
-        const row = page.library.books.get(index)
-        if (!row.id)
+    function openMenu(item, x, y) {
+        page.menuBookId = page.library.books.idAt(page.currentIndex)
+        page.menuTargets = page.targetIds()
+        bookMenu.popup(item, x, y)
+    }
+
+    function runAction(key) {
+        const bookId = page.menuBookId
+        if (!bookId)
             return
         if (key === "open") {
-            page.activate(index)
+            page.activate(page.library.books.indexOf(bookId))
             return
         }
         if (key === "trash") {
-            page.trashRequested(page.targetIds(index))
+            page.trashRequested(page.menuTargets)
             return
         }
         if (key.startsWith("convert:")) {
-            page.convertRequested(page.targetIds(index), key.split(":")[1])
+            page.convertRequested(page.menuTargets, key.split(":")[1])
             return
         }
         if (key.startsWith("send:")) {
-            page.sendRequested(page.targetIds(index), key.slice(5))
+            page.sendRequested(page.menuTargets, key.slice(5))
             return
         }
-        const error = key === "read" ? page.library.openFormat(row.id, "") : page.library.openFolder(row.id)
+        const error = key === "read" ? page.library.openFormat(bookId, "") : page.library.openFolder(bookId)
         if (error)
             page.failed(error)
     }
 
     // What stands in place of the books when there are none to show.
     function emptyTitle() {
+        if (page.library.loaded && page.library.sectionError)
+            return qsTr("Cousoir cannot run the saved search “%1”").arg(page.library.section.slice(7))
         if (page.library.loaded && page.library.searchError)
             return qsTr("Calibre's search cannot read “%1”").arg(page.library.searchText)
         if (page.library.loaded && page.library.scopeCount === 0 && page.narrowed)
@@ -179,6 +184,8 @@ Rectangle {
     }
 
     function emptyMessage() {
+        if (page.library.loaded && page.library.sectionError)
+            return page.library.sectionError
         if (page.library.loaded && page.library.searchError)
             return page.library.searchError
         if (page.library.loaded && page.library.scopeCount === 0 && page.narrowed)
@@ -195,8 +202,9 @@ Rectangle {
     }
 
     // A new list keeps the current book current when it still shows it, a
-    // sort for instance; else it starts at the first. A single selection
-    // follows the current book.
+    // sort for instance; else it starts at the first, or at the first book
+    // still selected among several. A single selection follows the current
+    // book.
     Connections {
         target: page.library.books
 
@@ -209,7 +217,9 @@ Rectangle {
         function onModelReset() {
             const books = page.library.books
             const kept = books.indexOf(before)
-            const index = kept >= 0 ? kept : books.count > 0 ? 0 : -1
+            const selected = books.selectedCount > 1 ? books.indexOf(books.selectedIds[0]) : -1
+            const index = kept >= 0 && (selected < 0 || books.isSelected(kept)) ? kept
+                : selected >= 0 ? selected : books.count > 0 ? 0 : -1
             bookTable.currentIndex = index
             coverGrid.currentIndex = index
             if (index >= 0 && books.selectedCount <= 1)
@@ -246,13 +256,11 @@ Rectangle {
                 rows: page.library.books
                 sortOption: page.library.sortOption
                 selectionCount: page.selectedCount
+                selectable: true
                 Accessible.name: qsTr("Books")
                 onActivated: function(index) { page.activate(index) }
                 onSortRequested: function(sort) { page.sortBy(sort) }
-                onMenuRequested: function(index, row, x, y) {
-                    page.menuIndex = index
-                    bookMenu.popup(row, x, y)
-                }
+                onMenuRequested: function(index, row, x, y) { page.openMenu(row, x, y) }
                 onSelectRequested: function(index, mode) { page.selectRow(index, mode) }
                 onSelectAllRequested: page.library.books.selectAll()
             }
@@ -265,12 +273,10 @@ Rectangle {
                 name: "cover"
                 rows: page.library.books
                 selectionCount: page.selectedCount
+                selectable: true
                 Accessible.name: qsTr("Book covers")
                 onActivated: function(index) { page.activate(index) }
-                onMenuRequested: function(index, cell, x, y) {
-                    page.menuIndex = index
-                    bookMenu.popup(cell, x, y)
-                }
+                onMenuRequested: function(index, cell, x, y) { page.openMenu(cell, x, y) }
                 onSelectRequested: function(index, mode) { page.selectRow(index, mode) }
                 onSelectAllRequested: page.library.books.selectAll()
             }
@@ -353,7 +359,7 @@ Rectangle {
         objectName: "bookMenu"
 
         actions: page.actions
-        onChosen: function(key) { page.runAction(key, page.menuIndex) }
+        onChosen: function(key) { page.runAction(key) }
         // Back to the list, unless Open showed the book instead.
         onClosed: {
             if (page.visible)

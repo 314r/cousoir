@@ -124,9 +124,21 @@ FocusScope {
             return check ? check(text) : true
         }
 
+        // Typed in since the field last showed the stored value.
+        property bool typed: false
+
         function revert() {
-            field.text = Qt.binding(() => detail.value)
+            typed = false
+            field.text = detail.value
         }
+
+        // The stored value, unless something is typed: a save of another
+        // field ending meanwhile leaves what is typed alone.
+        onValueChanged: {
+            if (!typed)
+                field.text = detail.value
+        }
+        Component.onCompleted: field.text = detail.value
 
         function commit() {
             if (field.text.trim() !== detail.value.trim() && valid)
@@ -153,13 +165,13 @@ FocusScope {
 
             Layout.fillWidth: !detail.number
             Layout.preferredWidth: detail.number ? Math.round(8 * Theme.charWidth) : 1
-            text: detail.value
             placeholderText: detail.placeholder
             horizontalAlignment: detail.number ? TextInput.AlignRight : TextInput.AlignLeft
             invalid: !detail.valid
             enabled: pane.editable
             Accessible.name: detail.label
 
+            onTextEdited: detail.typed = true
             onEditingFinished: detail.commit()
             // Esc reverts here instead of closing the book.
             Keys.onShortcutOverride: function(event) {

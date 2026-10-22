@@ -208,6 +208,13 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         current.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
         if (!CalibreDb::readLibrary(db, &current, &error))
             return undo(error);
+        for (const int id : bulk.bookIds) {
+            const Book *book = current.book(id);
+            const bool kept = std::any_of(result->bulkBefore.cbegin(), result->bulkBefore.cend(),
+                                          [id](const Book &before) { return before.id == id; });
+            if (book && !kept)
+                result->bulkBefore.append(*book);
+        }
         for (const BookEdit &edit : bulk.edits(current, request.config.tweaks)) {
             if (!applyEdit(edit))
                 return undo(error);

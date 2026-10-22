@@ -48,7 +48,7 @@ BookListModel::BookListModel(QObject *parent)
 {
 }
 
-void BookListModel::setRows(const QList<Book> &books, QList<qsizetype> order, const QString &coverKey)
+bool BookListModel::setRows(const QList<Book> &books, QList<qsizetype> order, const QString &coverKey)
 {
     const bool sameRows = order.size() == m_order.size() && coverKey == m_coverKey
         && std::equal(order.cbegin(), order.cend(), m_order.cbegin(), [&](qsizetype a, qsizetype b) {
@@ -60,7 +60,7 @@ void BookListModel::setRows(const QList<Book> &books, QList<qsizetype> order, co
         m_order = std::move(order);
         if (!sameBooks && !m_order.isEmpty())
             emit dataChanged(index(0), index(int(m_order.size()) - 1));
-        return;
+        return false;
     }
     const int before = count();
     const qsizetype selected = m_selected.size();
@@ -80,6 +80,7 @@ void BookListModel::setRows(const QList<Book> &books, QList<qsizetype> order, co
     // Their order may have changed too.
     if (!m_selected.isEmpty() || selected > 0)
         emit selectionChanged();
+    return true;
 }
 
 int BookListModel::count() const

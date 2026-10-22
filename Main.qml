@@ -369,7 +369,7 @@ ThemedWindow {
     function targetIds() {
         if (session.bookOpen)
             return book.id ? [book.id] : []
-        return booksShown ? booksPage.targetIds(booksPage.currentIndex) : []
+        return booksShown ? booksPage.targetIds() : []
     }
 
     // Opens the open book, or the current row's, in the desktop's reader.
@@ -891,6 +891,23 @@ ThemedWindow {
         setTextScalePercent(appearanceSettings.textScalePercent)
         library.sortOption = layoutSettings.sortOption
         booksPage.focusList()
+    }
+
+    // The library goes back to its books when the saved search shown is
+    // gone; the sidebar follows it.
+    Connections {
+        target: window.library
+
+        function onSectionChanged() {
+            if (!window.deviceSection && window.section !== window.library.section)
+                window.section = window.library.section
+        }
+
+        function onVirtualLibraryChanged() {
+            if (window.library.virtualLibraryError)
+                window.showNotice(qsTr("Cousoir cannot narrow the books to “%1”, so all show: %2")
+                                  .arg(window.library.virtualLibrary).arg(window.library.virtualLibraryError))
+        }
     }
 
     onSectionChanged: {

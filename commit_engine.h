@@ -82,6 +82,8 @@ struct Result
     QSet<int> dirtied;
     // The ids of the books added, in order.
     QList<int> added;
+    // The books the bulk edits changed, as they were before them.
+    QList<Book> bulkBefore;
     // The backup made, if any.
     QString backup;
 };
