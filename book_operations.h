@@ -120,6 +120,9 @@ bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoratio
 // set_conversion_options() of backend.py: the settings of the book's last
 // conversion, `data` as Calibre stores it.
 bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QString *error);
+// save_last_read_position_to_cursor() of Calibre's backend: a reader's
+// position in the book, in place of the one it had.
+bool setReadPosition(SqliteDb &db, int bookId, const ReadPosition &position, QString *error);
 
 // update_path() of backend.py for one book: its folder and files follow its
 // title and first author, in the database and on disk.

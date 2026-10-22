@@ -25,6 +25,9 @@
 #include "metadata_downloader.h"
 #include "device_library.h"
 #include "library_share.h"
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
 #include "sqlite_db.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
@@ -90,6 +93,7 @@ private slots:
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
     void sharesOnTheNetwork();
+    void readsInCousoir();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
     void welcomesWithoutLibrary();
@@ -158,6 +162,9 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<LibraryShare>("Cousoir", 1, 0, "LibraryShare");
+#ifdef COUSOIR_READER
+    qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
+#endif
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
                               "BooksPage", "BulkEditPane", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
@@ -718,6 +725,96 @@ void LibraryUiTest::sharesOnTheNetwork()
     qunsetenv("COUSOIR_SHARE_LOCALHOST");
 }
 
+// A book read in Cousoir's reader: its pages turned, where reading stopped
+// kept, and the book opened again there.
+void LibraryUiTest::readsInCousoir()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub")) }));
+    QCOMPARE(error, QString());
+    waitForSave();
+    int bookId = 0;
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("The Voyage"))
+                bookId = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return bookId > 0;
+    }(), 15000);
+    library()->setProperty("currentBookId", bookId);
+    QVERIFY(library()->property("readerAvailable").toBool());
+
+    const auto openReader = [this] {
+        QMetaObject::invokeMethod(m_window, "readBook");
+        return m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    };
+    QQuickWindow *reader = openReader();
+    QVERIFY(reader);
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty(), 20000);
+    // The cover, then the first chapter's pages.
+    QCOMPARE(reader->property("spineIndex").toInt(), 0);
+    for (int i = 0; i < 3; ++i) {
+        const QString before = reader->property("position").toString();
+        QTest::keyClick(reader, Qt::Key_Right);
+        QTRY_VERIFY_WITH_TIMEOUT(reader->property("position").toString() != before, 10000);
+    }
+    QCOMPARE(reader->property("spineIndex").toInt(), 1);
+    QCOMPARE(reader->property("page").toInt(), 2);
+    const QString position = reader->property("position").toString();
+    QVERIFY2(position.startsWith(QLatin1String("epubcfi(/4/2/4/")), qPrintable(position));
+    QVERIFY(reader->property("bookFraction").toDouble() > 0);
+
+    // Kept when the book is closed, and read from there again.
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    reader = openReader();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QTRY_COMPARE(reader->property("spineIndex").toInt(), 1);
+    QTRY_COMPARE(reader->property("page").toInt(), 2);
+    QCOMPARE(reader->property("position").toString(), position);
+
+    // The table of contents: a section of the second chapter.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 2), Q_ARG(QVariant, QStringLiteral("fragment:s2")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() > 0, 20000);
+    const QString section = reader->property("position").toString();
+    reader->close();
+
+    // Kept in the library too, as Calibre keeps its viewer's.
+    waitForSave();
+    SqliteDb db;
+    QString dbError;
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QStringList rows;
+    for (const QVariantList &row :
+         db.rows(QStringLiteral("SELECT format, user, device, cfi FROM last_read_positions WHERE book=?"), { bookId })) {
+        QStringList columns;
+        for (const QVariant &column : row)
+            columns.append(column.toString());
+        rows.append(columns.join(u'|'));
+    }
+    QCOMPARE(rows, QStringList{ QStringLiteral("EPUB|local|cousoir|") + section });
+
+    // Calibre's viewer read on since: where the book opens now.
+    const QString calibreCfi = QStringLiteral("epubcfi(/8/2/4/2[top]/1:0)");
+    QVERIFY(db.run(QStringLiteral("INSERT INTO last_read_positions(book,format,user,device,cfi,epoch,pos_frac) "
+                                  "VALUES (?,'EPUB','local','calibre-desktop-viewer',?,?,0.8)"),
+                   { bookId, calibreCfi, double(QDateTime::currentSecsSinceEpoch() + 60) }, &dbError));
+    db.close();
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    reader = openReader();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QTRY_COMPARE(reader->property("spineIndex").toInt(), 3);
+    reader->close();
+#endif
+}
+
 void LibraryUiTest::usesOmarchyColorsByDefault()
 {
     const auto settingsWindow = [this] {
@@ -1179,6 +1276,9 @@ void LibraryUiTest::changesCovers()
 
 int main(int argc, char **argv)
 {
+#ifdef COUSOIR_READER
+    BookReader::initialize();
+#endif
     QGuiApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
     QTemporaryDir settingsDir;

@@ -34,6 +34,9 @@
 #include <numeric>
 
 #include "book_import.h"
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
 #include "calibre_db.h"
 #include "calibre_text.h"
 #include "concurrency_guard.h"
@@ -1272,6 +1275,16 @@ void BookLibrary::rebuildCurrentBook()
     emit currentBookChanged();
 }
 
+bool BookLibrary::readerAvailable() const
+{
+#ifdef COUSOIR_READER
+    // Set up before the application, as main() does.
+    return BookReader::ready();
+#else
+    return false;
+#endif
+}
+
 bool BookLibrary::writable() const
 {
     return m_writable;
@@ -1804,6 +1817,15 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     emit savingChanged();
     startCommit();
     return {};
+}
+
+void BookLibrary::saveReadPosition(int bookId, const ReadPosition &position)
+{
+    if (!m_writable || !findBook(bookId) || position.cfi.isEmpty())
+        return;
+    CommitEngine::Request request;
+    request.readPositions.append({ bookId, position });
+    queueChange(request);
 }
 
 QString BookLibrary::queueChange(const CommitEngine::Request &change)

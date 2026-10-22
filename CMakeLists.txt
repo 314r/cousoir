@@ -23,6 +23,8 @@ if(UNIX AND NOT APPLE)
     set(COUSOIR_DBUS Qt6::DBus)
 endif()
 # libmtp, to reach a Kindle Paperwhite; without it, Cousoir sees no MTP device.
+# Qt WebEngine, to read books in Cousoir; without it, there is no reader.
+find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick)
 find_package(PkgConfig)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIBMTP IMPORTED_TARGET libmtp)
@@ -102,6 +104,8 @@ qt_add_library(cousoir_core STATIC
     file_transaction.h
     identifier_links.cpp
     identifier_links.h
+    epub_book.cpp
+    epub_book.h
     kepub.cpp
     kepub.h
     kindle.cpp
@@ -182,6 +186,11 @@ qt_add_library(cousoir_models STATIC
     system_appearance.h
 )
 target_link_libraries(cousoir_models PUBLIC cousoir_core Qt6::Concurrent Qt6::Quick ${COUSOIR_DBUS})
+if(TARGET Qt6::WebEngineQuick)
+    target_sources(cousoir_models PRIVATE book_reader.cpp book_reader.h)
+    target_link_libraries(cousoir_models PUBLIC Qt6::WebEngineQuick)
+    target_compile_definitions(cousoir_models PUBLIC COUSOIR_READER)
+endif()
 
 qt_add_executable(cousoir main.cpp)
 
@@ -223,6 +232,9 @@ set(COUSOIR_QML_FILES
     ThinScrollBar.qml
     TrashPage.qml
 )
+if(TARGET Qt6::WebEngineQuick)
+    list(APPEND COUSOIR_QML_FILES ReaderWindow.qml)
+endif()
 
 set(COUSOIR_ICON_FILES
     assets/icons/arrow-left.svg
@@ -258,6 +270,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/user.svg
     assets/icons/wifi.svg
     assets/icons/hicolor/cousoir-256.png
+    assets/reader/reader.js
 )
 
 qt_add_qml_module(cousoir
@@ -383,7 +396,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check library_server metadata_web mobi_metadata qr_code test_tool)
+                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)
@@ -413,7 +426,7 @@ if(BUILD_TESTING)
     foreach(scale IN ITEMS 1 2)
         cousoir_add_logged_test(library_ui_tests_scale_${scale} library_ui_tests)
         set_tests_properties(library_ui_tests_scale_${scale} PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale}"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale};QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu"
         )
     endforeach()
 

@@ -37,6 +37,9 @@
 #include "cover_cache.h"
 #include "device_library.h"
 #include "library_share.h"
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
 #include "omarchy_theme.h"
 #include "system_appearance.h"
 
@@ -178,6 +181,9 @@ void registerTypes()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<LibraryShare>("Cousoir", 1, 0, "LibraryShare");
+#ifdef COUSOIR_READER
+    qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
+#endif
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     // The interface's own types, from the resources as the UI tests have them.
     const QDir qml(QStringLiteral(":/qt/qml/Cousoir"));
@@ -314,6 +320,9 @@ struct Shot
     QString settings;
     // The library shared on the network, from this computer only.
     bool sharing = false;
+    // The book read in Cousoir's reader, drawn instead, the keys pressed
+    // there.
+    bool read = false;
 };
 
 int screenshot(const QString &path, const Shot &shot)
@@ -367,9 +376,29 @@ int screenshot(const QString &path, const Shot &shot)
         if (shot.pause > 0)
             QTest::qWait(shot.pause);
     }
+    if (shot.read) {
+        QMetaObject::invokeMethod(window, "readBook");
+        QQuickWindow *reader = nullptr;
+        QTest::qWaitFor([&] {
+            for (QObject *root : engine.rootObjects()) {
+                if ((reader = root->findChild<QQuickWindow *>(QStringLiteral("readerWindow"))))
+                    return true;
+            }
+            return false;
+        }, 5000);
+        if (!reader) {
+            out() << "no reader" << Qt::endl;
+            return 1;
+        }
+        window = reader;
+        // The page laid out and its position told.
+        QTest::qWait(2500);
+    }
     for (const QString &key : shot.keys) {
         drawn(window);
         QTest::keySequence(window, QKeySequence(key));
+        if (shot.read)
+            QTest::qWait(500);
     }
     if (!shot.typed.isEmpty()) {
         drawn(window);
@@ -401,6 +430,9 @@ int screenshot(const QString &path, const Shot &shot)
 
 int main(int argc, char *argv[])
 {
+#ifdef COUSOIR_READER
+    BookReader::initialize();
+#endif
     QGuiApplication app(argc, argv);
     QStandardPaths::setTestModeEnabled(true);
     QCoreApplication::setOrganizationName(QStringLiteral("cousoir-benchmark"));
@@ -432,6 +464,7 @@ int main(int argc, char *argv[])
     parser.addOption({ QStringLiteral("settings"), QStringLiteral("Draw the settings window's section instead."),
                        QStringLiteral("key") });
     parser.addOption({ QStringLiteral("sharing"), QStringLiteral("Share the library, from this computer only.") });
+    parser.addOption({ QStringLiteral("read"), QStringLiteral("Read the book in Cousoir's reader, drawn instead.") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -459,6 +492,7 @@ int main(int argc, char *argv[])
         shot.typed = parser.value(QStringLiteral("type"));
         shot.settings = parser.value(QStringLiteral("settings"));
         shot.sharing = parser.isSet(QStringLiteral("sharing"));
+        shot.read = parser.isSet(QStringLiteral("read"));
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);

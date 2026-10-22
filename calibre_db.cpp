@@ -774,7 +774,12 @@ bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLangua
         && forEachRow(db, QStringLiteral("SELECT book, pages FROM books_pages_link"), [&](SqliteStatement &row) {
             if (Book *book = bookWithId(row.integer(0)))
                 book->pages = row.isNull(1) ? -1 : int(row.integer(1));
-        }, error);
+        }, error)
+        && forEachRow(db, QStringLiteral("SELECT book, format, user, device, cfi, epoch, pos_frac FROM last_read_positions"),
+                      [&](SqliteStatement &row) {
+                          data->readPositions[int(row.integer(0))].append(
+                              { row.text(1).toUpper(), row.text(2), row.text(3), row.text(4), row.real(5), row.real(6) });
+                      }, error);
     if (!ok)
         return false;
 

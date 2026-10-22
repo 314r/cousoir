@@ -625,6 +625,17 @@ bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QStr
                   { bookId, data }, error);
 }
 
+bool setReadPosition(SqliteDb &db, int bookId, const ReadPosition &position, QString *error)
+{
+    if (!bookExists(db, bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    return db.run(QStringLiteral("INSERT OR REPLACE INTO last_read_positions(book,format,user,device,cfi,epoch,pos_frac) "
+                                 "VALUES (?,?,?,?,?,?,?)"),
+                  { bookId, position.format.toUpper(), position.user, position.device, position.cfi, position.epoch,
+                    position.fraction },
+                  error);
+}
+
 bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, const Context &context, Result *result,
                  QString *error)
 {
