@@ -327,6 +327,31 @@ private slots:
         QCOMPARE(run.exitCode, 1);
     }
 
+    // Templates alike when their texts are, or both fail whatever the
+    // message; a text that differs is a difference.
+    void comparesTemplates()
+    {
+        QTemporaryDir folder;
+        const auto results = [&folder](const QString &name, const QJsonValue &first, const QJsonValue &second) {
+            const QString path = folder.filePath(name);
+            const QJsonArray array{ QJsonObject{ { QStringLiteral("template"), QStringLiteral("{title}") },
+                                                 { QStringLiteral("books"),
+                                                   QJsonObject{ { QStringLiteral("1"), first }, { QStringLiteral("2"), second } } } } };
+            return writeAll(path, QJsonDocument(array).toJson()) ? path : QString();
+        };
+        const QJsonObject error{ { QStringLiteral("error"), QStringLiteral("Valeur : champ inconnu") } };
+        const QJsonObject otherError{ { QStringLiteral("error"), QStringLiteral("Value: unknown field") } };
+        const QString calibre = results(QStringLiteral("calibre.json"), QStringLiteral("A"), error);
+        Run run = tool({ QStringLiteral("compare-templates"), calibre,
+                         results(QStringLiteral("same.json"), QStringLiteral("A"), otherError) });
+        QVERIFY2(run.exitCode == 0, qPrintable(run.output));
+        QCOMPARE(run.lastLine(), QStringLiteral("1 of 1 templates alike, 0 differences"));
+        run = tool({ QStringLiteral("compare-templates"), calibre,
+                     results(QStringLiteral("other.json"), QStringLiteral("B"), otherError) });
+        QCOMPARE(run.exitCode, 1);
+        QVERIFY(run.output.contains(QLatin1String("book 1\n    calibre \"A\"\n    cousoir \"B\"")));
+    }
+
     void makesFixtureFiles()
     {
         QTemporaryDir folder;

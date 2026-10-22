@@ -983,10 +983,8 @@ private:
         if (location.size() >= 2 && location.startsWith(u'@'))
             return userCategory(location.mid(1), lower(query), candidates);
 
-        if (location == QLatin1String("template")) {
-            fail(tr("Cousoir does not run Calibre's templates in searches"));
-            return found;
-        }
+        if (location == QLatin1String("template"))
+            return templateSearch(query, candidates);
         return textSearch(location, query, candidates);
     }
 
@@ -1174,6 +1172,69 @@ private:
         return std::nullopt;
     }
 
+    // The pseudo field a template search compares, its values by book id.
+    static QString templateField() { return QStringLiteral("\x01template"); }
+    QHash<int, QString> m_templateValues;
+
+    // The template search of get_matches(): TEMPLATE#@#:t:QUERY, the
+    // template's text of each book compared as text (t), a number (n), a
+    // date (d) or yes or no (b). A template that fails fails the search.
+    QBitArray templateSearch(const QString &raw, const QBitArray &candidates)
+    {
+        QBitArray found = empty(m_books.size());
+        static const QRegularExpression separator(QStringLiteral("#@#:([tdnb]):"),
+                                                  QRegularExpression::CaseInsensitiveOption);
+        QList<QRegularExpressionMatch> separators;
+        QRegularExpressionMatchIterator it = separator.globalMatch(raw);
+        while (it.hasNext())
+            separators.append(it.next());
+        if (separators.size() != 1) {
+            fail(tr("search template: missing or invalid separator. Valid separators are: %1")
+                     .arg(QStringLiteral("#@#:[tdnb]:")));
+            return found;
+        }
+        const QRegularExpressionMatch &match = separators.first();
+        const QString templateText = raw.left(match.capturedStart());
+        const QChar kind = match.captured(1).toLower().at(0);
+        const QString query = raw.mid(match.capturedEnd());
+        const CalibreTemplate::Library library(m_index.m_data, m_index.m_interfaceLanguage);
+        m_templateValues.clear();
+        QBitArray valued = empty(m_books.size());
+        for (qsizetype row = 0; row < m_books.size(); ++row) {
+            if (!candidates.testBit(row))
+                continue;
+            QString error;
+            const QString value = CalibreTemplate::evaluate(templateText, library, m_books.at(row), &error);
+            if (!error.isNull()) {
+                fail(error);
+                return found;
+            }
+            m_templateValues.insert(m_books.at(row).id, value);
+            if (!value.isEmpty())
+                valued.setBit(row);
+        }
+        if (kind == u't') {
+            const auto [matchKindOf, text] = matchKind(query);
+            const TextQuery textQuery(matchKindOf, text);
+            if (const QString error = textQuery.error(); !error.isEmpty()) {
+                fail(error);
+                return found;
+            }
+            for (qsizetype row = 0; row < m_books.size(); ++row) {
+                if (candidates.testBit(row) && textQuery.matches(m_templateValues.value(m_books.at(row).id), nullptr))
+                    found.setBit(row);
+            }
+        } else if (kind == u'n') {
+            found = numericSearch(templateField(), lower(query), DataType::Float, valued);
+        } else if (kind == u'd') {
+            found = dateSearch(templateField(), lower(query), valued);
+        } else {
+            found = booleanSearch(templateField(), lower(query), candidates);
+        }
+        m_templateValues.clear();
+        return found;
+    }
+
     // A book's value of a custom column: null when it has none. A
     // composite's text, or its values between commas for a column of
     // several, or the date it is for one sorted by date.
@@ -1250,12 +1311,14 @@ private:
             fail(tr("Invalid boolean query \"%1\"").arg(query));
             return found;
         }
-        const Custom custom = *customOf(field);
-        const bool tristate = m_index.m_preferences.boolsAreTristate;
+        // A template's text is yes when it is not empty, never none.
+        const std::optional<Custom> custom = customOf(field);
+        const bool tristate = custom && m_index.m_preferences.boolsAreTristate;
         for (qsizetype row = 0; row < m_books.size(); ++row) {
             if (!candidates.testBit(row))
                 continue;
-            const QVariant value = customValue(m_books.at(row), custom);
+            const QVariant value = custom ? customValue(m_books.at(row), *custom)
+                                          : QVariant(!m_templateValues.value(m_books.at(row).id).isEmpty());
             bool hit = false;
             if (!tristate)
                 hit = value.isNull() || !value.toBool() ? noAndFalse.contains(query) : yes.contains(query);
@@ -1462,8 +1525,16 @@ private:
         return size;
     }
 
-    QDateTime dateOf(const Book &book, const QString &field) const
+    QDateTime dateOf(const Book &book, const QString &field)
     {
+        if (field == templateField()) {
+            // parse_date() of the text, which fails the search when it is
+            // no date.
+            const std::optional<QDateTime> date = CalibreTemplate::parseDate(m_templateValues.value(book.id));
+            if (!date)
+                fail(tr("Invalid date: %1").arg(m_templateValues.value(book.id)));
+            return date.value_or(QDateTime());
+        }
         if (const std::optional<Custom> custom = customOf(field))
             return customValue(book, *custom).toDateTime();
         if (field == QLatin1String("timestamp"))
@@ -1598,6 +1669,14 @@ private:
         const bool half = custom && halfStars(*custom->column);
         const bool many = field == QLatin1String("rating") || (custom && custom->type == DataType::Rating);
         const auto value = [&](const Book &book) -> std::optional<double> {
+            if (field == templateField()) {
+                const QString text = m_templateValues.value(book.id);
+                bool ok = false;
+                const double number = text.trimmed().toDouble(&ok);
+                if (!ok)
+                    fail(tr("Non-numeric value in column %1: %2").arg(QString(), text));
+                return number;
+            }
             if (custom && custom->column->datatype == QLatin1String("composite")) {
                 // float() of its text, which fails the search when it is
                 // no number.

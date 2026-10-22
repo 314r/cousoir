@@ -418,6 +418,21 @@ words:montagne
 #labels:true
 #labels:false
 by terry
+# Templates: their text compared as text, a number, a date, yes or no.
+template:"{title}#@#:t:omens"
+template:"{title} {authors}#@#:t:=Good Omens Terry Pratchett & Neil Gaiman"
+template:"{tags:uppercase()}#@#:t:~^ROMAN"
+template:"program: $#pagecount#@#:n:>100"
+template:"program: $#pagecount#@#:n:0"
+template:"program: format_date($$#started, 'yyyy-MM-dd')#@#:d:2024"
+template:"program: format_date($$#started, 'yyyy-MM-dd')#@#:d:<2000"
+template:"{series}#@#:b:yes"
+template:"{series}#@#:b:false"
+template:"{series}#@#:B:true"
+template:"{title}"
+template:"{title}#@#:x:a"
+template:"program: nosuchfunction()#@#:t:x"
+template:"{title}#@#:n:>1"
 #nothing:x
 #genre:sf and not #read:yes
 bien
