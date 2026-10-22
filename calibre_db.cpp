@@ -616,7 +616,7 @@ bool readCustomValues(SqliteDb &db, QList<Book> &books, const BookWithId &bookWi
     return true;
 }
 
-bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
+bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLanguage, QString *error)
 {
     data->userVersion = db.value(QStringLiteral("PRAGMA user_version")).toInt();
     data->schemaFingerprint = schemaFingerprint(db);
@@ -740,7 +740,7 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
         && forEachRow(db, QStringLiteral("SELECT id, lang_code FROM languages"), [&](SqliteStatement &row) {
             // Shown by name; the code stays in `sort`.
             const QString code = row.text(1);
-            languages.insert(int(row.integer(0)), { int(row.integer(0)), CalibreText::languageName(code), code, 0, {} });
+            languages.insert(int(row.integer(0)), { int(row.integer(0)), CalibreText::languageName(code, interfaceLanguage), code, 0, {} });
         }, error)
         && forEachRow(db, QStringLiteral("SELECT book, lang_code FROM books_languages_link ORDER BY id"),
                       [&](SqliteStatement &row) {
@@ -846,7 +846,7 @@ bool loadLibrary(const QString &libraryPath, const QString &snapshotPath, const 
     SqliteDb db;
     if (!db.open(snapshotPath, SqliteDb::Mode::Immutable, error)
         || !prepareConnection(db, config.tweaks, config.interfaceLanguage, error)
-        || !readLibrary(db, &loaded, error)) {
+        || !readLibrary(db, &loaded, config.interfaceLanguage, error)) {
         return false;
     }
     db.close();

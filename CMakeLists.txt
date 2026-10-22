@@ -61,6 +61,8 @@ qt_add_library(cousoir_core STATIC
     calibre_db.h
     calibre_job.cpp
     calibre_job.h
+    calibre_languages.cpp
+    calibre_languages.h
     calibre_list.cpp
     calibre_list.h
     calibre_lock.cpp

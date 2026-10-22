@@ -23,6 +23,8 @@
 
 #include "calibre_text.h"
 
+#include "calibre_languages.h"
+
 #include <QHash>
 #include <QLocale>
 #include <QMutex>
@@ -376,6 +378,9 @@ QString sqlAuthorToAuthorSort(const QString &author, const Tweaks &tweaks)
 
 QString canonicalizeLanguage(const QString &raw)
 {
+    // Calibre's own table when Calibre is there.
+    if (const std::optional<QString> code = CalibreLanguages::canonicalize(raw))
+        return *code;
     QString code = raw.toLower().trimmed();
     code.replace(u'_', u'-');
     code = code.section(u'-', 0, 0).section(u'@', 0, 0).trimmed();
@@ -514,12 +519,9 @@ QString checkDoi(const QString &text)
     return doi.match(text).captured(0);
 }
 
-QString languageName(const QString &code)
+QString languageName(const QString &code, const QString &interfaceLanguage)
 {
-    const QLocale::Language language = QLocale::codeToLanguage(code, QLocale::AnyLanguageCode);
-    if (language == QLocale::AnyLanguage)
-        return code;
-    return QLocale::languageToString(language);
+    return CalibreLanguages::names(interfaceLanguage)->name(code);
 }
 
 QString asciiText(const QString &text)

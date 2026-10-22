@@ -219,7 +219,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     for (const BulkEdit &bulk : request.bulkEdits) {
         LibraryData current;
         current.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-        if (!CalibreDb::readLibrary(db, &current, &error))
+        if (!CalibreDb::readLibrary(db, &current, request.config.interfaceLanguage, &error))
             return undo(error);
         for (const int id : bulk.bookIds) {
             const Book *book = current.book(id);
@@ -255,7 +255,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     if (!request.trash.isEmpty()) {
         // The books as they are now, for their metadata.opf.
         trashed.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-        if (!CalibreDb::readLibrary(db, &trashed, &error))
+        if (!CalibreDb::readLibrary(db, &trashed, request.config.interfaceLanguage, &error))
             return undo(error);
         withComposites(&trashed, request.config.interfaceLanguage,
                        QSet<int>(request.trash.cbegin(), request.trash.cend()));
@@ -310,7 +310,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     // dates of the books added and restored as Calibre holds them then.
     LibraryData data;
     data.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-    if (!CalibreDb::readLibrary(db, &data, &error)) {
+    if (!CalibreDb::readLibrary(db, &data, request.config.interfaceLanguage, &error)) {
         files.rollback(nullptr);
         return fail(error);
     }

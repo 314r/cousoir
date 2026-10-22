@@ -23,7 +23,9 @@ QString rating(int rating);
 QString date(const QDateTime &date);
 // What the list shows of a field of the book: a built-in field by Calibre's
 // name, "pubdate", or a custom column by its search term, "#genre".
-QString field(const Book &book, const QString &key, const QList<CustomColumn> &columns);
+// Languages are named in `interfaceLanguage`, as Calibre names them.
+QString field(const Book &book, const QString &key, const QList<CustomColumn> &columns,
+              const QString &interfaceLanguage);
 
 } // namespace BookDisplay
 
@@ -52,7 +54,7 @@ public:
 
     // The columns whose text the rows have, by field key, and the library's
     // custom columns they may name.
-    void setColumns(const QStringList &keys, const QList<CustomColumn> &customColumns);
+    void setColumns(const QStringList &keys, const QList<CustomColumn> &customColumns, const QString &interfaceLanguage);
 
     int count() const;
     // The ids of the rows, in order.
@@ -86,6 +88,7 @@ private:
     QList<qsizetype> m_order;
     QStringList m_columns;
     QList<CustomColumn> m_customColumns;
+    QString m_interfaceLanguage;
     QString m_coverKey;
     // Row by book id, made when first asked.
     mutable QHash<int, int> m_rowOf;

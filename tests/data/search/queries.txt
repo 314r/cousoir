@@ -473,3 +473,5 @@ montagne
 #sorts:"=Pratchett, Terry"
 #sorts:true
 #sorts:false
+languages:français
+languages:anglais

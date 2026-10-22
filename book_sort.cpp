@@ -399,10 +399,10 @@ std::optional<Keys> Sorter::Private::make(const QString &field) const
     if (field == QLatin1String("tags"))
         return tupleKeys([](const Book &book) { return book.tags; });
     if (field == QLatin1String("languages")) {
-        return tupleKeys([](const Book &book) {
+        return tupleKeys([this](const Book &book) {
             QStringList names;
             for (const QString &code : book.languages)
-                names.append(CalibreText::languageName(code));
+                names.append(CalibreText::languageName(code, config.interfaceLanguage));
             return names;
         });
     }

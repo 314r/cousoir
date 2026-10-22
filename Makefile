@@ -50,3 +50,4 @@ oracle:
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/conversion_oracle.py -- tests/data/library tests/data/oracle/conversion.json
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/search_oracle.py -- . tests/data/oracle/search.json
 	calibre-debug -e tools/oracle/template_tables_oracle.py -- .
+	calibre-debug -e tools/oracle/language_fixture.py -- tests/data/calibre-resources

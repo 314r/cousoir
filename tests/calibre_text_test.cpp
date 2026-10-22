@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "calibre_languages.h"
 #include "calibre_text.h"
 
 namespace {
@@ -156,11 +157,29 @@ void CalibreTextTest::titleSortFollowsTweaks()
     QCOMPARE(CalibreText::titleSort(title, {}, tweaks, QStringLiteral("fr")), title);
 }
 
+// Calibre's names, in its interface language, with its translations and
+// their fallbacks; Qt's English ones without Calibre.
 void CalibreTextTest::namesLanguages()
 {
-    QCOMPARE(CalibreText::languageName(QStringLiteral("fra")), QStringLiteral("French"));
-    QCOMPARE(CalibreText::languageName(QStringLiteral("eng")), QStringLiteral("English"));
-    QCOMPARE(CalibreText::languageName(QStringLiteral("qqq")), QStringLiteral("qqq"));
+    CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("fra"), QStringLiteral("en")), QStringLiteral("French"));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("eng"), QStringLiteral("en")), QStringLiteral("English"));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("qqq"), QStringLiteral("en")), QStringLiteral("qqq"));
+    // Calibre's English name, its translation from iso639.mo.
+    QCOMPARE(CalibreText::languageName(QStringLiteral("grc"), QStringLiteral("en")),
+             QStringLiteral("Greek, Ancient (to 1453)"));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("grc"), QStringLiteral("fr")),
+             QStringLiteral("Grec, ancien (jusqu'à 1453)"));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("fra"), QStringLiteral("fr")), QStringLiteral("Français"));
+    // messages.mo first, then a country's own translation by its language.
+    QCOMPARE(CalibreText::languageName(QStringLiteral("eng"), QStringLiteral("fr_CA")), QStringLiteral("Anglais"));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("deu"), QStringLiteral("de_DE.UTF-8@euro")), QStringLiteral("Deutsch"));
+    // A language Calibre has no translation for keeps the English names.
+    QCOMPARE(CalibreText::languageName(QStringLiteral("deu"), QStringLiteral("eo")), QStringLiteral("German"));
+    CalibreLanguages::setResourcesFolder(QStringLiteral(""));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("fra"), QStringLiteral("fr")), QStringLiteral("French"));
+    QCOMPARE(CalibreText::languageName(QStringLiteral("qqq"), QStringLiteral("fr")), QStringLiteral("qqq"));
+    CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
 }
 
 void CalibreTextTest::foldsForSearch()
