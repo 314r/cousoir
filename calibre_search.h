@@ -76,6 +76,15 @@ public:
     const LibraryData &data() const { return m_data; }
     const Preferences &preferences() const { return m_preferences; }
     qsizetype size() const { return m_data.books.size(); }
+    // The folded titles, by book row, and names of the library's authors,
+    // series, tags and publishers, in the order of its lists.
+    const QList<Folded> &titles() const { return m_titles; }
+    const QList<Folded> &authorNames() const { return m_authorNames; }
+    const QList<Folded> &seriesNames() const { return m_seriesNames; }
+    const QList<Folded> &tagNames() const { return m_tagNames; }
+    const QList<Folded> &publisherNames() const { return m_publisherNames; }
+    // The row of an author in the library's list, -1 when unknown.
+    qsizetype authorRow(int id) const { return m_authorRows.value(id, -1); }
 
 private:
     friend class Search;

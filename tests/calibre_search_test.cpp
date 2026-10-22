@@ -7,6 +7,7 @@
 
 #include "calibre_db.h"
 #include "calibre_search.h"
+#include "palette.h"
 #include "test_support.h"
 
 namespace {
@@ -49,6 +50,7 @@ class CalibreSearchTest : public QObject
 
 private slots:
     void initTestCase();
+    void findsForPalette();
     void foldsAsCalibre();
     void foldsCharacters_data();
     void foldsCharacters();
@@ -225,6 +227,35 @@ void CalibreSearchTest::usesLibraryPreferences()
     QCOMPARE(found(QStringLiteral("people:gaiman")), QList<int>{ 4 });
     QCOMPARE(found(QStringLiteral("@favourites:true")), QList<int>{ 1 });
     QCOMPARE(found(QStringLiteral("@favourites:false")), (QList<int>{ 2, 3, 4, 5, 6 }));
+}
+
+void CalibreSearchTest::findsForPalette()
+{
+    const CalibreSearch::Index index = fixtureIndex();
+    const auto titles = [](const QList<Palette::Hit> &hits) {
+        QStringList list;
+        for (const Palette::Hit &hit : hits)
+            list.append(hit.kind + u':' + hit.title);
+        return list;
+    };
+    // An author before the book of the same closeness; a name that starts
+    // with what is typed before one that only has it.
+    QCOMPARE(titles(Palette::search(index, QStringLiteral("pra"), 10)),
+             QStringList({ QStringLiteral("authors:Terry Pratchett"), QStringLiteral("book:Good Omens") }));
+    // Words in the title and the authors together, without accents.
+    QCOMPARE(titles(Palette::search(index, QStringLiteral("ecume vian"), 10)),
+             QStringList({ QStringLiteral("book:L'Écume des jours") }));
+    QCOMPARE(titles(Palette::search(index, QStringLiteral("cook"), 10)).first(), QStringLiteral("authors:Glen Cook"));
+    QVERIFY(Palette::search(index, QStringLiteral("zzzz"), 10).isEmpty());
+    // The window's commands: all of them before anything is typed, then
+    // before the library's names as close.
+    const QList<Palette::Hit> commands{ { QStringLiteral("section"), 0, QStringLiteral("Trash"), {}, 0 },
+                                        { QStringLiteral("action"), 1, QStringLiteral("Move to the trash"), {}, 0 } };
+    QCOMPARE(titles(Palette::search(index, QString(), 10, commands)),
+             QStringList({ QStringLiteral("section:Trash"), QStringLiteral("action:Move to the trash") }));
+    QCOMPARE(titles(Palette::search(index, QStringLiteral("trash"), 10, commands)),
+             QStringList({ QStringLiteral("section:Trash"), QStringLiteral("action:Move to the trash") }));
+    QCOMPARE(Palette::search(index, QStringLiteral("o"), 3).size(), 3);
 }
 
 QTEST_GUILESS_MAIN(CalibreSearchTest)

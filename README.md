@@ -68,8 +68,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   network folder, no other computer editing.
 - 🎨 **Wears your Omarchy theme**, or follows your system's light or dark
   mode.
-- ⌨️ **Keyboard-first.** Every action has a shortcut, and the status bar shows
-  the ones that matter right now.
+- ⌨️ **Keyboard-first.** Every action has a shortcut, the status bar shows
+  the ones that matter right now, and Ctrl+K finds any book, author, series,
+  tag, section or action by a few letters.
 - 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
   exactly as `calibredb list` and `calibredb search` do, checks its health,
   and applies changes from a JSON file.
@@ -139,6 +140,7 @@ Cousoir installs under `~/.local` and appears in your app launcher. Set
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |
+| Ctrl+K | Find anything: a book, an author, a section, an action |
 | F5, Ctrl+R | Reload the library, or read the reader again |
 | Ctrl+I | Show or hide the book details pane |
 | Ctrl+V | Paste the clipboard's image as the cover |

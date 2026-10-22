@@ -78,6 +78,7 @@ private slots:
     void switchesToCovers();
     void browsesByAuthor();
     void searchesAsCalibre();
+    void findsWithPalette();
     void opensInReader();
     void showsWriteState();
     void picksLibraryInSettings();
@@ -976,6 +977,51 @@ void LibraryUiTest::editsCustomColumns()
     click("confirmRevertButton");
     waitForSave();
     QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QString());
+}
+
+// Ctrl+K: a book, an author's books and a section, each a few letters and
+// Enter away; Esc closes it.
+void LibraryUiTest::findsWithPalette()
+{
+    QObject *palette = object("commandPalette");
+    QVERIFY(palette);
+    // The first hit for what is typed; none when the palette does not open.
+    const auto find = [&](const QString &typed) -> QVariantMap {
+        QTest::keySequence(m_window, QKeySequence(QStringLiteral("Ctrl+K")));
+        if (!QTest::qWaitFor([&] { return palette->property("opened").toBool()
+                                          && control("paletteField")->hasActiveFocus(); }))
+            return {};
+        typeText(typed);
+        QTest::qWaitFor([&] { return !palette->property("hits").toList().isEmpty(); });
+        return palette->property("hits").toList().value(0).toMap();
+    };
+
+    QCOMPARE(find(QStringLiteral("omens")).value(QStringLiteral("title")).toString(), QStringLiteral("Good Omens"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(!palette->property("opened").toBool());
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 4);
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+
+    QCOMPARE(find(QStringLiteral("pratch")).value(QStringLiteral("kind")).toString(), QStringLiteral("authors"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(library()->property("section").toString(), QStringLiteral("authors"));
+    QTRY_COMPARE(library()->property("filter").toMap().value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Terry Pratchett"));
+    QCOMPARE(bookRows().size(), 1);
+
+    QCOMPARE(find(QStringLiteral("trash")).value(QStringLiteral("kind")).toString(), QStringLiteral("section"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(control("trashPage")->isVisible());
+
+    QTest::keySequence(m_window, QKeySequence(QStringLiteral("Ctrl+K")));
+    QTRY_VERIFY(palette->property("opened").toBool());
+    QTRY_VERIFY(control("paletteField")->hasActiveFocus());
+    typeText(QStringLiteral("xyzzy"));
+    QTRY_VERIFY(control("paletteEmpty")->isVisible());
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!palette->property("opened").toBool());
+    QVERIFY(control("trashPage")->isVisible());
 }
 
 void LibraryUiTest::changesCovers()

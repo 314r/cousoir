@@ -11,7 +11,9 @@ description and files, which open in the desktop's reader. A book's metadata
 and cover edit in place; books and files are added, moved to the library's
 trash and restored from it; Calibre converts books to KEPUB for a Kobo and
 AZW3 for a Kindle; books go to a Kobo or a Kindle plugged in, and come off
-it.
+it, and what a Kobo knows of their reading, highlights and notes included,
+comes back. Ctrl+K finds a book, an item, a section or an action by a few
+letters.
 
 Calibre stays the library's owner and keeps working as before. Cousoir reads
 and writes Calibre's own `metadata.db` and, wherever it computes something
@@ -73,6 +75,20 @@ it for a library shared some other way, OneDrive or Google Drive for
 instance, or one only this computer changes despite a sync folder; the
 choice is kept per library and `cousoir-cli` follows it. With Only this
 computer in a Dropbox folder, only a Dropbox sync under way still waits.
+
+## Finding with Ctrl+K
+
+Ctrl+K opens a palette over the window. A few letters find the library's
+books, by their title or their title and authors together, its authors,
+series, tags and publishers, and the window's sections, virtual libraries
+and the actions that can be done now, each with its shortcut: add books,
+open in the reader, convert, send to or eject a reader, move to the trash,
+show the covers or the details, reload, settings, the themes. Letters match
+as the search matches them, without case, accents or punctuation; what is
+the whole name typed, or starts with it, comes first, then commands, then
+items, then books. Up and Down choose, Enter goes to the book, lists the
+item's books or does the action, Esc closes. Before anything is typed, it
+lists the sections and the actions.
 
 ## Searching
 
@@ -655,6 +671,7 @@ columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |
+| Ctrl+K | Find a book, author, series, tag, publisher, section or action by a few letters |
 | F5, Ctrl+R | Reload the library, or read the reader again |
 | Ctrl+I | Show or hide the book details pane, or the pane editing several books |
 | Enter, Tab, Esc | Save, save and move on, or revert a field |

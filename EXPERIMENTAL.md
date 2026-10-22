@@ -138,8 +138,8 @@ searches run it. Cousoir shows no composite and cannot search one.
 | 4. Editing the description | done |
 | 5. Custom columns | done; as table columns, later |
 | 6. Reading life from the readers | done for the Kobo; a Kindle's clippings, later |
-| 7. A command palette | next |
-| 8. Calibre's templates | planned |
+| 7. A command palette | done |
+| 8. Calibre's templates | next |
 
 ## Journal
 
@@ -437,3 +437,18 @@ checked against the code and Calibre's:
   need the Kobo's positions turned into the CFIs Calibre's viewer uses.
 - Found on the way: run by hand without ctest's environment, the UI tests
   draw on the real display, and one fails at 200%; they are run with it.
+
+### 2026-10-22 — goal 7, a command palette (`exp-palette`)
+
+- Ctrl+K opens a palette: the library's books, authors, series, tags and
+  publishers, and the window's sections, virtual libraries and the actions
+  that can be done now, with their shortcuts. Letters are folded as the
+  search folds them, so `ecume` finds "L'Écume des jours", and a book is
+  found by words of its title and of its authors together (`ecume vian`).
+  A name that is what was typed, or starts with it, comes first; commands
+  before items, items before books.
+- `Palette::search()` reads the folded titles and names the search index
+  already has: 9.5 ms a letter at 50 000 books, which the benchmark now
+  measures.
+- `cousoir-benchmark --screenshot` takes `--key` and `--type`, to draw the
+  palette open.
