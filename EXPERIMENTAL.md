@@ -908,3 +908,14 @@ the first or last day of a month.
 - Without Calibre, sending now works to both readers; conversions to AZW3
   still need Calibre.
 
+### 2026-10-22 — a review of goal 18 (`exp-review8`)
+
+The MOBI writer came out line for line Calibre's, and the Kobo's send
+unchanged by the shared code. Two problems, fixed: a metadata.calibre (or
+driveinfo.calibre) on the Kindle that could not be read was taken for
+none, so the send wrote one holding only the books just sent; it now stops,
+as Calibre's job does, tested with a file that cannot be read. And every
+book was read whole into memory, a MOBI up to three times over: now only a
+MOBI is read, to write into it, with one copy at most as its records move;
+a PDF or a comic goes as a file copy.
+

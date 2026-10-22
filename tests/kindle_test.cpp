@@ -129,6 +129,28 @@ private slots:
         QVERIFY(info.value(QLatin1String("mtp_prefix")).toString().startsWith(QLatin1String("mtp:::")));
     }
 
+    // A metadata.calibre that cannot be read stops the send rather than be
+    // written over without the books it lists.
+    void keepsWhatItCannotRead()
+    {
+        QTemporaryDir root;
+        QTemporaryDir config;
+        QVERIFY(makeKindle(root.path()));
+        const QString metadata = root.filePath(QStringLiteral("metadata.calibre"));
+        QVERIFY(writeAll(metadata, "[]"));
+        QVERIFY(QFile::setPermissions(metadata, QFileDevice::WriteOwner));
+        FolderFiles files(root.path(), true);
+        QString error;
+        QVERIFY(files.scan(&error));
+        QTemporaryDir job;
+        QVERIFY(!KindleSend::prepareNatively(m_data, { 2 }, files, KindleSend::standIn(),
+                                             Kindle::formatMap(config.path(), QStringLiteral("G000000000000000")),
+                                             config.path(), QStringLiteral("fr"), job.path(), &error));
+        QVERIFY(!error.isEmpty());
+        QFile::setPermissions(metadata, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QCOMPARE(readAll(metadata), QByteArray("[]"));
+    }
+
     // My Clippings.txt as Kindles write it, in their languages and their
     // older forms.
     void readsClippings()

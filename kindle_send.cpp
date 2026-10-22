@@ -35,6 +35,7 @@
 #include "mobi_metadata.h"
 #include "native_send.h"
 #include "python_json.h"
+#include "send_job.h"
 
 namespace {
 
@@ -275,17 +276,22 @@ bool isMobi(const QString &format)
     return formats.contains(format.toUpper());
 }
 
-QByteArray readFrom(DeviceFiles &files, const QString &path)
+// A file of the Kindle: empty when it has none; nothing, with `error`, when
+// it has one that cannot be read, which would otherwise be written over
+// without what it held.
+std::optional<QByteArray> readFrom(DeviceFiles &files, const QString &path, QString *error)
 {
     if (!files.find(path))
-        return {};
+        return QByteArray();
     QTemporaryDir folder;
     const QString local = folder.filePath(QStringLiteral("file"));
-    QString ignored;
-    if (!folder.isValid() || !files.read(path, local, &ignored))
-        return {};
     QFile file(local);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    if (!folder.isValid() || !files.read(path, local, error) || !file.open(QIODevice::ReadOnly)) {
+        if (error->isEmpty())
+            *error = QObject::tr("Cannot read %1 on the Kindle.").arg(path);
+        return std::nullopt;
+    }
+    return file.readAll();
 }
 
 } // namespace
@@ -399,10 +405,13 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
         }
         return current.isEmpty() ? name : current + u'/' + name;
     };
-    const auto put = [&](const QString &path, const QByteArray &bytes) -> std::optional<QString> {
+    // `bytes`, or the file at `source` copied as it is.
+    const auto put = [&](const QString &path, const QByteArray &bytes, const QString &source = {}) -> std::optional<QString> {
         const QString placed = ensureParent(path);
         const QString local = QStringLiteral("device/put-%1").arg(puts++);
-        if (!CalibreJob::writeFile(QDir(folder).filePath(local), bytes, error))
+        const bool written = source.isEmpty() ? CalibreJob::writeFile(QDir(folder).filePath(local), bytes, error)
+                                              : SendJob::copyInto(source, QDir(folder).filePath(local), error);
+        if (!written)
             return std::nullopt;
         operations.append(QJsonObject{ { QStringLiteral("op"), QStringLiteral("put") },
                                        { QStringLiteral("path"), placed },
@@ -411,7 +420,10 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
     };
 
     // driveinfo.calibre, as the driver writes it when it lists the books.
-    PythonJson::Value info = PythonJson::parse(readFrom(files, QStringLiteral("driveinfo.calibre")));
+    const std::optional<QByteArray> driveInfo = readFrom(files, QStringLiteral("driveinfo.calibre"), error);
+    if (!driveInfo)
+        return false;
+    PythonJson::Value info = PythonJson::parse(*driveInfo);
     if (info.kind != PythonJson::Value::Kind::Dict)
         info = PythonJson::Value::dict();
     if (info.text(QStringLiteral("device_store_uuid")).isEmpty())
@@ -434,8 +446,11 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
 
     // metadata.calibre's entries of the books still there, as books() keeps
     // them.
+    const std::optional<QByteArray> metadataFile = readFrom(files, QStringLiteral("metadata.calibre"), error);
+    if (!metadataFile)
+        return false;
     QList<QByteArray> entries;
-    for (const QByteArray &element : DeviceBooks::arrayElements(readFrom(files, QStringLiteral("metadata.calibre")))) {
+    for (const QByteArray &element : DeviceBooks::arrayElements(*metadataFile)) {
         if (onDevice.contains(PythonJson::parse(element).text(QStringLiteral("lpath")).toLower()))
             entries.append(element);
     }
@@ -461,19 +476,25 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
             if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
                 source = bookFormat.file;
         }
-        QFile sourceFile(source);
-        if (!sourceFile.open(QIODevice::ReadOnly)) {
-            *error = QObject::tr("Cannot read %1.").arg(source);
-            return false;
+        // Only a MOBI is read whole, to write the metadata into it; other
+        // files are copied as they are.
+        QByteArray bytes;
+        const bool mobi = isMobi(format);
+        if (mobi) {
+            QFile sourceFile(source);
+            if (!sourceFile.open(QIODevice::ReadOnly)) {
+                *error = QObject::tr("Cannot read %1.").arg(source);
+                return false;
+            }
+            bytes = sourceFile.readAll();
         }
-        QByteArray bytes = sourceFile.readAll();
         QByteArray cover;
         if (!book->coverFile.isEmpty()) {
             QFile coverFile(book->coverFile);
             if (coverFile.open(QIODevice::ReadOnly))
                 cover = coverFile.readAll();
         }
-        if (isMobi(format)) {
+        if (mobi) {
             // The library's metadata in the copy, as Calibre's send writes it.
             MobiMetadata::Metadata metadata;
             metadata.title = book->title;
@@ -490,9 +511,12 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
             metadata.uuid = book->uuid;
             metadata.languages = book->languages;
             metadata.cover = cover;
+            // A book the writer refuses goes as it is, as Calibre's send
+            // goes on when set_metadata() fails.
+            QByteArray updated = bytes;
             QString mobiError;
-            if (!MobiMetadata::update(&bytes, metadata, mobiOptions, &mobiError))
-                bytes = sourceFile.seek(0) ? sourceFile.readAll() : bytes;
+            if (MobiMetadata::update(&updated, metadata, mobiOptions, &mobiError))
+                bytes = std::move(updated);
         }
 
         // create_upload_path(), in the folder of a rule for the format.
@@ -503,14 +527,14 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
         options.maxLength = maxPathLength;
         options.useSubdirs = settings.sendTemplate.contains(u'/');
         const QString relative = NativeSend::uploadPath(data, *book, extension, options, interfaceLanguage);
-        const std::optional<QString> placed = put(options.prefix + u'/' + relative, bytes);
+        const std::optional<QString> placed = put(options.prefix + u'/' + relative, bytes, mobi ? QString() : source);
         if (!placed)
             return false;
         const QString lpath = *placed;
 
         // upload_kindle_thumbnail(): the cover where the Kindle looks, a copy
         // against Amazon's bug, and which file it is for.
-        const QString thumbnailName = MobiMetadata::thumbnailName(bytes);
+        const QString thumbnailName = mobi ? MobiMetadata::thumbnailName(bytes) : QString();
         const QImage coverImage = QImage::fromData(cover);
         if (!thumbnailName.isEmpty() && !coverImage.isNull()) {
             const QByteArray jpeg = NativeSend::thumbnailJpeg(coverImage, thumbnailSize, thumbnailSize, 75);
@@ -522,7 +546,7 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
                 return false;
         }
         // upload_apnx(): the page numbers, in the book's .sdr folder.
-        if (apnxWanted) {
+        if (apnxWanted && mobi) {
             QString apnxError;
             const QString guid = QUuid::createUuid().toString(QUuid::Id128).left(8);
             const QByteArray apnx = MobiMetadata::apnx(bytes, guid, &apnxError);
@@ -537,7 +561,7 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
         // The book's entry, by its path in lower case, in place of one there.
         const QString entryPath = lpath.toLower();
         const QByteArray text = NativeSend::entryText(NativeSend::bookEntry(
-            data, *book, entryPath, bytes.size(),
+            data, *book, entryPath, mobi ? qint64(bytes.size()) : QFileInfo(source).size(),
             coverImage.isNull() ? PythonJson::Value::null() : NativeSend::thumbnail(*book, thumbnailSize, thumbnailSize)));
         bool replaced = false;
         for (QByteArray &element : entries) {
