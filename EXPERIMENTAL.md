@@ -111,6 +111,17 @@ untouched: whether it was read, how far, when; its highlights and notes.
 Ctrl+K: books, authors, series, tags, sections and actions, found by a few
 letters. Keyboard-first, as the rest of Cousoir.
 
+### 8. Calibre's templates
+
+Composite columns are built by Calibre's template language, and `template:`
+searches run it. Cousoir shows no composite and cannot search one.
+
+- A port of the template language's single function mode and general
+  program mode, with the functions most templates use, checked against
+  Calibre's own formatter on a battery of templates.
+- Composite columns shown, searched and written into `metadata.opf` as
+  Calibre computes them; `template:` searches.
+
 ### Always
 
 - Bugs found on the way are fixed, with a test.
@@ -125,9 +136,10 @@ letters. Keyboard-first, as the rest of Cousoir.
 | 2. Search like Calibre | done; follow-ups below |
 | 3. Many books at once | done |
 | 4. Editing the description | done |
-| 5. Custom columns | next |
-| 6. Reading life from the readers | planned |
+| 5. Custom columns | done; as table columns, later |
+| 6. Reading life from the readers | next |
 | 7. A command palette | planned |
+| 8. Calibre's templates | planned |
 
 ## Journal
 
@@ -324,3 +336,49 @@ bound its text to the stored value, which typing does not break, so a field
 that follows another, the title sort its title, lost what was being typed in
 it when the other's save ended. The field takes the stored value only while
 nothing is typed. A test fails without the fix.
+
+### 2026-10-22 — goal 5, custom columns (`exp-custom`)
+
+- Every kind of custom column is read as Calibre's tables read it, and
+  `cousoir-cli list` prints them as `calibredb list` does: byte for byte on
+  `tests/data/library-custom`, a copy of the fixture with a column of each
+  of Calibre's thirteen kinds, made and filled by `calibredb`
+  (`tools/make_custom_library.sh`). The search takes `#name:` as Calibre
+  does; the battery gained 77 searches on custom columns, all alike.
+- Writing goes through a port of Calibre's custom column writers: the
+  adapters, the item tables of text, series and enumerations, a series'
+  number kept in its link, an enumeration that takes only its values. The
+  `metadata.opf` files carry the columns as Calibre's
+  `serialize_user_metadata()` writes them, byte for byte against Calibre's.
+  `tests/data/edits/custom.json` edits each kind with both programs: same
+  tables, same files.
+- The details pane shows and edits them, each by its kind.
+- Adding a book reads the values its file holds for custom columns, from an
+  EPUB's OPF of either version or a PDF's XMP packet, merges them as
+  `smart_update()` does, and gives the book the values the library's columns
+  give new books. Restoring a book from the trash takes them back from its
+  `metadata.opf`. Both were refused before. The golden test reads files
+  Calibre exported from a library with custom columns, some of them not
+  matching the fixture's (another kind, other separators, a value an
+  enumeration does not have, a column it does not have), adds them with
+  default values set, trashes and restores books, and crosses the trashes:
+  the same tables and files, but for the composite column's value.
+
+Found on the way:
+
+- `calibredb add` loses everything in a PDF's XMP packet under Calibre's
+  own names, custom columns, rating, series, title sort: importing
+  `calibre.db.cache` breaks the namespace prefix of the XMP reader's XPath,
+  in that process only. Calibre's Add books reads the files in a worker
+  that never imports it, and keeps them. Cousoir does as Add books does;
+  the oracle reads the files to add before it opens the library.
+- The `metadata.opf` of a book in a library with a composite column of
+  several values gave it the separators of text.
+- A pointer into a temporary JSON value, freed at once, corrupted the heap
+  when a column had a default value. `find()` on a temporary no longer
+  compiles.
+
+Left for later: custom columns as table columns, to see and sort them in
+the list; composite columns, whose values Calibre computes from templates
+(goal 8). The golden comparison leaves composite values out of the
+`metadata.opf` files.

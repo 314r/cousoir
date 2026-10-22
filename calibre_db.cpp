@@ -3,7 +3,9 @@
 // Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
 // GPL v3:
 // - src/calibre/db/backend.py: the SQL functions, aggregates and temporary
-//   author triggers of a connection, and format_abspath()
+//   author triggers of a connection, format_abspath(), and the custom
+//   columns initialize_custom_columns() keeps, with their separators
+// - src/calibre/db/tables.py: how the custom columns' tables are read
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
