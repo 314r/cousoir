@@ -379,7 +379,7 @@ int screenshot(const QString &path, const Shot &shot)
     if (shot.read) {
         QMetaObject::invokeMethod(window, "readBook");
         QQuickWindow *reader = nullptr;
-        QTest::qWaitFor([&] {
+        (void)QTest::qWaitFor([&] {
             for (QObject *root : engine.rootObjects()) {
                 if ((reader = root->findChild<QQuickWindow *>(QStringLiteral("readerWindow")))
                     || (reader = root->findChild<QQuickWindow *>(QStringLiteral("pdfReaderWindow"))))

@@ -33,6 +33,7 @@
 #endif
 
 #include "calibre_date.h"
+#include "calibre_fts.h"
 #include "calibre_template.h"
 #include "sqlite_db.h"
 
@@ -378,6 +379,11 @@ bool prepareConnection(SqliteDb &db, const CalibreText::Tweaks &tweaks, const QS
     sqlite3_busy_timeout(handle, 10000);
     if (!db.exec(QStringLiteral("PRAGMA cache_size=-5000; PRAGMA temp_store=2; PRAGMA foreign_keys=ON;"), error))
         return false;
+    // Calibre's full text tokenizer in place of SQLite's, as Calibre's
+    // connections have it: the annotations' index is made with it. Without
+    // FTS5, a write that needs it fails there.
+    QString ftsError;
+    CalibreFts::registerTokenizers(handle, interfaceLanguage, &ftsError);
 
     constexpr int flags = SQLITE_UTF8 | SQLITE_INNOCUOUS;
     constexpr int pure = flags | SQLITE_DETERMINISTIC;

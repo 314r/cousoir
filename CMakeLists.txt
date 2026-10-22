@@ -16,6 +16,10 @@ include(CTest)
 
 find_package(Qt6 6.9 REQUIRED COMPONENTS Core Concurrent Gui Network Qml Quick QuickControls2 Svg Xml)
 find_package(SQLite3 REQUIRED)
+# ICU and Snowball's libstemmer, for Calibre's full text tokenizer.
+find_package(ICU REQUIRED COMPONENTS uc i18n)
+find_path(STEMMER_INCLUDE_DIR libstemmer.h REQUIRED)
+find_library(STEMMER_LIBRARY stemmer REQUIRED)
 find_package(libzip REQUIRED)
 # UDisks2, to eject a Kobo.
 if(UNIX AND NOT APPLE)
@@ -60,6 +64,8 @@ qt_add_library(cousoir_core STATIC
     calibre_config.h
     calibre_date.h
     calibre_db.cpp
+    calibre_fts.cpp
+    calibre_fts.h
     calibre_db.h
     calibre_job.cpp
     calibre_job.h
@@ -162,7 +168,9 @@ qt_add_resources(cousoir_core "core_resources"
 )
 target_link_libraries(cousoir_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP}
+    PRIVATE ICU::uc ICU::i18n ${STEMMER_LIBRARY}
 )
+target_include_directories(cousoir_core PRIVATE ${STEMMER_INCLUDE_DIR})
 
 # The models QML uses on top of it, and the system's theme and appearance.
 qt_add_library(cousoir_models STATIC
@@ -400,7 +408,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book test_tool)
+                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)
