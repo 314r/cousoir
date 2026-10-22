@@ -285,4 +285,5 @@ private:
     QString m_wirelessError;
     // A batch going to an app.
     bool m_wirelessSending = false;
+    bool m_destroying = false;
 };

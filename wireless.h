@@ -199,7 +199,8 @@ private:
     };
     using Replies = std::function<void(const QList<Message> &)>;
 
-    void enqueue(std::function<void()> task);
+    // A task, and whom to tell should the connection close before it ends.
+    void enqueue(std::function<void()> task, Done done = {});
     void next();
     // Sends a request; `done` gets the `replies` messages that answer it,
     // none for 0.
@@ -224,6 +225,7 @@ private:
     QString cacheKey(const PythonJson::Value &book) const;
     void remember(const PythonJson::Value &book);
     void forget(const QString &lpath);
+    QString cacheFile() const;
     void readCache();
     void writeCache();
     void setBook(const PythonJson::Value &book);
@@ -231,7 +233,7 @@ private:
     QTcpSocket *m_socket;
     Settings m_settings;
     QByteArray m_buffer;
-    std::deque<std::function<void()>> m_queue;
+    std::deque<std::pair<std::function<void()>, Done>> m_queue;
     bool m_running = false;
     int m_expected = 0;
     QList<Message> m_replies;

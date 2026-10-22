@@ -48,6 +48,8 @@ private slots:
     void asksOnlyForBooksItDoesNotKnow();
     void sendsChangedMetadata();
     void tellsWhyABookWasRefused();
+    void tellsWhatWaitedWhenTheAppGoes();
+    void namesTheCacheSafely();
     void checksThePassword();
     void turnsASecondAppAway();
 
@@ -268,6 +270,46 @@ void WirelessTest::tellsWhyABookWasRefused()
     QVERIFY(!finished.at(0).at(0).toBool());
     QVERIFY(finished.at(0).at(1).toString().contains(QStringLiteral("No space left on device")));
     QVERIFY(connection->isOpen());
+}
+
+void WirelessTest::tellsWhatWaitedWhenTheAppGoes()
+{
+    FakeApp app;
+    WirelessConnection *connection = connect(&app);
+    QVERIFY(connection);
+    // The app stops answering during a send, another one waiting.
+    app.silent = true;
+    QList<bool> ended;
+    const auto book = [this](const QString &name) {
+        return Wireless::Outgoing{ name, bookMetadata(name, QStringLiteral("u-") + name, QStringLiteral("2026-10-19T08:38:30+00:00")),
+                                   writeBook(name, "x") };
+    };
+    connection->send({ book(QStringLiteral("a.epub")) }, [&ended](bool ok, const QString &) { ended.append(ok); });
+    connection->send({ book(QStringLiteral("b.epub")) }, [&ended](bool ok, const QString &) { ended.append(ok); });
+    QTRY_VERIFY(app.count(Wireless::FreeSpace) >= 2);
+    app.disconnectNow();
+    QTRY_COMPARE(ended, (QList<bool>{ false, false }));
+    // Asked once it is gone, at once.
+    bool told = false;
+    connection->remove({ QStringLiteral("a.epub") }, [&told](bool ok, const QString &) { told = !ok; });
+    QVERIFY(told);
+}
+
+void WirelessTest::namesTheCacheSafely()
+{
+    // A uuid the app makes up names no file outside the cache.
+    FakeApp app;
+    app.deviceUuid = QStringLiteral("../../escaped");
+    WirelessConnection *connection = connect(&app);
+    QVERIFY(connection);
+    QSignalSpy closed(connection, &WirelessConnection::closed);
+    connection->eject();
+    QTRY_COMPARE(closed.size(), 1);
+    QVERIFY(!QFileInfo::exists(m_folder->filePath(QStringLiteral("escaped.json"))));
+    QVERIFY(!QFileInfo::exists(QDir(m_folder->path()).filePath(QStringLiteral("../escaped.json"))));
+    const QStringList files = QDir(m_folder->filePath(QStringLiteral("cache"))).entryList(QDir::Files);
+    QCOMPARE(files.size(), 1);
+    QVERIFY(files.constFirst().startsWith(QLatin1String("wireless_device_")));
 }
 
 void WirelessTest::checksThePassword()
