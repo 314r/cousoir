@@ -96,6 +96,7 @@ private slots:
     void asksForThePassword();
     void showsAWebPage();
     void pagesLongFeeds();
+    void logsTheStatusSent();
 
 private:
     Answer get(const QString &path, const QByteArray &verb = "GET", const QByteArray &authorization = {});
@@ -289,7 +290,8 @@ void LibraryServerTest::showsAWebPage()
     const QString html = QString::fromUtf8(page.body);
     QVERIFY(html.contains(QStringLiteral("<title>Bibliothèque</title>")));
     QVERIFY(html.contains(QStringLiteral("href=\"/get/1/EPUB\"")));
-    QVERIFY(html.contains(QStringLiteral("src=\"/thumb/1\"")));
+    // The cover's time in its address, for a browser to see a new one.
+    QVERIFY(html.contains(QStringLiteral("src=\"/thumb/1?v=%1\"").arg(m_data.book(1)->coverModified)));
 
     // What was searched shows in the box, as text.
     const QString found = QString::fromUtf8(get(QStringLiteral("/?q=%22%3E%3Cb%3Eglen")).body);
@@ -332,6 +334,34 @@ void LibraryServerTest::pagesLongFeeds()
     const Feed tags = parseFeed(Opds::categoryFeed(data, QStringLiteral("tags"), QStringLiteral("en")));
     QCOMPARE(tags.entries.first().links.value(QStringLiteral("subsection")),
              QStringLiteral("/opds/books?q=tags%3A%22%3DC%2B%2B%22&sort=title&title=C%2B%2B"));
+}
+
+void LibraryServerTest::logsTheStatusSent()
+{
+    QSignalSpy served(&m_server, &LibraryServer::served);
+    get(QStringLiteral("/opds"));
+    get(QStringLiteral("/cover/5"));
+    QTRY_COMPARE(served.size(), 2);
+    QCOMPARE(served.at(0).at(0).toString(), QStringLiteral("GET /opds"));
+    QCOMPARE(served.at(0).at(1).toInt(), 200);
+    QCOMPARE(served.at(1).at(1).toInt(), 404);
+
+    // A file the library lists but the disk lost.
+    LibraryData data = m_data;
+    Book *book = &data.books[0];
+    book->formats.first().file = m_cache.filePath(QStringLiteral("gone.epub"));
+    LibraryServer::Catalog catalog;
+    catalog.data = &data;
+    catalog.find = [](const QString &, const QList<BookSort::Level> &, QString *) { return QList<qsizetype>{}; };
+    LibraryServer server;
+    server.setCatalog(catalog);
+    QCOMPARE(server.listen(0, QHostAddress::LocalHost), QString());
+    QSignalSpy lost(&server, &LibraryServer::served);
+    QNetworkReply *reply = m_network.get(QNetworkRequest(
+        QUrl(QStringLiteral("http://127.0.0.1:%1/get/%2/%3").arg(server.port()).arg(book->id).arg(book->formats.first().format))));
+    QTRY_COMPARE(lost.size(), 1);
+    QCOMPARE(lost.first().at(1).toInt(), 404);
+    reply->deleteLater();
 }
 
 QTEST_GUILESS_MAIN(LibraryServerTest)

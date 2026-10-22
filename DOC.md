@@ -657,7 +657,9 @@ again finds them after joining another network. The port is 8090 unless
 changed, so that Calibre's content server, on 8080, can run beside it. A
 password, when set, is asked for by every reader and browser (any user name
 goes); without one, anyone on the network can download the books. The
-setting is remembered: Cousoir shares the library again when it opens.
+setting is remembered: Cousoir shares the library again when it opens, and
+the status bar shows it, a click away from the Network section, whenever
+the library is shared.
 Files are named as Calibre's content server names them, `Title - Authors_ID.epub`.
 
 `cousoir-cli serve` shares a library the same way without the application,
@@ -667,7 +669,8 @@ changes it.
 Cousoir departs from Calibre's content server here: it reads and nothing
 else (no editing, no reading in the browser, no users with their own
 rights), serves the one library open, and speaks HTTP only, for the local
-network: put it behind a proxy with HTTPS to reach it from elsewhere.
+network: to reach it from elsewhere, put it behind a proxy with HTTPS at
+the root of a host name, as its links start at `/`.
 
 ## Settings
 

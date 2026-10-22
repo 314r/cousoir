@@ -39,6 +39,7 @@ constexpr qint64 chunk = 256 * 1024;
 constexpr int thumbnailHeight = 300;
 
 const char *const headProperty = "cousoirHead";
+const char *const requestProperty = "cousoirRequest";
 
 QByteArray statusText(int status)
 {
@@ -297,12 +298,10 @@ void LibraryServer::read(QTcpSocket *socket)
 void LibraryServer::answer(QTcpSocket *socket, const QByteArray &method, const QByteArray &target,
                            const QHash<QByteArray, QByteArray> &headers)
 {
-    const auto log = [this, method, target](int status) {
-        emit served(QString::fromLatin1(method + ' ' + target), status);
-    };
+    // For the log: what was asked, noted where the answer is written.
+    socket->setProperty(requestProperty, QString::fromLatin1(method + ' ' + target));
     if (method != "GET" && method != "HEAD") {
         reply(socket, 405, "text/plain", "Only GET and HEAD\n", { { "Allow", "GET, HEAD" } });
-        log(405);
         return;
     }
     socket->setProperty(headProperty, method == "HEAD");
@@ -315,13 +314,11 @@ void LibraryServer::answer(QTcpSocket *socket, const QByteArray &method, const Q
         if (colon < 0 || QString::fromUtf8(credentials.mid(colon + 1)) != m_password) {
             reply(socket, 401, "text/plain", "A password is needed\n",
                   { { "WWW-Authenticate", "Basic realm=\"Cousoir\", charset=\"UTF-8\"" } });
-            log(401);
             return;
         }
     }
     if (!m_catalog.data || !m_catalog.find) {
         reply(socket, 503, "text/plain", "The library is not open\n");
-        log(503);
         return;
     }
     const LibraryData &data = *m_catalog.data;
@@ -340,7 +337,6 @@ void LibraryServer::answer(QTcpSocket *socket, const QByteArray &method, const Q
         const QList<qsizetype> rows = m_catalog.find(q, sortLevels(q.isEmpty() ? QStringLiteral("timestamp") : QStringLiteral("title")), &error);
         reply(socket, 200, "text/html;charset=utf-8",
               Opds::webPage(data, error.isEmpty() ? rows : QList<qsizetype>{}, q, offset, m_catalog.name, error));
-        log(200);
         return;
     }
     if (segments.first() == QLatin1String("opds")) {
@@ -370,16 +366,13 @@ void LibraryServer::answer(QTcpSocket *socket, const QByteArray &method, const Q
             const QByteArray feed = Opds::categoryFeed(data, section, m_catalog.interfaceLanguage);
             if (feed.isEmpty()) {
                 reply(socket, 404, "text/plain", "Not found\n");
-                log(404);
                 return;
             }
             reply(socket, 200, navigation, feed);
         } else {
             reply(socket, 404, "text/plain", "Not found\n");
-            log(404);
             return;
         }
-        log(200);
         return;
     }
 
@@ -398,21 +391,17 @@ void LibraryServer::answer(QTcpSocket *socket, const QByteArray &method, const Q
                                          .arg(format.toLower());
                 sendFile(socket, file.file, Opds::mimeType(format).toLatin1(),
                          CalibreText::asciiFilename(name).replace(u'"', u'_'));
-                log(200);
                 return;
             }
         }
     } else if (book && segments.size() == 2 && segments.first() == QLatin1String("cover") && !book->coverFile.isEmpty()) {
         sendFile(socket, book->coverFile, "image/jpeg", {});
-        log(200);
         return;
     } else if (book && segments.size() == 2 && segments.first() == QLatin1String("thumb") && !book->coverFile.isEmpty()) {
         sendThumbnail(socket, book->id);
-        log(200);
         return;
     }
     reply(socket, 404, "text/plain", "Not found\n");
-    log(404);
 }
 
 void LibraryServer::reply(QTcpSocket *socket, int status, const QByteArray &type, const QByteArray &body,
@@ -430,6 +419,7 @@ void LibraryServer::reply(QTcpSocket *socket, int status, const QByteArray &type
     if (!socket->property(headProperty).toBool())
         socket->write(body);
     socket->disconnectFromHost();
+    emit served(socket->property(requestProperty).toString(), status);
 }
 
 void LibraryServer::sendFile(QTcpSocket *socket, const QString &path, const QByteArray &type, const QString &downloadName)
@@ -448,6 +438,7 @@ void LibraryServer::sendFile(QTcpSocket *socket, const QString &path, const QByt
         header += name + ": " + value + "\r\n";
     header += "\r\n";
     socket->write(header);
+    emit served(socket->property(requestProperty).toString(), 200);
     if (socket->property(headProperty).toBool() || file->size() == 0) {
         socket->disconnectFromHost();
         return;
