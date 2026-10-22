@@ -39,6 +39,7 @@
 #include "library_server.h"
 #include "metadata_download.h"
 #include "mtp.h"
+#include "open_library.h"
 #include "cousoir_paths.h"
 
 namespace {
@@ -699,10 +700,8 @@ int download(const QString &libraryPath, const QString &id, bool covers)
         return 1;
     }
     const QString program = MetadataDownload::program();
-    if (program.isEmpty()) {
-        err() << QStringLiteral("Downloading metadata needs Calibre, which is not installed.") << Qt::endl;
-        return 1;
-    }
+    // Open Library without Calibre, as the application asks it.
+    const bool native = program.isEmpty() || qEnvironmentVariableIsSet("COUSOIR_NATIVE_DOWNLOAD");
     const CalibreConfig config = CalibreConfig::load();
     QTemporaryDir folder;
     MetadataDownload::Query query{ book->title, book->authors, book->identifiers };
@@ -712,8 +711,27 @@ int download(const QString &libraryPath, const QString &id, bool covers)
             && CalibreJob::run(program, MetadataDownload::arguments(folder.path()),
                                CalibreJob::environment(folder.path(), config.interfaceLanguage), [](double) {}, &error);
     };
+    OpenLibrary::Client client;
     MetadataDownload::Identified identified;
-    if (!run(MetadataDownload::prepareIdentify) || !MetadataDownload::readIdentified(folder.path(), &identified, &error)) {
+    if (native) {
+        const OpenLibrary::Preferences preferences = OpenLibrary::Preferences::load(CalibreConfig::configDirectory());
+        identified.ignoredFields = preferences.ignoredFields;
+        identified.appendComments = preferences.appendComments;
+        QEventLoop loop;
+        QObject::connect(&client, &OpenLibrary::Client::identified, &loop,
+                         [&](const QList<MetadataDownload::Found> &books, const QString &failure) {
+                             identified.books = books;
+                             error = failure;
+                             loop.quit();
+                         });
+        client.identify(query, book->languages.value(0), config.interfaceLanguage, preferences);
+        loop.exec();
+        if (!error.isEmpty()) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+    } else if (!run(MetadataDownload::prepareIdentify)
+               || !MetadataDownload::readIdentified(folder.path(), &identified, &error)) {
         err() << error << Qt::endl;
         return 1;
     }
@@ -747,7 +765,22 @@ int download(const QString &libraryPath, const QString &id, bool covers)
         // The dialog's: the book's title and authors, the identifiers found.
         query.identifiers = identified.books.first().identifiers;
         QList<MetadataDownload::Cover> found;
-        if (!run(MetadataDownload::prepareCovers) || !MetadataDownload::readCovers(folder.path(), &found, &error)) {
+        if (native) {
+            QEventLoop loop;
+            QObject::connect(&client, &OpenLibrary::Client::coverFound, &loop,
+                             [&found](const MetadataDownload::Cover &cover) { found.append(cover); });
+            QObject::connect(&client, &OpenLibrary::Client::coversFinished, &loop, [&](const QString &failure) {
+                error = failure;
+                loop.quit();
+            });
+            client.covers(0, folder.path());
+            loop.exec();
+            std::stable_sort(found.begin(), found.end(), [](const auto &a, const auto &b) {
+                return qint64(a.width) * a.height > qint64(b.width) * b.height;
+            });
+            if (!error.isEmpty())
+                err() << error << Qt::endl;
+        } else if (!run(MetadataDownload::prepareCovers) || !MetadataDownload::readCovers(folder.path(), &found, &error)) {
             err() << error << Qt::endl;
             return 1;
         }
@@ -1100,7 +1133,7 @@ int main(int argc, char *argv[])
         "  template  Print what each template of a JSON array makes of each book.\n"
         "  download  Print what Calibre's metadata sources, on the web, find for the\n"
         "          book of the id given, and what it would change; --covers adds the\n"
-        "          covers found.\n"
+        "          covers found. Without Calibre, Open Library is asked.\n"
         "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
         "          kepubify BOOK.epub BOOK.kepub\n"
         "  serve   Share the library on the local network until stopped: an OPDS\n"

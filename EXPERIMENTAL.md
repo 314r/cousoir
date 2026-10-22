@@ -200,6 +200,10 @@ Cousoir's own sources, Open Library and Google Books over their public
 APIs, in the dialog of goal 9 when Calibre is not installed or beside
 Calibre's results. Tests against a local fake server.
 
+Done with Open Library alone: Google's Atom feed, which Calibre's Google
+source uses, answers 500 today, and its JSON API without a key is out of
+quota for anonymous callers.
+
 ### 17. Highlights from a Kindle
 
 The Kindle's "My Clippings.txt" read like the Kobo's notes: by book,
@@ -229,7 +233,7 @@ copied or saved as Markdown.
 | 12. Language names | done |
 | 14. A Kobo without Calibre | done; a PDF goes without metadata |
 | 15. The library on the network | done |
-| 16. Metadata from the web without Calibre | planned |
+| 16. Metadata from the web without Calibre | done, with Open Library |
 | 17. Kindle highlights | planned |
 | 13. Notes | planned |
 
@@ -803,4 +807,23 @@ and a log saying 200 for a file gone from the disk. It also noted that a
 remembered share starts again unnoticed, on a café's network for
 instance: the status bar now shows the library shared, a click away from
 the Network section.
+
+### 2026-10-22 — goal 16, metadata from the web without Calibre (`exp-openlibrary`)
+
+- `OpenLibrary`: the search by ISBN (then by title and author when Open
+  Library does not know it) with Calibre's own search words, checked
+  against Calibre's `get_title_tokens()` and `get_author_tokens()` by a new
+  oracle; the work with its best edition in the book's language; the
+  work's description, Markdown made HTML; subjects as tags, `series:` ones
+  as the series; MARC's language codes ("fre") made Calibre's ("fra");
+  the ranking of Calibre's `InternalMetadataCompareKeyGen`; covers.
+- `MetadataDownloader` asks it when Calibre is not installed: the same
+  dialog, fields and saves (Calibre's `update_from_mi()` port of goal 9),
+  Calibre's download preferences when it left some. `cousoir-cli download`
+  too.
+- Tests: `metadata_web_tests` against a fake Open Library serving answers
+  the real one gave (`tools/make_openlibrary_fixtures.sh`), and an
+  end-to-end download saved to a copy of the library in
+  `book_library_tests`. One manual run against the real site found
+  *Shadows Linger* with its publisher, date, series and description.
 

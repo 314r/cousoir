@@ -59,8 +59,8 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   gone and files the database doesn't know. Keep one copy, merge the names or
   tidy the entries in a click, or ignore what you meant.
 - 🌐 **Metadata and covers from the web.** Calibre's own sources look the
-  book up; pick the fields to take beside your values, and a cover among
-  those found. Revert undoes it.
+  book up, or Open Library when Calibre isn't installed; pick the fields to
+  take beside your values, and a cover among those found. Revert undoes it.
 - 🔄 **Convert with Calibre.** KEPUB for a Kobo, AZW3 for a Kindle, using your
   Calibre conversion settings.
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
