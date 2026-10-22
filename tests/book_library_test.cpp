@@ -26,6 +26,15 @@ CalibreConfig frenchConfig()
     return config;
 }
 
+// The rows the book list shows, as maps.
+QVariantList bookRows(BookLibrary &library)
+{
+    QVariantList result;
+    for (int row = 0; row < library.books()->count(); ++row)
+        result.append(library.books()->get(row));
+    return result;
+}
+
 QList<int> ids(const QVariantList &rows)
 {
     QList<int> result;
@@ -67,6 +76,7 @@ private slots:
     void sortsBooks();
     void searchesBooks_data();
     void searchesBooks();
+    void keepsRowsInPlace();
     void browsesSections();
     void filtersByItem();
     void describesCurrentBook();
@@ -124,12 +134,12 @@ void BookLibraryTest::loadsLibrary()
     QCOMPARE(library->counts().value(QStringLiteral("books")).toInt(), 6);
     QCOMPARE(library->counts().value(QStringLiteral("authors")).toInt(), 6);
     QCOMPARE(library->scopeCount(), 6);
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
     // Its copy of the database stays out of the library.
     QVERIFY(QFileInfo::exists(BookLibrary::cacheFolder(library->libraryPath()) + QStringLiteral("/snapshot.db")));
     QVERIFY(!QFileInfo::exists(QDir(fixtureLibrary()).filePath(QStringLiteral("metadata.db-journal"))));
 
-    const QVariantMap black = library->rows().first().toMap();
+    const QVariantMap black = bookRows(*library).first().toMap();
     QCOMPARE(black.value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
     QCOMPARE(black.value(QStringLiteral("authors")).toString(), QStringLiteral("Glen Cook"));
     QCOMPARE(black.value(QStringLiteral("series")).toString(), QStringLiteral("Chronicles of the Black Company [1]"));
@@ -162,7 +172,7 @@ void BookLibraryTest::sortsBooks()
     QVERIFY(library);
     library->setSortOption(option);
     QCOMPARE(library->sortOption(), option);
-    QCOMPARE(ids(library->rows()), expected);
+    QCOMPARE(ids(bookRows(*library)), expected);
     library->setSortOption(QStringLiteral("nonsense"));
     QCOMPARE(library->sortOption(), option);
 }
@@ -190,8 +200,43 @@ void BookLibraryTest::searchesBooks()
     auto library = open();
     QVERIFY(library);
     library->setSearchText(search);
-    QCOMPARE(ids(library->rows()), expected);
+    QCOMPARE(ids(bookRows(*library)), expected);
     QCOMPARE(library->scopeCount(), 6);
+}
+
+void BookLibraryTest::keepsRowsInPlace()
+{
+    auto library = open();
+    QVERIFY(library);
+    BookListModel *books = library->books();
+    QCOMPARE(books->count(), 6);
+    QCOMPARE(books->idAt(0), 2);
+    QCOMPARE(books->indexOf(2), 0);
+    QCOMPARE(books->indexOf(3), 5);
+    QCOMPARE(books->indexOf(99), -1);
+    QCOMPARE(books->idAt(6), 0);
+    QVERIFY(books->get(-1).isEmpty());
+    QCOMPARE(books->data(books->index(1), Qt::UserRole).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("L'Écume des jours"));
+
+    // The same books read again only change their values; another order
+    // starts the list again.
+    QSignalSpy resets(books, &QAbstractItemModel::modelReset);
+    QSignalSpy changes(books, &QAbstractItemModel::dataChanged);
+    QSignalSpy loaded(library.get(), &BookLibrary::libraryChanged);
+    library->reload();
+    QVERIFY(loaded.wait(10000));
+    QCOMPARE(resets.count(), 0);
+    QCOMPARE(changes.count(), 1);
+    library->setSortOption(QStringLiteral("added"));
+    QCOMPARE(resets.count(), 1);
+    QCOMPARE(books->ids(), (QList<int>{ 1, 2, 3, 4, 5, 6 }));
+    // A search narrows the sorted list without sorting it again.
+    library->setSearchText(QStringLiteral("glen"));
+    QCOMPARE(books->ids(), (QList<int>{ 2, 3 }));
+    QCOMPARE(books->indexOf(3), 1);
+    library->setSortOption(QStringLiteral("addedDesc"));
+    QCOMPARE(books->ids(), (QList<int>{ 3, 2 }));
 }
 
 void BookLibraryTest::browsesSections()
@@ -203,7 +248,7 @@ void BookLibraryTest::browsesSections()
     // A browse section lists items, not books, and starts without a search.
     library->setSection(QStringLiteral("authors"));
     QVERIFY(library->searchText().isEmpty());
-    QVERIFY(library->rows().isEmpty());
+    QVERIFY(bookRows(*library).isEmpty());
     QCOMPARE(library->facetCount(), 6);
     QCOMPARE(names(library->facetRows()),
              (QStringList{ QStringLiteral("Glen Cook"), QStringLiteral("Jean-Pierre Dupont"),
@@ -245,17 +290,17 @@ void BookLibraryTest::filtersByItem()
     QCOMPARE(filterChanged.size(), 1);
     QCOMPARE(library->filter().value(QStringLiteral("kind")).toString(), QStringLiteral("authors"));
     QCOMPARE(library->filter().value(QStringLiteral("name")).toString(), QStringLiteral("Glen Cook"));
-    QCOMPARE(ids(library->rows()), (QList<int>{ 2, 3 }));
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 3 }));
     QCOMPARE(library->scopeCount(), 2);
 
     library->setSearchText(QStringLiteral("shadows"));
-    QCOMPARE(ids(library->rows()), QList<int>{ 3 });
+    QCOMPARE(ids(bookRows(*library)), QList<int>{ 3 });
     QCOMPARE(library->scopeCount(), 2);
 
     library->clearFilter();
     QVERIFY(library->filter().isEmpty());
     QVERIFY(library->searchText().isEmpty());
-    QVERIFY(library->rows().isEmpty());
+    QVERIFY(bookRows(*library).isEmpty());
 
     // An id the section does not have changes nothing.
     library->openFacetItem(999);
@@ -264,10 +309,10 @@ void BookLibraryTest::filtersByItem()
     library->setSection(QStringLiteral("languages"));
     const QVariantList languages = library->facetRows();
     library->openFacetItem(languages.last().toMap().value(QStringLiteral("id")).toInt());
-    QCOMPARE(ids(library->rows()), (QList<int>{ 1, 5, 6 }));
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 1, 5, 6 }));
     library->setSection(QStringLiteral("books"));
     QVERIFY(library->filter().isEmpty());
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
 }
 
 void BookLibraryTest::describesCurrentBook()
@@ -379,7 +424,7 @@ void BookLibraryTest::keepsBooksWhenReloadFails()
     QVERIFY(failed.wait(10000));
     QVERIFY(failed.first().first().toString().contains(QStringLiteral("Calibre is writing")));
     QVERIFY(library->loaded());
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
 }
 
 void BookLibraryTest::switchesLibrary()
@@ -401,7 +446,7 @@ void BookLibraryTest::switchesLibrary()
     QVERIFY(!library->loaded());
     QCOMPARE(library->currentBookId(), 0);
     QTRY_VERIFY_WITH_TIMEOUT(library->loaded(), 10000);
-    QCOMPARE(library->rows().size(), 5);
+    QCOMPARE(bookRows(*library).size(), 5);
 }
 
 void BookLibraryTest::reportsMissingLibrary()
@@ -412,7 +457,7 @@ void BookLibraryTest::reportsMissingLibrary()
     QVERIFY(changed.wait(10000));
     QVERIFY(!library->loaded());
     QVERIFY(library->lastError().contains(QStringLiteral("no Calibre library")));
-    QVERIFY(library->rows().isEmpty());
+    QVERIFY(bookRows(*library).isEmpty());
 }
 
 void BookLibraryTest::followsCalibreOnReload()
@@ -435,7 +480,7 @@ void BookLibraryTest::followsCalibreOnReload()
     library->reload();
     QCOMPARE(library->libraryPath(), QDir::cleanPath(fixtureLibrary()));
     QTRY_VERIFY_WITH_TIMEOUT(library->loaded(), 10000);
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
 }
 
 namespace {
@@ -689,7 +734,7 @@ void BookLibraryTest::movesBooksToTrash()
     QCOMPARE(library->moveToTrash({ 4 }), QString());
     QVERIFY(waitForSave(library.get()));
     QTRY_COMPARE(library->counts().value(QStringLiteral("books")).toInt(), 5);
-    QVERIFY(!ids(library->rows()).contains(4));
+    QVERIFY(!ids(bookRows(*library)).contains(4));
     QCOMPARE(trashKeys(library.get()), QStringList{ QStringLiteral("b-4") });
     QCOMPARE(library->counts().value(QStringLiteral("trash")).toInt(), 1);
     const QVariantMap entry = library->trashEntries().first().toMap();

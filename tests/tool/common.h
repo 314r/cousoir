@@ -78,4 +78,7 @@ int makeEpub(const QStringList &arguments);
 int makeImportEpubs(const QStringList &arguments);
 int makePdf(const QStringList &arguments);
 
+// large.cpp
+int makeLibrary(const QStringList &arguments);
+
 } // namespace Tool

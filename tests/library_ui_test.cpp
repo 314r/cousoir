@@ -104,6 +104,8 @@ private:
     // A popup or another object that is no item.
     QObject *object(const char *name) const { return m_window->findChild<QObject *>(QString::fromLatin1(name)); }
     QObject *library() const;
+    // The rows the book list shows, as maps.
+    QVariantList bookRows() const;
     QObject *guard() const;
     QString text(const char *name) const;
     void typeText(const QString &text);
@@ -201,6 +203,15 @@ QQuickItem *LibraryUiTest::control(const QString &name) const
 QObject *LibraryUiTest::library() const
 {
     return m_window->property("library").value<QObject *>();
+}
+
+QVariantList LibraryUiTest::bookRows() const
+{
+    auto *books = library()->property("books").value<BookListModel *>();
+    QVariantList rows;
+    for (int row = 0; books && row < books->count(); ++row)
+        rows.append(books->get(row));
+    return rows;
 }
 
 QObject *LibraryUiTest::guard() const
@@ -310,7 +321,7 @@ void LibraryUiTest::listsSearchesAndSortsBooks()
     QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("added"));
     QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(added));
     QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("addedDesc"));
-    QCOMPARE(library()->property("rows").toList().first().toMap().value(QStringLiteral("title")).toString(),
+    QCOMPARE(bookRows().first().toMap().value(QStringLiteral("title")).toString(),
              QStringLiteral("Le Petit Prince"));
     // The order is remembered.
     QTRY_COMPARE(QSettings().value(QStringLiteral("Layout/sortOption")).toString(), QStringLiteral("addedDesc"));
@@ -657,7 +668,7 @@ void LibraryUiTest::editsDetailsInPlace()
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
-    const QVariantList rows = library()->property("rows").toList();
+    const QVariantList rows = bookRows();
     QVERIFY(std::any_of(rows.cbegin(), rows.cend(), [](const QVariant &row) {
         return row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("Mood Indigo");
     }));
@@ -801,7 +812,7 @@ void LibraryUiTest::movesBooksToTrashAndBack()
     // Del on the list asks before moving the current book.
     QMetaObject::invokeMethod(m_window, "focusCurrentList");
     QTRY_VERIFY(m_window->activeFocusItem());
-    const QVariantList rows = library()->property("rows").toList();
+    const QVariantList rows = bookRows();
     QVERIFY(!rows.isEmpty());
     const QVariantMap first = rows.first().toMap();
     QVERIFY(text("keyHints").endsWith(QStringLiteral("Del trash")));
@@ -812,7 +823,7 @@ void LibraryUiTest::movesBooksToTrashAndBack()
              QStringLiteral("Move “%1” to the trash?").arg(first.value(QStringLiteral("title")).toString()));
     clickVisible("confirmAccept");
     waitForSave();
-    QTRY_COMPARE(library()->property("rows").toList().size(), rows.size() - 1);
+    QTRY_COMPARE(bookRows().size(), rows.size() - 1);
 
     // The Trash section lists it, and Restore puts it back.
     click("sidebar_trash");

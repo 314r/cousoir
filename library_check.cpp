@@ -87,6 +87,27 @@ std::optional<NameParts> nameParts(const QString &name, const CalibreText::Tweak
     return parts;
 }
 
+// sameByInitials() on names already split.
+bool partsByInitials(const NameParts &a, const NameParts &b)
+{
+    if (a.surname != b.surname || a.given.size() != b.given.size())
+        return false;
+    // A surname of initials says too little.
+    if (std::any_of(a.surname.cbegin(), a.surname.cend(), [](const QString &word) { return word.size() < 2; }))
+        return false;
+    bool differ = false;
+    for (qsizetype i = 0; i < a.given.size(); ++i) {
+        const QString &x = a.given.at(i);
+        const QString &y = b.given.at(i);
+        if (x == y)
+            continue;
+        if (!(x.size() == 1 && y.startsWith(x)) && !(y.size() == 1 && x.startsWith(y)))
+            return false;
+        differ = true;
+    }
+    return differ;
+}
+
 bool hasInitial(const NameParts &parts)
 {
     return std::any_of(parts.given.cbegin(), parts.given.cend(), [](const QString &word) { return word.size() == 1; });
@@ -149,7 +170,7 @@ Authors groupAuthors(const QList<FacetItem> &authors, const CalibreText::Tweaks 
                 if (other == node)
                     continue;
                 for (const qsizetype candidate : std::as_const(nodes.at(other))) {
-                    if (LibraryCheck::sameByInitials(authors.at(author).name, authors.at(candidate).name, tweaks))
+                    if (parts.at(candidate) && partsByInitials(*parts.at(author), *parts.at(candidate)))
                         fitting.insert(other);
                 }
             }
@@ -485,22 +506,7 @@ bool sameByInitials(const QString &first, const QString &second, const CalibreTe
 {
     const std::optional<NameParts> a = nameParts(first, tweaks);
     const std::optional<NameParts> b = nameParts(second, tweaks);
-    if (!a || !b || a->surname != b->surname || a->given.size() != b->given.size())
-        return false;
-    // A surname of initials says too little.
-    if (std::any_of(a->surname.cbegin(), a->surname.cend(), [](const QString &word) { return word.size() < 2; }))
-        return false;
-    bool differ = false;
-    for (qsizetype i = 0; i < a->given.size(); ++i) {
-        const QString &x = a->given.at(i);
-        const QString &y = b->given.at(i);
-        if (x == y)
-            continue;
-        if (!(x.size() == 1 && y.startsWith(x)) && !(y.size() == 1 && x.startsWith(y)))
-            return false;
-        differ = true;
-    }
-    return differ;
+    return a && b && partsByInitials(*a, *b);
 }
 
 QString isbnKey(const QString &value)

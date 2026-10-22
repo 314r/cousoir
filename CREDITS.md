@@ -75,7 +75,8 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | | `src/calibre/db/cache.py`: `set_field()`, `set_metadata()` |
 | `commit_engine.cpp` | `src/calibre/__init__.py`: `fit_image()`; `src/calibre/utils/img.py`: `save_cover_data_to()` |
 | `calibre_db.cpp` | `src/calibre/db/backend.py`: the SQL functions, aggregates and temporary author triggers of a connection, `format_abspath()` |
-| `book_library.cpp` | `src/calibre/db/utils.py`: `find_identical_books()`; `src/calibre/ebooks/__init__.py`: `BOOK_EXTENSIONS`; `src/calibre/ebooks/metadata/__init__.py`: `fmt_sidx()`, `rating_to_stars()` |
+| `book_library.cpp` | `src/calibre/db/utils.py`: `find_identical_books()`; `src/calibre/ebooks/__init__.py`: `BOOK_EXTENSIONS` |
+| `book_list_model.cpp` | `src/calibre/ebooks/metadata/__init__.py`: `fmt_sidx()`, `rating_to_stars()` |
 | `device_books.cpp` | `src/calibre/gui2/device.py`: `set_books_in_library()` |
 | `device_files.cpp` | `src/calibre/devices/mtp/driver.py`: `is_folder_ignored()` |
 | `kobo.cpp` | `src/calibre/devices/kobo/driver.py`, Copyright (C) Timothy Legge, Kovid Goyal and David Forrester: the books KOBOTOUCH's `books()` lists, `imageid_from_contentid()`, `images_path()`, `cover_file_endings()`, `qhash()`, `path_from_contentid()`, the device models |

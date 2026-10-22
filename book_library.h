@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QCollator>
+#include <QCollatorSortKey>
 #include <QFileSystemWatcher>
 #include <QFutureWatcher>
 #include <QHash>
@@ -12,6 +13,7 @@
 
 #include "book.h"
 #include "book_edit.h"
+#include "book_list_model.h"
 #include "book_operations.h"
 #include "calibre_config.h"
 #include "commit_engine.h"
@@ -46,7 +48,9 @@ class BookLibrary : public QObject
     Q_PROPERTY(QVariantMap filter READ filter NOTIFY filterChanged)
     // The books of the section, or of the filter, before the search.
     Q_PROPERTY(int scopeCount READ scopeCount NOTIFY rowsChanged)
-    Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
+    // The books listed: those of the section or the filter that the search
+    // finds, in the sort order.
+    Q_PROPERTY(BookListModel *books READ books CONSTANT)
     // The items of a browse section: { id, name, count }.
     Q_PROPERTY(QVariantList facetRows READ facetRows NOTIFY facetRowsChanged)
     Q_PROPERTY(int facetCount READ facetCount NOTIFY facetRowsChanged)
@@ -116,7 +120,7 @@ public:
     void setSection(const QString &section);
     QVariantMap filter() const;
     int scopeCount() const;
-    QVariantList rows() const;
+    BookListModel *books();
     QVariantList facetRows() const;
     int facetCount() const;
     QString searchText() const;
@@ -261,13 +265,34 @@ signals:
     void importWarning(const QString &message);
 
 private:
+    // What the book list needs of each book, by its place in the library's
+    // books: its words folded for the search, and its sort keys. Made with
+    // each load, on the worker thread.
+    struct BookIndex
+    {
+        QList<QString> searchTexts;
+        std::vector<QCollatorSortKey> titleKeys;
+        std::vector<QCollatorSortKey> authorKeys;
+        // The sort of the book's series, empty for none.
+        std::vector<QCollatorSortKey> seriesKeys;
+        QHash<int, qsizetype> rowOf;
+    };
+
     struct LoadResult
     {
         QString path;
         LibraryData data;
+        BookIndex index;
         QString error;
         QString recovered;
         bool ok = false;
+    };
+
+    // A save, and the index of the books it leaves.
+    struct CommitResult
+    {
+        CommitEngine::Result result;
+        BookIndex index;
     };
 
     struct ImportResult
@@ -292,7 +317,10 @@ private:
     void rebuildCheck();
     void startCommit();
     void finishCommit();
-    void applyData(LibraryData data);
+    void applyData(LibraryData data, BookIndex index);
+    static BookIndex indexBooks(const LibraryData &data);
+    // The library's books in the sort order, without its direction.
+    const QList<qsizetype> &sortedBooks();
     // What the current book's fields hold, as updateBook() takes them.
     QVariantMap editableValues(const Book &book) const;
     // Keeps the current book as it is before its first change.
@@ -318,13 +346,15 @@ private:
     QFileSystemWatcher m_watcher;
     QTimer m_changeTimer;
     QCollator m_collator;
-    // Each book's title, authors, series and tags, folded for the search.
-    QHash<int, QString> m_searchTexts;
+    BookIndex m_index;
+    // sortedBooks(), and the sort it is for; empty until asked.
+    QList<qsizetype> m_sorted;
+    QString m_sortedBy;
 
     QString m_section = QStringLiteral("books");
     QString m_filterKind;
     int m_filterId = 0;
-    QVariantList m_rows;
+    BookListModel m_bookList;
     int m_scopeCount = 0;
     QVariantList m_facetRows;
     QString m_searchText;
@@ -334,7 +364,7 @@ private:
     QVariantMap m_currentBook;
 
     bool m_writable = false;
-    QFutureWatcher<CommitEngine::Result> m_commitWatcher;
+    QFutureWatcher<CommitResult> m_commitWatcher;
     // The changes waiting, in order; edits in a row go together.
     QList<CommitEngine::Request> m_pending;
     QFutureWatcher<ImportResult> m_importWatcher;

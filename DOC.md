@@ -564,6 +564,14 @@ are available as shortcuts. They pick the number the same way, and
 ctest --test-dir build --output-on-failure
 ```
 
+`tools/sandbox.sh` runs a command with its home, temporary, cache, data and
+config folders, and Calibre's, under `build/sandbox`: the tests then write
+nothing outside the source tree, not even Qt's `~/.qttest`.
+
+```bash
+tools/sandbox.sh ctest --test-dir build --output-on-failure
+```
+
 Besides what builds Cousoir, the tests need only Calibre, for the parts that
 run it. `cousoir-test-tool`, built with them, does the rest: it compares what
 Calibre and Cousoir wrote, stands in for the readers and for Calibre's
@@ -600,7 +608,8 @@ The tests check the port against Calibre itself:
   reads it, checks Cousoir's list against Calibre's byte for byte, and checks
   that reading leaves every file of the library as it was.
 - `golden_list` runs `calibredb list` and `cousoir-cli list` on separate
-  copies of the fixture and compares them; with `COUSOIR_GOLDEN_REAL=1` it
+  copies of the fixture and compares them, and on 2000 made-up books from
+  `cousoir-test-tool make-library`, below; with `COUSOIR_GOLDEN_REAL=1` it
   does the same with the library Calibre opens. It then applies the edits of
   `tests/data/edits/edits.json` with Calibre's own writers
   (`tools/oracle/apply_edits.py`) and with `cousoir-cli apply`, and compares
@@ -669,6 +678,28 @@ The tests check the port against Calibre itself:
   real one.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%
   scale, against a copy of the fixture library.
+
+### Measuring
+
+`cousoir-test-tool make-library FOLDER BOOKS [SEED]` writes a library of
+made-up books, the same ones for the same seed, through Calibre's own schema
+and triggers: authors, series, tags and publishers of which a few fill most
+books, as in a real library, titles in several languages, names in other
+scripts, the same book now and then, files and covers. `cousoir-benchmark`
+then measures what a user waits for, on a copy, as it saves an edit:
+loading, checking, searching letter by letter, sorting, browsing, opening a
+book and saving; with `--ui`, the whole window, each step until its frame is
+drawn.
+
+```bash
+build/cousoir-test-tool make-library build/sandbox/libs/50k 50000
+cp -a --reflink=auto build/sandbox/libs/50k build/sandbox/libs/bench
+sync -f build/sandbox
+QT_QPA_PLATFORM=offscreen tools/sandbox.sh build/cousoir-benchmark --ui build/sandbox/libs/bench
+```
+
+The `sync` first: a save ends by flushing the library's folder to the disk,
+which on btrfs also writes whatever the copy left pending.
 
 ## License
 
