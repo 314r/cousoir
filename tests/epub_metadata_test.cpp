@@ -67,6 +67,7 @@ private slots:
     void writesPackagesAsCalibre_data();
     void writesPackagesAsCalibre();
     void leavesBrokenPackages();
+    void readsPackagesAsCalibreDoes();
     void writesABook();
 };
 
@@ -119,6 +120,56 @@ void EpubMetadataTest::leavesBrokenPackages()
     QVERIFY(!EpubMetadata::apply("no xml", metadata, {}));
 }
 
+void EpubMetadataTest::readsPackagesAsCalibreDoes()
+{
+    EpubMetadata::Metadata metadata;
+    metadata.title = QStringLiteral("Le Titre");
+    metadata.authors = { QStringLiteral("Boris Vian") };
+
+    // In the encoding its declaration names, as xml_to_unicode() reads it.
+    const QByteArray latin1 = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?>\n"
+                              "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\">"
+                              "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"id\">x</dc:identifier>"
+                              "<dc:title>T</dc:title><dc:rights>\xa9 \xc9" "ditions</dc:rights></metadata>"
+                              "<manifest><item id=\"c\" href=\"chapitre_\xe9t\xe9.xhtml\" media-type=\"application/xhtml+xml\"/></manifest>"
+                              "<spine><itemref idref=\"c\"/></spine></package>";
+    std::optional<EpubMetadata::Package> result = EpubMetadata::apply(latin1, metadata, {});
+    QVERIFY(result);
+    const QString opf = QString::fromUtf8(result->opf);
+    QVERIFY(opf.contains(QStringLiteral("<dc:rights>© Éditions</dc:rights>")));
+    QVERIFY(opf.contains(QStringLiteral("href=\"chapitre_été.xhtml\"")));
+
+    // What Calibre's parser recovers from: an & of its own, a prefix
+    // used undeclared.
+    const QByteArray sloppy = "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\" unique-identifier=\"id\">"
+                              "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
+                              "<dc:identifier id=\"id\" opf:scheme=\"ISBN\">9780000000002</dc:identifier>"
+                              "<dc:title>T</dc:title><dc:rights>Simon & Schuster</dc:rights></metadata>"
+                              "<manifest/><spine/></package>";
+    result = EpubMetadata::apply(sloppy, metadata, {});
+    QVERIFY(result);
+    QVERIFY(result->opf.contains("<dc:title>Le Titre</dc:title>"));
+    QVERIFY(result->opf.contains("Simon &amp; Schuster"));
+
+    // A series Calibre wrote, its refinements gone with it.
+    const QByteArray series = "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\">"
+                              "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:identifier id=\"id\">x</dc:identifier>"
+                              "<dc:title>T</dc:title>"
+                              "<meta property=\"belongs-to-collection\" id=\"s1\">Old</meta>"
+                              "<meta refines=\"#s1\" property=\"collection-type\">series</meta>"
+                              "<meta property=\"belongs-to-collection\" id=\"s2\" refines=\"#s1\">Nested</meta>"
+                              "<meta refines=\"#s2\" property=\"group-position\">2</meta>"
+                              "</metadata><manifest/><spine/></package>";
+    metadata.series = QStringLiteral("New");
+    metadata.seriesIndex = 3;
+    result = EpubMetadata::apply(series, metadata, {});
+    QVERIFY(result);
+    QVERIFY(!result->opf.contains("Old"));
+    QVERIFY(!result->opf.contains("Nested"));
+    QVERIFY(result->opf.contains(">New</meta>"));
+    QVERIFY(result->opf.contains("property=\"group-position\">3</meta>"));
+}
+
 void EpubMetadataTest::writesABook()
 {
     // The fixture's book, with its package in OEBPS: the package changed,
@@ -145,14 +196,15 @@ void EpubMetadataTest::writesABook()
     QVERIFY(after.data.value(QStringLiteral("OEBPS/content.opf")).contains("<dc:identifier>calibre:2</dc:identifier>"));
     QCOMPARE(after.data.value(QStringLiteral("OEBPS/text.xhtml")), before.data.value(QStringLiteral("OEBPS/text.xhtml")));
 
-    // A file that is no EPUB is refused; one whose package cannot be
-    // changed goes as it is.
+    // A file that cannot be read as an EPUB goes as it is, as Calibre sends
+    // a book its writer fails on.
     const QString text = temporary.filePath(QStringLiteral("a.txt"));
     QFile file(text);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write("text");
     file.close();
-    QVERIFY(!EpubMetadata::write(text, temporary.filePath(QStringLiteral("b.epub")), metadata, &error));
+    QVERIFY(EpubMetadata::write(text, temporary.filePath(QStringLiteral("b.epub")), metadata, &error));
+    QCOMPARE(readAll(temporary.filePath(QStringLiteral("b.epub"))), QByteArrayLiteral("text"));
 }
 
 QTEST_GUILESS_MAIN(EpubMetadataTest)

@@ -125,7 +125,16 @@ QList<Node *> findAll(Node *root, const std::function<bool(const Node &)> &match
 // HTML's named entities, which XML lacks, as character references.
 QString xmlText(const QByteArray &data)
 {
-    QStringDecoder decoder = QStringDecoder::decoderForHtml(data);
+    // xml_to_unicode(): a byte order mark, else the encoding the XML
+    // declaration names, else what an HTML page says, else UTF-8.
+    QStringDecoder decoder;
+    const bool bom = data.startsWith("\xef\xbb\xbf") || data.startsWith("\xff\xfe") || data.startsWith("\xfe\xff");
+    static const QRegularExpression declared(QStringLiteral("^\\s*<\\?xml[^>]*encoding\\s*=\\s*[\"']([-\\w.:]+)[\"']"));
+    const QRegularExpressionMatch encoding = declared.match(QString::fromLatin1(data.left(256)));
+    if (!bom && encoding.hasMatch())
+        decoder = QStringDecoder(encoding.captured(1).toLatin1().constData());
+    if (!decoder.isValid())
+        decoder = QStringDecoder::decoderForHtml(data);
     QString text = decoder.isValid() ? decoder.decode(data) : QString::fromUtf8(data);
     static const QRegularExpression entity(QStringLiteral("&([A-Za-z][A-Za-z0-9]*);"));
     static const QSet<QString> xmlEntities{ QStringLiteral("amp"), QStringLiteral("lt"), QStringLiteral("gt"),

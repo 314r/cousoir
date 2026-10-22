@@ -32,6 +32,7 @@
 #include <QMimeDatabase>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSet>
 #include <QUrl>
 
@@ -147,10 +148,20 @@ std::vector<std::unique_ptr<Node>> takeWithTail(Node *node)
     return taken;
 }
 
+// The nodes taken out while a package is changed: alive until it is
+// written, as lxml keeps an element Python still holds, for a list taken
+// before a removal may still hold one.
+thread_local std::vector<std::unique_ptr<Node>> *removedNodes = nullptr;
+
 void removeNode(Node *node)
 {
-    if (node->parent)
-        takeWithTail(node);
+    if (!node->parent)
+        return;
+    std::vector<std::unique_ptr<Node>> taken = takeWithTail(node);
+    if (removedNodes) {
+        for (auto &removed : taken)
+            removedNodes->push_back(std::move(removed));
+    }
 }
 
 // parent.insert(index, nodes): before its index-th child, as lxml counts.
@@ -398,6 +409,9 @@ void removeRefines(Node *element, Refines *refines)
 
 void removeElement(Node *element, Refines *refines)
 {
+    // Gone already, with another's refinements.
+    if (!element->parent)
+        return;
     removeRefines(element, refines);
     removeNode(element);
 }
@@ -1917,6 +1931,28 @@ QString packagePath(const BookZip::Zip &zip)
     return {};
 }
 
+// A package's text with its stray &s escaped and the prefixes of OPF and
+// Dublin Core declared where they are used undeclared.
+QByteArray repaired(const QByteArray &opf)
+{
+    QString text = QString::fromLatin1(opf);
+    static const QRegularExpression stray(QStringLiteral("&(?!(#\\d+|#x[0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);)"));
+    text.replace(stray, QStringLiteral("&amp;"));
+    static const QRegularExpression packageTag(QStringLiteral("<([\\w.-]+:)?package\\b"));
+    const QRegularExpressionMatch tag = packageTag.match(text);
+    if (tag.hasMatch()) {
+        QString declarations;
+        for (const auto &[prefix, uri] : { std::pair(QStringLiteral("opf"), opfNamespace), std::pair(QStringLiteral("dc"), dcNamespace) }) {
+            if (text.contains(u'<' + prefix + u':') || text.contains(u' ' + prefix + u':')) {
+                if (!text.contains(QStringLiteral("xmlns:") + prefix + u'='))
+                    declarations += QStringLiteral(" xmlns:%1=\"%2\"").arg(prefix, uri);
+            }
+        }
+        text.insert(tag.capturedEnd(), declarations);
+    }
+    return text.toLatin1();
+}
+
 } // namespace
 
 Metadata fromBook(const LibraryData &data, const Book &book, const QString &interfaceLanguage)
@@ -1950,7 +1986,14 @@ Metadata fromBook(const LibraryData &data, const Book &book, const QString &inte
 
 std::optional<Package> apply(const QByteArray &opf, const Metadata &metadata, const QString &coverPrefix)
 {
+    std::vector<std::unique_ptr<Node>> removed;
+    removedNodes = &removed;
+    const auto forget = qScopeGuard([] { removedNodes = nullptr; });
     std::unique_ptr<Node> document = XmlTree::parse(opf);
+    // Calibre's parser recovers from what such packages often have: an & of
+    // their own, a prefix used undeclared.
+    if (!document)
+        document = XmlTree::parse(repaired(opf));
     Node *package = document ? XmlTree::documentElement(document.get()) : nullptr;
     if (!package || package->namespaceUri != opfNamespace || package->localName != QLatin1String("package"))
         return std::nullopt;
@@ -2030,9 +2073,9 @@ std::optional<Package> apply(const QByteArray &opf, const Metadata &metadata, co
 bool write(const QString &source, const QString &target, const Metadata &metadata, QString *error)
 {
     BookZip::Zip zip;
-    if (!BookZip::readZip(source, &zip, error))
-        return false;
-    const QString opfPath = packagePath(zip);
+    QString zipError;
+    const bool read = BookZip::readZip(source, &zip, &zipError);
+    const QString opfPath = read ? packagePath(zip) : QString();
     const QString folder = opfPath.contains(u'/') ? opfPath.section(u'/', 0, -2) : QString();
     const std::optional<Package> package
         = opfPath.isEmpty() ? std::nullopt : apply(zip.data.value(opfPath), metadata, folder);

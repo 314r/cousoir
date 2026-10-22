@@ -1177,3 +1177,22 @@ sidebar.
 Left: the notes the readers keep (Kobo, Kindle), which show on each book's
 page; editing a highlight's note from here.
 
+
+### 2026-10-22 — a review of goal 20, part 2 (`exp-review12`)
+
+The ZIP written (mimetype first and stored), obfuscated fonts (the package's
+identifier is never changed), covers by `../` or `%20` and the KEPUB code
+under the new serializer came out right. Three bugs, fixed, and a minor one:
+
+- A series Calibre wrote freed its refinements while the loop still read
+  them (AddressSanitizer saw it on the tests' own package); removed nodes
+  now stay alive until the package is written, as lxml keeps them.
+- A package in Latin-1 or another encoding its declaration names was read
+  as UTF-8, its other fields and its non-ASCII addresses mangled in the
+  book sent; the declaration is honoured, as `xml_to_unicode()` does.
+- A package with a bare `&` or an undeclared `opf:` prefix, which Calibre's
+  parser recovers from, got no metadata; it is repaired and read again.
+- A book that cannot be read as an EPUB goes as it is, as Calibre sends a
+  book its writer fails on, and an entry that cannot be read fails the book
+  rather than go missing from it; a send whose copy cannot be made fails,
+  rather than tell the books sent.

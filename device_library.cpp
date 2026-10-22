@@ -1441,10 +1441,11 @@ void DeviceLibrary::sendWireless(const Job &job, const Connected &connected)
     const QString base = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("sends"));
     QDir().mkpath(base);
     const auto copies = std::make_shared<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
-    auto *watcher = new QFutureWatcher<QList<Wireless::Outgoing>>(this);
+    using Prepared = std::pair<QList<Wireless::Outgoing>, QString>;
+    auto *watcher = new QFutureWatcher<Prepared>(this);
     connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, connection, copies] {
         watcher->deleteLater();
-        const QList<Wireless::Outgoing> books = watcher->result();
+        const auto [books, prepareError] = watcher->result();
         const auto done = [this, copies](bool ok, const QString &error) {
             if (m_destroying)
                 return;
@@ -1459,6 +1460,10 @@ void DeviceLibrary::sendWireless(const Job &job, const Connected &connected)
                 emit failed(tr("“%1” was not sent to %2: %3").arg(sent.titles.join(QLatin1String("”, “")), sent.name, error));
             startNext();
         };
+        if (!prepareError.isEmpty()) {
+            done(false, prepareError);
+            return;
+        }
         if (!connection) {
             done(false, tr("The reader disconnected."));
             return;
@@ -1484,12 +1489,12 @@ void DeviceLibrary::sendWireless(const Job &job, const Connected &connected)
             const QString file = QDir(folder).filePath(QString::number(bookId) + extension);
             QString error;
             if (!WirelessSend::prepareFile(data, *book, format, file, language, config, &error))
-                continue;
+                return Prepared{ {}, error };
             QString lpath = existing.value(bookId);
             if (lpath.isEmpty())
                 lpath = WirelessSend::uploadPath(data, *book, extension, app, language);
             books.append({ lpath, WirelessSend::metadata(data, *book, lpath, QFileInfo(file).size(), app, language), file });
         }
-        return books;
+        return Prepared{ books, QString() };
     }));
 }
