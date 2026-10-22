@@ -41,6 +41,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - ✏️ **Edit in place.** Title, authors, series, tags, rating, publisher,
   languages, dates and identifiers save as you leave the field. Drop or paste
   an image to change the cover.
+- 📚 **Many books at once.** Select with Ctrl, Shift or Ctrl+A, then trash,
+  convert, send, or edit them together as Calibre's bulk edit does: tags
+  added and removed, a series numbered, and Undo if you change your mind.
 - ➕ **Add books by dropping them.** Files or whole folders. Their metadata is
   read as `calibredb add` reads it, and Cousoir asks before adding a book you
   already have.
@@ -125,7 +128,8 @@ Cousoir installs under `~/.local` and appears in your app launcher. Set
 | Ctrl+N | Add books |
 | Ctrl+Shift+K, Ctrl+Shift+A | Convert the book to KEPUB or AZW3 |
 | Ctrl+D | Send the book to the reader plugged in |
-| Del | Move the book to the trash, or remove it from the reader |
+| Ctrl+click, Shift+click, Ctrl+A | Select several books, to act on or edit together |
+| Del | Move the selected books to the trash, or remove a book from the reader |
 | Ctrl+O | Open the book in your ebook reader |
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |

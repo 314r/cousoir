@@ -17,6 +17,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <optional>
 
 #include "book_edit.h"
 #include "book_import.h"
@@ -665,6 +666,16 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             const QJsonObject convert = op.value(QLatin1String("convert")).toObject();
             conversions.append({ convert.value(QLatin1String("book")).toInt(),
                                  convert.value(QLatin1String("format")).toString().toUpper() });
+            continue;
+        }
+        if (op.contains(QLatin1String("bulk"))) {
+            BulkEdit bulk;
+            QString error;
+            if (!BulkEdit::fromVariantMap(op.value(QLatin1String("bulk")).toObject().toVariantMap(), &bulk, &error)) {
+                err() << error << Qt::endl;
+                return 2;
+            }
+            request.bulkEdits.append(bulk);
             continue;
         }
         if (op.contains(QLatin1String("addFormat"))) {

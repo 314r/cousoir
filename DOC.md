@@ -201,6 +201,31 @@ Cousoir departs from Calibre on purpose in a few places:
   from other tables, Cousoir does not write.
 - The description is not editable yet.
 
+## Several books at once
+
+A click selects a book; Ctrl with a click adds a book to the selection or
+takes it out, Shift with a click or with the arrows, Page Up, Page Down,
+Home or End selects every book from the last one clicked, and Ctrl+A
+selects them all, in the table or the covers. Esc goes back to the current
+book alone. The status bar counts them. A sort keeps the books selected; a
+search keeps those it still shows.
+
+The row menu, Del, Ctrl+D and Ctrl+Shift+K or Ctrl+Shift+A then act on all
+the books selected: moved to the trash in one change, after asking; sent to
+the reader, those it reads none of the formats of converted first, after
+asking; converted one after the other.
+
+Beside the list, a pane edits them together, as Calibre's bulk metadata
+edit does (Ctrl+I hides it). A field filled in goes to every book; one left
+empty keeps each book's own; × beside a field clears it for all. The
+authors replace each book's, with their author sort; tags are added to and
+removed from each book's own, an added tag keeping the library's spelling
+of it; a series puts the books at 1, numbers them from a number in the
+list's order, or after the series' last book, as Calibre's numbering does;
+the rating, publisher, languages and publication date replace each book's.
+Apply saves it all in one change; Undo puts the books back as they were
+before it, in the fields it could change.
+
 ## Adding and removing books
 
 Ctrl+N, or the + button of the toolbar, picks book files to add; files dropped
@@ -530,7 +555,18 @@ the formats a book has no file for copied to it from another first:
 ```
 
 An `add` makes one book of its files, with the first one's metadata; files
-are relative to the JSON file. Conversions run first, on the books as the
+are relative to the JSON file. A `bulk` edits several books together, as
+the pane beside the list does, after the edits and before the other
+changes, each one on the books as the changes before it left them:
+
+```json
+[{ "bulk": { "books": [1, 4], "addTags": ["Lu"], "removeTags": "À lire",
+             "series": "Discworld", "numberSeries": true, "seriesStart": 1 } }]
+```
+
+Its keys are `books`, `authors`, `rating`, `publisher`, `series`,
+`numberSeries`, `seriesStart`, `seriesIncrement`, `languages`, `pubdate`,
+`addTags`, `removeTags` and `removeAllTags`. Conversions run first, on the books as the
 library has them, and their files are added with the formats added:
 
 ```json
@@ -563,18 +599,22 @@ reader `mtpdir:FOLDER` is a folder that stands for a Kindle over MTP.
 | Shortcut | Action |
 |---|---|
 | Up/Down, arrows in the grid | Move in the list |
+| Page Up, Page Down, Home, End | Move by a page, or to the first or last book |
+| Ctrl+click, Shift+click, Shift with the moving keys | Select several books |
+| Ctrl+A | Select every book listed |
+| Esc | Back to one book, from several selected |
 | Enter, Space, double click | Open the book, or the section's item |
 | Menu, Shift+F10, right click | Book actions: open, open in reader, show folder, convert, send, move to trash |
 | Ctrl+N | Add books |
 | Ctrl+Shift+K, Ctrl+Shift+A | Convert the book, or the selected one, to KEPUB or AZW3 |
 | Ctrl+D | Send the book, or the selected one, to the reader plugged in |
-| Del | Move the selected book to the trash, or remove it from the reader |
+| Del | Move the selected books to the trash, or remove a book from the reader |
 | Ctrl+O | Open the book, or the selected one, in the reader |
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |
 | F5, Ctrl+R | Reload the library, or read the reader again |
-| Ctrl+I | Show or hide the book details pane |
+| Ctrl+I | Show or hide the book details pane, or the pane editing several books |
 | Enter, Tab, Esc | Save, save and move on, or revert a field |
 | Ctrl+V | Paste the clipboard's image as the cover |
 | Enter, Esc | Revert the book's changes or keep them, once asked |
@@ -676,7 +716,8 @@ The tests check the port against Calibre itself:
   (`tools/oracle/search_books.py`) and Cousoir's, which must find the same
   books or both refuse the search. With `COUSOIR_GOLDEN_REAL=1` it
   does the same with the library Calibre opens. It then applies the edits of
-  `tests/data/edits/edits.json` with Calibre's own writers
+  `tests/data/edits/edits.json`, and apart the bulk edits of
+  `tests/data/edits/bulk.json`, with Calibre's own writers and bulk edit
   (`tools/oracle/apply_edits.py`) and with `cousoir-cli apply`, and compares
   every table and every file, `metadata.opf` files as XML and covers by their
   pixels; `calibredb check_library` must report both copies alike. Finally

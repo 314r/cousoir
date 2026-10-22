@@ -307,6 +307,8 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_importedBooks.clear();
     m_importedDuplicates.clear();
     m_backedUp = false;
+    m_bulkOriginals.clear();
+    emit bulkUndoChanged();
     rebuildCheck();
     emit libraryChanged();
     emit filterChanged();
@@ -1302,12 +1304,78 @@ void BookLibrary::revertCurrentBook()
         queueEdit(edit);
 }
 
+int BookLibrary::bulkUndoCount() const
+{
+    return int(m_bulkOriginals.size());
+}
+
+QString BookLibrary::updateBooks(const QVariantList &bookIds, const QVariantMap &changes)
+{
+    if (!m_writable)
+        return tr("The library cannot be changed right now.");
+    if (changes.contains(QStringLiteral("pubdate")) && !isDate(changes.value(QStringLiteral("pubdate")).toString()))
+        return tr("“%1” is not a date.").arg(changes.value(QStringLiteral("pubdate")).toString());
+    QVariantMap withBooks = changes;
+    withBooks.insert(QStringLiteral("books"), bookIds);
+    BulkEdit bulk;
+    QString error;
+    if (!BulkEdit::fromVariantMap(withBooks, &bulk, &error))
+        return error;
+    bulk.bookIds.removeIf([this](int id) { return !findBook(id); });
+    if (bulk.isEmpty())
+        return {};
+    // What the edit can change, as it was, for undoBulkEdit().
+    static const QStringList fields = { QStringLiteral("authors"), QStringLiteral("authorSort"),
+                                        QStringLiteral("series"), QStringLiteral("seriesIndex"),
+                                        QStringLiteral("tags"), QStringLiteral("rating"),
+                                        QStringLiteral("publisher"), QStringLiteral("languages"),
+                                        QStringLiteral("pubdate") };
+    m_bulkOriginals.clear();
+    for (const int id : std::as_const(bulk.bookIds)) {
+        const QVariantMap values = editableValues(*findBook(id));
+        QVariantMap kept;
+        for (const QString &field : fields)
+            kept.insert(field, values.value(field));
+        m_bulkOriginals.insert(id, kept);
+    }
+    emit bulkUndoChanged();
+    CommitEngine::Request request;
+    request.bulkEdits.append(bulk);
+    return queueChange(request);
+}
+
+void BookLibrary::undoBulkEdit()
+{
+    if (m_bulkOriginals.isEmpty() || !m_writable)
+        return;
+    CommitEngine::Request request;
+    for (auto it = m_bulkOriginals.constBegin(); it != m_bulkOriginals.constEnd(); ++it) {
+        const Book *book = findBook(it.key());
+        if (!book)
+            continue;
+        const QVariantMap current = editableValues(*book);
+        QVariantMap changes;
+        for (auto field = it.value().constBegin(); field != it.value().constEnd(); ++field) {
+            if (current.value(field.key()) != field.value())
+                changes.insert(field.key(), field.value());
+        }
+        BookEdit edit;
+        QString error;
+        if (BookEdit::fromVariantMap(it.key(), changes, &edit, &error) && !edit.isEmpty())
+            request.edits.append(edit);
+    }
+    m_bulkOriginals.clear();
+    emit bulkUndoChanged();
+    if (!request.edits.isEmpty())
+        queueChange(request);
+}
+
 QString BookLibrary::queueEdit(const BookEdit &edit)
 {
     if (edit.isEmpty())
         return {};
     // With the edits just before it, if the last change waiting is edits.
-    if (!m_pending.isEmpty() && !m_pending.constLast().hasOperations()) {
+    if (!m_pending.isEmpty() && !m_pending.constLast().hasOperations() && m_pending.constLast().bulkEdits.isEmpty()) {
         m_pending.last().edits.append(edit);
     } else {
         CommitEngine::Request request;

@@ -80,6 +80,8 @@ class BookLibrary : public QObject
     Q_PROPERTY(bool saving READ saving NOTIFY savingChanged)
     // The current book has changed since it was opened.
     Q_PROPERTY(bool canRevert READ canRevert NOTIFY canRevertChanged)
+    // The last bulk edit can be undone: its books' values before it are kept.
+    Q_PROPERTY(int bulkUndoCount READ bulkUndoCount NOTIFY bulkUndoChanged)
     // The metadata.db Cousoir last wrote, for the guard's ownChangeKey.
     Q_PROPERTY(QString publishedKey READ publishedKey NOTIFY publishedKeyChanged)
     // Calibre's interface language as set here, empty for Calibre's own; and
@@ -162,6 +164,7 @@ public:
     void setWritable(bool writable);
     bool saving() const;
     bool canRevert() const;
+    int bulkUndoCount() const;
     QString publishedKey() const;
     QString calibreLanguage() const;
     void setCalibreLanguage(const QString &language);
@@ -204,6 +207,13 @@ public:
     Q_INVOKABLE QString removeCover(int bookId);
     // Puts the current book back as it was when it was opened.
     Q_INVOKABLE void revertCurrentBook();
+    // Edits the books together, BulkEdit's keys, as Calibre's bulk metadata
+    // edit does; `bookIds` in the list's order, which numbers a series. Same
+    // returns as updateBook().
+    Q_INVOKABLE QString updateBooks(const QVariantList &bookIds, const QVariantMap &changes);
+    // Puts the books of the last bulk edit back as they were before it, in
+    // the fields it could change.
+    Q_INVOKABLE void undoBulkEdit();
     // Whether `text` is a date updateBook() takes for pubdate.
     Q_INVOKABLE bool isDate(const QString &text) const;
     // Shows the folder of backups in the file manager.
@@ -269,6 +279,7 @@ signals:
     void writableChanged();
     void savingChanged();
     void canRevertChanged();
+    void bulkUndoChanged();
     void publishedKeyChanged();
     void calibreLanguageChanged();
     // An edit went into the library.
@@ -430,6 +441,8 @@ private:
     bool m_backedUp = false;
     QString m_publishedKey;
     QString m_calibreLanguage;
+    // The books of the last bulk edit as they were before it.
+    QHash<int, QVariantMap> m_bulkOriginals;
     // The current book as it was opened, kept at its first change.
     int m_originalBookId = 0;
     QVariantMap m_original;

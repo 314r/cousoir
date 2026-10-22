@@ -35,6 +35,9 @@ struct Request
     QString backupFolder;
     CalibreConfig config;
     QList<BookEdit> edits;
+    // Then bulk edits, each worked out on the books as the changes before it
+    // left them.
+    QList<BulkEdit> bulkEdits;
     // After the edits, in this order: formats copied from one book to
     // another, before anything leaves, then formats moved to the trash, books
     // moved to the trash, books and formats restored from it, books added and

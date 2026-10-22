@@ -28,6 +28,8 @@ ThemedWindow {
     readonly property bool checkShown: section === "check" && !session.bookOpen
     readonly property bool deviceShown: deviceSection && !session.bookOpen
     readonly property bool booksShown: !facetShown && !trashShown && !checkShown && !deviceShown && !session.bookOpen
+    // Several books selected in the list, which the pane beside it edits.
+    readonly property bool editingMany: booksShown && library.books.selectedCount > 1
     // A message to show in place of the key hints for a while: an error,
     // unless noticeIsError says otherwise.
     property string notice: ""
@@ -192,6 +194,26 @@ ThemedWindow {
         startConversion(bookId, format)
     }
 
+    // Several books converted to `format`, after asking; one book as
+    // convertBook() converts it.
+    function convertBooks(bookIds, format) {
+        if (bookIds.length === 1) {
+            convertBook(bookIds[0], format)
+            return
+        }
+        if (bookIds.length === 0 || !library.writable)
+            return
+        const having = bookIds.filter(id => conversions.formatsFor(id).length > 0
+                                       && (bookRow(id)?.formats || "").split(", ").includes(format)).length
+        convertManyDialog.bookIds = bookIds
+        convertManyDialog.format = format
+        convertManyDialog.title = qsTr("Convert %1 books to %2?").arg(bookIds.length).arg(format)
+        convertManyDialog.message = having > 0
+            ? qsTr("%1 of them have a %2 file already, which the new one replaces.").arg(having).arg(format)
+            : qsTr("Calibre converts them one after the other, each with its own settings.")
+        convertManyDialog.ask()
+    }
+
     // An older notice gives way to the conversion's progress.
     function startConversion(bookId, format) {
         const error = conversions.convert(bookId, format)
@@ -225,7 +247,7 @@ ThemedWindow {
         if (devices.sendFormat(bookId, target) === "" && format && library.writable && conversions.available
             && conversions.formatsFor(bookId).length > 0) {
             const row = bookRow(bookId)
-            convertAndSendDialog.bookId = bookId
+            convertAndSendDialog.bookIds = [bookId]
             convertAndSendDialog.root = target
             convertAndSendDialog.format = format
             convertAndSendDialog.title = qsTr("Convert “%1” to %2 for %3?").arg(row ? row.title : "").arg(format)
@@ -240,6 +262,41 @@ ThemedWindow {
             showNotice(error)
         else
             notice = ""
+    }
+
+    // Sends several books to the reader on `root`, the first one connected
+    // by default: those it reads now, and the others once converted, after
+    // asking.
+    function sendBooks(bookIds, root) {
+        if (bookIds.length === 1) {
+            sendBook(bookIds[0], root)
+            return
+        }
+        const target = root || (devices.devices.length > 0 ? devices.devices[0].root : "")
+        const device = devices.devices.find(device => device.root === target)
+        if (bookIds.length === 0 || !device)
+            return
+        const format = devices.convertFormat(target)
+        const sendable = bookIds.filter(id => devices.sendFormat(id, target) !== "")
+        const convertible = bookIds.filter(id => devices.sendFormat(id, target) === "" && format && library.writable
+                                               && conversions.available && conversions.formatsFor(id).length > 0)
+        if (sendable.length > 0) {
+            const error = devices.send(sendable, target)
+            if (error)
+                showNotice(error)
+            else
+                notice = ""
+        }
+        if (convertible.length > 0) {
+            convertAndSendDialog.bookIds = convertible
+            convertAndSendDialog.root = target
+            convertAndSendDialog.format = format
+            convertAndSendDialog.title = qsTr("Convert %1 books to %2 for %3?").arg(convertible.length).arg(format)
+                .arg(device.name)
+            convertAndSendDialog.message = qsTr("%1 reads none of their formats. Calibre converts them first, then they are sent.")
+                .arg(device.name)
+            convertAndSendDialog.ask()
+        }
     }
 
     // Sends the books converted for a reader once their files are in the
@@ -287,14 +344,32 @@ ThemedWindow {
             showNotice(error)
     }
 
-    // Asks before moving a book to the trash.
-    function trashBook(bookId) {
-        const row = bookRow(bookId)
-        if (!row || !library.writable)
+    // Asks before moving books to the trash.
+    function trashBooks(bookIds) {
+        if (bookIds.length === 0 || !library.writable)
             return
-        trashDialog.bookId = bookId
-        trashDialog.title = qsTr("Move “%1” to the trash?").arg(row.title)
+        const row = bookRow(bookIds[0])
+        if (bookIds.length === 1 && !row)
+            return
+        trashDialog.bookIds = bookIds
+        trashDialog.title = bookIds.length === 1 ? qsTr("Move “%1” to the trash?").arg(row.title)
+                                                 : qsTr("Move %1 books to the trash?").arg(bookIds.length)
+        trashDialog.message = bookIds.length === 1
+            ? qsTr("Its files go to the library's trash, where Cousoir and Calibre can restore it.")
+            : qsTr("Their files go to the library's trash, where Cousoir and Calibre can restore them.")
         trashDialog.ask()
+    }
+
+    function trashBook(bookId) {
+        trashBooks(bookId ? [bookId] : [])
+    }
+
+    // The books an action of the keyboard acts on: the open book, or those
+    // selected in the list, or its current one.
+    function targetIds() {
+        if (session.bookOpen)
+            return book.id ? [book.id] : []
+        return booksShown ? booksPage.targetIds(booksPage.currentIndex) : []
     }
 
     // Opens the open book, or the current row's, in the desktop's reader.
@@ -365,9 +440,10 @@ ThemedWindow {
         }
         const shown = library.books.count
         const total = library.scopeCount
+        const selected = library.books.selectedCount > 1 ? qsTr("%1 selected · ").arg(library.books.selectedCount) : ""
         if (shown !== total)
-            return qsTr("%1 of %2 books").arg(shown).arg(total)
-        return plural(total, qsTr("%1 book"), qsTr("%1 books"))
+            return selected + qsTr("%1 of %2 books").arg(shown).arg(total)
+        return selected + plural(total, qsTr("%1 book"), qsTr("%1 books"))
     }
 
     function hintText() {
@@ -416,6 +492,9 @@ ThemedWindow {
                                                 : qsTr("Ctrl+F search · F5 reload")
         if (library.books.count === 0)
             return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · F5 reload")
+        if (editingMany)
+            return qsTr("Esc one book · Shift+↑↓ more · Ctrl+A all") + (library.writable ? qsTr(" · Del trash") : "")
+                + (devices.devices.length > 0 ? qsTr(" · Ctrl+D send") : "")
         const back = session.filterOpen ? qsTr("Esc back · ") : ""
         const trash = library.writable ? qsTr(" · Del trash") : ""
         return back + qsTr("↑↓ move · Enter open · Ctrl+O read · Ctrl+G %1").arg(layoutSettings.gridMode ? qsTr("list")
@@ -619,11 +698,14 @@ ThemedWindow {
 
     Shortcut {
         sequences: ["Esc", "Alt+Left", StandardKey.Back]
-        enabled: session.bookOpen || session.filterOpen
-        // The revert question keeps the changes instead.
+        enabled: session.bookOpen || session.filterOpen || (window.booksShown && booksPage.selectedCount > 1)
+        // The revert question keeps the changes instead; several books
+        // selected go back to the current one first.
         onActivated: {
             if (bookPage.confirmingRevert)
                 bookPage.confirmingRevert = false
+            else if (window.booksShown && booksPage.selectedCount > 1)
+                booksPage.collapseSelection()
             else
                 window.goBack()
         }
@@ -653,7 +735,7 @@ ThemedWindow {
 
     Shortcut {
         sequence: "Ctrl+I"
-        enabled: session.bookOpen
+        enabled: session.bookOpen || window.editingMany
         onActivated: window.toggleDetails()
     }
 
@@ -678,26 +760,26 @@ ThemedWindow {
     Shortcut {
         sequence: "Ctrl+Shift+K"
         enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
-        onActivated: window.convertBook(window.currentBookId(), "KEPUB")
+        onActivated: window.convertBooks(window.targetIds(), "KEPUB")
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+A"
         enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
-        onActivated: window.convertBook(window.currentBookId(), "AZW3")
+        onActivated: window.convertBooks(window.targetIds(), "AZW3")
     }
 
     Shortcut {
         sequence: "Ctrl+D"
         enabled: (session.bookOpen || window.booksShown) && window.devices.devices.length > 0
             && window.devices.available && window.devices.writable
-        onActivated: window.sendBook(window.currentBookId(), "")
+        onActivated: window.sendBooks(window.targetIds(), "")
     }
 
     Shortcut {
         sequences: [StandardKey.Delete]
         enabled: window.booksShown && window.library.writable
-        onActivated: window.trashBook(booksPage.currentBookId())
+        onActivated: window.trashBooks(window.targetIds())
     }
 
     FileDialog {
@@ -721,16 +803,15 @@ ThemedWindow {
         id: trashDialog
         objectName: "trashDialog"
 
-        property int bookId: 0
+        property var bookIds: []
 
-        message: qsTr("Its files go to the library's trash, where Cousoir and Calibre can restore it.")
         acceptText: qsTr("Move to Trash")
         acceptVariant: "danger"
         onAccepted: {
-            const error = window.library.moveToTrash([bookId])
+            const error = window.library.moveToTrash(bookIds)
             if (error)
                 window.showNotice(error)
-            else if (session.bookOpen && window.book.id === bookId)
+            else if (session.bookOpen && bookIds.includes(window.book.id))
                 window.closeBook()
         }
     }
@@ -750,14 +831,29 @@ ThemedWindow {
         id: convertAndSendDialog
         objectName: "convertAndSendDialog"
 
-        property int bookId: 0
+        property var bookIds: []
         property string root
         property string format
 
         acceptText: qsTr("Convert and send")
         onAccepted: {
-            window.pendingSends = window.pendingSends.concat([{ bookId: bookId, root: root }])
-            window.startConversion(bookId, format)
+            window.pendingSends = window.pendingSends.concat(bookIds.map(bookId => ({ bookId: bookId, root: root })))
+            for (const bookId of bookIds)
+                window.startConversion(bookId, format)
+        }
+    }
+
+    ConfirmDialog {
+        id: convertManyDialog
+        objectName: "convertManyDialog"
+
+        property var bookIds: []
+        property string format
+
+        acceptText: qsTr("Convert")
+        onAccepted: {
+            for (const bookId of bookIds)
+                window.startConversion(bookId, format)
         }
     }
 
@@ -943,7 +1039,7 @@ ThemedWindow {
                     id: detailsToggle
                     objectName: "detailsToggle"
 
-                    visible: session.bookOpen
+                    visible: session.bookOpen || window.editingMany
                     selected: window.detailsVisible
                     text: window.detailsVisible ? qsTr("Hide details") : qsTr("Show details")
                     tip: qsTr("Details (Ctrl+I)")
@@ -1216,8 +1312,10 @@ ThemedWindow {
 
                         visible: window.library.virtualLibraries.length > 0 && !session.bookOpen
                             && !window.deviceShown && !window.checkShown && !window.trashShown
-                        Layout.preferredWidth: Math.round(Math.min(24, Math.max(12, choices.reduce(
-                            (longest, choice) => Math.max(longest, choice.label.length), 0) + 4)) * Theme.charWidth)
+                        // The longest name, its arrow and paddings.
+                        Layout.preferredWidth: Math.round(Math.min(24, choices.reduce(
+                            (longest, choice) => Math.max(longest, choice.label.length), 0)) * Theme.charWidth)
+                            + leftPadding + rightPadding
                         Accessible.name: qsTr("Virtual library")
                         model: choices
                         currentIndex: Math.max(0, choices.findIndex(choice => choice.value === window.library.virtualLibrary))
@@ -1309,9 +1407,10 @@ ThemedWindow {
                         onBookActivated: function(bookId) {
                             window.openBook(bookId)
                         }
-                        onTrashRequested: function(bookId) { window.trashBook(bookId) }
-                        onConvertRequested: function(bookId, format) { window.convertBook(bookId, format) }
-                        onSendRequested: function(bookId, root) { window.sendBook(bookId, root) }
+                        paneShown: window.detailsVisible
+                        onTrashRequested: function(bookIds) { window.trashBooks(bookIds) }
+                        onConvertRequested: function(bookIds, format) { window.convertBooks(bookIds, format) }
+                        onSendRequested: function(bookIds, root) { window.sendBooks(bookIds, root) }
                         onReloadRequested: session.reload()
                         onLibraryFolderRequested: libraryFolderDialog.open()
                         onFailed: function(message) { window.showNotice(message) }
