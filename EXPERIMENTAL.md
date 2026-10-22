@@ -137,8 +137,8 @@ searches run it. Cousoir shows no composite and cannot search one.
 | 3. Many books at once | done |
 | 4. Editing the description | done |
 | 5. Custom columns | done; as table columns, later |
-| 6. Reading life from the readers | next |
-| 7. A command palette | planned |
+| 6. Reading life from the readers | done for the Kobo; a Kindle's clippings, later |
+| 7. A command palette | next |
 | 8. Calibre's templates | planned |
 
 ## Journal
@@ -412,3 +412,28 @@ checked against the code and Calibre's:
   so do Calibre's (`c_parse()` in `db/tables.py` reads to the second), so
   lists, OPF files and restored books match Calibre's. Words alone not
   looking in composite columns is documented, until goal 8 computes them.
+
+### 2026-10-22 — goal 6, reading life from the readers (`exp-reading`)
+
+- A Kobo's books come with what its database says of their reading: status,
+  percent, last read, time spent, and the highlights, notes and bookmarks,
+  read as Calibre's Kobo `Bookmark` reads them to fetch annotations, quirks
+  included: a hidden note left out, a corner turned down as a bookmark, an
+  empty highlight kept, chapters of a KEPUB from its rows of type 899, a
+  note taking another's place when two chapters share an index.
+- The golden test reads `tests/data/kobo-reading.sql` on a fake Kobo with
+  Calibre's `Bookmark` and with `cousoir-cli device`: 4 books, 12 notes
+  alike. `kobo.sql` now has the Bookmark table of firmware 4.38, which
+  Calibre's query needs.
+- A book's page shows each reader's copy: how far, when, how long, and the
+  notes by chapter, copied or saved as Markdown. The Kobo's page has Read
+  and Notes columns. What a Kobo told is kept per library outside it, so it
+  stays once the Kobo is unplugged; nothing is written to the library or the
+  Kobo.
+- Not done: a Kindle's `My Clippings.txt`. Calibre has no reader for it to
+  test against, its format changes with the Kindle's language, and a
+  Kindle over MTP is opened for each thing Cousoir does there. Left for
+  later, with writing the notes into Calibre's annotations, which would
+  need the Kobo's positions turned into the CFIs Calibre's viewer uses.
+- Found on the way: run by hand without ctest's environment, the UI tests
+  draw on the real display, and one fails at 200%; they are run with it.

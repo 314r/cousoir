@@ -9,10 +9,13 @@
 #include "device_books.h"
 
 #include <QHash>
+#include <QObject>
 #include <QSet>
 
 #include "book.h"
 #include "calibre_text.h"
+
+#include <optional>
 
 namespace {
 
@@ -132,6 +135,36 @@ QList<QByteArray> arrayElements(const QByteArray &json)
 QByteArray joinElements(const QList<QByteArray> &elements)
 {
     return elements.isEmpty() ? QByteArray("[]") : "[\n  " + elements.join(",\n  ") + "\n]";
+}
+
+QString notesMarkdown(const QString &title, const QStringList &authors, const QList<ReaderNote> &notes)
+{
+    QStringList blocks{ QStringLiteral("# ") + title };
+    if (!authors.isEmpty())
+        blocks.append(authors.join(QStringLiteral(" & ")));
+    const auto quoted = [](const QString &text) {
+        QStringList lines = text.trimmed().split(u'\n');
+        for (QString &line : lines)
+            line = (QStringLiteral("> ") + line.trimmed()).trimmed();
+        return lines.join(u'\n');
+    };
+    std::optional<std::pair<int, QString>> chapter;
+    for (const ReaderNote &note : notes) {
+        if (!chapter || chapter->first != note.chapter || chapter->second != note.chapterTitle) {
+            chapter = std::pair(note.chapter, note.chapterTitle);
+            if (!note.chapterTitle.isEmpty())
+                blocks.append(QStringLiteral("## ") + note.chapterTitle);
+        }
+        if (note.type == QLatin1String("Bookmark")) {
+            blocks.append(QObject::tr("*Bookmark, %1 % into the chapter*").arg(note.chapterProgress));
+            continue;
+        }
+        if (!note.text.trimmed().isEmpty())
+            blocks.append(quoted(note.text));
+        if (!note.annotation.trimmed().isEmpty())
+            blocks.append(note.annotation.trimmed());
+    }
+    return blocks.join(QStringLiteral("\n\n")) + u'\n';
 }
 
 } // namespace DeviceBooks

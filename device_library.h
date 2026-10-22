@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QThreadPool>
 #include <QTimer>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -16,6 +17,7 @@
 #include <memory>
 
 #include "kobo.h"
+#include "reading_log.h"
 
 class BookLibrary;
 
@@ -55,7 +57,9 @@ class DeviceLibrary : public QObject
     Q_PROPERTY(QString currentRoot READ currentRoot WRITE setCurrentRoot NOTIFY currentChanged)
     Q_PROPERTY(QVariantMap current READ current NOTIFY currentChanged)
     // Its books, by title: { lpath, title, authors, format, size, bookId,
-    // purchased }, with size as text.
+    // purchased, reading, notes }, with size as text, reading how far it is
+    // read, "43 %" or "✓" once finished, and notes the number of its
+    // highlights and notes.
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY rowsChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY rowsChanged)
@@ -115,6 +119,19 @@ public:
     Q_INVOKABLE void cancel(int bookId = 0);
     // Looks for readers again and reads their books.
     Q_INVOKABLE void refresh();
+    // What the readers know of the reading of a library book, a reader's
+    // copy of it at a time: { name, format, connected, seen, status,
+    // percent, state, lastRead, timeSpent, notes, markdown }, with seen,
+    // state, lastRead and timeSpent as text, percent -1 when unknown, notes
+    // { type, text, annotation, chapter, newChapter, progress, created },
+    // created as text and newChapter true for a chapter's first, and
+    // markdown the notes as Markdown. A reader unplugged tells what it told
+    // when last seen, connected false. It changes with rows.
+    Q_INVOKABLE QVariantList reading(int bookId) const;
+    // Copies text, notes as Markdown, to the clipboard.
+    Q_INVOKABLE void copyNotes(const QString &markdown) const;
+    // Saves it to a file; returns an error message, empty on success.
+    Q_INVOKABLE QString saveNotes(const QString &markdown, const QUrl &file) const;
 
     // For the tests: where volumes and Kindles come from and how often to
     // look, the program run in place of calibre-debug, how ejecting is done
@@ -174,6 +191,10 @@ private:
 
     void scan();
     void load(const QString &root);
+    // Keeps what a reader tells of the reading of the library's books.
+    void recordReading(const Connected &connected);
+    QString deviceId(const Connected &connected) const;
+    const ReadingLog::Log &readingLog() const;
     void rematch();
     void updateWritable();
     const Connected *find(const QString &root) const;
@@ -194,6 +215,9 @@ private:
     Ejector m_ejector;
     QString m_configDirectory;
     QList<Connected> m_devices;
+    // What the readers told, for the library at m_readingLogPath.
+    mutable ReadingLog::Log m_readingLog;
+    mutable QString m_readingLogPath;
     QString m_currentRoot;
     bool m_writable = true;
     QList<Job> m_jobs;

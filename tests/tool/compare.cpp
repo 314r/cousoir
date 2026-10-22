@@ -912,4 +912,67 @@ int compareReads(const QStringList &arguments)
     return differences ? 1 : 0;
 }
 
+// --- compare-reading -----------------------------------------------------
+
+// Compares what tools/oracle/kobo_reading.py reads of a Kobo's books with
+// what `cousoir-cli device` prints of them: each book of Calibre's, by its
+// ContentID, its percent and last reading and its notes, field by field.
+
+int compareReading(const QStringList &arguments)
+{
+    const std::optional<QJsonValue> calibreRead = readJson(arguments.at(0));
+    const std::optional<QJsonValue> cousoirRead = readJson(arguments.at(1));
+    if (!calibreRead || !cousoirRead)
+        return 1;
+    const QJsonObject calibre = calibreRead->toObject();
+    QHash<QString, QJsonObject> cousoir;
+    for (const QJsonValue &book : cousoirRead->toObject().value(QLatin1String("books")).toArray()) {
+        const QString id = book.toObject().value(QLatin1String("content_id")).toString();
+        if (!id.isEmpty())
+            cousoir.insert(id, book.toObject().value(QLatin1String("reading")).toObject());
+    }
+    int differences = 0;
+    int notes = 0;
+    const auto differ = [&differences](const QString &where, const QJsonValue &a, const QJsonValue &b) {
+        ++differences;
+        out() << where << "\n    calibre " << display(a) << "\n    cousoir " << display(b) << '\n';
+    };
+    for (auto it = calibre.constBegin(); it != calibre.constEnd(); ++it) {
+        if (!cousoir.contains(it.key())) {
+            ++differences;
+            out() << it.key() << ": not listed by Cousoir\n";
+            continue;
+        }
+        const QJsonObject theirs = it.value().toObject();
+        const QJsonObject ours = cousoir.take(it.key());
+        for (const char *key : { "percent_read", "last_read" }) {
+            if (theirs.value(QLatin1String(key)) != ours.value(QLatin1String(key)))
+                differ(it.key() + QStringLiteral(": ") + QLatin1String(key), theirs.value(QLatin1String(key)),
+                       ours.value(QLatin1String(key)));
+        }
+        const QJsonArray a = theirs.value(QLatin1String("notes")).toArray();
+        const QJsonArray b = ours.value(QLatin1String("notes")).toArray();
+        if (a.size() != b.size()) {
+            differ(it.key() + QStringLiteral(": notes"), a.size(), b.size());
+            continue;
+        }
+        for (qsizetype i = 0; i < a.size(); ++i) {
+            ++notes;
+            const QJsonObject x = a.at(i).toObject();
+            const QJsonObject y = b.at(i).toObject();
+            for (auto field = x.constBegin(); field != x.constEnd(); ++field) {
+                if (field.value() != y.value(field.key()))
+                    differ(QStringLiteral("%1: note %2, %3").arg(it.key()).arg(i).arg(field.key()), field.value(),
+                           y.value(field.key()));
+            }
+        }
+    }
+    for (auto it = cousoir.constBegin(); it != cousoir.constEnd(); ++it) {
+        ++differences;
+        out() << it.key() << ": not read by Calibre\n";
+    }
+    out() << '\n' << calibre.size() << " books, " << notes << " notes, " << differences << " differences\n";
+    return differences ? 1 : 0;
+}
+
 } // namespace Tool

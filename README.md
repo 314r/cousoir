@@ -60,6 +60,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
   exactly where Calibre puts them, and each app recognises the books the other
   sent.
+- 🖍️ **Your reading, back from the Kobo.** How far you got in each book, and
+  your highlights and notes by chapter, copied or saved as Markdown, still
+  there once the Kobo is unplugged.
 - 🛡️ **Safe, shared or not.** Cousoir writes only when nothing else can:
   Calibre closed and, for a library in Dropbox, Syncthing, Nextcloud or on a
   network folder, no other computer editing.

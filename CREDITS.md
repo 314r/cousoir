@@ -88,6 +88,7 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | `device_books.cpp` | `src/calibre/gui2/device.py`: `set_books_in_library()` |
 | `device_files.cpp` | `src/calibre/devices/mtp/driver.py`: `is_folder_ignored()` |
 | `kobo.cpp` | `src/calibre/devices/kobo/driver.py`, Copyright (C) Timothy Legge, Kovid Goyal and David Forrester: the books KOBOTOUCH's `books()` lists, `imageid_from_contentid()`, `images_path()`, `cover_file_endings()`, `qhash()`, `path_from_contentid()`, the device models |
+| | `src/calibre/devices/kobo/bookmark.py`, Copyright (C) Timothy Legge and Kovid Goyal: `Bookmark.get_bookmark_data()` |
 | `kindle.cpp` | `src/calibre/devices/mtp/driver.py`: `_sync_kindle_thumbnails()`, `delete_kindle_cover_thumbnail_for()`; `src/calibre/devices/mtp/filesystem_cache.py` and `src/calibre/ebooks/__init__.py`: the book extensions |
 | `kindle_send.cpp` | `src/calibre/devices/mtp/unix/driver.py`: `put_file()`, `get_mtp_file()`, `delete_file_or_folder()`; `src/calibre/devices/mtp/driver.py`: `open()`, `books()`, in the Python the job runs |
 | `conversion.cpp` | `src/calibre/gui2/convert/single.py`: `setup_pipeline()`; `src/calibre/gui2/tools.py`: `convert_single_ebook()`; `src/calibre/ebooks/conversion/config.py`: `load_defaults()`; `src/calibre/db/legacy.py`: `original_fmt()`, in the Python the job runs |

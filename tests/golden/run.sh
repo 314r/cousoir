@@ -444,6 +444,37 @@ devices() {
 devices kobo kobo "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
 devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
 
+# What a Kobo knows of the reading of its books, read by Calibre's Kobo
+# Bookmark (tools/oracle/kobo_reading.py) and by `cousoir-cli device`, on a
+# fake Kobo whose database has books read, finished and bought, with
+# highlights, notes and bookmarks (tests/data/kobo-reading.sql).
+reading() {
+    local kobo="$work/reading-kobo"
+    rm -rf "$kobo"
+    mkdir -p "$kobo/.kobo" "$kobo/Vian, Boris" "$kobo/Pratchett, Terry"
+    printf 'N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390' > "$kobo/.kobo/version"
+    "$tool" run-sql "$kobo/.kobo/KoboReader.sqlite" "$root/tests/data/kobo.sql"
+    "$tool" run-sql "$kobo/.kobo/KoboReader.sqlite" "$root/tests/data/kobo-reading.sql"
+    for file in "Vian, Boris/Ecume.kepub.epub" "Pratchett, Terry/Mort.epub" Notes.pdf; do
+        printf 'book' > "$kobo/$file"
+    done
+    oracle "$root/tools/oracle/kobo_reading.py" -- "$kobo" "$work/reading-calibre.json" || return 0
+    if ! "$cli" device --library "$root/tests/data/library" "$kobo" > "$work/reading-cousoir.json"; then
+        echo "reading: cousoir-cli device failed"
+        status=1
+        return 0
+    fi
+    if "$tool" compare-reading "$work/reading-calibre.json" "$work/reading-cousoir.json" > "$work/reading.txt"; then
+        echo "reading: $(tail -1 "$work/reading.txt")"
+    else
+        echo "reading: Cousoir reads the Kobo's reading differently:"
+        head -40 "$work/reading.txt"
+        status=1
+    fi
+}
+
+reading
+
 # A few books of the real library converted, with the user's Calibre
 # settings: the two smallest EPUBs to KEPUB and AZW3, the smallest book
 # with a KEPUB to KEPUB again, and the smallest whose only source is an AZW3

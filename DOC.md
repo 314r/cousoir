@@ -439,6 +439,18 @@ KEPUB on the way, Calibre's quick KEPUB; and places the file as
 each file whole under a hidden name, then renames it, and deletes the Kobo's
 cached covers of the books sent so it makes them again.
 
+What the Kobo knows of each book's reading shows too, read from its
+database as Calibre's Kobo driver reads it to fetch annotations: the Kobo's
+page has a Read column, how far each book is read or ✓ once finished, and a
+Notes column; a book's page tells, for each reader that has it, how far it
+is read, when it was last read and for how long, then its highlights, notes
+and bookmarks by chapter, how far into the chapter and when each was made.
+Copy puts them on the clipboard as Markdown, a quote for each highlight with
+its note below; Save writes them to a Markdown file. Cousoir keeps what a
+Kobo told last in `~/.local/share/cousoir/reading/<library>.json`, so a
+book's page still shows it once the Kobo is unplugged, saying when it was
+seen. Neither the library nor the Kobo is written for it.
+
 Cousoir departs from Calibre here:
 
 - It never writes to the Kobo's own database, `.kobo/KoboReader.sqlite`,
@@ -615,8 +627,10 @@ their path on the reader:
 Calibre's log of a conversion or a sending is in its job's folder, in a
 temporary folder removed at the end unless `COUSOIR_KEEP_JOBS` is set.
 
-`device` prints, as JSON, the books on a reader, named as above, and the
-library book each one is, without changing anything. For the tests, a
+`device` prints, as JSON, the books on a reader, named as above, the
+library book each one is and, for a Kobo, what it knows of their reading,
+as `tools/oracle/kobo_reading.py` prints Calibre's, without changing
+anything. For the tests, a
 reader `mtpdir:FOLDER` is a folder that stands for a Kindle over MTP.
 
 `read` prints, as JSON, the metadata adding each file would read, custom
@@ -799,8 +813,13 @@ The tests check the port against Calibre itself:
   JSON, without the times, random ids and temporary paths in them
   (`cousoir-test-tool compare-devices`); then Calibre connects to both, which
   must end alike, and each program must recognise the books the other sent.
-  With `COUSOIR_GOLDEN_REAL=1`, books of the real library go too. It is
-  skipped without Calibre.
+  With `COUSOIR_GOLDEN_REAL=1`, books of the real library go too. Last, it
+  reads a fake Kobo whose database has books being read, finished and
+  bought, with highlights, notes and bookmarks
+  (`tests/data/kobo-reading.sql`), with Calibre's Kobo `Bookmark`
+  (`tools/oracle/kobo_reading.py`) and with `cousoir-cli device`, which
+  must find the same reading, notes, chapters and order. It is skipped
+  without Calibre.
 - `test_tool_tests` checks that the comparisons `golden_list` relies on find
   what differs, a row, a file, a package file, a cover, a converted book, a
   book on a reader or a field read, and let through what may: attributes in
@@ -811,7 +830,8 @@ The tests check the port against Calibre itself:
   book of the fixture to KEPUB. `book_library_tests` and the UI tests drive
   conversions with `tests/data/fake-calibre-debug` standing in for Calibre.
 - `kobo_tests` reads fake Kobos: the model from a fake `/sys`, the books from
-  their database and `metadata.calibre`, Calibre's matching with the library,
+  their database and `metadata.calibre`, their reading and notes, the log
+  kept of them, Calibre's matching with the library,
   the cover cache Calibre computes, removals that leave the other entries of
   `metadata.calibre` as written; and the sending jobs, their outcome and how
   their files reach the Kobo, and, with Calibre installed, sends a book of

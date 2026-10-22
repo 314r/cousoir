@@ -100,6 +100,7 @@ private slots:
     void checksLibrary();
     void convertsBooks();
     void sendsToKobo();
+    void showsReading();
     void sendsToKindle();
     void keepsLongNamesShort();
 
@@ -1376,6 +1377,75 @@ void LibraryUiTest::sendsToKobo()
     QTRY_COMPARE(text("keyHints"), QStringLiteral("Kobo eReader can be unplugged."));
     QTRY_COMPARE(text("pageTitle"), QStringLiteral("Books"));
     QVERIFY(!control(entry) || !control(entry)->isVisible());
+    devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
+}
+
+// A Kobo that has read a book of the library: how far, and its highlights
+// and notes, on the book's page and the Kobo's, copied as Markdown; as last
+// seen once the Kobo is unplugged.
+void LibraryUiTest::showsReading()
+{
+    auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
+    QVERIFY(devices);
+    QTemporaryDir kobo;
+    QVERIFY(makeKobo(kobo.path()));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite")),
+                         SqliteDb::Mode::ReadWrite, &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-reading.sql"))), &error),
+                 qPrintable(error));
+    }
+    QVERIFY(writeAll(QDir(kobo.path()).filePath(QStringLiteral("Vian, Boris/Ecume.kepub.epub")), "kepub"));
+    QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
+    devices->setVolumeProvider([&volumes] { return volumes; }, 20);
+    const QString entry = QStringLiteral("sidebar_device:") + QDir::cleanPath(kobo.path());
+    QTRY_VERIFY(control(entry) && control(entry)->isVisible());
+
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(control("readingState") && control("readingState")->isVisible());
+    QVERIFY2(text("readingState").startsWith(QStringLiteral("43 % read  ·  last read 2026-10-2")),
+             qPrintable(text("readingState")));
+    QVERIFY(text("readingState").endsWith(QStringLiteral("1 h 30 min  ·  6 notes")));
+    QStringList annotations;
+    for (QQuickItem *item : visualDescendants(m_window->contentItem(), QStringLiteral("noteAnnotation"))) {
+        if (item->isVisible())
+            annotations.append(item->property("text").toString());
+    }
+    annotations.sort();
+    QCOMPARE(annotations, QStringList({ QStringLiteral("Le nénuphar, déjà ?"), QStringLiteral("Seulement une note") }));
+    QMetaObject::invokeMethod(control("copyNotesButton"), "clicked");
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("Highlights and notes copied as Markdown"));
+    QVERIFY2(QGuiApplication::clipboard()->text().startsWith(
+                 QStringLiteral("# L'Écume des jours\n\nBoris Vian\n\n> perdu\n\n## Un\n\n> le pianocktail")),
+             qPrintable(QGuiApplication::clipboard()->text()));
+
+    // The Kobo's page: how far each book is read and how many notes it has.
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(control("booksPage") && control("booksPage")->isVisible());
+    QTRY_VERIFY(control(entry)->isVisible());
+    click(entry.toLatin1().constData());
+    QTRY_VERIFY(control("devicePage")->isVisible());
+    QTRY_VERIFY(control("deviceRow0"));
+    QVariantMap ecume;
+    for (const QVariant &row : devices->rows()) {
+        if (row.toMap().value(QStringLiteral("bookId")).toInt() == 1)
+            ecume = row.toMap();
+    }
+    QCOMPARE(ecume.value(QStringLiteral("reading")).toString(), QStringLiteral("43 %"));
+    QCOMPARE(ecume.value(QStringLiteral("notes")).toInt(), 6);
+
+    // Unplugged, the book's page tells what the Kobo told when last seen.
+    volumes.clear();
+    QTRY_VERIFY(!control(entry) || !control(entry)->isVisible());
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(control("bookPage") && control("bookPage")->isVisible());
+    QTRY_VERIFY(control("readingState") && control("readingState")->isVisible());
+    QVERIFY2(text("readingState").startsWith(QStringLiteral("Seen %1  ·  43 % read")
+                                                 .arg(QDate::currentDate().toString(Qt::ISODate))),
+             qPrintable(text("readingState")));
     devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
 }
 

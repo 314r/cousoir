@@ -28,4 +28,10 @@ QString backupFolder(const QString &libraryPath)
         + libraryKey(libraryPath);
 }
 
+QString readingFile(const QString &libraryPath)
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/cousoir/reading/")
+        + libraryKey(libraryPath) + QStringLiteral(".json");
+}
+
 } // namespace CousoirPaths

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import QtCore
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Dialogs
@@ -47,6 +48,14 @@ Rectangle {
     signal convertRequested(string format)
     // Send to a Kobo, chosen in the details pane.
     signal sendRequested(string root)
+    // Something done, for the status bar.
+    signal noticed(string message)
+
+    // What the readers connected know of the book's reading.
+    readonly property var reading: page.devices && page.devices.rows !== undefined && page.book.id
+        ? page.devices.reading(page.book.id) : []
+    // The notes the save dialog writes, as Markdown.
+    property string savingNotes: ""
 
     color: Theme.canvas
 
@@ -389,6 +398,161 @@ Rectangle {
                     }
                 }
 
+                // Each reader's copy of the book: how far it is read, when,
+                // and the highlights and notes made in it.
+                Repeater {
+                    model: page.reading
+
+                    delegate: ColumnLayout {
+                        id: copy
+
+                        required property var modelData
+                        readonly property bool reading: copy.modelData.status === 1 && copy.modelData.percent >= 0
+
+                        objectName: "readingOn_" + copy.modelData.name
+                        Layout.fillWidth: true
+                        spacing: Theme.gutter
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.topMargin: Theme.gutter
+                            spacing: Theme.gutter
+
+                            HeadingLabel {
+                                Layout.fillWidth: true
+                                text: qsTr("On %1").arg(copy.modelData.name)
+                            }
+
+                            FlatButton {
+                                objectName: "copyNotesButton"
+
+                                visible: copy.modelData.notes.length > 0
+                                text: qsTr("Copy")
+                                tip: qsTr("Copy the highlights and notes as Markdown")
+                                onClicked: {
+                                    page.devices.copyNotes(copy.modelData.markdown)
+                                    page.noticed(qsTr("Highlights and notes copied as Markdown"))
+                                }
+                            }
+
+                            FlatButton {
+                                objectName: "saveNotesButton"
+
+                                visible: copy.modelData.notes.length > 0
+                                text: qsTr("Save…")
+                                tip: qsTr("Save the highlights and notes as a Markdown file")
+                                onClicked: {
+                                    page.savingNotes = copy.modelData.markdown
+                                    notesDialog.selectedFile = notesDialog.currentFolder + "/"
+                                        + (page.book.title || "notes").replace(/[\\/:*?"<>|]/g, "_") + ".md"
+                                    notesDialog.open()
+                                }
+                            }
+                        }
+
+                        Label {
+                            objectName: "readingState"
+
+                            Layout.fillWidth: true
+                            text: [copy.modelData.connected ? "" : qsTr("Seen %1").arg(copy.modelData.seen),
+                                   copy.modelData.state,
+                                   copy.modelData.lastRead ? qsTr("last read %1").arg(copy.modelData.lastRead) : "",
+                                   copy.modelData.timeSpent,
+                                   copy.modelData.notes.length > 0
+                                       ? (copy.modelData.notes.length === 1 ? qsTr("1 note")
+                                                                            : qsTr("%1 notes").arg(copy.modelData.notes.length))
+                                       : ""].filter(part => part.length > 0).join("  ·  ")
+                            color: Theme.textMuted
+                            wrapMode: Text.Wrap
+                        }
+
+                        // How far, as a hairline.
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Math.max(2, Math.round(2 * Theme.spacingScale))
+                            visible: copy.reading
+                            color: Theme.divider
+
+                            Rectangle {
+                                width: parent.width * Math.min(100, copy.modelData.percent) / 100
+                                height: parent.height
+                                color: Theme.accent
+                            }
+                        }
+
+                        Repeater {
+                            model: copy.modelData.notes
+
+                            delegate: ColumnLayout {
+                                id: note
+
+                                required property var modelData
+                                required property int index
+                                readonly property bool bookmark: note.modelData.type === "Bookmark"
+
+                                Layout.fillWidth: true
+                                Layout.topMargin: note.modelData.newChapter ? Theme.gutter : 0
+                                spacing: Math.round(Theme.gutter / 2)
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    visible: note.modelData.newChapter && note.modelData.chapter.length > 0
+                                    text: note.modelData.chapter
+                                    font.weight: Font.Bold
+                                    wrapMode: Text.Wrap
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Theme.gutter
+
+                                    // A quote's bar; none for a bookmark.
+                                    Rectangle {
+                                        Layout.preferredWidth: Math.max(2, Math.round(2 * Theme.spacingScale))
+                                        Layout.fillHeight: true
+                                        color: note.bookmark ? "transparent" : Theme.controlBorder
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: Math.round(Theme.gutter / 2)
+
+                                        Label {
+                                            objectName: "noteText"
+
+                                            Layout.fillWidth: true
+                                            visible: text.length > 0
+                                            text: note.bookmark ? qsTr("Bookmark") : note.modelData.text
+                                            color: note.bookmark ? Theme.textMuted : Theme.text
+                                            wrapMode: Text.Wrap
+                                        }
+
+                                        Label {
+                                            objectName: "noteAnnotation"
+
+                                            Layout.fillWidth: true
+                                            visible: note.modelData.annotation.length > 0
+                                            text: note.modelData.annotation
+                                            color: Theme.textBright
+                                            font.italic: true
+                                            wrapMode: Text.Wrap
+                                        }
+
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: [qsTr("%1 % into the chapter").arg(note.modelData.progress),
+                                                   note.modelData.created].filter(part => part.length > 0).join("  ·  ")
+                                            color: Theme.textFaint
+                                            font.pointSize: Theme.fontPointSizeCaption
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Item { Layout.preferredHeight: Theme.pagePadding }
             }
         }
@@ -422,6 +586,23 @@ Rectangle {
 
         actions: page.coverActions
         onChosen: function(key) { page.runCoverAction(key) }
+    }
+
+    FileDialog {
+        id: notesDialog
+
+        title: qsTr("Save the highlights and notes")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "md"
+        nameFilters: [qsTr("Markdown (*.md)")]
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: {
+            const error = page.devices.saveNotes(page.savingNotes, selectedFile)
+            if (error)
+                page.failed(error)
+            else
+                page.noticed(qsTr("Highlights and notes saved"))
+        }
     }
 
     FileDialog {
