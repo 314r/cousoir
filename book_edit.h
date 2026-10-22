@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QList>
+#include <QMap>
 #include <QPair>
 #include <QString>
 #include <QStringList>
@@ -44,6 +45,10 @@ struct BookEdit
     std::optional<QByteArray> cover;
     // When the book was added: only for books Cousoir adds or restores.
     std::optional<CalibreDate> timestamp;
+    // Custom columns by label, "genre" for #genre, with "saga_index" for a
+    // series column's number: text, a list, a number, true or false, a date
+    // as text, or null to clear it.
+    QMap<QString, QVariant> custom;
 
     bool isEmpty() const;
     // Whether the book's folder and file names may change.
@@ -52,9 +57,10 @@ struct BookEdit
     // From the keys QML and `cousoir-cli apply` use: title, sort, authors,
     // authorSort, series, seriesIndex, tags, rating, publisher, languages,
     // identifiers ({ type: value } or "isbn:…, goodreads:…"), pubdate,
-    // comments, coverFile (a path to read) and removeCover. Lists may be
-    // arrays or text: authors split on "&", the others on ",". Returns false
-    // with `error` for a value of the wrong kind or an unknown key.
+    // comments, coverFile (a path to read), removeCover and #label for a
+    // custom column. Lists may be arrays or text: authors split on "&", the
+    // others on ",". Returns false with `error` for a value of the wrong kind
+    // or an unknown key.
     static bool fromVariantMap(int bookId, const QVariantMap &changes, BookEdit *edit, QString *error);
 };
 

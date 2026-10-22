@@ -144,10 +144,10 @@ searches generated "$work/generated"
 # table and file by file; calibredb then checks Cousoir's copy and lists it as
 # it lists Calibre's.
 edits() {
-    local edits=$1
+    local edits=$1 library=${2:-$root/tests/data/library}
     for side in calibre cousoir; do
         rm -rf "$work/edit-$side"
-        cp -a --reflink=auto "$root/tests/data/library" "$work/edit-$side"
+        cp -a --reflink=auto "$library" "$work/edit-$side"
     done
     oracle "$root/tools/oracle/apply_edits.py" -- "$work/edit-calibre" "$edits" || return 0
     if ! "$cli" apply --force --library "$work/edit-cousoir" "$edits" >/dev/null; then
@@ -180,6 +180,7 @@ edits() {
 
 edits "$root/tests/data/edits/edits.json"
 edits "$root/tests/data/edits/bulk.json"
+edits "$root/tests/data/edits/custom.json" "$root/tests/data/library-custom"
 
 # Books and formats added, moved to the trash and restored, then one copy of
 # a book kept with the formats of another, step by step on both copies, each
@@ -279,10 +280,10 @@ conversion_settings() { "$tool" conversion-settings "$1"; }
 conversions conversions "$root/tests/data/library" "$root/tests/data/edits/convert.json" 1:KEPUB,2:AZW3,3:AZW3,5:KEPUB \
     conversion_settings
 
-# The round trip: Calibre writes again the metadata.opf files of the books
-# Cousoir changed, as its GUI does when it starts, and finds nothing to
-# change in them; then edits the library itself, which Cousoir reads as
-# calibredb does.
+# The round trip, on the custom library edited last: Calibre writes again the
+# metadata.opf files of the books Cousoir changed, as its GUI does when it
+# starts, and finds nothing to change in them, custom columns included; then
+# edits the library itself, which Cousoir reads as calibredb does.
 round_trip() {
     rm -rf "$work/trip" "$work/trip-before"
     cp -a --reflink=auto "$work/edit-cousoir" "$work/trip"
@@ -294,7 +295,9 @@ round_trip() {
         status=1
     fi
     calibredb set_metadata --with-library "$work/trip" 1 --field "title:Mood Indigo" --field "tags:Jazz,Roman" >/dev/null
-    calibredb list --with-library "$work/trip" --for-machine --fields all | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-calibre.json"
+    # The custom library's composite column is Calibre's to compute.
+    calibredb list --with-library "$work/trip" --for-machine --fields all \
+        | sed -e "s|$work/trip|@LIBRARY@|g" -e '/"\*computed":/d' > "$work/trip-calibre.json"
     "$cli" list --library "$work/trip" | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-cousoir.json"
     if cmp -s "$work/trip-calibre.json" "$work/trip-cousoir.json"; then
         echo "round trip: Calibre keeps Cousoir's files and Cousoir reads Calibre's change"

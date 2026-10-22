@@ -498,9 +498,7 @@ bool isKnownSchema(int userVersion, const QString &fingerprint)
 // in db/tables.py: a normalized column's items by link order, a series'
 // number from its link's extra, the others one row per book. A composite's
 // values are Calibre's to compute.
-template<typename BookWithId>
-bool readCustomColumns(SqliteDb &db, QList<Book> &books, const BookWithId &bookWithId, QList<CustomColumn> *columns,
-                       QString *error)
+bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *error)
 {
     columns->clear();
     QStringList tables;
@@ -528,6 +526,15 @@ bool readCustomColumns(SqliteDb &db, QList<Book> &books, const BookWithId &bookW
         const QString link = QStringLiteral("books_custom_column_%1_link").arg(column.id);
         return !tables.contains(table) || (column.normalized && !tables.contains(link));
     });
+    return true;
+}
+
+template<typename BookWithId>
+bool readCustomValues(SqliteDb &db, QList<Book> &books, const BookWithId &bookWithId, QList<CustomColumn> *columns,
+                      QString *error)
+{
+    if (!readCustomColumns(db, columns, error))
+        return false;
     for (Book &book : books)
         book.custom.resize(columns->size());
 
@@ -751,7 +758,7 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                   [](const BookFormat &a, const BookFormat &b) { return a.format < b.format; });
     }
 
-    if (!readCustomColumns(db, books, bookWithId, &data->customColumns, error))
+    if (!readCustomValues(db, books, bookWithId, &data->customColumns, error))
         return false;
 
     data->books = std::move(books);

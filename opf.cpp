@@ -2,8 +2,11 @@
 //
 // Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
 // GPL v3:
-// - src/calibre/ebooks/metadata/opf2.py: metadata_to_opf()
+// - src/calibre/ebooks/metadata/opf2.py: metadata_to_opf(),
+//   serialize_user_metadata()
 // - src/calibre/ebooks/metadata/__init__.py: fmt_sidx()
+// - src/calibre/ebooks/metadata/book/json_codec.py: encode_is_multiple()
+// - src/calibre/library/field_metadata.py: add_custom_field()
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
@@ -11,8 +14,12 @@
 
 #include <QXmlStreamReader>
 
+#include <algorithm>
+#include <numeric>
+
 #include "calibre_db.h"
 #include "calibre_text.h"
+#include "python_json.h"
 
 namespace {
 
@@ -53,25 +60,7 @@ QString escapeAttribute(const QString &text)
 // json.dumps(ensure_ascii=False) of a string.
 QString jsonString(const QString &text)
 {
-    QString result = QStringLiteral("\"");
-    for (const QChar character : text) {
-        const char16_t code = character.unicode();
-        switch (code) {
-        case u'"': result += QStringLiteral("\\\""); break;
-        case u'\\': result += QStringLiteral("\\\\"); break;
-        case u'\n': result += QStringLiteral("\\n"); break;
-        case u'\r': result += QStringLiteral("\\r"); break;
-        case u'\t': result += QStringLiteral("\\t"); break;
-        case u'\b': result += QStringLiteral("\\b"); break;
-        case u'\f': result += QStringLiteral("\\f"); break;
-        default:
-            if (code < 0x20)
-                result += QStringLiteral("\\u%1").arg(int(code), 4, 16, QLatin1Char('0'));
-            else
-                result += character;
-        }
-    }
-    return result + u'"';
+    return PythonJson::dumps(PythonJson::Value::from(text));
 }
 
 // The links of the book's items, as get_all_link_maps_for_book() gathers
@@ -109,6 +98,110 @@ QString seriesIndexText(double index)
     while (text.endsWith(u'0'))
         text.chop(1);
     return text;
+}
+
+// Calibre 9.16's built-in fields in a book's record, after which the custom
+// columns take their rec_index.
+constexpr int builtInFields = 23;
+
+// serialize_user_metadata(): each custom column, by key, as its field
+// metadata with the book's value, in json.dumps()'s spelling. A composite's
+// value is Calibre's to compute: the one `previous` holds stays.
+QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book &book,
+                                            const QHash<QString, QString> &previous)
+{
+    // rec_index: the columns by label, a series' numbers next to it.
+    QList<qsizetype> order(data.customColumns.size());
+    std::iota(order.begin(), order.end(), qsizetype(0));
+    std::sort(order.begin(), order.end(), [&data](qsizetype a, qsizetype b) {
+        return data.customColumns.at(a).label < data.customColumns.at(b).label;
+    });
+    QHash<qsizetype, int> recIndex;
+    int next = builtInFields;
+    for (const qsizetype index : std::as_const(order)) {
+        recIndex.insert(index, next);
+        next += data.customColumns.at(index).datatype == QLatin1String("series") ? 2 : 1;
+    }
+
+    QList<QPair<QString, QString>> result;
+    for (const qsizetype index : std::as_const(order)) {
+        const CustomColumn &column = data.customColumns.at(index);
+        const QString key = u'#' + column.label;
+        const QString &type = column.datatype;
+        const bool composite = type == QLatin1String("composite");
+        const PythonJson::Value display = PythonJson::parse(column.display);
+        const bool names = display.find(QStringLiteral("is_names"))
+            && display.find(QStringLiteral("is_names"))->boolean;
+
+        PythonJson::Value field = PythonJson::Value::dict();
+        field.insert(QStringLiteral("table"), PythonJson::Value::from(QStringLiteral("custom_column_%1").arg(column.id)));
+        field.insert(QStringLiteral("column"), PythonJson::Value::from(QStringLiteral("value")));
+        field.insert(QStringLiteral("datatype"), PythonJson::Value::from(type));
+        // encode_is_multiple(): a character here, the lists' separators in
+        // is_multiple2.
+        field.insert(QStringLiteral("is_multiple"), column.multiple
+                         ? PythonJson::Value::from(composite ? QStringLiteral(",") : QStringLiteral("|"))
+                         : PythonJson::Value::null());
+        field.insert(QStringLiteral("kind"), PythonJson::Value::from(QStringLiteral("field")));
+        field.insert(QStringLiteral("name"), PythonJson::Value::from(column.name));
+        field.insert(QStringLiteral("search_terms"), PythonJson::Value::from(QStringList{ key }));
+        field.insert(QStringLiteral("label"), PythonJson::Value::from(column.label));
+        field.insert(QStringLiteral("colnum"), PythonJson::Value::from(column.id));
+        field.insert(QStringLiteral("display"), display.kind == PythonJson::Value::Kind::Dict ? display
+                                                                                            : PythonJson::Value::dict());
+        field.insert(QStringLiteral("is_custom"), PythonJson::Value::from(true));
+        field.insert(QStringLiteral("is_category"), PythonJson::Value::from(column.normalized && !composite));
+        field.insert(QStringLiteral("link_column"), PythonJson::Value::from(QStringLiteral("value")));
+        field.insert(QStringLiteral("category_sort"), PythonJson::Value::from(QStringLiteral("value")));
+        field.insert(QStringLiteral("is_csp"), PythonJson::Value::from(false));
+        field.insert(QStringLiteral("is_editable"), PythonJson::Value::from(column.editable));
+        field.insert(QStringLiteral("rec_index"), PythonJson::Value::from(recIndex.value(index)));
+
+        const CustomValue value = book.custom.value(index);
+        PythonJson::Value stored;
+        if (composite) {
+            stored = PythonJson::Value::from(QString());
+            bool ok = false;
+            const PythonJson::Value before = PythonJson::parse(previous.value(key).toUtf8(), &ok);
+            if (ok && before.find(QStringLiteral("#value#")))
+                stored = *before.find(QStringLiteral("#value#"));
+        } else if (column.multiple) {
+            stored = PythonJson::Value::from(value.value.toStringList());
+        } else if (value.value.isNull()) {
+            stored = PythonJson::Value::null();
+        } else if (type == QLatin1String("int") || type == QLatin1String("rating")) {
+            stored = PythonJson::Value::from(value.value.toLongLong());
+        } else if (type == QLatin1String("float")) {
+            stored = PythonJson::Value::from(value.value.toDouble());
+        } else if (type == QLatin1String("bool")) {
+            stored = PythonJson::Value::from(value.value.toBool());
+        } else if (type == QLatin1String("datetime")) {
+            // to_json() of a date.
+            stored = PythonJson::Value::dict();
+            stored.insert(QStringLiteral("__class__"), PythonJson::Value::from(QStringLiteral("datetime.datetime")));
+            stored.insert(QStringLiteral("__value__"),
+                          PythonJson::Value::from(CalibreDb::isoFormat(value.value.toDateTime())));
+        } else {
+            stored = PythonJson::Value::from(value.value.toString());
+        }
+        field.insert(QStringLiteral("#value#"), stored);
+        if (!composite) {
+            field.insert(QStringLiteral("#extra#"), type == QLatin1String("series") && !value.value.isNull()
+                                                        ? PythonJson::Value::from(value.seriesIndex)
+                                                        : PythonJson::Value::null());
+        }
+        PythonJson::Value separators = PythonJson::Value::dict();
+        if (column.multiple) {
+            separators.insert(QStringLiteral("cache_to_list"), PythonJson::Value::from(QStringLiteral("|")));
+            separators.insert(QStringLiteral("ui_to_list"), PythonJson::Value::from(names ? QStringLiteral("&")
+                                                                                          : QStringLiteral(",")));
+            separators.insert(QStringLiteral("list_to_ui"), PythonJson::Value::from(names ? QStringLiteral(" & ")
+                                                                                          : QStringLiteral(", ")));
+        }
+        field.insert(QStringLiteral("is_multiple2"), separators);
+        result.append({ QStringLiteral("calibre:user_metadata:") + key, PythonJson::dumps(field) });
+    }
+    return result;
 }
 
 // The calibre: metadata of `previous` Cousoir has no data for.
@@ -198,8 +291,22 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
          exact ? exact->timestamp.isoFormat() : CalibreDb::isoFormat(book.timestamp));
     if (!book.sort.isEmpty())
         meta(QStringLiteral("calibre:title_sort"), book.sort);
-    for (const auto &kept : keptMetadata(previous))
-        meta(kept.first, kept.second);
+    // The user categories, the custom columns, then the annotations, as
+    // metadata_to_opf() writes them.
+    const QList<QPair<QString, QString>> kept = keptMetadata(previous);
+    QHash<QString, QString> previousColumns;
+    for (const auto &[name, content] : kept) {
+        if (name == QLatin1String("calibre:user_categories"))
+            meta(name, content);
+        else if (name.startsWith(QLatin1String("calibre:user_metadata:")))
+            previousColumns.insert(name.mid(22), content);
+    }
+    for (const auto &[name, content] : userMetadata(data, book, previousColumns))
+        meta(name, content);
+    for (const auto &[name, content] : kept) {
+        if (name == QLatin1String("calibre:annotation"))
+            meta(name, content);
+    }
 
     QString opf = QStringLiteral(
         "<?xml version='1.0' encoding='utf-8'?>\n"

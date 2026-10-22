@@ -5,7 +5,7 @@
 #
 # The file is cousoir-cli apply's. Edits, [{"book": 1, "set": {"title": ...}}],
 # go field by field through Cache.set_field() or set_cover(), in the order
-# Cache.set_metadata() sets them; bulk edits, [{"bulk": {"books": [1, 2],
+# Cache.set_metadata() sets them, custom columns ("#genre") last; bulk edits, [{"bulk": {"books": [1, 2],
 # "addTags": ...}}], as Calibre's bulk metadata edit applies them, after the
 # single edits. Then, in cousoir-cli's order: formats copied
 # from one book to another as Merge only formats copies them, formats to the
@@ -48,7 +48,7 @@ OPERATIONS = ('copyFormats', 'removeFormats', 'trash', 'restore', 'add', 'addFor
 def edit(change):
     book = change['book']
     values = change['set']
-    unknown = set(values) - set(ORDER)
+    unknown = {key for key in values if not key.startswith('#')} - set(ORDER)
     if unknown:
         raise SystemExit('Unknown fields: %s' % ', '.join(sorted(unknown)))
     for key in ORDER:
@@ -72,6 +72,9 @@ def edit(change):
             elif key == 'identifiers' and isinstance(value, str):
                 value = dict(part.strip().partition(':')[0::2] for part in value.split(',') if part.strip())
             cache.set_field(FIELDS[key], {book: value})
+    # Custom columns after, as set_metadata() sets them, by their key.
+    for key in sorted(k for k in values if k.startswith('#')):
+        cache.set_field(key, {book: values[key]})
 
 
 def bulk(args):

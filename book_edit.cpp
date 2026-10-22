@@ -43,7 +43,7 @@ std::optional<QStringList> listValue(const QVariant &value, QChar separator)
 bool BookEdit::isEmpty() const
 {
     return !title && !sort && !authors && !authorSort && !series && !seriesIndex && !tags && !rating && !publisher
-        && !languages && !identifiers && !pubdate && !comments && !cover;
+        && !languages && !identifiers && !pubdate && !comments && !cover && custom.isEmpty();
 }
 
 bool BookEdit::movesFiles() const
@@ -127,6 +127,8 @@ bool BookEdit::fromVariantMap(int bookId, const QVariantMap &changes, BookEdit *
         } else if (key == QLatin1String("removeCover")) {
             if (value.toBool())
                 result.cover = QByteArray();
+        } else if (key.size() > 1 && key.startsWith(u'#')) {
+            result.custom.insert(key.mid(1), value);
         } else {
             return fail(QObject::tr("Unknown field “%1”.").arg(key));
         }
