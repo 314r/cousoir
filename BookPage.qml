@@ -11,7 +11,9 @@ import Cousoir
 // A book: its cover, title, authors and description, beside the details
 // pane with the rest of its metadata and its files. While the library may be
 // written, an image dropped on the page replaces the cover, another file is
-// added as a format, and the Cover menu picks, pastes or removes a cover.
+// added as a format, the Cover menu picks, pastes or removes a cover, and
+// Edit opens the description as text: Ctrl+Enter saves it, Esc puts it back,
+// and closing the book saves it too.
 Rectangle {
     id: page
 
@@ -30,7 +32,10 @@ Rectangle {
 
     // The toolbar asks before undoing every change since the book opened.
     property bool confirmingRevert: false
-    readonly property bool editing: details.editing
+    // The description is open as text, for the book of that id.
+    property int descriptionBookId: 0
+    readonly property bool editingDescription: descriptionBookId > 0 && descriptionBookId === (book.id || 0)
+    readonly property bool editing: details.editing || editingDescription
     readonly property var coverActions: [
         { key: "choose", title: qsTr("Choose image…") },
         { key: "paste", title: qsTr("Paste image") },
@@ -78,6 +83,28 @@ Rectangle {
 
     function finishEditing() {
         details.finishEditing()
+        if (page.editingDescription)
+            page.saveDescription()
+    }
+
+    function editDescription() {
+        descriptionArea.text = page.book.descriptionText || ""
+        page.descriptionBookId = page.book.id || 0
+        descriptionArea.forceActiveFocus()
+        descriptionArea.cursorPosition = descriptionArea.length
+    }
+
+    function saveDescription() {
+        const error = page.library.saveDescription(page.descriptionBookId, descriptionArea.text)
+        page.descriptionBookId = 0
+        page.forceActiveFocus()
+        if (error)
+            page.failed(error)
+    }
+
+    function cancelDescription() {
+        page.descriptionBookId = 0
+        page.forceActiveFocus()
     }
 
     function revertChanges() {
@@ -242,14 +269,113 @@ Rectangle {
                     Layout.fillWidth: true
                     spacing: Theme.gutter
 
-                    HeadingLabel {
-                        text: qsTr("Description")
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.gutter
+
+                        HeadingLabel {
+                            Layout.fillWidth: true
+                            text: qsTr("Description")
+                        }
+
+                        FlatButton {
+                            objectName: "editDescriptionButton"
+
+                            visible: page.library.writable && !page.editingDescription
+                            text: qsTr("Edit")
+                            tip: qsTr("Edit the description")
+                            onClicked: page.editDescription()
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: page.editingDescription
+                        spacing: Theme.gutter
+
+                        TextArea {
+                            id: descriptionArea
+                            objectName: "descriptionEditor"
+
+                            Layout.fillWidth: true
+                            Layout.minimumHeight: 6 * Theme.rowHeight
+                            wrapMode: TextArea.Wrap
+                            textFormat: TextEdit.PlainText
+                            color: Theme.text
+                            selectionColor: Theme.textSelection
+                            selectedTextColor: Theme.textBright
+                            placeholderText: qsTr("No description.")
+                            placeholderTextColor: Theme.textFaint
+                            padding: Theme.controlInset
+                            Accessible.name: qsTr("Description")
+
+                            background: Rectangle {
+                                color: Theme.fill
+                                border.width: 1
+                                border.color: descriptionArea.activeFocus ? Theme.accent : Theme.controlBorder
+                            }
+
+                            // Esc puts it back here instead of closing the book.
+                            Keys.onShortcutOverride: function(event) {
+                                event.accepted = event.key === Qt.Key_Escape
+                            }
+                            Keys.onEscapePressed: page.cancelDescription()
+                            Keys.onPressed: function(event) {
+                                if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                                    && (event.modifiers & Qt.ControlModifier)) {
+                                    page.saveDescription()
+                                    event.accepted = true
+                                }
+                            }
+                        }
+
+                        Label {
+                            objectName: "descriptionLoss"
+
+                            Layout.fillWidth: true
+                            visible: page.book.descriptionLosesFormatting === true
+                            text: qsTr("This description holds more than text, a table or an image: saving it from here leaves that out.")
+                            color: Theme.danger
+                            font.pointSize: Theme.fontPointSizeCaption
+                            wrapMode: Text.Wrap
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("**bold**   *italics*   [link](https://…)   - list   1. list   # heading")
+                            color: Theme.textMuted
+                            font.pointSize: Theme.fontPointSizeCaption
+                            wrapMode: Text.Wrap
+                        }
+
+                        RowLayout {
+                            spacing: Theme.gutter
+
+                            FlatButton {
+                                objectName: "saveDescriptionButton"
+
+                                variant: "primary"
+                                text: qsTr("Save")
+                                tip: qsTr("Save (Ctrl+Enter)")
+                                onClicked: page.saveDescription()
+                            }
+
+                            FlatButton {
+                                objectName: "cancelDescriptionButton"
+
+                                variant: "outline"
+                                text: qsTr("Cancel")
+                                tip: qsTr("Cancel (Esc)")
+                                onClicked: page.cancelDescription()
+                            }
+                        }
                     }
 
                     Label {
                         objectName: "bookDescription"
 
                         Layout.fillWidth: true
+                        visible: !page.editingDescription
                         text: page.book.description || qsTr("No description.")
                         textFormat: page.book.description ? Text.RichText : Text.PlainText
                         color: page.book.description ? Theme.text : Theme.textMuted

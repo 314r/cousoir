@@ -200,6 +200,9 @@ public:
     // the book's language. Returns an error message for a value it refuses,
     // empty once the edit is on its way: saved() or saveFailed() follows.
     Q_INVOKABLE QString updateBook(int bookId, const QVariantMap &changes);
+    // The book's description from the editor's text, Description's; an
+    // unchanged text writes nothing. Same returns as updateBook().
+    Q_INVOKABLE QString saveDescription(int bookId, const QString &text);
     // The book's cover from an image file, from the image on the clipboard,
     // or none. Same returns as updateBook().
     Q_INVOKABLE QString setCover(int bookId, const QString &fileUrl);

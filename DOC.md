@@ -149,9 +149,17 @@ A JPEG that fits in 1650 by 2200 pixels is kept as it is; anything else is
 scaled to fit and saved as a JPEG, its transparency on white, as Calibre
 saves covers.
 
+Edit, beside the description's heading, opens it as text, in the book's
+page: paragraphs apart by a blank line, a line break where a line ends,
+`**bold**`, `*italics*`, `[a link](https://…)`, `- ` or `1. ` for a list
+and `#` for a heading. Ctrl+Enter or Save saves it as HTML in paragraphs,
+as Calibre keeps it; Esc or Cancel puts it back; closing the book saves it.
+A description with more than that, a table or an image, says that saving it
+from there leaves that out; one saved unchanged is not rewritten.
+
 Once the open book has changed, Revert changes in the toolbar puts it back as
-it was when you opened it, cover included, after asking (Enter reverts, Esc
-keeps). Closing the book makes its changes final.
+it was when you opened it, cover and description included, after asking
+(Enter reverts, Esc keeps). Closing the book makes its changes final.
 
 ### How a change is saved
 
@@ -199,7 +207,6 @@ Cousoir departs from Calibre on purpose in a few places:
   left for Calibre to tidy: Cousoir refuses to write those fields.
 - With Calibre in Japanese, Korean or Vietnamese, whose folder names come
   from other tables, Cousoir does not write.
-- The description is not editable yet.
 
 ## Several books at once
 
@@ -617,6 +624,7 @@ reader `mtpdir:FOLDER` is a folder that stands for a Kindle over MTP.
 | Ctrl+I | Show or hide the book details pane, or the pane editing several books |
 | Enter, Tab, Esc | Save, save and move on, or revert a field |
 | Ctrl+V | Paste the clipboard's image as the cover |
+| Ctrl+Enter, Esc | Save the description or put it back, while editing it |
 | Enter, Esc | Revert the book's changes or keep them, once asked |
 | Enter | Restore the selected entry of the trash |
 | Enter, Menu, Shift+F10 | A finding's actions, in the check |
@@ -684,6 +692,9 @@ The tests check the port against Calibre itself:
   `make oracle`, which also generates `calibre_search.inc`, the folds; then
   parses and runs searches on the fixture, with saved searches, virtual
   libraries, grouped search terms and user categories.
+- `description_tests` checks the description's text both ways: HTML read as
+  text, text saved as HTML, and a description saved from its text reading
+  back as the same text.
 - `opf_tests` checks that Cousoir writes the `metadata.opf` files of the
   fixture library exactly as Calibre wrote them.
 - `commit_engine_tests` saves edits to copies of the fixture: folders moving,

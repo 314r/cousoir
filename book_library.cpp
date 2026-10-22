@@ -38,6 +38,7 @@
 #include "cover_cache.h"
 #include "field_writers.h"
 #include "cousoir_paths.h"
+#include "description.h"
 
 namespace {
 
@@ -92,32 +93,6 @@ QString monthYear(const QDateTime &date)
 QString sizeText(qint64 size)
 {
     return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
-}
-
-// The HTML Calibre keeps for a description, without the fonts, sizes and
-// colours its editors leave behind: the page shows it in the theme's own.
-QString cleanDescription(const QString &html)
-{
-    if (html.trimmed().isEmpty())
-        return {};
-    if (!html.contains(u'<')) {
-        QStringList paragraphs;
-        static const QRegularExpression blankLines(QStringLiteral("\\n\\s*\\n"));
-        for (const QString &paragraph : html.split(blankLines))
-            paragraphs.append(QStringLiteral("<p>%1</p>")
-                                  .arg(paragraph.toHtmlEscaped().replace(u'\n', QStringLiteral("<br>"))));
-        return paragraphs.join(QString());
-    }
-    static const QRegularExpression attributes(
-        QStringLiteral("\\s(style|face|color|size|class|bgcolor|width|height|align|dir|lang)"
-                       "\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)"),
-        QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression wrappers(QStringLiteral("</?(font|span)\\b[^>]*>"),
-                                             QRegularExpression::CaseInsensitiveOption);
-    QString cleaned = html;
-    cleaned.remove(attributes);
-    cleaned.remove(wrappers);
-    return cleaned.trimmed();
 }
 
 // A book identifier's label and, where there is one, its page.
@@ -1082,7 +1057,11 @@ void BookLibrary::rebuildCurrentBook()
         { QStringLiteral("added"), localDateTime(book->timestamp) },
         { QStringLiteral("modified"), localDateTime(book->lastModified) },
         { QStringLiteral("path"), book->path },
-        { QStringLiteral("description"), cleanDescription(book->comments) },
+        { QStringLiteral("description"), Description::cleaned(book->comments) },
+        // The description as the editor shows it, and whether saving it
+        // from there leaves something out.
+        { QStringLiteral("descriptionText"), Description::toText(book->comments) },
+        { QStringLiteral("descriptionLosesFormatting"), Description::losesFormatting(book->comments) },
         { QStringLiteral("cover"), book->coverFile.isEmpty()
               ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
         { QStringLiteral("formats"), formats },
@@ -1183,6 +1162,7 @@ QVariantMap BookLibrary::editableValues(const Book &book) const
         // The exact date, which a revert puts back as it was.
         { QStringLiteral("pubdate"), CalibreDb::isUndefinedDate(book.pubdate) ? QString()
                                                                               : CalibreDb::isoFormat(book.pubdate) },
+        { QStringLiteral("comments"), book.comments },
     };
 }
 
@@ -1241,6 +1221,17 @@ void BookLibrary::keepOriginal(const Book &book)
     QFile cover(book.coverFile);
     m_originalCover = !book.coverFile.isEmpty() && cover.open(QIODevice::ReadOnly) ? cover.readAll() : QByteArray();
     emit canRevertChanged();
+}
+
+QString BookLibrary::saveDescription(int bookId, const QString &text)
+{
+    const Book *book = findBook(bookId);
+    if (!book)
+        return tr("This book is no longer in the library.");
+    // Unchanged, the description keeps its HTML as it is.
+    if (text.trimmed() == Description::toText(book->comments).trimmed())
+        return {};
+    return updateBook(bookId, { { QStringLiteral("comments"), Description::toHtml(text) } });
 }
 
 QString BookLibrary::setCover(int bookId, const QString &fileUrl)

@@ -80,6 +80,8 @@ qt_add_library(cousoir_core STATIC
     conversion.h
     cousoir_paths.cpp
     cousoir_paths.h
+    description.cpp
+    description.h
     device_books.cpp
     device_books.h
     device_files.cpp
@@ -329,13 +331,16 @@ if(BUILD_TESTING)
         )
     endfunction()
 
-    foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db opf commit_engine concurrency_guard conversion kobo
+    foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
                           kindle library_check test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)
         cousoir_add_logged_test(${name}_tests ${name}_tests)
     endforeach()
+
+    # A description is read with QTextDocument, which wants a GUI application.
+    set_tests_properties(description_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(book_library_tests tests/book_library_test.cpp)
     target_link_libraries(book_library_tests PRIVATE cousoir_models Qt6::Test)

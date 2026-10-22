@@ -287,6 +287,7 @@ struct Shot
     QString virtualLibrary;
     int book = 0;
     int selected = 0;
+    QStringList clicks;
 };
 
 int screenshot(const QString &path, const Shot &shot)
@@ -312,6 +313,17 @@ int screenshot(const QString &path, const Shot &shot)
         for (int row = 0; row < shot.selected; ++row)
             QMetaObject::invokeMethod(books, "select", Q_ARG(int, row), Q_ARG(QString, row ? QStringLiteral("toggle")
                                                                                           : QStringLiteral("only")));
+    }
+    // Controls clicked, by name, in order.
+    for (const QString &name : shot.clicks) {
+        drawn(window);
+        QQuickItem *item = window->findChild<QQuickItem *>(name);
+        if (!item) {
+            out() << "no control " << name << Qt::endl;
+            return 1;
+        }
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
     }
     // The covers load on their own threads.
     QTest::qWait(300);
@@ -347,6 +359,8 @@ int main(int argc, char *argv[])
     parser.addOption({ QStringLiteral("book"), QStringLiteral("The book open."), QStringLiteral("id") });
     parser.addOption({ QStringLiteral("select"), QStringLiteral("How many of the first books to select."),
                        QStringLiteral("count") });
+    parser.addOption({ QStringLiteral("click"), QStringLiteral("A control to click, by its objectName."),
+                       QStringLiteral("name") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -367,6 +381,7 @@ int main(int argc, char *argv[])
         shot.virtualLibrary = parser.value(QStringLiteral("vl"));
         shot.book = parser.value(QStringLiteral("book")).toInt();
         shot.selected = parser.value(QStringLiteral("select")).toInt();
+        shot.clicks = parser.values(QStringLiteral("click"));
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);

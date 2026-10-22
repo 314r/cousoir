@@ -124,8 +124,8 @@ letters. Keyboard-first, as the rest of Cousoir.
 | 1. A large library stays instant | done (see the journal); memory left for later |
 | 2. Search like Calibre | done; follow-ups below |
 | 3. Many books at once | done |
-| 4. Editing the description | next |
-| 5. Custom columns | planned |
+| 4. Editing the description | done |
+| 5. Custom columns | next |
 | 6. Reading life from the readers | planned |
 | 7. A command palette | planned |
 
@@ -272,3 +272,19 @@ language, as Swedish tells "a" from "å" and Spanish "n" from "ñ";
   selection; the pane beside the list edits it, with Undo.
 - Found on the way: a binding on a function call does not follow the
   selection; `selectedIds` became a property.
+
+### 2026-10-22 — goal 4, the description (`exp-description`)
+
+- The description edits as text in the book's page, in the monospace look
+  of the rest: blank lines between paragraphs, a line break where a line
+  ends, and Markdown's bold, italics, links, lists and headings. No toolbar,
+  no rich-text widget.
+- Qt reads Markdown and writes it, but its writer wraps lines at 80 columns,
+  which would turn every long paragraph into line breaks, and its reader
+  makes a paragraph of each line break. `description.cpp` uses QTextDocument
+  only to read the HTML, walks its blocks and fragments to write the text,
+  and reads the text back with a small parser of its own. A description
+  saved from its text reads back as the same text (tested), one saved
+  unchanged is not rewritten, and one holding a table or an image says so
+  before it is saved.
+- Revert changes now puts the description back too.
