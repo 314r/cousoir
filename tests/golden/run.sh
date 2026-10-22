@@ -52,10 +52,8 @@ oracle() {
     fi
 }
 
-# A third argument names the custom fields Calibre lists and Cousoir does not,
-# a composite column's, which Calibre's template language computes.
 compare() {
-    local name=$1 source=$2 skipped=${3:-}
+    local name=$1 source=$2
     for side in calibre cousoir; do
         cp -a --reflink=auto "$source" "$work/$name-$side"
         # Dropbox conflict copies are not part of the library.
@@ -63,7 +61,7 @@ compare() {
             \( -iname '*conflicted copy*' -o -iname '*copie en conflit*' -o -iname '*case conflict*' \) -delete
     done
     calibredb list --with-library "$work/$name-calibre" --for-machine --fields all \
-        | sed -e "s|$work/$name-calibre|@LIBRARY@|g" ${skipped:+-e "/\"\\*$skipped\":/d"} > "$work/$name-calibre.json"
+        | sed -e "s|$work/$name-calibre|@LIBRARY@|g" > "$work/$name-calibre.json"
     "$cli" list --library "$work/$name-cousoir" \
         | sed "s|$work/$name-cousoir|@LIBRARY@|g" > "$work/$name-cousoir.json"
     if cmp -s "$work/$name-calibre.json" "$work/$name-cousoir.json"; then
@@ -76,7 +74,7 @@ compare() {
 }
 
 compare fixture "$root/tests/data/library"
-compare custom "$root/tests/data/library-custom" computed
+compare custom "$root/tests/data/library-custom"
 # Two thousand made-up books, for the names, titles and files six books
 # leave out: names in other scripts, long titles, the same book twice.
 "$tool" make-library "$work/generated" 2000 7 > /dev/null
@@ -114,6 +112,36 @@ reads() {
 }
 
 reads fixture "$root/tests/data/import" "$root/tests/data/library"
+
+# What the templates of tests/data/templates/templates.json make of each book,
+# with Calibre's formatter (tools/oracle/template_oracle.py) and Cousoir's:
+# the same text, or an error on both sides.
+templates() {
+    local name=$1 source=$2
+    rm -rf "$work/$name-templates"
+    cp -a --reflink=auto "$source" "$work/$name-templates"
+    oracle "$root/tools/oracle/template_oracle.py" -- "$work/$name-templates" \
+        "$root/tests/data/templates/templates.json" "$work/$name-templates-calibre.json" || return 0
+    if ! "$cli" template --library "$work/$name-templates" "$root/tests/data/templates/templates.json" \
+        > "$work/$name-templates-cousoir.json" 2> "$work/$name-templates.log"; then
+        echo "$name templates: cousoir-cli template failed:"
+        tail -20 "$work/$name-templates.log"
+        status=1
+        return 0
+    fi
+    if "$tool" compare-templates "$work/$name-templates-calibre.json" "$work/$name-templates-cousoir.json" \
+        > "$work/$name-templates.txt"; then
+        echo "$name templates: $(tail -1 "$work/$name-templates.txt")"
+    else
+        echo "$name templates: Cousoir's templates differ from Calibre's:"
+        head -60 "$work/$name-templates.txt"
+        status=1
+    fi
+}
+
+templates fixture "$root/tests/data/library"
+templates custom "$root/tests/data/library-custom"
+templates generated "$work/generated"
 
 # The searches of tests/data/search/queries.txt, Calibre's and Cousoir's, on
 # a library with the saved searches, virtual libraries, grouped search terms
@@ -313,9 +341,8 @@ round_trip() {
         status=1
     fi
     calibredb set_metadata --with-library "$work/trip" 1 --field "title:Mood Indigo" --field "tags:Jazz,Roman" >/dev/null
-    # The custom library's composite column is Calibre's to compute.
     calibredb list --with-library "$work/trip" --for-machine --fields all \
-        | sed -e "s|$work/trip|@LIBRARY@|g" -e '/"\*computed":/d' > "$work/trip-calibre.json"
+        | sed -e "s|$work/trip|@LIBRARY@|g" > "$work/trip-calibre.json"
     "$cli" list --library "$work/trip" | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-cousoir.json"
     if cmp -s "$work/trip-calibre.json" "$work/trip-cousoir.json"; then
         echo "round trip: Calibre keeps Cousoir's files and Cousoir reads Calibre's change"

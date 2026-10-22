@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QSet>
 #include <QString>
 
 #include "book.h"
@@ -49,7 +50,7 @@ bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *erro
 PythonJson::Value multipleSeparators(const CustomColumn &column);
 // Finds each book's cover and format files in its folder, as calibredb list
 // does: a format whose file has another name is found by its extension.
-void findFiles(LibraryData *data);
+void findFiles(LibraryData *data, const QSet<int> *only = nullptr);
 
 // Everything above: the snapshot, a prepared immutable connection to it, the
 // read and the file check.

@@ -69,6 +69,12 @@ qt_add_library(cousoir_core STATIC
     calibre_search.h
     calibre_search.inc
     calibre_strings.inc
+    calibre_template.cpp
+    calibre_template.h
+    calibre_template_book.cpp
+    calibre_template_engine.cpp
+    calibre_template_functions.cpp
+    calibre_template_p.h
     calibre_text.cpp
     calibre_text.h
     calibre_unidecode.inc

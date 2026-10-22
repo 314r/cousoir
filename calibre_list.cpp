@@ -64,16 +64,18 @@ QByteArray machineList(const LibraryData &data)
         if (!book->uuid.isNull())
             entry.insert(QStringLiteral("uuid"), PythonJson::Value::from(book->uuid));
 
-        // The custom columns as *label, but a composite's, which Calibre
-        // computes; a date it has not is "None", any other value missing is
-        // left out.
+        // The custom columns as *label, a composite's as its template made
+        // it; a date it has not is "None", any other value missing is left
+        // out.
         for (qsizetype index = 0; index < data.customColumns.size(); ++index) {
             const CustomColumn &column = data.customColumns.at(index);
             const QVariant value = book->custom.value(index).value;
             const QString key = u'*' + column.label;
             const QString &type = column.datatype;
-            if (type == QLatin1String("composite"))
+            if (type == QLatin1String("composite")) {
+                entry.insert(key, PythonJson::Value::from(value.toString()));
                 continue;
+            }
             if (type == QLatin1String("datetime")) {
                 entry.insert(key, PythonJson::Value::from(value.isNull() ? QStringLiteral("None")
                                                                : CalibreDb::isoFormat(value.toDateTime())));

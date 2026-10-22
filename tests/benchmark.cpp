@@ -320,7 +320,8 @@ int screenshot(const QString &path, const Shot &shot)
         const QString kobo = QDir(shot.kobo).absolutePath();
         devices->setVolumeProvider([kobo] { return QList<Volume>{ { kobo, QString() } }; }, 100);
         devices->refresh();
-        QTest::qWaitFor([devices] { return !devices->devices().isEmpty() && !devices->loading(); }, 10000);
+        if (!QTest::qWaitFor([devices] { return !devices->devices().isEmpty() && !devices->loading(); }, 10000))
+            out() << "the Kobo was not read" << Qt::endl;
     }
     if (!shot.virtualLibrary.isEmpty())
         library->setProperty("virtualLibrary", shot.virtualLibrary);

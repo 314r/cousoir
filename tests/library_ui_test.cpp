@@ -992,7 +992,8 @@ void LibraryUiTest::findsWithPalette()
                                           && control("paletteField")->hasActiveFocus(); }))
             return {};
         typeText(typed);
-        QTest::qWaitFor([&] { return !palette->property("hits").toList().isEmpty(); });
+        if (!QTest::qWaitFor([&] { return !palette->property("hits").toList().isEmpty(); }))
+            return {};
         return palette->property("hits").toList().value(0).toMap();
     };
 
