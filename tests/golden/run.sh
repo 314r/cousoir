@@ -3,9 +3,9 @@
 # each on its own copy of the fixture library and, with COUSOIR_GOLDEN_REAL=1,
 # of the library Calibre opens; `cousoir-cli read` with Calibre's readers on
 # book files; and the libraries Calibre and `cousoir-cli apply` leave after
-# the same edits, additions, removals, conversions and metadata downloads. calibredb can rename
-# files and touches metadata.db even to list it, so neither ever runs on the
-# library itself.
+# the same edits, additions, removals, conversions and metadata downloads.
+# calibredb can rename files and touches metadata.db even to list it, so
+# neither ever runs on the library itself.
 #
 #   tests/golden/run.sh build/cousoir-cli [build/cousoir-test-tool]
 #
