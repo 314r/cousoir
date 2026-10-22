@@ -17,8 +17,9 @@ Cousoir works on Calibre's libraries, and could not do so without Calibre:
   This is why Cousoir is released under the GPL version 3 too. The files that
   hold ported code say so at their top, and are listed below.
 - **Its data.** The transliteration table that turns names into folder names,
-  Calibre's translations of "Unknown" and "Cover", the MOBI language codes and
-  the HTML entities are generated from Calibre itself.
+  Calibre's translations of "Unknown" and "Cover", the MOBI language codes,
+  the HTML entities, and how Calibre's ICU collators match text in a search
+  are generated from Calibre itself.
 - **Calibre itself, at run time.** Cousoir runs Calibre, through
   `calibre-debug`, to convert books and to send them to a Kobo or a Kindle
   with Calibre's own drivers; to read the formats it has no reader for; and to
@@ -51,6 +52,10 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | | `src/calibre/utils/localization.py`: `canonicalize_lang()` |
 | | `src/calibre/utils/cleantext.py`: `clean_xml_chars()`, `clean_ascii_chars()` |
 | `calibre_paths.cpp` | `src/calibre/db/backend.py`: `construct_path_name()`, `construct_file_name()`, `WINDOWS_RESERVED_NAMES` |
+| `calibre_search.cpp` | `src/calibre/utils/search_query_parser.py`: `Parser`, `SearchQueryParser`'s evaluation, saved searches |
+| | `src/calibre/db/search.py`: `_matchkind()`, `_match()`, `DateSearch`, `NumericSearch`, `KeyPairSearch`, `Parser.get_matches()`, `get_user_category_matches()`, `Search._do_search()` |
+| | `src/calibre/db/fields.py`: the values each field searches, `iter_searchable_values_for_sort()` |
+| | `src/calibre/library/field_metadata.py`: the fields' search terms and data types |
 | `opf_reader.cpp` | `src/calibre/ebooks/metadata/opf3.py`: `read_metadata()` and the readers it calls, `parse_prefixes()`, `expand_prefix()`, `parse_identifier()`, `find_main_title()` |
 | | `src/calibre/ebooks/metadata/opf2.py`: the `OPF` class's readers, `first_spine_item()`, the EPUB 3 raster cover |
 | | `src/calibre/ebooks/metadata/utils.py`: `parse_opf_version()` |

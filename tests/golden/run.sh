@@ -112,6 +112,30 @@ reads() {
 
 reads fixture "$root/tests/data/import" "$root/tests/data/library"
 
+# The searches of tests/data/search/queries.txt, Calibre's and Cousoir's, on
+# a library with the saved searches, virtual libraries, grouped search terms
+# and user categories of tests/data/search/preferences.sql added.
+searches() {
+    local name=$1 source=$2
+    rm -rf "$work/$name-search"
+    cp -a --reflink=auto "$source" "$work/$name-search"
+    "$tool" run-sql "$work/$name-search/metadata.db" "$root/tests/data/search/preferences.sql"
+    oracle "$root/tools/oracle/search_books.py" -- "$work/$name-search" "$root/tests/data/search/queries.txt" \
+        "$work/$name-search-calibre.json" || return 0
+    "$tool" search-books "$work/$name-search" "$root/tests/data/search/queries.txt" "$work/$name-search-cousoir.json"
+    if "$tool" compare-searches "$work/$name-search-calibre.json" "$work/$name-search-cousoir.json" \
+        > "$work/$name-searches.txt"; then
+        echo "$name searches: $(tail -1 "$work/$name-searches.txt")"
+    else
+        echo "$name searches: Cousoir finds other books than Calibre:"
+        head -60 "$work/$name-searches.txt"
+        status=1
+    fi
+}
+
+searches fixture "$root/tests/data/library"
+searches generated "$work/generated"
+
 # The same edits written by Calibre and by Cousoir, then compared table by
 # table and file by file; calibredb then checks Cousoir's copy and lists it as
 # it lists Calibre's.

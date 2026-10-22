@@ -505,6 +505,18 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                               .toString().toDouble(&expiryOk);
     data->trashExpirySeconds = expiryOk ? std::max<qint64>(24 * 3600, qint64(expiry)) : 14 * 24 * 3600;
 
+    for (const char *key : { "saved_searches", "virtual_libraries", "grouped_search_terms", "user_categories",
+                             "virtual_lib_on_startup" }) {
+        SqliteStatement preference(db, QStringLiteral("SELECT val FROM preferences WHERE key=?"));
+        preference.bind(1, QString::fromLatin1(key));
+        if (preference.step())
+            data->preferences.insert(QString::fromLatin1(key), preference.text(0));
+    }
+    if (!forEachRow(db, QStringLiteral("SELECT label FROM custom_columns WHERE mark_for_delete=0 ORDER BY id"),
+                    [&](SqliteStatement &row) { data->customColumns.append(row.text(0)); }, error)) {
+        return false;
+    }
+
     QList<Book> books;
     QHash<int, qsizetype> rows;
     if (!forEachRow(db, QStringLiteral("SELECT id, title, sort, timestamp, pubdate, series_index, author_sort, path, "
@@ -640,7 +652,11 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                       [&](SqliteStatement &row) {
                           if (Book *book = bookWithId(row.integer(0)))
                               book->conversionOptions = row.blob(1);
-                      }, error);
+                      }, error)
+        && forEachRow(db, QStringLiteral("SELECT book, pages FROM books_pages_link"), [&](SqliteStatement &row) {
+            if (Book *book = bookWithId(row.integer(0)))
+                book->pages = row.isNull(1) ? -1 : int(row.integer(1));
+        }, error);
     if (!ok)
         return false;
 
