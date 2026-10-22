@@ -683,6 +683,46 @@ Cousoir departs from Calibre here:
   its text: the second rewrite reads the file at its first length. Cousoir
   keeps it.
 
+## Reading in Cousoir
+
+Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
+the book in Cousoir's reader: its EPUB (or KEPUB), else its PDF. Ctrl+O still
+opens it in the desktop's reader.
+
+An EPUB shows a screen at a time, in the theme's colours and with its own
+fonts: the arrows, Space, Page Up and Page Down, the wheel or a click on
+either side turn the pages, Home and End go to the ends of the chapter, the
+next and previous chapters follow. T shows the table of contents beside the
+pages, the section being read in bold and named in the toolbar; Ctrl+Plus
+and Ctrl+Minus change the text's size. Links within the book go to their
+page; others open in the browser. The toolbar tells how far into the book
+the page is. Esc closes the book.
+
+Where reading stopped is kept as reading goes, and in the library when the
+book closes, where Calibre keeps its own: a CFI in `last_read_positions`, as
+Calibre's viewer counts positions in its pages (from
+`src/pyj/read_book/cfi.pyj`), user `local`, device `cousoir`. A book opens
+where the newest position left it, Cousoir's own or one Calibre's viewer or
+its content server wrote.
+
+Selected text becomes a highlight with H or the Highlight button, kept
+where Calibre's viewer keeps its highlights: a row of the library's
+`annotations` table, user `viewer`, its JSON as the viewer writes it (the
+text, its start and end CFIs, the chapter's file and titles, the yellow of
+Calibre's colours). The viewer shows Cousoir's highlights, and Cousoir the
+viewer's, in their colours; the Highlights list beside the pages goes to
+each. A highlight clicked can be removed, which Cousoir writes as the viewer
+does, so that the programs that have it forget it too.
+
+A PDF shows a page after the other, fitted to the window's width or to the
+whole page, its page kept.
+
+Cousoir departs from Calibre's viewer here: no reading aloud, no search in
+the book, no notes on highlights yet, colours other than yellow only as
+shown, and no vertical or right-to-left page order. The position and the
+highlights are written while the library can be written; when Calibre
+writes to it, they wait in Cousoir for the next time.
+
 ## Sharing on the network
 
 Settings, Network, Share the library serves the library open to the other
@@ -929,7 +969,9 @@ columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 - libzip
 - For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
-- For converting and sending to a reader, Calibre
+- For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs; built
+  without them, Cousoir has no reader
+- For converting to AZW3, and KEPUB from formats other than EPUB, Calibre
 - For ejecting a Kobo, UDisks2 and Qt D-Bus
 - For a Kindle over MTP, libmtp
 - CMake 3.21 or later
@@ -1120,6 +1162,12 @@ The tests check the port against Calibre itself:
   `/proc/net/unix`, a fake Dropbox socket, Syncthing and Nextcloud folders
   made in a temporary folder and a file system type given in place of the
   real one.
+- `epub_book_tests` reads EPUB 3 and EPUB 2 books: their spine, their table
+  of contents from nav or NCX, nested, and paths resolved. The UI tests read
+  `tests/data/reader/voyage.epub` (`tools/make_reader_fixture.py`) in the
+  reader: pages turned, the position written to the library and found
+  again, a newer one of Calibre's viewer taken, a highlight made, kept as
+  the viewer keeps it, shown again and removed; and a PDF.
 - `library_server_tests` serves the fixture library on a port of
   127.0.0.1 and reads it as a reader would: the catalog's feeds followed
   link by link, searches, categories, files, covers and thumbnails, the

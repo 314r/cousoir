@@ -25,6 +25,35 @@ ThemedWindow {
     property int pages: 1
     property real zoom: 1
     property bool tocVisible: false
+    // The sidebar's list: "toc" or "highlights".
+    property string sidebar: "toc"
+    property bool hasSelection: false
+    // The highlights shown on the page.
+    property int highlightsShown: 0
+    // The page each table of contents anchor of the spine item shown is on.
+    property var anchorPages: ({})
+    // The table of contents entry being read.
+    readonly property int currentEntry: {
+        let found = -1
+        const toc = bookReader.toc
+        for (let i = 0; i < toc.length; ++i) {
+            const entry = toc[i]
+            if (entry.spineIndex < 0 || entry.spineIndex > spineIndex)
+                continue
+            if (entry.spineIndex === spineIndex && entry.fragment
+                && !(anchorPages[entry.fragment] >= 0 && anchorPages[entry.fragment] <= page))
+                continue
+            found = i
+        }
+        return found
+    }
+    // The highlight clicked, to remove.
+    property string chosenHighlight: ""
+    readonly property bool darkPage: Theme.canvas.hslLightness < 0.5
+    // Calibre's builtin_colors_light and builtin_colors_dark.
+    readonly property var highlightColors: darkPage
+        ? { yellow: "#906e00", green: "#306f50", blue: "#265589", red: "#a23e5a", purple: "#505088" }
+        : { yellow: "#ffeb6b", green: "#c0ed72", blue: "#add8ff", red: "#ffb0ca", purple: "#d9b2ff" }
     readonly property double bookFraction: bookReader.bookFraction(spineIndex, fileFraction)
 
     signal failed(string message)
@@ -69,8 +98,57 @@ ThemedWindow {
             view.runJavaScript("window.cousoir.goToEnd()")
         else
             view.runJavaScript("window.cousoir.goToStart()")
+        highlightsShown = 0
+        applyHighlights(bookReader.highlights.filter(h => h.spineIndex === spineIndex))
+        updateAnchors()
+        hasSelection = false
+        chosenHighlight = ""
         view.opacity = 1
         view.forceActiveFocus()
+    }
+
+    // Where the table of contents' anchors of the spine item are, for the
+    // chapter being read.
+    function updateAnchors() {
+        const anchors = bookReader.toc.filter(entry => entry.spineIndex === spineIndex && entry.fragment)
+                                      .map(entry => entry.fragment)
+        anchorPages = ({})
+        if (anchors.length)
+            view.runJavaScript("window.cousoir.pagesOf(" + JSON.stringify(anchors) + ")",
+                               function(pages) { readerWindow.anchorPages = pages || ({}) })
+    }
+
+    function applyHighlights(list) {
+        const marks = list.map(h => ({ uuid: h.uuid, start: h.start, end: h.end,
+                                       color: highlightColors[h.which] || highlightColors.yellow }))
+        if (marks.length)
+            view.runJavaScript("window.cousoir.applyHighlights(" + JSON.stringify(marks) + ")",
+                               function(count) { readerWindow.highlightsShown += count || 0 })
+    }
+
+    // The selection made a highlight, kept where Calibre's viewer keeps its
+    // own.
+    function highlightSelection() {
+        view.runJavaScript("JSON.stringify(window.cousoir.selection())", function(result) {
+            const selected = result ? JSON.parse(result) : null
+            if (!selected)
+                return
+            const uuid = bookReader.addHighlight(spineIndex, selected.start, selected.end, selected.text, "yellow")
+            if (!uuid)
+                return
+            applyHighlights([{ uuid: uuid, start: selected.start, end: selected.end, which: "yellow" }])
+            view.runJavaScript("window.cousoir.clearSelection()")
+            hasSelection = false
+        })
+    }
+
+    function removeChosenHighlight() {
+        if (!chosenHighlight)
+            return
+        bookReader.removeHighlight(chosenHighlight)
+        view.runJavaScript("window.cousoir.removeHighlight(" + JSON.stringify(chosenHighlight) + ")")
+        chosenHighlight = ""
+        highlightsShown = Math.max(0, highlightsShown - 1)
     }
 
     function nextPage() {
@@ -90,15 +168,8 @@ ThemedWindow {
         zoom = Math.max(0.5, Math.min(3, value))
     }
 
-    // The title of the chapter shown: the last table of contents entry at or
-    // before the spine item.
     function chapterTitle() {
-        let title = ""
-        for (const entry of bookReader.toc) {
-            if (entry.spineIndex >= 0 && entry.spineIndex <= spineIndex)
-                title = entry.title
-        }
-        return title
+        return currentEntry >= 0 ? bookReader.toc[currentEntry].title : ""
     }
 
     visible: false
@@ -159,6 +230,26 @@ ThemedWindow {
                 color: Theme.textMuted
             }
 
+            FlatButton {
+                objectName: "readerHighlightButton"
+
+                visible: readerWindow.hasSelection
+                variant: "outline"
+                text: qsTr("Highlight")
+                tip: qsTr("Highlight the selection (H)")
+                onClicked: readerWindow.highlightSelection()
+            }
+
+            FlatButton {
+                objectName: "readerRemoveHighlightButton"
+
+                visible: readerWindow.chosenHighlight !== ""
+                variant: "outline"
+                text: qsTr("Remove highlight")
+                icon.source: "assets/icons/trash.svg"
+                onClicked: readerWindow.removeChosenHighlight()
+            }
+
             Label {
                 objectName: "readerProgress"
 
@@ -197,47 +288,135 @@ ThemedWindow {
         anchors.fill: parent
         spacing: 0
 
-        ListView {
-            id: tocList
-            objectName: "readerToc"
-
+        ColumnLayout {
+            // Its own width: a layout would otherwise take its lists' fill.
             Layout.preferredWidth: Math.round(30 * Theme.charWidth)
+            Layout.maximumWidth: Layout.preferredWidth
+            Layout.fillWidth: false
             Layout.fillHeight: true
             visible: readerWindow.tocVisible
-            clip: true
-            model: bookReader.toc
+            spacing: 0
 
-            delegate: ItemDelegate {
-                id: entry
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: Theme.gutter
+                spacing: Theme.gutter
 
-                required property var modelData
-
-                width: ListView.view.width
-                leftPadding: Theme.gutter + entry.modelData.depth * Theme.gutter * 2
-                text: entry.modelData.title
-                highlighted: entry.modelData.spineIndex === readerWindow.spineIndex
-                enabled: entry.modelData.spineIndex >= 0
-                onClicked: readerWindow.load(entry.modelData.spineIndex,
-                                             entry.modelData.fragment ? "fragment:" + entry.modelData.fragment : "start")
-
-                contentItem: Label {
-                    text: entry.text
-                    elide: Text.ElideRight
-                    color: entry.highlighted ? Theme.textBright : Theme.text
-                    font.weight: entry.highlighted ? Font.Bold : Font.Normal
+                FlatButton {
+                    variant: "outline"
+                    selected: readerWindow.sidebar === "toc"
+                    text: qsTr("Contents")
+                    onClicked: readerWindow.sidebar = "toc"
                 }
-                background: Rectangle {
-                    color: entry.hovered ? Theme.hover : "transparent"
+
+                FlatButton {
+                    objectName: "readerHighlightsTab"
+
+                    variant: "outline"
+                    selected: readerWindow.sidebar === "highlights"
+                    text: qsTr("Highlights (%1)").arg(bookReader.highlights.length)
+                    onClicked: readerWindow.sidebar = "highlights"
                 }
             }
 
-            ScrollBar.vertical: ThinScrollBar {}
+            ListView {
+                objectName: "readerHighlights"
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: readerWindow.sidebar === "highlights"
+                clip: true
+                model: bookReader.highlights
+                spacing: Theme.gutter
+
+                delegate: ItemDelegate {
+                    id: mark
+
+                    required property var modelData
+
+                    width: ListView.view.width
+                    leftPadding: Theme.gutter
+                    rightPadding: Theme.gutter
+                    onClicked: readerWindow.load(mark.modelData.spineIndex,
+                                                 "cfi:epubcfi(/" + 2 * (mark.modelData.spineIndex + 1) + mark.modelData.start + ")")
+
+                    contentItem: ColumnLayout {
+                        spacing: 2
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: mark.modelData.text
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 4
+                            elide: Text.ElideRight
+                            leftPadding: Theme.gutter
+                            background: Rectangle {
+                                width: 3
+                                height: parent.height
+                                color: readerWindow.highlightColors[mark.modelData.which] || readerWindow.highlightColors.yellow
+                            }
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            visible: mark.modelData.notes !== ""
+                            text: mark.modelData.notes
+                            wrapMode: Text.Wrap
+                            color: Theme.textMuted
+                            font.italic: true
+                        }
+                    }
+                    background: Rectangle {
+                        color: mark.hovered ? Theme.hover : "transparent"
+                    }
+                }
+
+                ScrollBar.vertical: ThinScrollBar {}
+            }
+
+            ListView {
+                id: tocList
+                objectName: "readerToc"
+
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: readerWindow.sidebar === "toc"
+                clip: true
+                model: bookReader.toc
+
+                delegate: ItemDelegate {
+                    id: entry
+
+                    required property var modelData
+                    required property int index
+
+                    width: ListView.view.width
+                    leftPadding: Theme.gutter + entry.modelData.depth * Theme.gutter * 2
+                    text: entry.modelData.title
+                    highlighted: entry.index === readerWindow.currentEntry
+                    enabled: entry.modelData.spineIndex >= 0
+                    onClicked: readerWindow.load(entry.modelData.spineIndex,
+                                                 entry.modelData.fragment ? "fragment:" + entry.modelData.fragment : "start")
+
+                    contentItem: Label {
+                        text: entry.text
+                        elide: Text.ElideRight
+                        color: entry.highlighted ? Theme.textBright : Theme.text
+                        font.weight: entry.highlighted ? Font.Bold : Font.Normal
+                    }
+                    background: Rectangle {
+                        color: entry.hovered ? Theme.hover : "transparent"
+                    }
+                }
+
+                ScrollBar.vertical: ThinScrollBar {}
+            }
         }
 
         Divider {
             Layout.preferredWidth: 1
             Layout.fillHeight: true
-            visible: tocList.visible
+            visible: readerWindow.tocVisible
         }
 
         WebEngineView {
@@ -293,9 +472,23 @@ ThemedWindow {
                     readerWindow.load(readerWindow.spineIndex + 1, "start")
                 } else if (event.event === "previous") {
                     readerWindow.load(readerWindow.spineIndex - 1, "end")
+                } else if (event.event === "layout") {
+                    readerWindow.updateAnchors()
+                } else if (event.event === "selection") {
+                    readerWindow.hasSelection = !event.empty
+                    if (!event.empty)
+                        readerWindow.chosenHighlight = ""
+                } else if (event.event === "highlight") {
+                    readerWindow.chosenHighlight = event.uuid
                 } else if (event.event === "key") {
-                    if (event.key === "Escape")
+                    if (event.key === "Escape" && readerWindow.chosenHighlight)
+                        readerWindow.chosenHighlight = ""
+                    else if (event.key === "Escape")
                         readerWindow.close()
+                    else if (!event.ctrl && (event.key === "h" || event.key === "H") && readerWindow.hasSelection)
+                        readerWindow.highlightSelection()
+                    else if (event.key === "Delete" && readerWindow.chosenHighlight)
+                        readerWindow.removeChosenHighlight()
                     else if (!event.ctrl && (event.key === "t" || event.key === "T"))
                         readerWindow.tocVisible = !readerWindow.tocVisible
                     else if (event.ctrl && (event.key === "+" || event.key === "="))

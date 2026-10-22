@@ -284,6 +284,10 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         if (!BookOperations::setReadPosition(db, bookId, position, &error))
             return undo(error);
     }
+    for (const auto &[bookId, annotation] : request.annotations) {
+        if (!BookOperations::setAnnotation(db, bookId, annotation, &error))
+            return undo(error);
+    }
 
     QSet<int> dirtied = state.dirtied;
     dirtied.unite(done.dirtied);

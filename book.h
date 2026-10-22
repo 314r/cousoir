@@ -143,6 +143,22 @@ struct ReadPosition
     double fraction = 0;
 };
 
+// A highlight or bookmark of Calibre's viewer, a row of its annotations
+// table: user type "local", user "viewer".
+struct Annotation
+{
+    QString format;
+    // "highlight" or "bookmark".
+    QString type;
+    QString id;
+    // Seconds since 1970.
+    double timestamp = 0;
+    // Its JSON, as the viewer keeps it.
+    QByteArray data;
+    // The text a search finds it by.
+    QString searchable;
+};
+
 struct LibraryData
 {
     QString libraryPath;

@@ -9,7 +9,9 @@
 //
 // It tells the window what happens by console messages, "cousoir:" and JSON:
 // { event: "position", cfi, fraction, page, pages }, { event: "next" } and
-// { event: "previous" } at the ends of the page, { event: "key", key }.
+// { event: "previous" } at the ends of the page, { event: "key", key },
+// { event: "selection", empty }, { event: "highlight", uuid } when one is
+// clicked, and { event: "layout" } once laid out again for a new size.
 (function () {
     'use strict';
     if (window.cousoir)
@@ -270,6 +272,99 @@
         return decoded;
     }
 
+    // --- Highlights, wrapped as Calibre's viewer wraps them -----------------
+
+    let wrapperCount = 0;
+
+    // A Range of two CFIs within the page, or null.
+    function rangeOf(start, end) {
+        const a = decode(start, document);
+        const b = decode(end, document);
+        if (!a || !b || !a.node || !b.node)
+            return null;
+        try {
+            const range = document.createRange();
+            range.setStart(a.node, a.offset !== undefined ? a.offset : 0);
+            range.setEnd(b.node, b.offset !== undefined ? b.offset : 0);
+            return range.collapsed ? null : range;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function wrapRange(range, uuid, color) {
+        const root = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? range.commonAncestorContainer
+                                                                                 : range.commonAncestorContainer.parentNode;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (range.intersectsNode(node) && node.nodeValue.length)
+                nodes.push(node);
+        }
+        const count = ++wrapperCount;
+        for (let node of nodes) {
+            const start = node === range.startContainer ? range.startOffset : 0;
+            const end = node === range.endContainer ? range.endOffset : node.nodeValue.length;
+            if (start >= end)
+                continue;
+            if (end < node.nodeValue.length)
+                node.splitText(end);
+            if (start > 0)
+                node = node.splitText(start);
+            const span = document.createElementNS(XHTML, 'span');
+            span.dataset.calibreRangeWrapper = String(count);
+            span.dataset.annotId = uuid;
+            span.style.backgroundColor = color;
+            node.parentNode.insertBefore(span, node);
+            span.appendChild(node);
+        }
+    }
+
+    // Wraps the highlights of this page: { uuid, start, end, color }. Their
+    // ranges are all found first, then wrapped, so that a wrapper never
+    // changes the text a later CFI points to.
+    function applyHighlights(list) {
+        const found = [];
+        for (const highlight of list || []) {
+            const range = rangeOf(highlight.start, highlight.end);
+            if (range)
+                found.push([range, highlight]);
+        }
+        for (const [range, highlight] of found)
+            wrapRange(range, highlight.uuid, highlight.color);
+        return found.length;
+    }
+
+    function removeHighlight(uuid) {
+        for (const span of document.querySelectorAll('span[data-annot-id="' + uuid.replace(/"/g, '') + '"]')) {
+            const parent = span.parentNode;
+            while (span.firstChild)
+                parent.insertBefore(span.firstChild, span);
+            parent.removeChild(span);
+            parent.normalize();
+        }
+    }
+
+    // The selection as Calibre's cfi_for_selection() gives it, and its text.
+    function selection() {
+        const selected = window.getSelection();
+        if (!selected || selected.isCollapsed || !selected.rangeCount)
+            return null;
+        const range = selected.getRangeAt(0);
+        const position = (container, offset) => {
+            if (container.nodeType === Node.ELEMENT_NODE && offset && container.childNodes.length > offset)
+                return [container.childNodes[offset], 0];
+            return [container, offset];
+        };
+        const [startNode, startOffset] = position(range.startContainer, range.startOffset);
+        const [endNode, endOffset] = position(range.endContainer, range.endOffset);
+        return {
+            start: encode(document, startNode, startOffset),
+            end: encode(document, endNode, endOffset),
+            text: selected.toString(),
+        };
+    }
+
     // --- Pages ------------------------------------------------------------
 
     function scroller() {
@@ -429,6 +524,11 @@
     document.addEventListener('click', event => {
         if (event.target.closest && event.target.closest('a[href]'))
             return;
+        const wrapper = event.target.closest ? event.target.closest('span[data-annot-id]') : null;
+        if (wrapper && window.getSelection().isCollapsed) {
+            post({ event: 'highlight', uuid: wrapper.dataset.annotId });
+            return;
+        }
         if (!window.getSelection().isCollapsed)
             return;
         const x = event.clientX;
@@ -453,10 +553,17 @@
             previous();
     }, { passive: false });
 
+    let selectionTimer = 0;
+    document.addEventListener('selectionchange', () => {
+        clearTimeout(selectionTimer);
+        selectionTimer = setTimeout(() => post({ event: 'selection', empty: window.getSelection().isCollapsed }), 150);
+    });
+
     window.addEventListener('resize', () => {
         const cfi = lastCfi;
         layout();
         goToCfi('epubcfi(/2' + cfi + ')');
+        post({ event: 'layout' });
     });
 
     window.cousoir = {
@@ -469,9 +576,22 @@
         goToEnd() { show(pages() - 1); },
         goToCfi: goToCfi,
         goToFragment: goToFragment,
+        // The page of each of these ids, -1 for one the page lacks.
+        pagesOf(ids) {
+            const pagesById = {};
+            for (const id of ids || []) {
+                const target = document.getElementById(id);
+                pagesById[id] = target ? pageOf(target) : -1;
+            }
+            return pagesById;
+        },
         next: next,
         previous: previous,
         currentCfi: currentCfi,
+        applyHighlights: applyHighlights,
+        removeHighlight: removeHighlight,
+        selection: selection,
+        clearSelection() { window.getSelection().removeAllRanges(); },
         encode: encode,
         decode: decode,
         page: page,

@@ -5,12 +5,14 @@
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMutex>
 #include <QQuickWebEngineProfile>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QUuid>
 #include <QtWebEngineQuick/qtwebenginequickglobal.h>
 #include <QWebEngineUrlRequestJob>
 #include <QWebEngineUrlScheme>
@@ -123,7 +125,7 @@ int BookReader::bookId() const
 
 QString BookReader::title() const
 {
-    return m_book ? m_book->title() : QString();
+    return m_book ? m_book->title() : m_pdfTitle;
 }
 
 QString BookReader::format() const
@@ -171,6 +173,116 @@ QString BookReader::script() const
 {
     QFile file(QStringLiteral(":/qt/qml/Cousoir/assets/reader/reader.js"));
     return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
+}
+
+QVariantList BookReader::highlights() const
+{
+    QList<QJsonObject> sorted = m_highlights.values();
+    // The book's order: by spine item, then where they start.
+    std::stable_sort(sorted.begin(), sorted.end(), [](const QJsonObject &a, const QJsonObject &b) {
+        return a.value(QLatin1String("spine_index")).toInt() < b.value(QLatin1String("spine_index")).toInt();
+    });
+    QVariantList list;
+    for (const QJsonObject &highlight : std::as_const(sorted)) {
+        const QJsonObject style = highlight.value(QLatin1String("style")).toObject();
+        int spineIndex = highlight.value(QLatin1String("spine_index")).toInt(-1);
+        const QString spineName = highlight.value(QLatin1String("spine_name")).toString();
+        if (m_book && !spineName.isEmpty() && m_book->spineIndex(spineName) >= 0)
+            spineIndex = m_book->spineIndex(spineName);
+        list.append(QVariantMap{
+            { QStringLiteral("uuid"), highlight.value(QLatin1String("uuid")).toString() },
+            { QStringLiteral("spineIndex"), spineIndex },
+            { QStringLiteral("start"), highlight.value(QLatin1String("start_cfi")).toString() },
+            { QStringLiteral("end"), highlight.value(QLatin1String("end_cfi")).toString() },
+            { QStringLiteral("text"), highlight.value(QLatin1String("highlighted_text")).toString() },
+            { QStringLiteral("notes"), highlight.value(QLatin1String("notes")).toString() },
+            { QStringLiteral("which"), style.value(QLatin1String("which")).toString(QStringLiteral("yellow")) },
+            { QStringLiteral("timestamp"), highlight.value(QLatin1String("timestamp")).toString() },
+        });
+    }
+    return list;
+}
+
+namespace {
+
+// annot_db_data(): the text a search finds a highlight by, its notes after
+// a separator, NFKC.
+QString searchableText(const QJsonObject &highlight)
+{
+    QString text = highlight.value(QLatin1String("highlighted_text")).toString();
+    const QString notes = highlight.value(QLatin1String("notes")).toString();
+    if (!notes.isEmpty())
+        text += QStringLiteral("\n\x1f\n") + notes;
+    return text.normalized(QString::NormalizationForm_KC);
+}
+
+// The viewer's timestamps: ISO 8601 in UTC, with milliseconds and a Z.
+QString isoNow()
+{
+    return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+}
+
+} // namespace
+
+QString BookReader::addHighlight(int spineIndex, const QString &start, const QString &end, const QString &text,
+                                 const QString &which)
+{
+    if (!m_book || spineIndex < 0 || spineIndex >= m_book->spine().size() || start.isEmpty() || end.isEmpty())
+        return {};
+    const QString uuid = QUuid::createUuid().toString(QUuid::Id128);
+    // The table of contents entries the highlight is under, as the viewer
+    // notes them.
+    QJsonArray family;
+    for (const EpubBook::TocEntry &entry : m_book->toc()) {
+        if (m_book->spineIndex(entry.name) >= 0 && m_book->spineIndex(entry.name) <= spineIndex) {
+            while (family.size() > entry.depth)
+                family.removeLast();
+            family.append(entry.title);
+        }
+    }
+    QJsonObject highlight{
+        { QStringLiteral("type"), QStringLiteral("highlight") },
+        { QStringLiteral("timestamp"), isoNow() },
+        { QStringLiteral("uuid"), uuid },
+        { QStringLiteral("highlighted_text"), text },
+        { QStringLiteral("start_cfi"), start },
+        { QStringLiteral("end_cfi"), end },
+        { QStringLiteral("style"), QJsonObject{ { QStringLiteral("type"), QStringLiteral("builtin") },
+                                                { QStringLiteral("kind"), QStringLiteral("color") },
+                                                { QStringLiteral("which"), which } } },
+        { QStringLiteral("spine_name"), m_book->spine().at(spineIndex).name },
+        { QStringLiteral("spine_index"), spineIndex },
+    };
+    if (!family.isEmpty())
+        highlight.insert(QStringLiteral("toc_family_titles"), family);
+    m_highlights.insert(uuid, highlight);
+    emit highlightsChanged();
+    if (m_library) {
+        m_library->saveAnnotation(m_bookId, { m_format, QStringLiteral("highlight"), uuid,
+                                              double(QDateTime::currentMSecsSinceEpoch()) / 1000,
+                                              QJsonDocument(highlight).toJson(QJsonDocument::Compact), searchableText(highlight) });
+    }
+    return uuid;
+}
+
+void BookReader::removeHighlight(const QString &uuid)
+{
+    if (!m_highlights.contains(uuid))
+        return;
+    // remove_highlight() of the viewer: the id and type kept, removed.
+    const QJsonObject removed{
+        { QStringLiteral("type"), QStringLiteral("highlight") },
+        { QStringLiteral("timestamp"), isoNow() },
+        { QStringLiteral("uuid"), uuid },
+        { QStringLiteral("removed"), true },
+    };
+    m_highlights.remove(uuid);
+    emit highlightsChanged();
+    if (m_library) {
+        m_library->saveAnnotation(m_bookId, { m_format, QStringLiteral("highlight"), uuid,
+                                              double(QDateTime::currentMSecsSinceEpoch()) / 1000,
+                                              QJsonDocument(removed).toJson(QJsonDocument::Compact), QString() });
+    }
 }
 
 QString BookReader::readableFormat(const QVariantList &formats)
@@ -237,12 +349,27 @@ QString BookReader::open(int bookId)
                     { QStringLiteral("device"), position.device } };
     }
     m_lastCfi.clear();
+    // Calibre's viewer's highlights, and those made here before.
+    m_highlights.clear();
+    for (const Annotation &annotation : m_library->annotations(bookId, m_format)) {
+        const QJsonObject highlight = QJsonDocument::fromJson(annotation.data).object();
+        if (annotation.type == QLatin1String("highlight") && !highlight.value(QLatin1String("removed")).toBool())
+            m_highlights.insert(annotation.id, highlight);
+    }
     emit bookChanged();
+    emit highlightsChanged();
     return {};
 }
 
 void BookReader::close()
 {
+    if (!m_pdfPath.isEmpty()) {
+        m_pdfPath.clear();
+        m_bookId = 0;
+        m_format.clear();
+        m_start.clear();
+        emit bookChanged();
+    }
     if (!m_book)
         return;
     // Where reading stopped, in the library too, for Calibre and for Cousoir
@@ -260,6 +387,56 @@ void BookReader::close()
     m_format.clear();
     m_start.clear();
     emit bookChanged();
+}
+
+QUrl BookReader::fileUrl() const
+{
+    return m_pdfPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(m_pdfPath);
+}
+
+QString BookReader::openPdf(int bookId)
+{
+    close();
+    const Book *book = m_library ? m_library->data().book(bookId) : nullptr;
+    if (!book)
+        return tr("This book is no longer in the library.");
+    for (const BookFormat &format : book->formats) {
+        if (format.format == QLatin1String("PDF") && !format.file.isEmpty())
+            m_pdfPath = format.file;
+    }
+    if (m_pdfPath.isEmpty())
+        return tr("“%1” has no PDF to read.").arg(book->title);
+    m_bookId = bookId;
+    m_uuid = book->uuid;
+    m_pdfTitle = book->title;
+    m_format = QStringLiteral("PDF");
+    QFile file(positionsFile());
+    const QJsonObject positions = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object()
+                                                                 : QJsonObject();
+    m_start = { { QStringLiteral("page"), positions.value(m_uuid + QStringLiteral(":PDF")).toObject().value(QLatin1String("page")).toInt() } };
+    emit bookChanged();
+    return {};
+}
+
+void BookReader::savePage(int page, int pages)
+{
+    if (m_pdfPath.isEmpty() || m_uuid.isEmpty())
+        return;
+    const QString path = positionsFile();
+    QFile file(path);
+    QJsonObject positions = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object()
+                                                           : QJsonObject();
+    file.close();
+    positions.insert(m_uuid + QStringLiteral(":PDF"),
+                     QJsonObject{ { QStringLiteral("page"), page },
+                                  { QStringLiteral("fraction"), pages > 0 ? double(page + 1) / pages : 0 },
+                                  { QStringLiteral("epoch"), double(QDateTime::currentMSecsSinceEpoch()) / 1000 } });
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSaveFile out(path);
+    if (out.open(QIODevice::WriteOnly)) {
+        out.write(QJsonDocument(positions).toJson(QJsonDocument::Compact));
+        out.commit();
+    }
 }
 
 int BookReader::spineIndexOf(const QUrl &url) const

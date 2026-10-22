@@ -382,15 +382,22 @@ ThemedWindow {
             showNotice(error)
     }
 
-    // Reads the open book, or the current row's, in Cousoir's own reader.
+    // Reads the open book, or the current row's, in Cousoir's own reader:
+    // its EPUB, else its PDF.
     function readBook() {
         const bookId = currentBookId()
         if (!bookId || !library.readerAvailable)
             return
-        if (!readerLoader.item)
-            readerLoader.setSource("ReaderWindow.qml", { library: window.library })
-        if (readerLoader.item)
-            readerLoader.item.openBook(bookId)
+        const format = library.readableFormat(bookId)
+        if (!format) {
+            showNotice(qsTr("This book has no EPUB or PDF to read."))
+            return
+        }
+        const loader = format === "PDF" ? pdfReaderLoader : readerLoader
+        if (!loader.item)
+            loader.setSource(format === "PDF" ? "PdfReaderWindow.qml" : "ReaderWindow.qml", { library: window.library })
+        if (loader.item)
+            loader.item.openBook(bookId)
         else
             showNotice(qsTr("The reader cannot be opened."))
     }
@@ -931,8 +938,21 @@ ThemedWindow {
         id: readerLoader
     }
 
+    Loader {
+        id: pdfReaderLoader
+    }
+
     Connections {
         target: readerLoader.item
+        ignoreUnknownSignals: true
+
+        function onFailed(message) {
+            window.showNotice(message)
+        }
+    }
+
+    Connections {
+        target: pdfReaderLoader.item
         ignoreUnknownSignals: true
 
         function onFailed(message) {
@@ -1494,7 +1514,7 @@ ThemedWindow {
 
                         visible: session.bookOpen && !bookPage.confirmingRevert && library.readerAvailable
                         enabled: (window.book.formats || []).some(format => !format.missing
-                                                                   && (format.format === "EPUB" || format.format === "KEPUB"))
+                                                                   && ["EPUB", "KEPUB", "PDF"].includes(format.format))
                         variant: "outline"
                         text: qsTr("Read")
                         tip: qsTr("Read in Cousoir (Ctrl+Shift+O)")

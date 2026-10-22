@@ -381,7 +381,8 @@ int screenshot(const QString &path, const Shot &shot)
         QQuickWindow *reader = nullptr;
         QTest::qWaitFor([&] {
             for (QObject *root : engine.rootObjects()) {
-                if ((reader = root->findChild<QQuickWindow *>(QStringLiteral("readerWindow"))))
+                if ((reader = root->findChild<QQuickWindow *>(QStringLiteral("readerWindow")))
+                    || (reader = root->findChild<QQuickWindow *>(QStringLiteral("pdfReaderWindow"))))
                     return true;
             }
             return false;

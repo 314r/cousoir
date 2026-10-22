@@ -636,6 +636,18 @@ bool setReadPosition(SqliteDb &db, int bookId, const ReadPosition &position, QSt
                   error);
 }
 
+bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QString *error)
+{
+    if (!bookExists(db, bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    return db.run(QStringLiteral("INSERT OR IGNORE INTO annotations_dirtied (book) VALUES (?)"), { bookId }, error)
+        && db.run(QStringLiteral("INSERT OR REPLACE INTO annotations(book,format,user_type,user,timestamp,annot_id,annot_type,"
+                                 "annot_data,searchable_text) VALUES (?,?,'local','viewer',?,?,?,?,?)"),
+                  { bookId, annotation.format.toUpper(), annotation.timestamp, annotation.id, annotation.type,
+                    QString::fromUtf8(annotation.data), annotation.searchable },
+                  error);
+}
+
 bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, const Context &context, Result *result,
                  QString *error)
 {

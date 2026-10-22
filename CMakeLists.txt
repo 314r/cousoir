@@ -24,7 +24,7 @@ if(UNIX AND NOT APPLE)
 endif()
 # libmtp, to reach a Kindle Paperwhite; without it, Cousoir sees no MTP device.
 # Qt WebEngine, to read books in Cousoir; without it, there is no reader.
-find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick)
+find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick)
 find_package(PkgConfig)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIBMTP IMPORTED_TARGET libmtp)
@@ -234,6 +234,10 @@ set(COUSOIR_QML_FILES
 )
 if(TARGET Qt6::WebEngineQuick)
     list(APPEND COUSOIR_QML_FILES ReaderWindow.qml)
+endif()
+# Qt Pdf, to read PDFs in the reader.
+if(TARGET Qt6::WebEngineQuick AND TARGET Qt6::PdfQuick)
+    list(APPEND COUSOIR_QML_FILES PdfReaderWindow.qml)
 endif()
 
 set(COUSOIR_ICON_FILES

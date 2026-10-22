@@ -123,6 +123,9 @@ bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QStr
 // save_last_read_position_to_cursor() of Calibre's backend: a reader's
 // position in the book, in place of the one it had.
 bool setReadPosition(SqliteDb &db, int bookId, const ReadPosition &position, QString *error);
+// save_annotations_for_book() of Calibre's backend, for one annotation of
+// its viewer: in place of the one of the same id.
+bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QString *error);
 
 // update_path() of backend.py for one book: its folder and files follow its
 // title and first author, in the database and on disk.
