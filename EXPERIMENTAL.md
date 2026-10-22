@@ -562,3 +562,44 @@ checked and fixed:
 Left for later: the library's stored template functions, Python templates,
 and the functions that need Calibre's window (book counts, notes, extra
 files, virtual libraries).
+
+### 2026-10-22 — a review of goal 8 (`exp-review4`)
+
+An agent reviewed the template port and found fifteen faults the battery
+let through; each was checked against Calibre and fixed, and the battery
+has 107 more templates (351), all alike on the three libraries:
+
+- A function of any number of arguments given too few read past the end of
+  its list, a crash at load for a composite using it: each now names the
+  least it takes, and fewer is Calibre's IndexError.
+- `{:'…'}`, the field left out, failed: Python numbers it, and SafeFormat
+  gives a number the empty text (Calibre's own "Formats" column preset).
+- A template calling itself, or thousands of nested parentheses,
+  overflowed the stack; there is a depth limit now.
+- Eight functions were missing: `format_duration()`, `formats_modtimes()`,
+  `formats_path_segments()`, `make_url()`, `make_url_extended()`,
+  `query_string()`, `urls_from_identifiers()`, `width_from_pages()`. The
+  identifier links are in `identifier_links.cpp`, for the details pane
+  later.
+- A composite whose display says not to keep its value in the OPF had it
+  written there. The custom fixture's `#pagesort` says so now, and its OPF
+  files are Calibre's again.
+- `date_arithmetic('')` failed; `format_date(…, 'from_number…')` did not
+  read a number; `$` was unknown in a composite's program; `re_group()`
+  went one group too far with nested groups (Python's `lastindex`);
+  `strcmpcase()` compared code units, not Calibre's case-sensitive
+  collation; `eval('program: $a')` read the book, not the variables, and
+  `with` left `lookup()` on the first book; functions in single function
+  mode were stripped even in `re_group()`'s templates; `ceiling(1e20)` and
+  ranges near 2⁶³ overflowed.
+- A search split a composite of names at its commas; it is split at `|`,
+  and the searches have such a column now.
+- Lengths are counted in characters as Python counts them (`strlen('😀')`
+  is 1); an empty separator is an error; `{x::'…'}` runs its program;
+  `isoformat` dates keep their microseconds; `author_sorts()` looks authors
+  up by id.
+- The template oracle let the library go before running the templates, so
+  Calibre's `with` failed; it keeps it open.
+
+Left as it is: `program: $` alone gives the empty text where Calibre fails
+on None, and an error's own text is still English.
