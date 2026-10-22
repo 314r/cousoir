@@ -24,4 +24,9 @@ QString toHtml(const QString &text);
 // image, a rule, a quotation, preformatted text.
 bool losesFormatting(const QString &html);
 
+// Whether a note holds something its text leaves out: what a description
+// would lose, and what Calibre's notes editor also makes, underlines,
+// strikes, colours and other styles, alignment, super- and subscripts.
+bool noteLosesFormatting(const QString &html);
+
 } // namespace Description

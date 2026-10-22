@@ -1016,3 +1016,23 @@ API. The golden test applies three note changes with `cousoir-cli apply`
 and has Calibre read, search, change and bring back the notes
 (`tools/oracle/notes_check.py`), checking the index's integrity after each
 step.
+
+### 2026-10-22 — a review of goal 13 (`exp-review10`)
+
+What Cousoir writes in `notes.db`, its backups and retired notes came out
+as Calibre's; Calibre restores and unretires them. Four bugs, fixed:
+
+- Editing a note Calibre's editor had formatted (underline, colour,
+  alignment, superscript, a quotation, a rule) lost that formatting on
+  save, even unchanged: such a note is now read-only, as a description
+  with tables is, and a note saved unchanged is not written.
+- A language's note was kept under its name in the interface language
+  ("English") where Calibre keeps it under its code (`eng`): Calibre could
+  not restore it, nor bring it back once retired.
+- A note's images showed at their own size, cut by the pane: they now
+  shrink to its width.
+- A save that failed (the notes database busy or read-only) threw away
+  what was typed; the editor now opens again with it.
+
+And the notes kept aside move only once the database committed the change,
+and a save that fails after writing the notes still shows them.

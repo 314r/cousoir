@@ -12,6 +12,7 @@
 #include <QObject>
 
 #include <algorithm>
+#include <functional>
 
 #include <xxhash.h>
 
@@ -87,6 +88,9 @@ bool apply(const QString &libraryPath, const QList<Change> &changes, const QStri
     };
     const QString backups = folder.filePath(QStringLiteral("backup"));
     const QString retired = folder.filePath(QStringLiteral("retired"));
+    // What is done to the notes kept aside once the database has the
+    // changes, which a failed commit would otherwise leave without them.
+    QList<std::function<void()>> afterCommit;
     for (const Change &change : changes) {
         // path_to_retired_dir_for_item(): by the field and the item's name
         // in lower case.
@@ -107,20 +111,21 @@ bool apply(const QString &libraryPath, const QList<Change> &changes, const QStri
             if (!db.run(QStringLiteral("DELETE FROM notes WHERE id=?"), { noteId }, error))
                 return undo({}, error);
             // retire_entry(): its backup kept aside, with its id.
-            if (QFileInfo::exists(backup)) {
+            afterCommit.append([backup, retiredFolder, retired, id = noteId.toInt()] {
+                if (!QFileInfo::exists(backup))
+                    return;
                 QDir().mkpath(retiredFolder);
                 const QString doc = QDir(retiredFolder).filePath(QStringLiteral("doc.html"));
                 QFile::remove(doc);
-                if (!QFile::rename(backup, doc)
-                    || !writeFile(QDir(retiredFolder).filePath(QStringLiteral("note_id")), QByteArray::number(noteId.toInt()),
-                                  error))
-                    return undo(QObject::tr("Cannot keep the note removed aside."), error);
+                QString ignored;
+                if (QFile::rename(backup, doc))
+                    writeFile(QDir(retiredFolder).filePath(QStringLiteral("note_id")), QByteArray::number(id), &ignored);
                 trimRetired(retired);
-            }
+            });
             continue;
         }
         if (!noteId.isValid()) {
-            QDir(retiredFolder).removeRecursively();
+            afterCommit.append([retiredFolder] { QDir(retiredFolder).removeRecursively(); });
             if (!db.run(QStringLiteral("INSERT INTO notes (item,colname,doc,searchable_text) VALUES (?,?,?,?)"),
                         { change.item, change.field, change.html, searchable }, error))
                 return undo({}, error);
@@ -137,6 +142,8 @@ bool apply(const QString &libraryPath, const QList<Change> &changes, const QStri
     }
     if (!db.exec(QStringLiteral("COMMIT"), error))
         return undo({}, error);
+    for (const std::function<void()> &step : std::as_const(afterCommit))
+        step();
     return true;
 }
 
