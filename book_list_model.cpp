@@ -85,7 +85,8 @@ QString customField(const Book &book, const CustomColumn &column, qsizetype inde
 
 } // namespace
 
-QString field(const Book &book, const QString &key, const QList<CustomColumn> &columns)
+QString field(const Book &book, const QString &key, const QList<CustomColumn> &columns,
+              const QString &interfaceLanguage)
 {
     if (key.startsWith(u'#')) {
         for (qsizetype index = 0; index < columns.size(); ++index) {
@@ -111,7 +112,7 @@ QString field(const Book &book, const QString &key, const QList<CustomColumn> &c
     if (key == QLatin1String("languages")) {
         QStringList names;
         for (const QString &code : book.languages)
-            names.append(CalibreText::languageName(code));
+            names.append(CalibreText::languageName(code, interfaceLanguage));
         return names.join(QStringLiteral(", "));
     }
     if (key == QLatin1String("formats")) {
@@ -231,17 +232,30 @@ QVariantMap BookListModel::get(int row) const
     };
     for (const QString &key : m_columns) {
         if (!values.contains(key))
-            values.insert(key, BookDisplay::field(book, key, m_customColumns));
+            values.insert(key, BookDisplay::field(book, key, m_customColumns, m_interfaceLanguage));
     }
     return values;
 }
 
-void BookListModel::setColumns(const QStringList &keys, const QList<CustomColumn> &customColumns)
+void BookListModel::setColumns(const QStringList &keys, const QList<CustomColumn> &customColumns,
+                               const QString &interfaceLanguage)
 {
-    if (keys == m_columns && customColumns.size() == m_customColumns.size())
+    const auto sameColumns = [&] {
+        if (customColumns.size() != m_customColumns.size())
+            return false;
+        for (qsizetype i = 0; i < customColumns.size(); ++i) {
+            const CustomColumn &a = customColumns.at(i);
+            const CustomColumn &b = m_customColumns.at(i);
+            if (a.label != b.label || a.datatype != b.datatype || a.multiple != b.multiple || a.display != b.display)
+                return false;
+        }
+        return true;
+    };
+    if (keys == m_columns && interfaceLanguage == m_interfaceLanguage && sameColumns())
         return;
     m_columns = keys;
     m_customColumns = customColumns;
+    m_interfaceLanguage = interfaceLanguage;
     if (!m_order.isEmpty())
         emit dataChanged(index(0), index(int(m_order.size()) - 1));
 }

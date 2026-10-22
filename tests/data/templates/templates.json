@@ -349,5 +349,9 @@
  "program: width_from_pages(10, 0)",
  "{#genre:'list_count($, \",\")'}",
  "{pubdate:'format_date($, \"yyyy\")'}",
- "{:'field(\"title\")'}"
+ "{:'field(\"title\")'}",
+ "program: language_strings('fra,eng,deu,grc,tlh,xxx', 1)",
+ "program: language_strings('fra,eng,deu,grc', 0)",
+ "program: language_strings($languages, 1)",
+ "{languages:'language_strings($, 1)'}"
 ]

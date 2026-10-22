@@ -15,6 +15,7 @@
 
 #include <memory>
 
+#include "calibre_languages.h"
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
@@ -142,6 +143,9 @@ private:
 void LibraryUiTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    // Calibre's names of languages from a part of its resources, whatever
+    // Calibre is installed.
+    CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
     qmlRegisterType<IsolatedTheme>("Cousoir", 1, 0, "OmarchyTheme");
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
@@ -419,7 +423,7 @@ void LibraryUiTest::showsBookDetails()
     QTest::keyClick(m_window, Qt::Key_I, Qt::ControlModifier);
     QTRY_VERIFY(!pane->isVisible());
     QVERIFY(control("factsLine")->isVisible());
-    QCOMPARE(text("factsLine"), QStringLiteral("Mar 1947  ·  French  ·  EPUB"));
+    QCOMPARE(text("factsLine"), QStringLiteral("Mar 1947  ·  Français  ·  EPUB"));
     QTest::keyClick(m_window, Qt::Key_I, Qt::ControlModifier);
     QTRY_VERIFY(pane->isVisible());
 

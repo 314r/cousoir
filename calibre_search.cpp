@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "calibre_db.h"
+#include "calibre_languages.h"
 
 namespace CalibreSearch {
 
@@ -1375,7 +1376,10 @@ private:
             const QBitArray current = candidates & ~found;
             QString q = query;
             if (field == QLatin1String("languages")) {
-                const QString code = CalibreText::canonicalizeLanguage(query);
+                // A code or English name, else a name in Calibre's language.
+                QString code = CalibreText::canonicalizeLanguage(query);
+                if (code.isEmpty())
+                    code = CalibreLanguages::names(m_index.m_interfaceLanguage)->codeOfName(query);
                 if (!code.isEmpty())
                     q = code;
             }

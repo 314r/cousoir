@@ -188,7 +188,7 @@ Calibre 7 keeps notes on authors, series, tags and publishers in
 | 9. Metadata from the web | done for one book; several at once, later |
 | 10. The list's columns | done |
 | 11. Instant saves | planned |
-| 12. Language names | next |
+| 12. Language names | done |
 | 13. Notes | planned |
 
 ## Journal
@@ -686,4 +686,18 @@ fixed:
   their names in its interface language, which Cousoir does not have yet.
 
 Left for later: column widths of one's own, and the cover grid's sort.
+
+### 2026-10-22 — goal 12, Calibre's language names (`exp-languages`)
+
+- Language names come from the Calibre installed, as Calibre gives them:
+  its ISO 639 table (`iso639.calibre_msgpack`) through its translator,
+  `messages.mo` then `iso639.mo` of `locales.zip`. The browse section, the
+  details, the list, the sort and `language_strings()` use them; a search
+  takes a name in Calibre's language too. Without Calibre, Qt's English
+  names. Sorts and templates now compare alike with Calibre in French.
+- The tests read a fixture of those resources (`make oracle` writes it
+  from Calibre), so they do not depend on Calibre being installed.
+- From goal 10's review: a reload whose custom columns changed showed
+  their values under the wrong headers; the list's columns follow each
+  load now. The rest of that review was corner cases, left as they are.
 

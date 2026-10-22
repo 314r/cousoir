@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include "calibre_languages.h"
 #include "book_library.h"
 #include "calibre_db.h"
 #include "conversion_service.h"
@@ -118,6 +119,9 @@ void BookLibraryTest::initTestCase()
     QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
     QCoreApplication::setApplicationName(QStringLiteral("book-library"));
     QSettings().clear();
+    // Calibre's names of languages from a part of its resources, whatever
+    // Calibre is installed.
+    CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
 }
 
 // Each test starts with no columns or sort kept: the fixture's copies are
@@ -289,7 +293,7 @@ void BookLibraryTest::browsesSections()
              (QStringList{ QStringLiteral("Classique"), QStringLiteral("Fantasy"), QStringLiteral("Humour"),
                            QStringLiteral("Roman"), QStringLiteral("Technique") }));
     library->setSection(QStringLiteral("languages"));
-    QCOMPARE(names(library->facetRows()), (QStringList{ QStringLiteral("English"), QStringLiteral("French") }));
+    QCOMPARE(names(library->facetRows()), (QStringList{ QStringLiteral("Anglais"), QStringLiteral("Français") }));
     library->setSection(QStringLiteral("series"));
     QCOMPARE(names(library->facetRows()),
              (QStringList{ QStringLiteral("Chronicles of the Black Company"), QStringLiteral("Contes") }));
@@ -399,7 +403,7 @@ void BookLibraryTest::describesCurrentBook()
     QCOMPARE(book.value(QStringLiteral("authors")).toStringList(), QStringList{ QStringLiteral("Boris Vian") });
     QCOMPARE(book.value(QStringLiteral("rating")).toString(), QStringLiteral("★★★★"));
     QCOMPARE(book.value(QStringLiteral("published")).toString(), QStringLiteral("Mar 1947"));
-    QCOMPARE(book.value(QStringLiteral("languages")).toStringList(), QStringList{ QStringLiteral("French") });
+    QCOMPARE(book.value(QStringLiteral("languages")).toStringList(), QStringList{ QStringLiteral("Français") });
     QCOMPARE(book.value(QStringLiteral("publisher")).toString(), QStringLiteral("Gallimard"));
     // The description keeps its structure and loses the editor's styling.
     QCOMPARE(book.value(QStringLiteral("description")).toString(),

@@ -104,8 +104,10 @@ QString fuzzyTitle(const QString &title, const Tweaks &tweaks, const QString &in
 // after the indices its books have.
 double nextSeriesIndex(QList<double> indices, const Tweaks &tweaks);
 
-// The English name of an ISO 639 code, or the code itself.
-QString languageName(const QString &code);
+// calibre_langcode_to_name(): the name of an ISO 639 code in Calibre's
+// interface language, as Calibre's tables and translations have it (see
+// CalibreLanguages), or the code itself.
+QString languageName(const QString &code, const QString &interfaceLanguage);
 
 // Lower case without accents, for searching "berenice" in "Bérénice".
 QString foldForSearch(const QString &text);

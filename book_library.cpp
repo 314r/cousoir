@@ -672,7 +672,7 @@ void BookLibrary::setColumns(const QStringList &columns)
     if (kept == this->columns())
         return;
     m_columns = kept;
-    m_bookList.setColumns(kept, m_data.customColumns);
+    m_bookList.setColumns(kept, m_data.customColumns, effectiveConfig().interfaceLanguage);
     saveView();
     emit columnsChanged();
 }
@@ -722,7 +722,7 @@ void BookLibrary::saveView()
 
 void BookLibrary::restoreView()
 {
-    if (m_viewOf == m_data.uuid)
+    if (m_viewOf == m_data.uuid && !m_viewOf.isNull())
         return;
     m_viewOf = m_data.uuid;
     QSettings settings;
@@ -783,7 +783,7 @@ void BookLibrary::restoreView()
         }
         m_columns = kept;
     }
-    m_bookList.setColumns(this->columns(), m_data.customColumns);
+    m_bookList.setColumns(this->columns(), m_data.customColumns, effectiveConfig().interfaceLanguage);
     emit columnsChanged();
     Q_UNUSED(before);
 }
@@ -1031,6 +1031,12 @@ void BookLibrary::applyData(LibraryData data, BookIndex index)
     // The choice made for this library, or Calibre's at its start.
     const CalibreSearch::Preferences &preferences = m_index.search.preferences();
     restoreView();
+    // The columns of this load: a custom column added or gone shows so.
+    m_columns.removeIf([this](const QString &key) {
+        return key.startsWith(u'#') && !BookSort::sortable(m_data, key);
+    });
+    m_bookList.setColumns(columns(), m_data.customColumns, effectiveConfig().interfaceLanguage);
+    emit columnsChanged();
     if (m_virtualLibraryOf != m_data.uuid) {
         m_virtualLibraryOf = m_data.uuid;
         const QVariant chosen = QSettings().value(QStringLiteral("Library/virtualLibrary/%1").arg(m_data.uuid));
@@ -1210,8 +1216,9 @@ void BookLibrary::rebuildCurrentBook()
     for (const auto &identifier : book->identifiers)
         identifierTexts.append(identifier.first + u':' + identifier.second);
     QStringList languages;
+    const QString interfaceLanguage = effectiveConfig().interfaceLanguage;
     for (const QString &code : book->languages)
-        languages.append(CalibreText::languageName(code));
+        languages.append(CalibreText::languageName(code, interfaceLanguage));
 
     const QString coverKey = coverKeyOf(m_libraryPath);
     const QVariantMap current{
@@ -1495,7 +1502,7 @@ QVariantList BookLibrary::downloadFields(int bookId, const MetadataDownload::Fou
     const CalibreConfig config = effectiveConfig();
     const QVariantMap current = editableValues(*book);
     // Each field as the dialog shows it, from the values updateBook() takes.
-    const auto text = [](const QString &field, const QVariantMap &values) -> QString {
+    const auto text = [&config](const QString &field, const QVariantMap &values) -> QString {
         const QVariant value = values.value(field);
         if (field == QLatin1String("authors"))
             return value.toStringList().join(QStringLiteral(" & "));
@@ -1506,7 +1513,7 @@ QVariantList BookLibrary::downloadFields(int bookId, const MetadataDownload::Fou
         if (field == QLatin1String("languages")) {
             QStringList names;
             for (const QString &code : value.toStringList())
-                names.append(CalibreText::languageName(code));
+                names.append(CalibreText::languageName(code, config.interfaceLanguage));
             return names.join(QStringLiteral(", "));
         }
         if (field == QLatin1String("identifiers")) {

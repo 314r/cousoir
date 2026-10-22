@@ -41,7 +41,7 @@ QString schemaFingerprint(SqliteDb &db);
 bool isKnownSchema(int userVersion, const QString &fingerprint);
 
 // Reads the books, the items they link to and the library's id.
-bool readLibrary(SqliteDb &db, LibraryData *data, QString *error);
+bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLanguage, QString *error);
 // The custom columns, by id, as initialize_custom_columns() keeps them:
 // those marked for deletion and those whose tables are gone left out.
 bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *error);

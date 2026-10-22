@@ -1185,10 +1185,12 @@ QHash<QString, Function> makeFunctions()
         }
         return formatDate(c.book.library, *date, 0, a.size() > 2 && !a[2].isEmpty() ? a[2] : QStringLiteral("iso"));
     });
-    add("language_strings", 2, [](Ctx, Args a) {
+    add("language_strings", 2, [](Ctx c, Args a) {
+        // In English when not to be localized.
+        const QString language = a[1] == QLatin1String("0") ? QStringLiteral("en") : c.book.library.language();
         QStringList names;
         for (const QString &code : items(a[0], QStringLiteral(","))) {
-            const QString name = CalibreText::languageName(code);
+            const QString name = CalibreText::languageName(code, language);
             if (!name.isEmpty())
                 names.append(name);
         }

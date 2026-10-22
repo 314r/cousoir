@@ -128,7 +128,7 @@ Cousoir departs from Calibre here:
 - The functions that need Calibre's window fail, as they do in `calibredb`:
   `virtual_libraries()`, `annotation_count()`, `book_count()`, notes and
   extra files among them; `user_categories()`, `get_link()` and
-  `author_links()` give nothing, and `language_strings()` English names.
+  `author_links()` give nothing.
 - The template functions a library stores, Calibre's "Stored templates",
   are not read: a template calling one fails.
 - An error says what went wrong in English, after Calibre's "TEMPLATE
@@ -148,6 +148,14 @@ Cousoir departs from Calibre here:
   and URL ones and the links set in Calibre's preferences; it sorts them
   case and accents aside as Calibre's primary sort key does. An entity in
   an identifier, `&amp;`, stays as it is.
+
+## Language names
+
+Languages show, sort and search by their names in Calibre's interface
+language, "Anglais" for English in French, as Calibre names them: from its
+ISO 639 table and its translations, read from the Calibre installed. Without
+Calibre, names are English. A search finds a language by its code, its
+English name or its name in Calibre's language.
 
 ## Searching
 
@@ -194,9 +202,6 @@ opens with the virtual library Calibre opens the library with.
 
 Cousoir departs from Calibre's search in a few places:
 
-- A language is found by its code or its English name; Calibre also takes
-  its name in Calibre's language, "anglais", and the names of the rarest
-  languages.
 - How text matches was taken from Calibre's collator for French, which
   English and most other languages share; Calibre in Swedish, say, also
   tells "a" from "å" in a search.
