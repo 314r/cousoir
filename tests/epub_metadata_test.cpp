@@ -41,11 +41,15 @@ EpubMetadata::Metadata metadataFrom(const QJsonObject &json)
         metadata.identifiers.append({ pair.toArray().at(0).toString(), pair.toArray().at(1).toString() });
     metadata.applicationId = json.value(QLatin1String("application_id")).toInt();
     metadata.uuid = json.value(QLatin1String("uuid")).toString();
-    const QJsonObject user = json.value(QLatin1String("user_metadata")).toObject();
-    for (auto it = user.begin(); it != user.end(); ++it) {
-        metadata.userMetadata.append(
-            { it.key(), PythonJson::parse(QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact)) });
-        metadata.customKeys.append(it.key());
+    // In their order, which the OPF 2 writer keeps.
+    const PythonJson::Value all = PythonJson::parse(readAll(folder + QStringLiteral("/metadata.json")));
+    const PythonJson::Value *set = all.find(json.value(QLatin1String("name")).toString());
+    const PythonJson::Value *user = set ? set->find(QStringLiteral("user_metadata")) : nullptr;
+    if (user) {
+        for (const auto &[key, field] : user->fields) {
+            metadata.userMetadata.append({ key, field });
+            metadata.customKeys.append(key);
+        }
     }
     if (json.value(QLatin1String("cover")).toBool())
         metadata.cover = QByteArrayLiteral("\xff\xd8\xff\xe0" "cover");
@@ -62,7 +66,7 @@ class EpubMetadataTest : public QObject
 private slots:
     void writesPackagesAsCalibre_data();
     void writesPackagesAsCalibre();
-    void leavesOpf2AndBrokenPackages();
+    void leavesBrokenPackages();
     void writesABook();
 };
 
@@ -85,8 +89,10 @@ void EpubMetadataTest::writesPackagesAsCalibre()
     QFETCH(QString, set);
     const QJsonObject sets = QJsonDocument::fromJson(readAll(folder + QStringLiteral("/metadata.json"))).object();
     const QString name = QFileInfo(package).completeBaseName() + u'-' + set;
-    const std::optional<EpubMetadata::Package> result = EpubMetadata::apply(
-        readAll(folder + QStringLiteral("/packages/") + package), metadataFrom(sets.value(set).toObject()), QStringLiteral("OEBPS"));
+    QJsonObject json = sets.value(set).toObject();
+    json.insert(QLatin1String("name"), set);
+    const std::optional<EpubMetadata::Package> result
+        = EpubMetadata::apply(readAll(folder + QStringLiteral("/packages/") + package), metadataFrom(json), QStringLiteral("OEBPS"));
     QVERIFY(result);
     const QByteArray expected = readAll(folder + QStringLiteral("/expected/") + name + QStringLiteral(".opf"));
     if (result->opf != expected) {
@@ -105,12 +111,10 @@ void EpubMetadataTest::writesPackagesAsCalibre()
     QCOMPARE(result->rasterCover, covers.value(name).toString());
 }
 
-void EpubMetadataTest::leavesOpf2AndBrokenPackages()
+void EpubMetadataTest::leavesBrokenPackages()
 {
     EpubMetadata::Metadata metadata;
     metadata.title = QStringLiteral("T");
-    QVERIFY(!EpubMetadata::apply("<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata/></package>",
-                                 metadata, {}));
     QVERIFY(!EpubMetadata::apply("<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\"/>", metadata, {}));
     QVERIFY(!EpubMetadata::apply("no xml", metadata, {}));
 }

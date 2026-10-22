@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opf:package xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0" unique-identifier="uid">
+  <opf:metadata>
+    <dc:identifier id="uid">urn:isbn:9780765319227</dc:identifier>
+    <dc:title>Prefixed Two</dc:title>
+    <dc:creator opf:role="edt">An Editor</dc:creator>
+    <dc:language>fr</dc:language>
+  </opf:metadata>
+  <opf:manifest>
+    <opf:item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+  </opf:manifest>
+  <opf:spine>
+    <opf:itemref idref="a"/>
+  </opf:spine>
+</opf:package>

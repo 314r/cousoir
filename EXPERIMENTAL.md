@@ -292,7 +292,7 @@ Calibre keeps the index Cousoir adds to.
 | 13. Notes | done; notes with images are read, left to Calibre to change |
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
 | 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
-| 20. Reader apps over the network | the protocol done; the metadata written into the files next |
+| 20. Reader apps over the network | done; Bonjour, collections and read columns later |
 | 21. The library's highlights | planned |
 | 22. Searching the books' text | planned |
 
@@ -1125,3 +1125,34 @@ answer came out right. Five bugs, fixed:
 `book_library_tests` failed once in the full run, an edit queued during
 another not applied, and not in fifteen runs alone: the test now says why
 a save is refused, for the next time.
+
+### 2026-10-22 — goal 20, part 2: the metadata in the files (`exp-epubmeta`)
+
+Calibre sends a copy of the book with the library's metadata written into
+it: a reader that reads the book's own, KOReader among them, shows what
+the library says. The wireless golden test showed it: the EPUB Calibre
+sent had its package rewritten and the library's cover added, at
+`OEBPS/OEBPS/cover.jpg` (Calibre joins the package's folder twice, a bug
+kept for the files to be alike).
+
+`EpubMetadata` ports both of Calibre's writers. For EPUB 3, `opf3.py`'s
+`apply_metadata()`: refines, prefixes, identifiers by scheme, the main
+title and its sort, authors with their roles, languages normalized with
+the book's countries, series as collections, custom columns as one JSON,
+the cover found or added, then `pretty_opf()` and `pretty_xml_tree()`. For
+EPUB 2 and Calibre's own conversions, `opf2.py`'s OPF class: its fields by
+regular expressions on the elements' names, `smart_update()` with its
+quirks (the uuid written as the calibre identifier, the whole author sort
+on the first author, ratings as "8.0"), the custom columns merged as
+`Metadata.smart_update()` merges them, `render()`. Nine packages, three of
+them EPUB 2, with three sets of metadata each, come out byte for byte as
+Calibre writes them (`tools/oracle/epub_meta_oracle.py`). Getting there
+meant writing XML as lxml does: Qt's writer escapes quotes in text, lxml
+does not; and lxml declares, on an element made with a namespace map, only
+the namespace the element is in.
+
+The XML tree and the ZIP code of the KEPUB port moved to `xml_tree` and
+`book_zip`, shared. Sends to apps write the metadata into EPUB, AZW3 and
+MOBI copies, and the wireless golden test compares the files sent entry by
+entry; plain EPUBs sent to a Kobo get it too.
+

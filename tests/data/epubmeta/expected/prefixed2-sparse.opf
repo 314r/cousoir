@@ -1,0 +1,18 @@
+<?xml version="1.0"  encoding="UTF-8"?>
+<opf:package xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0" unique-identifier="uid">
+  <opf:metadata>
+    <dc:title>Unknown</dc:title>
+    <dc:creator opf:role="aut" opf:file-as="Unknown">Unknown</dc:creator>
+    <dc:identifier id="uid">urn:isbn:9780765319227</dc:identifier>
+    <dc:language>fr</dc:language>
+    <dc:date>0101-01-01T00:00:00+00:00</dc:date>
+    <dc:identifier opf:scheme="calibre">c2a91d0e-0000-4000-8000-000000000006</dc:identifier>
+    <dc:identifier opf:scheme="ISBN">9780765319227</dc:identifier>
+  </opf:metadata>
+  <opf:manifest>
+    <opf:item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+  </opf:manifest>
+  <opf:spine>
+    <opf:itemref idref="a"/>
+  </opf:spine>
+</opf:package>

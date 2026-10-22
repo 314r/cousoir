@@ -31,6 +31,13 @@ QString uploadPath(const LibraryData &data, const Book &book, const QString &ext
 PythonJson::Value metadata(const LibraryData &data, const Book &book, const QString &lpath, qint64 size,
                            const Wireless::App &app, const QString &interfaceLanguage);
 
+// The file sent of `book` in `format`, written to `target`: the library's
+// metadata and cover written into an EPUB, an AZW3 or a MOBI copy as
+// Calibre's send writes them (EpubMetadata, MobiMetadata), other formats
+// copied as they are. False, with `error`, when it cannot be written.
+bool prepareFile(const LibraryData &data, const Book &book, const QString &format, const QString &target,
+                 const QString &interfaceLanguage, const QString &calibreConfigDirectory, QString *error);
+
 // The app's books as Cousoir lists a reader's, matched with the library's.
 QList<DeviceBook> deviceBooks(const QList<PythonJson::Value> &books, const LibraryData &data);
 

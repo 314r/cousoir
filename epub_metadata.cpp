@@ -4,7 +4,13 @@
 // - src/calibre/ebooks/metadata/epub.py: set_metadata(),
 //   serialize_cover_data();
 // - src/calibre/ebooks/metadata/opf.py: set_metadata(),
-//   set_metadata_opf3();
+//   set_metadata_opf2(), set_metadata_opf3();
+// - src/calibre/ebooks/metadata/opf2.py: the OPF class's fields,
+//   unquote_urls(), smart_update(), get_identifiers(), set_identifiers(),
+//   raster_cover, guide_raster_cover, create_metadata_element(), render(),
+//   serialize_user_metadata();
+// - src/calibre/ebooks/metadata/book/base.py: Metadata.smart_update()'s
+//   custom columns;
 // - src/calibre/ebooks/metadata/opf3.py: apply_metadata() and the readers
 //   and writers it calls, the prefixes and refines;
 // - src/calibre/ebooks/metadata/utils.py: normalize_languages(),
@@ -27,6 +33,7 @@
 #include <QPainter>
 #include <QRegularExpression>
 #include <QSet>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -34,6 +41,7 @@
 #include "book_zip.h"
 #include "calibre_db.h"
 #include "calibre_languages.h"
+#include "calibre_template.h"
 #include "calibre_text.h"
 #include "opf.h"
 #include "xml_tree.h"
@@ -1162,6 +1170,704 @@ bool isNullTitle(const QString &title, const QString &interfaceLanguage)
     return title.isEmpty() || title == CalibreText::unknownText(interfaceLanguage);
 }
 
+// --- OPF 2: opf2.py's OPF class ----------------------------------------------
+
+void collectDescendants(Node *node, QList<Node *> *found)
+{
+    for (const auto &child : node->children) {
+        if (child->kind == Node::Kind::Element) {
+            found->append(child.get());
+            collectDescendants(child.get(), found);
+        }
+    }
+}
+
+QList<Node *> descendants(Node *node)
+{
+    QList<Node *> found;
+    collectDescendants(node, &found);
+    return found;
+}
+
+// re:match(name(), pattern, "i"): the qualified name searched.
+bool nameMatches(const Node *node, const QString &pattern)
+{
+    const QRegularExpression expression(pattern, QRegularExpression::CaseInsensitiveOption);
+    return expression.match(node->qualifiedName).hasMatch();
+}
+
+QList<Node *> matching(Node *root, const QString &pattern)
+{
+    QList<Node *> found;
+    for (Node *node : descendants(root)) {
+        if (nameMatches(node, pattern))
+            found.append(node);
+    }
+    return found;
+}
+
+bool hasOpfAttribute(const Node *element, const QString &localName)
+{
+    for (const QXmlStreamAttribute &attribute : element->attributes) {
+        const QString name = attribute.qualifiedName().toString();
+        const qsizetype colon = name.indexOf(u':');
+        if (colon >= 0 && name.mid(colon + 1) == localName && namespaceFor(element, name.left(colon)) == opfNamespace)
+            return true;
+    }
+    return false;
+}
+
+// string(): the text of an element and of its children.
+QString allText(const Node *node)
+{
+    QString text;
+    for (const auto &child : node->children) {
+        if (isText(child.get()))
+            text += child->text;
+        else if (child->kind == Node::Kind::Element)
+            text += allText(child.get());
+    }
+    return text;
+}
+
+struct Opf2
+{
+    Node *document = nullptr;
+    Node *package = nullptr;
+    Node *metadata = nullptr;
+};
+
+// get_text(): a meta's content, another element's text.
+QString getText(const Node *element)
+{
+    if (nameMatches(element, QStringLiteral("meta$")) && hasAttribute(element, QStringLiteral("content")))
+        return element->attribute(QStringLiteral("content"));
+    return allText(element);
+}
+
+bool isOpfMeta(const Node *element)
+{
+    return element->namespaceUri == opfNamespace && element->localName == QLatin1String("meta");
+}
+
+// set_text()
+void setTextOrContent(Node *element, const QString &text)
+{
+    if (isOpfMeta(element))
+        element->setAttribute(QStringLiteral("content"), text);
+    else
+        setText(element, text);
+}
+
+// What lxml declares on an element made with an nsmap: the namespace the
+// element is in, under the nsmap's prefix, when the place has it not.
+void declare(Node *element, const Node *place, const QString &prefix, const QString &uri)
+{
+    if (namespaceFor(place, prefix) != uri)
+        element->namespaces.append(QXmlStreamNamespaceDeclaration(prefix, uri));
+}
+
+// The prefix an attribute of OPF's namespace takes there: the one the place
+// has, or one lxml makes up.
+QString opfAttributePrefix(Node *element, const Node *place)
+{
+    const auto isPrefixed = [](const QXmlStreamNamespaceDeclaration &declaration) {
+        return declaration.namespaceUri() == opfNamespace && !declaration.prefix().isEmpty();
+    };
+    for (const QXmlStreamNamespaceDeclaration &declaration : element->namespaces) {
+        if (isPrefixed(declaration))
+            return declaration.prefix().toString();
+    }
+    for (const Node *at = place; at; at = at->parent) {
+        for (const QXmlStreamNamespaceDeclaration &declaration : at->namespaces) {
+            if (isPrefixed(declaration))
+                return declaration.prefix().toString();
+        }
+    }
+    element->namespaces.append(QXmlStreamNamespaceDeclaration(QStringLiteral("ns0"), opfNamespace));
+    return QStringLiteral("ns0");
+}
+
+// create_metadata_element(): appended to the metadata, in Dublin Core's
+// namespace or as OPF's meta named calibre:NAME.
+Node *createMetadataElement(Opf2 &opf, const QString &name, const QList<QPair<QString, QString>> &opfAttributes = {},
+                            bool isDc = true)
+{
+    auto element = std::make_unique<Node>();
+    if (isDc)
+        declare(element.get(), opf.metadata, QStringLiteral("dc"), dcNamespace);
+    else
+        declare(element.get(), opf.metadata, QString(), opfNamespace);
+    if (isDc) {
+        element->namespaceUri = dcNamespace;
+        element->localName = name;
+        element->qualifiedName = QStringLiteral("dc:") + name;
+    } else {
+        element->namespaceUri = opfNamespace;
+        element->localName = QStringLiteral("meta");
+        element->qualifiedName = QStringLiteral("meta");
+    }
+    for (const auto &[attribute, value] : opfAttributes)
+        element->setAttribute(opfAttributePrefix(element.get(), opf.metadata) + u':' + attribute, value);
+    if (!isDc)
+        element->setAttribute(QStringLiteral("name"), QStringLiteral("calibre:") + name);
+    Node *created = appendElement(opf.metadata, std::move(element));
+    setTail(created, QStringLiteral("\n"));
+    return created;
+}
+
+// metadata_elem_path, get_metadata_element(): the last element named so, or
+// meta named calibre:NAME.
+Node *metadataElement(Opf2 &opf, const QString &name)
+{
+    Node *last = nullptr;
+    const QRegularExpression calibreName(QStringLiteral("^calibre:") + name + u'$', QRegularExpression::CaseInsensitiveOption);
+    for (Node *node : descendants(opf.metadata)) {
+        if (nameMatches(node, name + u'$')
+            || (nameMatches(node, QStringLiteral("meta$")) && calibreName.match(node->attribute(QStringLiteral("name"))).hasMatch()))
+            last = node;
+    }
+    return last;
+}
+
+// MetadataField.__set__()
+void setField(Opf2 &opf, const QString &name, const QString &value, bool isDc)
+{
+    Node *element = metadataElement(opf, name);
+    if (!element)
+        element = createMetadataElement(opf, name, {}, isDc);
+    setTextOrContent(element, value);
+}
+
+QString roleOf(const Node *creator)
+{
+    if (hasAttribute(creator, QStringLiteral("role")))
+        return creator->attribute(QStringLiteral("role"));
+    return opfAttribute(creator, QStringLiteral("role"));
+}
+
+// authors_path, editors_path, bkp_path
+QList<Node *> creators(Opf2 &opf, const QString &pattern, const QString &role, bool orUnroled)
+{
+    QList<Node *> found;
+    for (Node *node : matching(opf.metadata, pattern)) {
+        const bool roled = hasAttribute(node, QStringLiteral("role")) || hasOpfAttribute(node, QStringLiteral("role"));
+        const bool matches = node->attribute(QStringLiteral("role")) == role || opfAttribute(node, QStringLiteral("role")) == role;
+        if (matches || (orUnroled && !roled))
+            found.append(node);
+    }
+    return found;
+}
+
+QList<Node *> authorElements(Opf2 &opf)
+{
+    QList<Node *> found = creators(opf, QStringLiteral("creator"), QStringLiteral("aut"), true);
+    return found.isEmpty() ? creators(opf, QStringLiteral("creator"), QStringLiteral("edt"), false) : found;
+}
+
+// The attributes whose name ends with `suffix`, lxml's keys being
+// {namespace}name or name.
+bool attributeEndsWith(const QXmlStreamAttribute &attribute, const QString &suffix)
+{
+    const QString name = attribute.qualifiedName().toString();
+    return name.endsWith(suffix) && (name.size() == suffix.size() || name.at(name.size() - suffix.size() - 1) == u':');
+}
+
+QStringList schemesOf(const Node *element)
+{
+    QStringList schemes;
+    for (const QXmlStreamAttribute &attribute : element->attributes) {
+        if (attributeEndsWith(attribute, QStringLiteral("scheme")))
+            schemes.append(attribute.value().toString());
+    }
+    return schemes;
+}
+
+QString uniqueIdentifierOf(const Node *package)
+{
+    for (const QXmlStreamAttribute &attribute : package->attributes) {
+        if (attribute.qualifiedName().toString().endsWith(QLatin1String("unique-identifier")))
+            return attribute.value().toString();
+    }
+    return {};
+}
+
+// get_identifiers()
+QList<QPair<QString, QString>> identifiersOf(Opf2 &opf)
+{
+    QList<QPair<QString, QString>> identifiers;
+    const auto put = [&identifiers](const QString &type, const QString &value) {
+        for (auto &[existing, current] : identifiers) {
+            if (existing == type) {
+                current = value;
+                return;
+            }
+        }
+        identifiers.append({ type, value });
+    };
+    QStringList schemeless;
+    for (Node *identifier : descendants(opf.metadata)) {
+        if (identifier->localName != QLatin1String("identifier") || textOf(identifier).isEmpty())
+            continue;
+        const QStringList schemes = schemesOf(identifier);
+        QString value = allText(identifier).trimmed();
+        if (!schemes.isEmpty()) {
+            const QString type = schemes.constFirst().toLower();
+            if (!value.isEmpty() && type != QLatin1String("calibre") && type != QLatin1String("uuid")) {
+                if (type == QLatin1String("isbn") && value.toLower().startsWith(QLatin1String("urn:isbn:")))
+                    value = value.mid(9);
+                put(type, value);
+            }
+        } else if (value.toLower().startsWith(QLatin1String("urn:isbn:"))) {
+            const QString isbn = CalibreText::checkIsbn(value.section(u':', -1));
+            if (!isbn.isEmpty())
+                put(QStringLiteral("isbn"), isbn);
+        } else {
+            schemeless.append(value);
+        }
+    }
+    const bool hasIsbn = std::any_of(identifiers.cbegin(), identifiers.cend(),
+                                     [](const auto &pair) { return pair.first == QLatin1String("isbn"); });
+    if (!hasIsbn) {
+        for (const QString &value : std::as_const(schemeless)) {
+            if (!CalibreText::checkIsbn(value, true).isEmpty()) {
+                put(QStringLiteral("isbn"), CalibreText::checkIsbn(value));
+                break;
+            }
+        }
+    }
+    return identifiers;
+}
+
+// set_identifiers()
+void setIdentifiers2(Opf2 &opf, QList<QPair<QString, QString>> identifiers)
+{
+    const QString uid = uniqueIdentifierOf(opf.package);
+    for (Node *identifier : descendants(opf.metadata)) {
+        if (identifier->localName != QLatin1String("identifier"))
+            continue;
+        QSet<QString> types;
+        QStringList ordered;
+        for (const QString &scheme : schemesOf(identifier)) {
+            if (!types.contains(scheme.toLower()))
+                ordered.append(scheme.toLower());
+            types.insert(scheme.toLower());
+        }
+        if (!uid.isEmpty() && hasAttribute(identifier, QStringLiteral("id")) && identifier->attribute(QStringLiteral("id")) == uid) {
+            for (qsizetype i = 0; !ordered.isEmpty() && i < identifiers.size(); ++i) {
+                if (identifiers.at(i).first == ordered.constFirst()) {
+                    setTextOrContent(identifier, identifiers.takeAt(i).second);
+                    break;
+                }
+            }
+            continue;
+        }
+        if (!types.isEmpty() && !types.contains(QStringLiteral("calibre")) && !types.contains(QStringLiteral("uuid")))
+            removeNode(identifier);
+    }
+    for (const auto &[type, value] : std::as_const(identifiers))
+        setTextOrContent(createMetadataElement(opf, QStringLiteral("identifier"), { { QStringLiteral("scheme"), type.toUpper() } }), value);
+}
+
+// The custom columns as opf2's smart_update() leaves them: those the book
+// has that the library knows, then the library's, each the library's field
+// with its value, a list's own kept when the library's is empty.
+QList<QPair<QString, Value>> mergedUserMetadata(Opf2 &opf, const Metadata &metadata)
+{
+    QList<QPair<QString, Value>> book;
+    for (Node *meta : descendants(opf.document)) {
+        if (meta->qualifiedName != QLatin1String("meta") || !hasAttribute(meta, QStringLiteral("content")))
+            continue;
+        const QString name = meta->attribute(QStringLiteral("name"));
+        if (!name.startsWith(QLatin1String("calibre:user_metadata:")))
+            continue;
+        const QString key = name.section(u':', 2);
+        bool ok = false;
+        const Value field = PythonJson::parse(meta->attribute(QStringLiteral("content")).toUtf8(), &ok);
+        if (key.startsWith(u'#') && ok && field.kind == Value::Kind::Dict && metadata.customKeys.contains(key))
+            book.append({ key, field });
+    }
+    QList<QPair<QString, Value>> result = book;
+    for (const auto &[key, libraryField] : metadata.userMetadata) {
+        // decode_is_multiple(): a list's separators in is_multiple.
+        Value field = libraryField;
+        const Value *multiple2 = field.find(QStringLiteral("is_multiple2"));
+        const bool multiple = multiple2 && PythonJson::truthy(*multiple2);
+        Value separators;
+        if (multiple) {
+            separators = *multiple2;
+            field.remove(QStringLiteral("is_multiple2"));
+        }
+        const QString type = field.text(QStringLiteral("datatype"));
+        Value value = field.find(QStringLiteral("#value#")) ? *field.find(QStringLiteral("#value#")) : Value::null();
+        bool extra = false;
+        if (type == QLatin1String("text") && multiple) {
+            // Merged with the book's, case aside; the library's when it has
+            // any.
+            extra = true;
+            if (!PythonJson::truthy(value)) {
+                for (const auto &[bookKey, bookField] : std::as_const(book)) {
+                    if (bookKey == key && bookField.find(QStringLiteral("#value#")))
+                        value = *bookField.find(QStringLiteral("#value#"));
+                }
+                if (value.kind != Value::Kind::List)
+                    value = Value::from(QStringList());
+            }
+        } else if (type == QLatin1String("int") || type == QLatin1String("float") || type == QLatin1String("bool")) {
+            extra = value.kind != Value::Kind::Null;
+        }
+        field.insert(QStringLiteral("#value#"), value);
+        if (extra && !field.find(QStringLiteral("#extra#")))
+            field.insert(QStringLiteral("#extra#"), Value::null());
+        // encode_is_multiple()
+        if (multiple) {
+            field.insert(QStringLiteral("is_multiple"),
+                         Value::from(type == QLatin1String("composite") ? QStringLiteral(",") : QStringLiteral("|")));
+            field.insert(QStringLiteral("is_multiple2"), separators);
+        }
+        bool replaced = false;
+        for (auto &[existing, current] : result) {
+            if (existing == key) {
+                current = field;
+                replaced = true;
+            }
+        }
+        if (!replaced)
+            result.append({ key, field });
+    }
+    return result;
+}
+
+// set_metadata_opf2(): OPF's smart_update(), the uuid as calibre's
+// identifier, the identifiers merged, the cover, render().
+std::optional<Package> applyOpf2(Node *document, Node *package, const Metadata &metadata, const QString &coverPrefix)
+{
+    Opf2 opf;
+    opf.document = document;
+    opf.package = package;
+    const QList<Node *> blocks = matching(package, QStringLiteral("metadata"));
+    if (blocks.isEmpty()) {
+        auto block = makeElement(package, opfNamespace, QStringLiteral("metadata"));
+        opf.metadata = insertElement(package, 0, std::move(block));
+        setTail(opf.metadata, QStringLiteral("\n"));
+    } else {
+        opf.metadata = blocks.constFirst();
+    }
+    // unquote_urls()
+    for (Node *manifest : matching(package, QStringLiteral("manifest"))) {
+        for (Node *item : kids(manifest)) {
+            if (item->kind == Node::Kind::Element && nameMatches(item, QStringLiteral("item")))
+                item->setAttribute(QStringLiteral("href"), QUrl::fromPercentEncoding(item->attribute(QStringLiteral("href")).toUtf8()));
+        }
+    }
+    for (Node *guide : matching(package, QStringLiteral("guide"))) {
+        for (Node *reference : kids(guide)) {
+            if (reference->kind == Node::Kind::Element && nameMatches(reference, QStringLiteral("reference")))
+                reference->setAttribute(QStringLiteral("href"),
+                                        QUrl::fromPercentEncoding(reference->attribute(QStringLiteral("href")).toUtf8()));
+        }
+    }
+    QStringList bookLanguages;
+    for (Node *node : descendants(opf.metadata)) {
+        if (node->localName == QLatin1String("language") && !getText(node).trimmed().isEmpty())
+            bookLanguages.append(getText(node).trimmed());
+    }
+    const QList<QPair<QString, Value>> userMetadata = mergedUserMetadata(opf, metadata);
+
+    // smart_update(), field by field.
+    if (!metadata.title.isEmpty()) {
+        // The title setter: OPF 2's titles replaced by one.
+        for (Node *title : matching(opf.metadata, QStringLiteral("title")))
+            removeNode(title);
+        const QString title = metadata.title.trimmed();
+        if (!title.isEmpty())
+            setText(createMetadataElement(opf, QStringLiteral("title")),
+                    QString(title).replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" ")));
+    }
+    if (!metadata.authors.isEmpty()) {
+        for (Node *author : authorElements(opf))
+            removeNode(author);
+        for (auto it = metadata.authors.crbegin(); it != metadata.authors.crend(); ++it) {
+            auto creator = std::make_unique<Node>();
+            creator->namespaceUri = dcNamespace;
+            creator->localName = QStringLiteral("creator");
+            creator->qualifiedName = QStringLiteral("dc:creator");
+            declare(creator.get(), opf.metadata, QStringLiteral("dc"), dcNamespace);
+            Node *added = insertElement(opf.metadata, 0, std::move(creator));
+            setTail(added, QStringLiteral("\n"));
+            added->setAttribute(opfAttributePrefix(added, added) + QStringLiteral(":role"), QStringLiteral("aut"));
+            setText(added, it->trimmed());
+        }
+    }
+    if (!metadata.authorSort.isEmpty()) {
+        const QList<Node *> authors = authorElements(opf);
+        if (!authors.isEmpty()) {
+            Node *first = authors.constFirst();
+            first->attributes.removeIf([](const QXmlStreamAttribute &attribute) {
+                return attribute.qualifiedName().toString().endsWith(QLatin1String("file-as"));
+            });
+            first->setAttribute(opfAttributePrefix(first, first) + QStringLiteral(":file-as"), metadata.authorSort);
+        }
+    }
+    // Metadata.smart_update(): the sort comes with a title, "Unknown" none.
+    if (!metadata.titleSort.isEmpty() && !isNullTitle(metadata.title, metadata.interfaceLanguage)) {
+        setField(opf, QStringLiteral("title_sort"), metadata.titleSort, false);
+        for (Node *title : matching(opf.metadata, QStringLiteral("title"))) {
+            title->attributes.removeIf([](const QXmlStreamAttribute &attribute) {
+                return attribute.qualifiedName().toString().endsWith(QLatin1String("file-as"));
+            });
+        }
+    }
+    if (!metadata.publisher.isEmpty())
+        setField(opf, QStringLiteral("publisher"), metadata.publisher, true);
+    if (!metadata.series.isEmpty()) {
+        setField(opf, QStringLiteral("series"), metadata.series, false);
+        setField(opf, QStringLiteral("series_index"), PythonJson::floatRepr(metadata.seriesIndex), false);
+    }
+    if (metadata.rating > 0)
+        setField(opf, QStringLiteral("rating"), PythonJson::floatRepr(metadata.rating), false);
+    QString isbn;
+    for (const auto &[type, value] : metadata.identifiers) {
+        if (type == QLatin1String("isbn"))
+            isbn = value;
+    }
+    if (!isbn.isEmpty()) {
+        QList<Node *> isbns;
+        for (Node *node : matching(opf.metadata, QStringLiteral("identifier"))) {
+            const QRegularExpression scheme(QStringLiteral("isbn"), QRegularExpression::CaseInsensitiveOption);
+            if (scheme.match(node->attribute(QStringLiteral("scheme"))).hasMatch()
+                || scheme.match(opfAttribute(node, QStringLiteral("scheme"))).hasMatch())
+                isbns.append(node);
+        }
+        if (isbns.isEmpty())
+            isbns.append(createMetadataElement(opf, QStringLiteral("identifier"), { { QStringLiteral("scheme"), QStringLiteral("ISBN") } }));
+        setTextOrContent(isbns.constFirst(), isbn);
+    }
+    if (!metadata.tags.isEmpty()) {
+        for (Node *tag : matching(opf.metadata, QStringLiteral("subject")))
+            removeNode(tag);
+        for (const QString &tag : metadata.tags)
+            setTextOrContent(createMetadataElement(opf, QStringLiteral("subject")), tag);
+    }
+    if (!metadata.comments.isEmpty())
+        setField(opf, QStringLiteral("description"), metadata.comments, true);
+    {
+        // The pubdate setter: the earliest date the book gives takes it.
+        Node *least = nullptr;
+        QDateTime leastValue;
+        for (Node *date : matching(opf.metadata, QStringLiteral("date"))) {
+            const std::optional<QDateTime> parsed = CalibreTemplate::parseDate(allText(date).trimmed());
+            if (!parsed) {
+                removeNode(date);
+                continue;
+            }
+            if (!least || *parsed < leastValue) {
+                least = date;
+                leastValue = *parsed;
+            }
+        }
+        if (!least)
+            least = createMetadataElement(opf, QStringLiteral("date"));
+        least->attributes.clear();
+        setText(least, CalibreDb::isoFormat(metadata.pubdate.isValid() ? metadata.pubdate : CalibreDb::undefinedDate()));
+    }
+    QStringList languages = metadata.languages.isEmpty() ? QStringList() : normalizeLanguages(bookLanguages, metadata.languages);
+    if (languages == QStringList{ QStringLiteral("und") })
+        languages.clear();
+    if (!languages.isEmpty()) {
+        for (Node *language : descendants(opf.metadata)) {
+            if (language->localName == QLatin1String("language"))
+                removeNode(language);
+        }
+        for (const QString &language : std::as_const(languages))
+            setTextOrContent(createMetadataElement(opf, QStringLiteral("language")), language);
+    }
+
+    // application_id = uuid
+    if (!metadata.uuid.isEmpty()) {
+        QSet<QString> removedIds;
+        for (Node *identifier : matching(opf.metadata, QStringLiteral("identifier"))) {
+            const QRegularExpression scheme(QStringLiteral("calibre|libprs500"), QRegularExpression::CaseInsensitiveOption);
+            if (scheme.match(opfAttribute(identifier, QStringLiteral("scheme"))).hasMatch()
+                || scheme.match(identifier->attribute(QStringLiteral("scheme"))).hasMatch()) {
+                removedIds.insert(identifier->attribute(QStringLiteral("id")));
+                removeNode(identifier);
+            }
+        }
+        const QString uid = uniqueIdentifierOf(opf.package);
+        Node *identifier = createMetadataElement(opf, QStringLiteral("identifier"), { { QStringLiteral("scheme"), QStringLiteral("calibre") } });
+        if (!uid.isEmpty() && removedIds.contains(uid))
+            identifier->setAttribute(QStringLiteral("id"), uid);
+        setTextOrContent(identifier, metadata.uuid);
+    }
+    // The book's identifiers, the library's over them.
+    QList<QPair<QString, QString>> identifiers = identifiersOf(opf);
+    for (const auto &[type, value] : metadata.identifiers) {
+        bool replaced = false;
+        for (auto &[existing, current] : identifiers) {
+            if (existing == type) {
+                current = value;
+                replaced = true;
+            }
+        }
+        if (!replaced)
+            identifiers.append({ type, value });
+    }
+    identifiers.removeIf([](const auto &pair) { return pair.first.isEmpty() || pair.second.isEmpty(); });
+    setIdentifiers2(opf, identifiers);
+
+    // The cover: the book's, the guide's, or one added.
+    Package result;
+    result.rasterCover = [&] {
+        for (Node *meta : descendants(opf.metadata)) {
+            if (!nameMatches(meta, QStringLiteral("meta")) || !hasAttribute(meta, QStringLiteral("content"))
+                || !QRegularExpression(QStringLiteral("cover"), QRegularExpression::CaseInsensitiveOption)
+                        .match(meta->attribute(QStringLiteral("name")))
+                        .hasMatch())
+                continue;
+            const QString id = meta->attribute(QStringLiteral("content"));
+            for (const QString &key : { QStringLiteral("id"), QStringLiteral("href") }) {
+                for (Node *manifest : matching(package, QStringLiteral("manifest"))) {
+                    for (Node *item : kids(manifest)) {
+                        if (item->kind != Node::Kind::Element || !nameMatches(item, QStringLiteral("item"))
+                            || item->attribute(key) != id)
+                            continue;
+                        const QString type = item->attribute(QStringLiteral("media-type"));
+                        if (!type.isEmpty() && !type.contains(QLatin1String("xml")) && !type.contains(QLatin1String("html")))
+                            return item->attribute(QStringLiteral("href"));
+                    }
+                }
+            }
+            return QString();
+        }
+        return QString();
+    }();
+    if (result.rasterCover.isEmpty() && !metadata.cover.isEmpty()) {
+        Node *item = nullptr;
+        // guide_raster_cover
+        QHash<QString, Node *> byHref;
+        for (Node *manifest : matching(package, QStringLiteral("manifest"))) {
+            for (Node *candidate : kids(manifest)) {
+                if (candidate->kind == Node::Kind::Element && nameMatches(candidate, QStringLiteral("item")))
+                    byHref.insert(candidate->attribute(QStringLiteral("href")), candidate);
+            }
+        }
+        for (Node *guide : descendants(package)) {
+            if (guide->localName != QLatin1String("guide"))
+                continue;
+            for (Node *reference : kids(guide)) {
+                if (reference->localName != QLatin1String("reference")
+                    || !QRegularExpression(QStringLiteral("cover"), QRegularExpression::CaseInsensitiveOption)
+                            .match(reference->attribute(QStringLiteral("type")))
+                            .hasMatch())
+                    continue;
+                Node *candidate = byHref.value(reference->attribute(QStringLiteral("href")));
+                static const QStringList images{ QStringLiteral("image/png"), QStringLiteral("image/jpeg"),
+                                                 QStringLiteral("image/jpg"), QStringLiteral("image/gif") };
+                if (!item && candidate && !candidate->attribute(QStringLiteral("id")).isEmpty()
+                    && images.contains(candidate->attribute(QStringLiteral("media-type")).toLower()))
+                    item = candidate;
+            }
+        }
+        if (item) {
+            result.rasterCover = item->attribute(QStringLiteral("href"));
+        } else {
+            QString prefix = coverPrefix;
+            if (!prefix.isEmpty() && !prefix.endsWith(u'/'))
+                prefix += u'/';
+            const QString name = prefix + QStringLiteral("cover.jpg");
+            Node *manifest = nullptr;
+            for (Node *child : kids(package, opfNamespace, "manifest")) {
+                manifest = child;
+                break;
+            }
+            if (manifest) {
+                Context context;
+                context.document = document;
+                const QString href = ensureUnique(name, allValues(context, QStringLiteral("href")));
+                const QString id = ensureUnique(QStringLiteral("cover"), allValues(context, QStringLiteral("id")));
+                item = appendElement(manifest, makeElement(manifest, opfNamespace, QStringLiteral("item"),
+                                                           { { QStringLiteral("href"), href },
+                                                             { QStringLiteral("id"), id },
+                                                             { QStringLiteral("media-type"), mediaType(name) } }));
+                result.rasterCover = name;
+            }
+        }
+        if (item) {
+            for (Node *meta : descendants(document)) {
+                if (meta->localName == QLatin1String("meta") && meta->attribute(QStringLiteral("name")) == QLatin1String("cover"))
+                    removeNode(meta);
+            }
+            Node *meta = createMetadataElement(opf, QStringLiteral("meta"), {}, false);
+            meta->setAttribute(QStringLiteral("name"), QStringLiteral("cover"));
+            meta->setAttribute(QStringLiteral("content"), item->attribute(QStringLiteral("id")));
+        }
+    }
+
+    // render(): the cover's content after its name; a series before its
+    // index; the custom columns written again.
+    for (Node *meta : descendants(opf.metadata)) {
+        if (!nameMatches(meta, QStringLiteral("meta")) || !hasAttribute(meta, QStringLiteral("content"))
+            || !QRegularExpression(QStringLiteral("cover"), QRegularExpression::CaseInsensitiveOption)
+                    .match(meta->attribute(QStringLiteral("name")))
+                    .hasMatch())
+            continue;
+        const QString content = meta->attribute(QStringLiteral("content"));
+        meta->removeAttribute(QStringLiteral("content"));
+        meta->setAttribute(QStringLiteral("content"), content);
+    }
+    {
+        Node *series = nullptr;
+        Node *index = nullptr;
+        qsizetype seriesAt = -1;
+        qsizetype indexAt = -1;
+        const QList<Node *> children = kids(opf.metadata);
+        for (qsizetype i = 0; i < children.size(); ++i) {
+            const QString name = children.at(i)->attribute(QStringLiteral("name"));
+            if (name == QLatin1String("calibre:series")) {
+                series = children.at(i);
+                seriesAt = i;
+            } else if (name == QLatin1String("calibre:series_index")) {
+                index = children.at(i);
+                indexAt = i;
+            }
+        }
+        if (series && index && seriesAt > indexAt) {
+            for (const QString attribute : { QStringLiteral("name"), QStringLiteral("content") }) {
+                const QString value = series->attribute(attribute);
+                series->setAttribute(attribute, index->attribute(attribute));
+                index->setAttribute(attribute, value);
+            }
+        }
+    }
+    for (Node *meta : descendants(document)) {
+        if (meta->qualifiedName == QLatin1String("meta") && hasAttribute(meta, QStringLiteral("content"))
+            && meta->attribute(QStringLiteral("name")).startsWith(QLatin1String("calibre:user_metadata:")))
+            removeNode(meta);
+    }
+    for (const auto &[key, field] : userMetadata) {
+        // serialize_user_metadata()
+        Value stored = field;
+        const Value *display = field.find(QStringLiteral("display"));
+        const Value *keep = display ? display->find(QStringLiteral("composite_store_template_value_in_opf")) : nullptr;
+        if (field.text(QStringLiteral("datatype")) == QLatin1String("composite") && keep && !PythonJson::truthy(*keep))
+            stored.insert(QStringLiteral("#value#"), Value::from(QString()));
+        auto meta = std::make_unique<Node>();
+        meta->localName = QStringLiteral("meta");
+        meta->qualifiedName = QStringLiteral("meta");
+        meta->setAttribute(QStringLiteral("name"), QStringLiteral("calibre:user_metadata:") + key);
+        meta->setAttribute(QStringLiteral("content"), PythonJson::dumps(stored));
+        Node *added = appendElement(opf.metadata, std::move(meta));
+        setTail(added, QStringLiteral("\n        "));
+    }
+    prettyOpf(package);
+    prettyXmlTree(package);
+    result.opf = QByteArrayLiteral("<?xml version=\"1.0\"  encoding=\"UTF-8\"?>\n") + XmlTree::serialize(*document, false, false)
+        + '\n';
+    return result;
+}
+
+
 // serialize_cover_data(): the library's cover as the book's file holds its
 // own, kept as it is when it is that format already.
 QByteArray coverAs(const QByteArray &cover, const QString &path)
@@ -1248,11 +1954,11 @@ std::optional<Package> apply(const QByteArray &opf, const Metadata &metadata, co
     Node *package = document ? XmlTree::documentElement(document.get()) : nullptr;
     if (!package || package->namespaceUri != opfNamespace || package->localName != QLatin1String("package"))
         return std::nullopt;
-    // parse_opf_version(): OPF 2 is Calibre's other writer's.
+    // parse_opf_version(): OPF 2 and older by opf2.py's writer.
     bool ok = false;
     const int major = package->attribute(QStringLiteral("version")).section(u'.', 0, 0).toInt(&ok);
     if (!ok || major < 3)
-        return std::nullopt;
+        return applyOpf2(document.get(), package, metadata, coverPrefix);
     Context context;
     context.document = document.get();
     context.package = package;

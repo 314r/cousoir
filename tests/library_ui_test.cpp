@@ -20,6 +20,7 @@
 
 #include <memory>
 
+#include "book_zip.h"
 #include "calibre_db.h"
 #include "calibre_fts.h"
 #include "calibre_languages.h"
@@ -1303,13 +1304,25 @@ void LibraryUiTest::sendsToWirelessApps()
     QCOMPARE(app.last(Wireless::GetInitializationInfo)->text(QStringLiteral("currentLibraryUUID")), uuid);
     QCOMPARE(app.last(Wireless::SetLibraryInfo)->text(QStringLiteral("libraryUuid")), uuid);
 
-    // A book goes, with its metadata, under Calibre's name for it.
+    // A book goes, with its metadata in it and beside it, under Calibre's
+    // name for it.
     QSignalSpy sent(devices, &DeviceLibrary::sent);
     QCOMPARE(devices->send({ 1 }, root), QString());
     QTRY_COMPARE(sent.size(), 1);
     QCOMPARE(app.books.size(), 1);
-    const Book *book = qobject_cast<BookLibrary *>(library())->data().book(1);
-    QCOMPARE(app.books.constFirst().data, readAll(book->formats.constFirst().file));
+    QTemporaryDir received;
+    const QString copy = received.filePath(QStringLiteral("sent.epub"));
+    QFile file(copy);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(app.books.constFirst().data);
+    file.close();
+    BookZip::Zip zip;
+    QString zipError;
+    QVERIFY2(BookZip::readZip(copy, &zip, &zipError), qPrintable(zipError));
+    bool identified = false;
+    for (const QString &name : std::as_const(zip.names))
+        identified = identified || zip.data.value(name).contains("<dc:identifier>calibre:1</dc:identifier>");
+    QVERIFY(identified);
     QCOMPARE(app.books.constFirst().metadata.text(QStringLiteral("lpath")), QStringLiteral("Ecume des jours, L' - Boris Vian (1).epub"));
     QCOMPARE(app.books.constFirst().metadata.text(QStringLiteral("title")), QStringLiteral("L'Écume des jours"));
 

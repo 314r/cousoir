@@ -10,6 +10,7 @@
 
 #include <QBuffer>
 #include <QDateTime>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
@@ -17,6 +18,8 @@
 
 #include "book.h"
 #include "calibre_text.h"
+#include "epub_metadata.h"
+#include "mobi_metadata.h"
 #include "native_send.h"
 
 using PythonJson::Value;
@@ -141,6 +144,64 @@ Value metadata(const LibraryData &data, const Book &book, const QString &lpath, 
                                  QStringLiteral("library_order"));
     entry.insert(QStringLiteral("_series_sort_"), Value::from(seriesSort));
     return entry;
+}
+
+bool prepareFile(const LibraryData &data, const Book &book, const QString &format, const QString &target,
+                 const QString &interfaceLanguage, const QString &calibreConfigDirectory, QString *error)
+{
+    QString source;
+    for (const BookFormat &bookFormat : book.formats) {
+        if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
+            source = bookFormat.file;
+    }
+    QFile::remove(target);
+    const QString upper = format.toUpper();
+    if (upper == QLatin1String("EPUB"))
+        return EpubMetadata::write(source, target, EpubMetadata::fromBook(data, book, interfaceLanguage), error);
+    static const QStringList mobi{ QStringLiteral("MOBI"), QStringLiteral("AZW"), QStringLiteral("AZW3"),
+                                   QStringLiteral("AZW4"), QStringLiteral("PRC") };
+    if (mobi.contains(upper)) {
+        QFile file(source);
+        if (!file.open(QIODevice::ReadOnly)) {
+            *error = QObject::tr("Cannot read %1.").arg(source);
+            return false;
+        }
+        QByteArray bytes = file.readAll();
+        MobiMetadata::Metadata metadata;
+        metadata.title = book.title;
+        metadata.authors = book.authors;
+        metadata.authorSort = book.authorSort;
+        metadata.publisher = book.publisher;
+        metadata.comments = book.comments;
+        for (const auto &[type, value] : book.identifiers) {
+            if (type == QLatin1String("isbn"))
+                metadata.isbn = value;
+        }
+        metadata.tags = book.tags;
+        metadata.pubdate = book.pubdate;
+        metadata.uuid = book.uuid;
+        metadata.languages = book.languages;
+        QFile cover(book.coverFile);
+        if (!book.coverFile.isEmpty() && cover.open(QIODevice::ReadOnly))
+            metadata.cover = cover.readAll();
+        // A book the writer refuses goes as it is, as when Calibre's
+        // set_metadata() fails.
+        QByteArray updated = bytes;
+        QString ignored;
+        if (MobiMetadata::update(&updated, metadata, MobiMetadata::Options::load(calibreConfigDirectory), &ignored))
+            bytes = std::move(updated);
+        QFile out(target);
+        if (!out.open(QIODevice::WriteOnly) || out.write(bytes) != bytes.size()) {
+            *error = QObject::tr("Cannot write %1.").arg(target);
+            return false;
+        }
+        return true;
+    }
+    if (!QFile::copy(source, target)) {
+        *error = QObject::tr("Cannot copy %1.").arg(source);
+        return false;
+    }
+    return true;
 }
 
 QList<DeviceBook> deviceBooks(const QList<Value> &books, const LibraryData &data)

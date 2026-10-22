@@ -65,8 +65,9 @@ struct Package
 };
 
 // set_metadata() of ebooks/metadata/opf.py on a package: apply_metadata()
-// for OPF 3, `coverPrefix` the package's folder in the book. Nothing when
-// the package cannot be read, or is OPF 2, which Cousoir leaves as it is.
+// for OPF 3, opf2.py's OPF.smart_update() and render() for OPF 2,
+// `coverPrefix` the package's folder in the book. Nothing when the package
+// cannot be read.
 std::optional<Package> apply(const QByteArray &opf, const Metadata &metadata, const QString &coverPrefix);
 
 // set_metadata() of ebooks/metadata/epub.py: the book at `source` written

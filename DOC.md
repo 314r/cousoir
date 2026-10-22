@@ -700,6 +700,21 @@ Cousoir departs from Calibre here:
   its text: the second rewrite reads the file at its first length. Cousoir
   keeps it.
 
+### The metadata in the files sent
+
+What Calibre sends is a copy of the book with the library's metadata in
+it, so that a reader that reads a book's own metadata, as KOReader does,
+shows the library's title, authors, series and cover. Cousoir writes it as
+Calibre's writers do: into an EPUB, the package's metadata replaced field
+by field as Calibre 9.16's `opf3.py` replaces it for EPUB 3, or as
+`opf2.py`'s OPF class does for EPUB 2 and Calibre's own conversions, the
+package laid out again as Calibre lays it out, the cover put in place of
+the book's, or added where Calibre adds it; into an AZW3 or a MOBI file,
+as goal 18's port of its MOBI writer does. What the library does not know
+of the book stays as the book has it, and a book whose package cannot be
+read goes as it is, as when Calibre's writer fails. Sends to apps over the
+network and plain EPUBs sent to a Kobo get it.
+
 ### Reader apps over the network
 
 KOReader, Calibre Companion and the other apps that connect to Calibre's
@@ -716,7 +731,8 @@ The app shows under Devices as a plugged-in reader does, with its books,
 which are the library's when sent from it, and the room left. Books go to
 it in the first of its formats the book has, at Calibre's path,
 `{title} - {authors} ({id})`, with their metadata and a thumbnail of their
-cover at the size the app asks for; a book on the app already, sent from
+cover at the size the app asks for, the library's metadata and cover
+written into an EPUB, AZW3 or MOBI copy as Calibre writes them (see below); a book on the app already, sent from
 the same library book, is replaced where it is. Removing a book removes it
 from the app, and Disconnect lets the app go. When the app connects, the
 metadata the library changed since it last had it goes to it, as Calibre
@@ -729,8 +745,8 @@ the golden test has the same app, a stand-in for KOReader, connect to
 Calibre's server and to Cousoir's, three times, and compares every message
 each sent it and the books it kept. Cousoir departs from Calibre here:
 
-- The file sent is the library's: Calibre writes the library's metadata and
-  cover into the EPUB it sends.
+- A PDF, FB2, DOCX or other format goes as the library has it: Calibre
+  writes the library's metadata into those too.
 - A book without a cover gets a drawn one, the title and authors on a
   colour; Calibre draws its own default cover.
 - Calibre's collections, read status columns and the books an app got
@@ -1212,8 +1228,9 @@ The tests check the port against Calibre itself:
   times to Calibre's wireless device server (`send_books.py` with
   `wireless:PORT`) and to `cousoir-cli wireless`, which send, change,
   remove and send books: every message each told it and the books it kept
-  must be alike (`tests/wireless/compare.py`), the books' files by their
-  names for now. Last, it
+  must be alike (`tests/wireless/compare.py`), the books' files entry by
+  entry, with the metadata Calibre writes into them, a PDF by its name.
+  Last, it
   reads a fake Kobo whose database has books being read, finished and
   bought, with highlights, notes and bookmarks
   (`tests/data/kobo-reading.sql`), with Calibre's Kobo `Bookmark`
@@ -1261,6 +1278,14 @@ The tests check the port against Calibre itself:
   search, change and bring back the notes `cousoir-cli apply` wrote
   (`tools/oracle/notes_check.py`). The UI tests read a series' note, write
   it, empty it, and read an author's note with an image.
+- `epub_metadata_tests` writes the library's metadata into nine EPUB
+  packages, EPUB 3 and EPUB 2, one as Calibre's conversions write it, one
+  as Project Gutenberg does, with three sets of metadata each, and
+  compares them byte for byte with what Calibre's writer makes of them
+  (`tools/oracle/epub_meta_oracle.py`, `tests/data/epubmeta`): refined
+  titles and authors, identifiers of every form, languages with countries,
+  covers found or added, prefixed namespaces, comments, custom columns.
+  And a whole book: its cover where Calibre puts it.
 - `wireless_tests` has an app that answers as KOReader does connect to
   Cousoir's wireless device server: the messages as Calibre frames them,
   the datagrams answered, books sent, listed from the metadata cache on

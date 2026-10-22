@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package version="2.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>Guided</dc:title>
+    <dc:identifier id="BookId" opf:scheme="UUID">urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="img" href="Images/front.png" media-type="image/png"/>
+    <item id="ch" href="Text/ch.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch"/>
+  </spine>
+  <guide>
+    <reference type="cover" title="Cover" href="Images/front.png"/>
+  </guide>
+</package>

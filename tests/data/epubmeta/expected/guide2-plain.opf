@@ -1,0 +1,29 @@
+<?xml version="1.0"  encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="BookId">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>Good Omens</dc:title>
+    <dc:creator opf:role="aut" opf:file-as="Pratchett, Terry">Terry Pratchett</dc:creator>
+    <dc:identifier id="BookId" opf:scheme="UUID">urn:uuid:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</dc:identifier>
+    <dc:publisher>Gollancz</dc:publisher>
+    <dc:subject>Fantasy</dc:subject>
+    <dc:date>1990-05-01T12:00:00+00:00</dc:date>
+    <dc:language>en</dc:language>
+    <dc:identifier opf:scheme="calibre">c2a91d0e-0000-4000-8000-000000000004</dc:identifier>
+    <dc:identifier opf:scheme="ISBN">9780575048003</dc:identifier>
+    <meta name="calibre:title_sort" content="Good Omens"/>
+    <meta name="calibre:rating" content="10.0"/>
+    <meta name="cover" content="img"/>
+    <meta name="calibre:user_metadata:#genre" content="{&quot;datatype&quot;: &quot;text&quot;, &quot;#value#&quot;: [], &quot;is_multiple&quot;: &quot;|&quot;, &quot;name&quot;: &quot;Genre&quot;, &quot;label&quot;: &quot;genre&quot;, &quot;#extra#&quot;: null, &quot;is_multiple2&quot;: {&quot;cache_to_list&quot;: &quot;|&quot;, &quot;ui_to_list&quot;: &quot;,&quot;, &quot;list_to_ui&quot;: &quot;, &quot;}}"/>
+    <meta name="calibre:user_metadata:#count" content="{&quot;datatype&quot;: &quot;int&quot;, &quot;#value#&quot;: 12, &quot;is_multiple&quot;: null, &quot;is_multiple2&quot;: {}, &quot;name&quot;: &quot;Count&quot;, &quot;label&quot;: &quot;count&quot;, &quot;#extra#&quot;: null}"/>
+  </metadata>
+  <manifest>
+    <item id="ch" href="Text/ch.xhtml" media-type="application/xhtml+xml"/>
+    <item id="img" href="Images/front.png" media-type="image/png"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch"/>
+  </spine>
+  <guide>
+    <reference type="cover" title="Cover" href="Images/front.png"/>
+  </guide>
+</package>
