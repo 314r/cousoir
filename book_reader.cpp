@@ -78,7 +78,12 @@ int spineStep(const QString &cfi)
 
 } // namespace
 
-BookReader::BookReader(QObject *parent) : QObject(parent) {}
+BookReader::BookReader(QObject *parent) : QObject(parent)
+{
+    m_flushTimer.setSingleShot(true);
+    m_flushTimer.setInterval(5000);
+    connect(&m_flushTimer, &QTimer::timeout, this, [this] { flush(false); });
+}
 
 BookReader::~BookReader()
 {
@@ -257,11 +262,8 @@ QString BookReader::addHighlight(int spineIndex, const QString &start, const QSt
         highlight.insert(QStringLiteral("toc_family_titles"), family);
     m_highlights.insert(uuid, highlight);
     emit highlightsChanged();
-    if (m_library) {
-        m_library->saveAnnotation(m_bookId, { m_format, QStringLiteral("highlight"), uuid,
-                                              double(QDateTime::currentMSecsSinceEpoch()) / 1000,
-                                              QJsonDocument(highlight).toJson(QJsonDocument::Compact), searchableText(highlight) });
-    }
+    queueAnnotation({ m_format, QStringLiteral("highlight"), uuid, double(QDateTime::currentMSecsSinceEpoch()) / 1000,
+                      QJsonDocument(highlight).toJson(QJsonDocument::Compact), searchableText(highlight) });
     return uuid;
 }
 
@@ -278,11 +280,55 @@ void BookReader::removeHighlight(const QString &uuid)
     };
     m_highlights.remove(uuid);
     emit highlightsChanged();
-    if (m_library) {
-        m_library->saveAnnotation(m_bookId, { m_format, QStringLiteral("highlight"), uuid,
-                                              double(QDateTime::currentMSecsSinceEpoch()) / 1000,
-                                              QJsonDocument(removed).toJson(QJsonDocument::Compact), QString() });
+    queueAnnotation({ m_format, QStringLiteral("highlight"), uuid, double(QDateTime::currentMSecsSinceEpoch()) / 1000,
+                      QJsonDocument(removed).toJson(QJsonDocument::Compact), QString() });
+}
+
+void BookReader::queueAnnotation(const Annotation &annotation)
+{
+    // The last change of a highlight replaces the one before.
+    m_pending.removeIf([&annotation](const Annotation &pending) { return pending.id == annotation.id; });
+    m_pending.append(annotation);
+    keepPending();
+    m_flushTimer.start();
+}
+
+void BookReader::keepPending() const
+{
+    QJsonArray list;
+    for (const Annotation &annotation : m_pending) {
+        list.append(QJsonObject{ { QStringLiteral("format"), annotation.format },
+                                 { QStringLiteral("type"), annotation.type },
+                                 { QStringLiteral("id"), annotation.id },
+                                 { QStringLiteral("timestamp"), annotation.timestamp },
+                                 { QStringLiteral("data"), QString::fromUtf8(annotation.data) },
+                                 { QStringLiteral("searchable"), annotation.searchable } });
     }
+    QJsonObject positions = readPositions();
+    if (list.isEmpty())
+        positions.remove(QStringLiteral("pending:") + m_uuid);
+    else
+        positions.insert(QStringLiteral("pending:") + m_uuid, list);
+    writePositions(positions);
+}
+
+void BookReader::flush(bool withPosition)
+{
+    m_flushTimer.stop();
+    if (!m_library || m_bookId <= 0)
+        return;
+    std::optional<ReadPosition> position;
+    if (withPosition && !m_lastCfi.isEmpty() && m_lastCfi != m_start.value(QStringLiteral("cfi")).toString())
+        position = ReadPosition{ m_format, QStringLiteral("local"), QStringLiteral("cousoir"), m_lastCfi,
+                                 double(QDateTime::currentMSecsSinceEpoch()) / 1000, m_lastFraction };
+    if (!position && m_pending.isEmpty())
+        return;
+    // While the library cannot be written, the highlights wait with the
+    // positions, for the next time the book is read.
+    if (!m_library->saveReading(m_bookId, position, m_pending))
+        return;
+    m_pending.clear();
+    keepPending();
 }
 
 QString BookReader::readableFormat(const QVariantList &formats)
@@ -356,6 +402,27 @@ QString BookReader::open(int bookId)
         if (annotation.type == QLatin1String("highlight") && !highlight.value(QLatin1String("removed")).toBool())
             m_highlights.insert(annotation.id, highlight);
     }
+    // Those made while the library could not be written, still to write.
+    m_pending.clear();
+    for (const QJsonValue &value : positions.value(QStringLiteral("pending:") + m_uuid).toArray()) {
+        const QJsonObject kept = value.toObject();
+        const Annotation annotation{ kept.value(QLatin1String("format")).toString(),
+                                     kept.value(QLatin1String("type")).toString(),
+                                     kept.value(QLatin1String("id")).toString(),
+                                     kept.value(QLatin1String("timestamp")).toDouble(),
+                                     kept.value(QLatin1String("data")).toString().toUtf8(),
+                                     kept.value(QLatin1String("searchable")).toString() };
+        if (annotation.format != m_format)
+            continue;
+        m_pending.append(annotation);
+        const QJsonObject highlight = QJsonDocument::fromJson(annotation.data).object();
+        if (highlight.value(QLatin1String("removed")).toBool())
+            m_highlights.remove(annotation.id);
+        else
+            m_highlights.insert(annotation.id, highlight);
+    }
+    if (!m_pending.isEmpty())
+        m_flushTimer.start();
     emit bookChanged();
     emit highlightsChanged();
     return {};
@@ -372,11 +439,10 @@ void BookReader::close()
     }
     if (!m_book)
         return;
-    // Where reading stopped, in the library too, for Calibre and for Cousoir
-    // on the computers sharing it.
-    if (m_library && !m_lastCfi.isEmpty() && m_lastCfi != m_start.value(QStringLiteral("cfi")).toString())
-        m_library->saveReadPosition(m_bookId, { m_format, QStringLiteral("local"), QStringLiteral("cousoir"), m_lastCfi,
-                                                double(QDateTime::currentMSecsSinceEpoch()) / 1000, m_lastFraction });
+    // Where reading stopped and the highlights, in the library too, for
+    // Calibre and for Cousoir on the computers sharing it.
+    flush(true);
+    m_pending.clear();
     m_lastCfi.clear();
     {
         const QMutexLocker locker(&booksLock);
@@ -422,21 +488,12 @@ void BookReader::savePage(int page, int pages)
 {
     if (m_pdfPath.isEmpty() || m_uuid.isEmpty())
         return;
-    const QString path = positionsFile();
-    QFile file(path);
-    QJsonObject positions = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object()
-                                                           : QJsonObject();
-    file.close();
+    QJsonObject positions = readPositions();
     positions.insert(m_uuid + QStringLiteral(":PDF"),
                      QJsonObject{ { QStringLiteral("page"), page },
                                   { QStringLiteral("fraction"), pages > 0 ? double(page + 1) / pages : 0 },
                                   { QStringLiteral("epoch"), double(QDateTime::currentMSecsSinceEpoch()) / 1000 } });
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    QSaveFile out(path);
-    if (out.open(QIODevice::WriteOnly)) {
-        out.write(QJsonDocument(positions).toJson(QJsonDocument::Compact));
-        out.commit();
-    }
+    writePositions(positions);
 }
 
 int BookReader::spineIndexOf(const QUrl &url) const
@@ -468,17 +525,27 @@ void BookReader::savePosition(int spineIndex, const QString &cfi, double fileFra
         return;
     m_lastCfi = cfi;
     m_lastFraction = bookFraction(spineIndex, fileFraction);
-    const QString path = positionsFile();
-    QFile file(path);
-    QJsonObject positions = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object()
-                                                           : QJsonObject();
-    file.close();
+    QJsonObject positions = readPositions();
     positions.insert(m_uuid, QJsonObject{
                                  { QStringLiteral("format"), m_format },
                                  { QStringLiteral("cfi"), cfi },
                                  { QStringLiteral("fraction"), bookFraction(spineIndex, fileFraction) },
                                  { QStringLiteral("epoch"), double(QDateTime::currentMSecsSinceEpoch()) / 1000 },
                              });
+    writePositions(positions);
+}
+
+QJsonObject BookReader::readPositions() const
+{
+    QFile file(positionsFile());
+    return file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object() : QJsonObject();
+}
+
+void BookReader::writePositions(const QJsonObject &positions) const
+{
+    const QString path = positionsFile();
+    if (path.isEmpty())
+        return;
     QDir().mkpath(QFileInfo(path).absolutePath());
     QSaveFile out(path);
     if (out.open(QIODevice::WriteOnly)) {

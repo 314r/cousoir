@@ -65,6 +65,8 @@ ThemedWindow {
         id: startPage
         interval: 50
         onTriggered: {
+            if (document.status === PdfDocument.Error)
+                return
             if (document.status !== PdfDocument.Ready) {
                 restart()
                 return
