@@ -17,6 +17,7 @@
 #include "conversion_service.h"
 #include "metadata_downloader.h"
 #include "device_library.h"
+#include "fake_open_library.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -103,6 +104,7 @@ private slots:
     void convertsBooks();
     void convertsWithoutCalibre();
     void downloadsMetadata();
+    void downloadsFromOpenLibrary();
     void sendsToKobos();
     void sendsToKobosWithoutCalibre();
     void sendsToKindles();
@@ -1017,6 +1019,53 @@ void BookLibraryTest::convertsBooks()
 // A metadata download lists what Calibre's sources found, compares it with
 // the book, finds covers and saves the fields chosen and a cover as one
 // edit, which Revert undoes; Calibre is a stand-in here.
+void BookLibraryTest::downloadsFromOpenLibrary()
+{
+    // Without Calibre: Open Library, here a server of the test's own.
+    FakeHttpServer server;
+    server.handler = fakeOpenLibrary;
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    MetadataDownloader downloader;
+    downloader.setNative(true);
+    downloader.setSite({ server.url(), server.url() });
+    downloader.setLibrary(library.get());
+    QVERIFY(downloader.available());
+    QCOMPARE(downloader.source(), QStringLiteral("openlibrary"));
+    library->setCurrentBookId(3);
+    QCOMPARE(downloader.search(3), QString());
+    QCOMPARE(downloader.state(), QStringLiteral("searching"));
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    const QVariantMap first = downloader.results().first().toMap();
+    QCOMPARE(first.value(QStringLiteral("title")).toString(), QStringLiteral("Shadows Linger"));
+    QCOMPARE(first.value(QStringLiteral("published")).toString(), QStringLiteral("1990"));
+    QVERIFY(first.value(QStringLiteral("hasSummary")).toBool());
+
+    QHash<QString, QVariantMap> fields;
+    for (const QVariant &row : downloader.fields(0))
+        fields.insert(row.toMap().value(QStringLiteral("key")).toString(), row.toMap());
+    QCOMPARE(fields.value(QStringLiteral("publisher")).value(QStringLiteral("found")).toString(), QStringLiteral("Tor Fantasy"));
+    QVERIFY(fields.value(QStringLiteral("comments")).value(QStringLiteral("chosen")).toBool());
+
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    const QVariantList covers = downloader.covers();
+    QCOMPARE(covers.size(), 2);
+    QCOMPARE(covers.at(1).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Open Library"));
+    QVERIFY(downloader.coversError().isEmpty());
+
+    QCOMPARE(downloader.apply(0, { QStringLiteral("comments"), QStringLiteral("publisher") },
+                              covers.at(1).toMap().value(QStringLiteral("url")).toString()),
+             QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("publisher")).toString(), QStringLiteral("Tor Fantasy"));
+    QVERIFY(library->currentBook().value(QStringLiteral("description")).toString().contains(QStringLiteral("White Rose")));
+    QCOMPARE(QImageReader(copy->filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/cover.jpg"))).size(),
+             QSize(300 + 6874911 % 100, 450));
+}
+
 void BookLibraryTest::downloadsMetadata()
 {
     auto copy = writableCopy();

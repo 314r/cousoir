@@ -470,8 +470,25 @@ identify job under Calibre on made-up results, applies them through
 Calibre's own dialog, shown offscreen, and through Cousoir: the libraries
 end alike.
 
-Downloading needs Calibre; without it the globe does not show. The tests
-never go on the web: a stand-in for Calibre answers them.
+Without Calibre, the dialog asks [Open Library](https://openlibrary.org),
+free and without an account: by the book's ISBN, else, or when Open
+Library does not know the ISBN, by the words of its title and first
+author that Calibre's sources search for. Each work found comes with the
+edition that best matches (in the book's language first): its title
+(the work's, better accented and cased, unless the edition's is
+another), authors, publisher, date, languages and ISBN; the work's
+description, from Markdown; its subjects as tags and its series, without
+its number, which the book keeps. The results are ranked as Calibre ranks
+a source's: a shared identifier, then a cover, every field, the
+interface's language, the same title, a longer description. Covers shows
+the edition's and the work's covers, six at most. Calibre's download
+preferences still apply when Calibre left some (the fields left aside,
+the description added to the book's, the most tags). `cousoir-cli
+download` does the same without Calibre.
+
+The tests never go on the web: a stand-in for Calibre answers them, and a
+server of the tests' own plays Open Library with answers it once gave
+(`tools/make_openlibrary_fixtures.sh`).
 
 Cousoir departs from Calibre here:
 
@@ -1078,6 +1095,11 @@ The tests check the port against Calibre itself:
   pages. `qr_code_tests` compares Cousoir's QR codes, module by module,
   with libqrencode's (`tools/make_qr_fixtures.sh` made them), and reads
   them back with `zbarimg` when it is installed.
+- `metadata_web_tests` checks the Open Library source: Calibre's search
+  words (`tests/data/oracle/source.json`), the search and work answers Open
+  Library once gave, read; dates; Calibre's ranking; and, against a fake
+  Open Library on 127.0.0.1, a search by ISBN, its fallback to the title,
+  covers, and a site that cannot be reached.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%
   scale, against a copy of the fixture library; the share listens on
   127.0.0.1 only (`COUSOIR_SHARE_LOCALHOST`).

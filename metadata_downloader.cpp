@@ -11,12 +11,38 @@
 
 #include "book.h"
 #include "book_library.h"
+#include "calibre_config.h"
 #include "calibre_job.h"
 
 MetadataDownloader::MetadataDownloader(QObject *parent)
     : QObject(parent)
     , m_program(MetadataDownload::program())
+    , m_web(new OpenLibrary::Client(this))
 {
+    connect(m_web, &OpenLibrary::Client::identified, this,
+            [this](const QList<MetadataDownload::Found> &books, const QString &error) {
+                if (!error.isEmpty()) {
+                    setState(QStringLiteral("failed"), error);
+                } else if (books.isEmpty()) {
+                    setState(QStringLiteral("failed"), tr("Open Library found nothing for this book."));
+                } else {
+                    m_identified.books = books;
+                    setState(QStringLiteral("found"));
+                }
+            });
+    connect(m_web, &OpenLibrary::Client::coverFound, this, [this](const MetadataDownload::Cover &cover) {
+        m_covers.append(cover);
+        emit coversChanged();
+    });
+    connect(m_web, &OpenLibrary::Client::coversFinished, this, [this](const QString &error) {
+        m_coversRunning = false;
+        m_coversError = error;
+        // The largest first once all are in, as Calibre orders them.
+        std::stable_sort(m_covers.begin(), m_covers.end(), [](const auto &a, const auto &b) {
+            return qint64(a.width) * a.height > qint64(b.width) * b.height;
+        });
+        emit coversChanged();
+    });
     // single_covers() saves each cover as it comes.
     m_coverPoll.setInterval(250);
     connect(&m_coverPoll, &QTimer::timeout, this, &MetadataDownloader::readCovers);
@@ -47,7 +73,17 @@ void MetadataDownloader::setLibrary(BookLibrary *library)
 
 bool MetadataDownloader::available() const
 {
-    return !m_program.isEmpty();
+    return true;
+}
+
+QString MetadataDownloader::source() const
+{
+    return native() ? QStringLiteral("openlibrary") : QStringLiteral("calibre");
+}
+
+bool MetadataDownloader::native() const
+{
+    return m_native || m_program.isEmpty();
 }
 
 QString MetadataDownloader::state() const
@@ -123,8 +159,6 @@ QString MetadataDownloader::search(int bookId)
 {
     if (!m_library)
         return tr("No library is open.");
-    if (!available())
-        return tr("Downloading metadata needs Calibre, which is not installed.");
     const Book *book = m_library->data().book(bookId);
     if (!book)
         return tr("This book is no longer in the library.");
@@ -132,6 +166,20 @@ QString MetadataDownloader::search(int bookId)
     m_bookId = bookId;
     // The dialog's: the book's title, authors and identifiers as they are.
     m_query = { book->title, book->authors, book->identifiers };
+    if (native()) {
+        QString error;
+        if (!makeFolder(&error)) {
+            setState(QStringLiteral("failed"), error);
+            return {};
+        }
+        // Calibre's preferences for downloads, when Calibre left some.
+        const OpenLibrary::Preferences preferences = OpenLibrary::Preferences::load(CalibreConfig::configDirectory());
+        m_identified.ignoredFields = preferences.ignoredFields;
+        m_identified.appendComments = preferences.appendComments;
+        setState(QStringLiteral("searching"));
+        m_web->identify(m_query, book->languages.value(0), m_library->interfaceLanguage(), preferences);
+        return {};
+    }
     start(false);
     return {};
 }
@@ -154,6 +202,12 @@ void MetadataDownloader::searchCovers(int result)
     m_query.identifiers = m_identified.books.at(result).identifiers;
     m_covers.clear();
     m_coversError.clear();
+    if (native()) {
+        m_coversRunning = true;
+        emit coversChanged();
+        m_web->covers(result, m_folder->path());
+        return;
+    }
     start(true);
 }
 
@@ -181,6 +235,7 @@ QString MetadataDownloader::apply(int result, const QStringList &fields, const Q
 void MetadataDownloader::cancel()
 {
     stopProcess();
+    m_web->stop();
     m_coverPoll.stop();
     m_folder.reset();
     m_identified = {};
@@ -197,6 +252,7 @@ void MetadataDownloader::stopCovers()
     if (!m_coversRunning)
         return;
     stopProcess();
+    m_web->stopCovers();
     m_coverPoll.stop();
     m_coversRunning = false;
 }
@@ -209,18 +265,37 @@ void MetadataDownloader::setProgram(const QString &program)
         emit availableChanged();
 }
 
+void MetadataDownloader::setNative(bool native)
+{
+    const QString before = source();
+    m_native = native;
+    if (source() != before)
+        emit availableChanged();
+}
+
+void MetadataDownloader::setSite(const OpenLibrary::Site &site)
+{
+    m_web->setSite(site);
+}
+
+bool MetadataDownloader::makeFolder(QString *error)
+{
+    // A folder of the library's cache, for both jobs, or for the covers.
+    const QString base = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("downloads"));
+    QDir().mkpath(base);
+    CalibreJob::removeStaleFolders(base);
+    m_folder = std::make_unique<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
+    if (m_folder->isValid())
+        return true;
+    *error = tr("Cannot create a folder for the download in %1.").arg(base);
+    return false;
+}
+
 void MetadataDownloader::start(bool covers)
 {
     QString error;
-    if (!covers) {
-        // A folder of the library's cache, for both jobs.
-        const QString base = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("downloads"));
-        QDir().mkpath(base);
-        CalibreJob::removeStaleFolders(base);
-        m_folder = std::make_unique<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
-        if (!m_folder->isValid())
-            error = tr("Cannot create a folder for the download in %1.").arg(base);
-    }
+    if (!covers)
+        makeFolder(&error);
     if (error.isEmpty()) {
         if (covers)
             MetadataDownload::prepareCovers(m_folder->path(), m_query, &error);

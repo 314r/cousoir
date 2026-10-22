@@ -55,6 +55,7 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | `calibre_languages.cpp` | `src/calibre/utils/localization.py`: `calibre_langcode_to_name()`, `canonicalize_lang()`, `lang_map()`, `translator_for_lang()` and its fallbacks, `locale_fallbacks()`, `available_translations()` |
 | `kepub.cpp` | `src/calibre/ebooks/oeb/polish/kepubify.py`: `kepubify_container()`, `add_kobo_spans()`, `wrap_body_contents()`, `add_style_and_script()`, `remove_kobo_markup_from_html()`, `add_dummy_title_page()`, `is_probably_a_title_page()`; `resources/templates/kobo.js` (in `assets/kobo`) |
 | `kobo_send.cpp` (without Calibre) | `src/calibre/devices/utils.py`: `create_upload_path()`; `src/calibre/library/save_to_disk.py`: `get_components()`, `get_component_metadata()`; `src/calibre/utils/filenames.py`: `shorten_components_to()`, `shorten_component()`, `limit_component()`; `src/calibre/devices/kobo/driver.py`: KoboTouch's `MAX_PATH_LEN`, `sanitize_path_components()`, `filename_callback()`, its settings; `src/calibre/ebooks/metadata/book/json_codec.py`: the book's entry in metadata.calibre; `src/calibre/devices/usbms/device.py`: driveinfo.calibre |
+| `open_library.cpp` | `src/calibre/ebooks/metadata/sources/base.py`: `Source.get_title_tokens()`, `Source.get_author_tokens()`, `cleanup_title()`, `InternalMetadataCompareKeyGen`; `src/calibre/ebooks/metadata/sources/prefs.py`: the defaults of `msprefs`; the fallback from an ISBN to a title search, after `src/calibre/ebooks/metadata/sources/google.py` |
 | `opds.cpp` | `src/calibre/srv/opds.py`: `ACQUISITION_ENTRY()`'s description of a book (rating, tags, series, then the comments) and its image links, the navigation by category, a series' books in series order |
 | `library_server.cpp` | `src/calibre/srv/code.py`: `book_filename()`, the name of a downloaded book |
 | `book_sort.cpp` | `src/calibre/db/cache.py`: `multisort()`; `src/calibre/db/fields.py`: each field's `sort_keys_for_books()`, sort and default keys, `SeriesField`'s title sort in the book's language, `CompositeField`'s number, date, bool and list keys; `src/calibre/db/view.py`: `add_to_sort_history()`; `src/calibre/gui2/library/views.py`: the list's saved state, `cleanup_sort_history()` and `apply_sort_history()` |
@@ -155,6 +156,10 @@ Calibre and say so:
   `src/calibre/devices/mtp/driver.py`;
 - `tests/tool/readers.cpp`: `qhash()` and `imageid_from_contentid()` of
   `src/calibre/devices/kobo/driver.py`.
+
+`tools/oracle/source_oracle.py` records the words Calibre's sources
+search by. The answers in `tests/data/openlibrary` are Open Library's
+(openlibrary.org, whose data is under CC0).
 
 The fixture library in `tests/data/library` was made by `calibredb`, and the
 expected results in `tests/data/oracle` and `tests/data/library-list.json` are

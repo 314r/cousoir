@@ -120,6 +120,8 @@ qt_add_library(cousoir_core STATIC
     metadata_download.h
     mtp.cpp
     mtp.h
+    open_library.cpp
+    open_library.h
     opds.cpp
     opds.h
     opf.cpp
@@ -375,7 +377,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check library_server qr_code test_tool)
+                          kindle library_check library_server metadata_web qr_code test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)
