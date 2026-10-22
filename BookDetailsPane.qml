@@ -88,6 +88,16 @@ FocusScope {
         removeDialog.ask()
     }
 
+    // The custom columns' keys, which change only with the library's
+    // columns: their fields stay while values change, keeping focus and what
+    // is typed in them.
+    property var customKeys: []
+    onBookChanged: {
+        const keys = (pane.book.custom || []).map(field => field.key)
+        if (keys.join("\n") !== pane.customKeys.join("\n"))
+            pane.customKeys = keys
+    }
+
     function save(key, value) {
         const changes = {}
         changes[key] = value
@@ -201,8 +211,11 @@ FocusScope {
 
         property var field: ({})
         readonly property string stored: field.editText || (field.datatype === "rating" ? "0" : "")
+        // Whole stars unless the column takes halves, and the value stored
+        // whatever it is.
         readonly property var choices: field.datatype === "rating"
-            ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(rating => field.halfStars || rating % 2 === 0).map(rating => ({
+            ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(rating => field.halfStars || rating % 2 === 0
+                                                              || String(rating) === choiceRow.stored).map(rating => ({
                 value: String(rating),
                 label: rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
             }))
@@ -424,13 +437,15 @@ FocusScope {
 
                 // The library's custom columns, each edited by its kind.
                 Repeater {
-                    model: pane.book.custom || []
+                    model: pane.customKeys
 
                     delegate: ColumnLayout {
                         id: customField
 
-                        required property var modelData
-                        readonly property string type: modelData.datatype
+                        required property string modelData
+                        readonly property var field: (pane.book.custom || []).find(
+                            field => field.key === customField.modelData) || ({})
+                        readonly property string type: field.datatype || ""
                         readonly property bool choice: type === "rating" || type === "bool" || type === "enumeration"
 
                         Layout.fillWidth: true
@@ -440,20 +455,23 @@ FocusScope {
                             id: textField
 
                             DetailField {
-                                key: customField.modelData.key
-                                label: customField.modelData.name
-                                value: customField.modelData.editText
-                                readOnly: !customField.modelData.editable
+                                key: customField.modelData
+                                label: customField.field.name || ""
+                                value: customField.field.editText || ""
+                                // A long text holding a table or an image is
+                                // Calibre's to edit: saving it from its text
+                                // would leave them out.
+                                readOnly: customField.field.editable !== true || customField.field.losesFormatting === true
                                 placeholder: customField.type === "datetime" ? qsTr("YYYY-MM-DD")
-                                    : customField.modelData.multiple ? (customField.modelData.names ? qsTr("Name & name")
-                                                                                                    : qsTr("value, value"))
+                                    : customField.field.multiple ? (customField.field.names ? qsTr("Name & name")
+                                                                                            : qsTr("value, value"))
                                     : ""
                                 check: customField.type === "int" ? (text => /^\s*([+-]?\d+)?\s*$/.test(text))
                                     : customField.type === "float"
                                     ? (text => !text.trim() || isFinite(Number(text.trim().replace(",", "."))))
-                                    : customField.type === "datetime" ? (text => pane.library.isDate(text)) : null
+                                    : customField.type === "datetime" ? (text => pane.library.isCustomDate(text)) : null
                                 saveAs: customField.type === "float" ? (text => text.trim().replace(",", "."))
-                                    : customField.modelData.html ? (text => pane.library.textToHtml(text)) : null
+                                    : customField.field.html ? (text => pane.library.textToHtml(text)) : null
                             }
                         }
 
@@ -461,7 +479,7 @@ FocusScope {
                             id: choiceField
 
                             CustomChoice {
-                                field: customField.modelData
+                                field: customField.field
                             }
                         }
 
@@ -471,12 +489,23 @@ FocusScope {
                             sourceComponent: customField.choice ? choiceField : textField
                         }
 
+                        Label {
+                            objectName: "formattingKept_" + customField.modelData
+
+                            Layout.fillWidth: true
+                            visible: customField.field.losesFormatting === true
+                            text: qsTr("More than text, a table or an image: edit it in Calibre.")
+                            color: Theme.textMuted
+                            font.pointSize: Theme.fontPointSizeCaption
+                            wrapMode: Text.Wrap
+                        }
+
                         DetailField {
-                            visible: customField.type === "series" && customField.modelData.editText.length > 0
-                            key: customField.modelData.key + "_index"
+                            visible: customField.type === "series" && (customField.field.editText || "").length > 0
+                            key: customField.modelData + "_index"
                             label: qsTr("Number")
-                            value: customField.modelData.seriesIndexText || "1"
-                            readOnly: !customField.modelData.editable
+                            value: customField.field.seriesIndexText || "1"
+                            readOnly: customField.field.editable !== true
                             number: true
                         }
                     }

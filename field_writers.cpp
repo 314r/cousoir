@@ -457,14 +457,25 @@ bool noneText(const QVariant &value)
     return text.isEmpty() || text.toLower() == QLatin1String("none");
 }
 
-// parse_date(x, assume_utc=False, as_utc=False) of a custom date: a date
-// and time as written, or a date alone at midnight here, its missing month
-// this month's and its missing day the 15th.
-std::optional<QDateTime> customDate(const QString &text)
+} // namespace
+
+namespace FieldWriters {
+
+std::optional<QDateTime> parseCustomDate(const QString &text)
 {
-    if (const std::optional<CalibreDate> exact = FieldWriters::parseExactDate(text))
-        return exact->dateTime;
-    static const QRegularExpression iso(QStringLiteral("^\\s*(\\d{4})(?:-(\\d{1,2})(?:-(\\d{1,2}))?)?\\s*$"));
+    // A date and time as written, local unless it says otherwise; Calibre's
+    // undefined date stays undefined.
+    static const QRegularExpression timed(QStringLiteral("^\\s*\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}"));
+    if (timed.match(text).hasMatch()) {
+        const std::optional<CalibreDate> date = OpfReader::parseDate(text, false);
+        if (!date)
+            return std::nullopt;
+        return CalibreDb::isUndefinedDate(date->dateTime) ? CalibreDb::undefinedDate()
+                                                          : date->dateTime.addMSecs(date->microsecond / 1000);
+    }
+    // A date alone at midnight here, its missing month this month's and its
+    // missing day the 15th.
+    static const QRegularExpression iso(QStringLiteral("^\\s*(\\d{4})(?:[-/.](\\d{1,2})(?:[-/.](\\d{1,2}))?)?\\s*$"));
     const QRegularExpressionMatch match = iso.match(text);
     if (!match.hasMatch())
         return std::nullopt;
@@ -475,6 +486,10 @@ std::optional<QDateTime> customDate(const QString &text)
         return std::nullopt;
     return QDateTime(date, QTime(0, 0)).toUTC();
 }
+
+} // namespace FieldWriters
+
+namespace {
 
 // Writer.set_books() for a custom column: the value through its adapter,
 // then one_one_in_other(), many_one() or many_many().
@@ -590,7 +605,7 @@ bool setCustom(SqliteDb &db, const CustomColumn &column, int bookId, const QVari
             // parse_date() of nothing is Calibre's undefined date.
             const QString text = raw.toString();
             const std::optional<QDateTime> date = text.trimmed().isEmpty() ? CalibreDb::undefinedDate()
-                                                                           : customDate(text);
+                                                                           : FieldWriters::parseCustomDate(text);
             if (!date)
                 return fail(QObject::tr("“%1” is not a date for #%2.").arg(text, column.label));
             value = CalibreDb::isUndefinedDate(*date) ? CalibreDb::undefinedDate() : *date;

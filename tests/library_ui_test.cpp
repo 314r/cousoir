@@ -4,6 +4,7 @@
 #include <QDesktopServices>
 #include <QDirIterator>
 #include <QGuiApplication>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -892,10 +893,13 @@ void LibraryUiTest::editsCustomColumns()
     // A composite is Calibre's to compute.
     QVERIFY(custom(QStringLiteral("#computed")).isEmpty());
 
+    // A save keeps the other fields as they are, focus and typing with them.
+    const QPointer<QQuickItem> price = control("field_#price");
     retype("field_#note", QStringLiteral("Autre note"));
     QTest::keyClick(m_window, Qt::Key_Return);
     waitForSave();
     QTRY_COMPARE(custom(QStringLiteral("#note")).value(QStringLiteral("text")).toString(), QStringLiteral("Autre note"));
+    QVERIFY(price && price == control("field_#price"));
 
     // A number takes digits only.
     retype("field_#pagecount", QStringLiteral("abc"));
@@ -937,6 +941,40 @@ void LibraryUiTest::editsCustomColumns()
     QCOMPARE(custom(QStringLiteral("#shelf")).value(QStringLiteral("text")).toString(), QString());
     QCOMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(), QStringLiteral("Bien"));
     QCOMPARE(custom(QStringLiteral("#price")).value(QStringLiteral("text")).toString(), QString());
+
+    const auto update = [this](const QVariantMap &changes) {
+        QString error;
+        QMetaObject::invokeMethod(library(), "updateBook", Q_RETURN_ARG(QString, error), Q_ARG(int, 1),
+                                  Q_ARG(QVariantMap, changes));
+        return error;
+    };
+    // A rating of half a star more than a whole-star column takes shows as
+    // it is; a long text holding a table is Calibre's to edit.
+    QCOMPARE(update({ { QStringLiteral("#myrating"), 7 },
+                      { QStringLiteral("#review"), QStringLiteral("<table><tr><td>Bien</td></tr></table>") } }),
+             QString());
+    waitForSave();
+    QTRY_COMPARE(control("field_#myrating")->property("currentText").toString(), QStringLiteral("★★★½"));
+    QVERIFY(!control("field_#review")->isEnabled());
+    QVERIFY(control("formattingKept_#review")->isVisible());
+
+    // A date cleared, then set and reverted: cleared again.
+    retype("field_#started", QString());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QString());
+    QMetaObject::invokeMethod(m_window, "closeBook");
+    QTRY_VERIFY(control("booksPage")->isVisible());
+    openWritable(1);
+    retype("field_#started", QStringLiteral("2020-01-01"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QStringLiteral("2020-01-01"));
+    click("revertChangesButton");
+    QTRY_VERIFY(control("confirmRevertButton") && control("confirmRevertButton")->isVisible());
+    click("confirmRevertButton");
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QString());
 }
 
 void LibraryUiTest::changesCovers()
