@@ -25,9 +25,14 @@ bool readZip(const QString &path, Zip *zip, QString *error)
         const QString name = QString::fromUtf8(stat.name);
         if (name.endsWith(u'/'))
             continue;
+        // A file that cannot be read fails the book rather than go missing
+        // from what is written back.
         zip_file_t *file = zip_fopen_index(archive, zip_uint64_t(i), 0);
-        if (!file)
-            continue;
+        if (!file) {
+            zip_discard(archive);
+            *error = QObject::tr("Cannot read %1 in %2.").arg(name, QFileInfo(path).fileName());
+            return false;
+        }
         QByteArray bytes(qsizetype(stat.size), Qt::Uninitialized);
         const zip_int64_t read = zip_fread(file, bytes.data(), stat.size);
         zip_fclose(file);
