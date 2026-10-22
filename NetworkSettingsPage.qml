@@ -12,6 +12,8 @@ Item {
     required property LibraryShare share
     // Where the sharing's settings are kept: enabled, port and password.
     required property QtObject settings
+    // The readers, whose wireless device server this page turns on.
+    property DeviceLibrary devices: null
 
     implicitHeight: contentLayout.implicitHeight + 2 * Theme.panePadding
 
@@ -221,6 +223,113 @@ Item {
             Label {
                 Layout.fillWidth: true
                 text: qsTr("Without a password, anyone on the network can download the books. With one, readers ask for it, with any user name. Sharing lasts while Cousoir is open; “cousoir-cli serve” shares a library without the application, on a server for instance.")
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        ColumnLayout {
+            objectName: "wirelessSection"
+
+            Layout.fillWidth: true
+            visible: networkPage.devices !== null
+            spacing: Theme.gutter
+
+            HeadingLabel {
+                text: qsTr("Wireless readers")
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("KOReader, Calibre Companion and the other apps that connect to Calibre's wireless device server connect to Cousoir the same way: their books show among the readers, and books go to them with their metadata and covers. One app at a time; in the app, connect to Calibre.")
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+            }
+
+            FlatButton {
+                objectName: "wirelessButton"
+
+                variant: "outline"
+                selected: networkPage.devices !== null && networkPage.devices.wirelessListening
+                text: networkPage.devices !== null && networkPage.devices.wirelessEnabled ? qsTr("Stop letting apps connect")
+                                                                                         : qsTr("Let apps connect")
+                icon.source: "assets/icons/wifi.svg"
+                onClicked: networkPage.devices.setWireless(!networkPage.devices.wirelessEnabled,
+                                                           networkPage.devices.wirelessPort,
+                                                           networkPage.devices.wirelessPassword)
+            }
+
+            Label {
+                objectName: "wirelessError"
+
+                Layout.fillWidth: true
+                visible: networkPage.devices !== null && networkPage.devices.wirelessError !== ""
+                text: networkPage.devices !== null ? networkPage.devices.wirelessError : ""
+                color: Theme.danger
+                wrapMode: Text.WordWrap
+            }
+
+            Label {
+                objectName: "wirelessAddresses"
+
+                Layout.fillWidth: true
+                visible: networkPage.devices !== null && networkPage.devices.wirelessListening
+                text: networkPage.devices === null ? ""
+                    : networkPage.devices.wirelessAddresses.length === 0
+                        ? qsTr("This computer is on no network.")
+                        : qsTr("Apps find Cousoir on the network by themselves; should one not, give it %1.")
+                              .arg(networkPage.devices.wirelessAddresses.join(qsTr(" or ")))
+                wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.gutter
+
+                Label {
+                    text: qsTr("Port")
+                }
+
+                FormField {
+                    objectName: "wirelessPortField"
+
+                    Layout.preferredWidth: Math.round(8 * Theme.charWidth)
+                    text: networkPage.devices !== null && networkPage.devices.wirelessPort > 0
+                        ? String(networkPage.devices.wirelessPort) : ""
+                    placeholderText: "9090"
+                    validator: IntValidator { bottom: 1024; top: 65535 }
+                    onEditingFinished: {
+                        const port = text === "" ? 0 : Number(text)
+                        if ((text === "" || acceptableInput) && port !== networkPage.devices.wirelessPort)
+                            networkPage.devices.setWireless(networkPage.devices.wirelessEnabled, port,
+                                                            networkPage.devices.wirelessPassword)
+                    }
+                }
+
+                Label {
+                    text: qsTr("Password")
+                }
+
+                FormField {
+                    objectName: "wirelessPasswordField"
+
+                    Layout.preferredWidth: Math.round(20 * Theme.charWidth)
+                    text: networkPage.devices !== null ? networkPage.devices.wirelessPassword : ""
+                    echoMode: TextInput.PasswordEchoOnEdit
+                    placeholderText: qsTr("None")
+                    onEditingFinished: {
+                        if (text !== networkPage.devices.wirelessPassword)
+                            networkPage.devices.setWireless(networkPage.devices.wirelessEnabled,
+                                                            networkPage.devices.wirelessPort, text)
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("With a password, the app must give the same. The port is Calibre's, 9090, or another free one when Calibre has it; set one when a firewall wants it.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
             }

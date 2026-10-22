@@ -64,6 +64,9 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | `kindle_send.cpp` (without Calibre) | `src/calibre/devices/mtp/driver.py`: `get_pref()`, `prefix_for_location()`, `create_upload_path()`, `ensure_parent()`, `upload_books()`, `upload_kindle_thumbnail()`, `upload_apnx()`, `_update_drive_info()`; `src/calibre/devices/mtp/defaults.py`: Amazon's settings; `src/calibre/devices/kindle/driver.py`: `get_apnx_opts()` |
 | `assets/reader/reader.js` | `src/pyj/read_book/cfi.pyj`: `encode()`, `decode()` and their helpers, the highlight wrappers skipped, `at_current()`'s scan from the top left, `cfi_for_selection()`; `src/pyj/read_book/iframe.pyj`: the spine step of a position; `src/pyj/read_book/annotations.pyj`: a highlight's fields, `remove_highlight()` |
 | `book_reader.cpp`, `book_operations.cpp` (positions and highlights) | `src/calibre/db/backend.py`: `save_last_read_position_to_cursor()`, `save_annotations_for_book()`; `src/calibre/db/annotations.py`: `annot_db_data()`; `src/calibre/gui2/viewer/integration.py`: the viewer's user and device; `src/calibre/constants.py`: `builtin_colors_light`, `builtin_colors_dark` |
+| `wireless.cpp` | `src/calibre/devices/smart_device_app/driver.py`, by Charles Haley and Kovid Goyal: the opcodes, `_json_encode()` and `_read_string_from_net()`, `ConnectionListener.run()`'s answer to a datagram, `open()`, `get_device_information()`, `_update_driveinfo_record()`, `set_library_info()`, `books()` with its metadata cache (`_metadata_in_cache()`, `_set_known_metadata()`, `_read_metadata_cache()`, `_write_metadata_cache()`), `upload_books()`, `_put_file()`, `delete_books()`, `sync_booklists()`, `_metadata_already_on_device()`, `free_space()`, `eject()`, the NOOPs of `detect_managed_devices()`, `_startup_on_demand()`'s ports |
+| `wireless_send.cpp` | `src/calibre/devices/smart_device_app/driver.py`: `_create_upload_path()`, `_json_encode()`'s `_series_sort_`; `src/calibre/gui2/device.py`: `cover_to_thumbnail()`, `set_default_thumbnail()`, `set_books_in_library()` with metadata managed on connect |
+| `assets/wireless/calibre.json` | `src/calibre/ebooks/__init__.py`: `BOOK_EXTENSIONS`; `src/calibre/devices/mime.py`: `mime_type_ext()`; `src/calibre/library/field_metadata.py`: `FieldMetadata`, as a library has it (`tools/oracle/wireless_oracle.py`) |
 | `calibre_notes.cpp`, `calibre_db.cpp` (notes) | `src/calibre/db/notes/connect.py`: `Notes.set_note()`, `set_backup_for()`, `path_to_retired_dir_for_item()`, `retire_entry()`, `trim_retired_dir()`, `hash_key()`, `notes_for()`, `get_note_data()` (read) |
 | `calibre_fts.cpp` | `src/calibre/db/sqlite_extension.cpp`: the FTS5 `Tokenizer` (its UTF-8 decoder, after Björn Höhrmann's, its script blocks, break iterators, diacritics and stemmers) and its registration as `unicode61`, `calibre` and `porter`; `src/calibre/utils/localization.py`: `bcp47_locale_name()` |
 | `book_sort.cpp` | `src/calibre/db/cache.py`: `multisort()`; `src/calibre/db/fields.py`: each field's `sort_keys_for_books()`, sort and default keys, `SeriesField`'s title sort in the book's language, `CompositeField`'s number, date, bool and list keys; `src/calibre/db/view.py`: `add_to_sort_history()`; `src/calibre/gui2/library/views.py`: the list's saved state, `cleanup_sort_history()` and `apply_sort_history()` |
@@ -204,6 +207,16 @@ codewords, and the masks. Its codes are compared, module by module, with
 those of [libqrencode](https://fukuchi.org/works/qrencode/)'s `qrencode`,
 and read back with [ZBar](https://github.com/mchehab/zbar)'s `zbarimg`, in
 the tests.
+
+## KOReader
+
+The tests' stand-in for a reader app, `tests/wireless/fake_koreader.py` and
+`tests/fake_wireless_app.h`, answers Calibre's wireless device server as
+[KOReader](https://koreader.rocks)'s Calibre plugin does
+(`plugins/calibre.koplugin/wireless.lua`, `metadata.lua` and
+`extensions.lua`, the KOReader community, AGPL v3): its handshake, its
+formats, its metadata cache and its answers. No code of KOReader's is in
+Cousoir itself.
 
 ## Lucide
 

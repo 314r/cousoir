@@ -406,6 +406,14 @@ bool Names::fromCalibre() const
     return bool(m_iso639);
 }
 
+QString Names::translate(const QString &message) const
+{
+    if (m_catalogs.isEmpty())
+        return message;
+    const QString translated = m_catalogs.constFirst().value(message);
+    return translated.isEmpty() ? message : translated;
+}
+
 QString resourcesFolder()
 {
     {

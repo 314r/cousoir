@@ -700,6 +700,43 @@ Cousoir departs from Calibre here:
   its text: the second rewrite reads the file at its first length. Cousoir
   keeps it.
 
+### Reader apps over the network
+
+KOReader, Calibre Companion and the other apps that connect to Calibre's
+wireless device server ("Connect/share > Start wireless device connection"
+in Calibre) connect to Cousoir the same way, once Settings > Network > Let
+apps connect is on. An app finds Cousoir by itself, as it finds Calibre, by
+a datagram on Calibre's ports; else it is given this computer's address and
+the port the settings show. Cousoir listens on Calibre's port, 9090, or
+another free one when Calibre has it, or on the port set; with a password,
+the app must give the same. One app at a time: another one that connects is
+told who has Cousoir.
+
+The app shows under Devices as a plugged-in reader does, with its books,
+which are the library's when sent from it, and the room left. Books go to
+it in the first of its formats the book has, at Calibre's path,
+`{title} - {authors} ({id})`, with their metadata and a thumbnail of their
+cover at the size the app asks for; a book on the app already, sent from
+the same library book, is replaced where it is. Removing a book removes it
+from the app, and Disconnect lets the app go. When the app connects, the
+metadata the library changed since it last had it goes to it, as Calibre
+sends it when its metadata management is "on connect". Cousoir keeps, for
+each app, the metadata of the books it has, as Calibre does, so that the
+app is asked only for what it changed.
+
+It is Calibre 9.16's protocol, as its SMART_DEVICE_APP driver speaks it:
+the golden test has the same app, a stand-in for KOReader, connect to
+Calibre's server and to Cousoir's, three times, and compares every message
+each sent it and the books it kept. Cousoir departs from Calibre here:
+
+- The file sent is the library's: Calibre writes the library's metadata and
+  cover into the EPUB it sends.
+- A book without a cover gets a drawn one, the title and authors on a
+  colour; Calibre draws its own default cover.
+- Calibre's collections, read status columns and the books an app got
+  elsewhere, which Calibre reads back to know them, are left out; so is
+  Bonjour, by which some apps find Calibre where datagrams do not pass.
+
 ## Reading in Cousoir
 
 Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
@@ -910,6 +947,16 @@ and name; an empty `html` removes it:
 ```json
 [{ "note": { "field": "tags", "item": 3, "name": "Fantasy",
              "html": "<p>Other worlds.</p>", "text": "Other worlds." } }]
+```
+
+`cousoir-cli wireless` lets reader apps connect as to Calibre's wireless
+device server, `--port` and `--password` as in the settings. With a JSON
+file of operations, it waits `--wait` seconds for an app, gives it the
+metadata the library changed, sends and removes books in order, then lets
+it go:
+
+```json
+[{ "send": [1, 2] }, { "remove": ["Ecume des jours, L' - Boris Vian (1).epub"] }]
 ```
 
 Conversions run first, on the books as the
@@ -1160,7 +1207,13 @@ The tests check the port against Calibre itself:
   JSON, without the times, random ids and temporary paths in them
   (`cousoir-test-tool compare-devices`); then Calibre connects to both, which
   must end alike, and each program must recognise the books the other sent.
-  With `COUSOIR_GOLDEN_REAL=1`, books of the real library go too. Last, it
+  With `COUSOIR_GOLDEN_REAL=1`, books of the real library go too. Then a
+  stand-in for KOReader (`tests/wireless/fake_koreader.py`) connects three
+  times to Calibre's wireless device server (`send_books.py` with
+  `wireless:PORT`) and to `cousoir-cli wireless`, which send, change,
+  remove and send books: every message each told it and the books it kept
+  must be alike (`tests/wireless/compare.py`), the books' files by their
+  names for now. Last, it
   reads a fake Kobo whose database has books being read, finished and
   bought, with highlights, notes and bookmarks
   (`tests/data/kobo-reading.sql`), with Calibre's Kobo `Bookmark`
@@ -1208,6 +1261,12 @@ The tests check the port against Calibre itself:
   search, change and bring back the notes `cousoir-cli apply` wrote
   (`tools/oracle/notes_check.py`). The UI tests read a series' note, write
   it, empty it, and read an author's note with an image.
+- `wireless_tests` has an app that answers as KOReader does connect to
+  Cousoir's wireless device server: the messages as Calibre frames them,
+  the datagrams answered, books sent, listed from the metadata cache on
+  connecting again, removed, metadata sent only where it changed, a book
+  the app refuses, a wrong password, and a second app turned away. The UI
+  tests send a book to such an app and remove it.
 - `epub_book_tests` reads EPUB 3 and EPUB 2 books: their spine, their table
   of contents from nav or NCX, nested, and paths resolved. The UI tests read
   `tests/data/reader/voyage.epub` (`tools/make_reader_fixture.py`) in the

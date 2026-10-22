@@ -237,6 +237,37 @@ Built only when Qt WebEngine is there.
 - Bugs found on the way are fixed, with a test.
 - DOC.md and the README describe what was added.
 
+## Fourth plan: more readers, more of the library
+
+Plans 2 and 3 took the readers plugged in, the web and reading away from
+Calibre. These reach the readers that are not plugged in, and make more of
+what the library holds.
+
+### 20. Reader apps over the network
+
+KOReader, Calibre Companion and the other apps speak Calibre's wireless
+device protocol (`devices/smart_device_app/driver.py`): Cousoir as its
+server, the apps' books listed with the driver's metadata cache, books sent
+with their metadata and covers, removed, metadata changed in the library
+sent on connecting. Then the files themselves as Calibre sends them: the
+library's metadata and cover written into the EPUB, by a port of Calibre's
+OPF 3 metadata writer (`ebooks/metadata/opf3.py`), which a Kobo's plain
+EPUBs need too. The golden test has the same stand-in for KOReader connect
+to Calibre's server and to Cousoir's.
+
+### 21. The library's highlights
+
+Every highlight and note the library keeps, from Calibre's viewer, from
+Cousoir's reader and from the readers: browsed, searched with Calibre's
+full text index of annotations, and exported, as Calibre's "Browse
+annotations" does.
+
+### 22. Searching the books' text
+
+Calibre's full text search (`full-text-search.db`): its index read and
+searched from Cousoir, and books indexed as Calibre indexes them, so that
+Calibre keeps the index Cousoir adds to.
+
 ## Status
 
 | Goal | State |
@@ -261,6 +292,9 @@ Built only when Qt WebEngine is there.
 | 13. Notes | done; notes with images are read, left to Calibre to change |
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
 | 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
+| 20. Reader apps over the network | the protocol done; the metadata written into the files next |
+| 21. The library's highlights | planned |
+| 22. Searching the books' text | planned |
 
 ## Journal
 
@@ -1036,3 +1070,34 @@ as Calibre's; Calibre restores and unretires them. Four bugs, fixed:
 
 And the notes kept aside move only once the database committed the change,
 and a save that fails after writing the notes still shows them.
+
+### 2026-10-22 — goal 20, reader apps over the network (`exp-wireless`), part 1
+
+Calibre's wireless device protocol, the server's side. A stand-in for
+KOReader (`tests/wireless/fake_koreader.py`, after KOReader's plugin)
+recorded what Calibre's own server, driven as its GUI drives it
+(`send_books.py` with `wireless:PORT`), tells an app over three
+connections: the handshake, the driveinfo, the library's field metadata,
+the books listed through the metadata cache, books sent with their
+metadata and thumbnails, metadata sent on connect when the library changed
+a book, books removed, the room left asked after each change, the eject.
+Cousoir's `WirelessServer` and `WirelessConnection` say the same, message
+for message, and keep the apps' metadata as the driver's cache does; the
+golden test compares the two transcripts and the books the app kept, and
+two details came from it: Calibre draws a cover for a book without one,
+and sends a changed book's metadata without its type.
+
+What Calibre tells every app alike, its extensions, the files' types and
+the standard fields' descriptions, comes from Calibre by an oracle
+(`assets/wireless/calibre.json`); the fields' names are translated from
+Calibre's catalog, as its `_()` translates them.
+
+In the application, Settings > Network lets apps connect; an app shows
+among the readers, with its books, and takes books, removals and Disconnect
+as a Kobo does. `cousoir-cli wireless` does the same from the command line,
+with a file of operations as the oracle takes them.
+
+Left for part 2: Calibre writes the library's metadata and cover into the
+EPUB it sends; Cousoir sends the library's file, and the golden test
+compares the files by name until it does the same.
+

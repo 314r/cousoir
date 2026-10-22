@@ -531,6 +531,60 @@ COUSOIR_NATIVE_SEND=1 devices kobo kobo-native "$root/tests/data/library" '[1, 2
 devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
 COUSOIR_NATIVE_SEND=1 devices kindle kindle-native "$root/tests/data/library" '[2, 5]' '[2]' 5
 
+# Books sent to a reader app over Calibre's wireless device connection, by
+# Calibre's own server (tools/oracle/send_books.py with "wireless:PORT") and
+# by `cousoir-cli wireless`, to the same app standing in for KOReader
+# (tests/wireless/fake_koreader.py), which keeps what it is sent. It
+# connects three times: books are sent; the library changes a book's
+# metadata, which goes to the app on connecting, then a book is removed and
+# others sent; nothing changed. Each time, what each server told the app
+# and the books it kept must be alike (tests/wireless/compare.py).
+wireless() {
+    local round side port client
+    rm -rf "$work"/wireless-*
+    cp -a --reflink=auto "$root/tests/data/library" "$work/wireless-library"
+    printf '[{"send": [1, 2, 5]}]' > "$work/wireless-ops-1.json"
+    cat > "$work/wireless-ops-2.json" <<'JSON'
+[{"remove": ["Ecume des jours, L' - Boris Vian (1).epub"]}, {"send": [3, 4]}]
+JSON
+    printf '[]' > "$work/wireless-ops-3.json"
+    for round in 1 2 3; do
+        [ "$round" = 2 ] && calibredb set_metadata --with-library "$work/wireless-library" 2 \
+            --field 'comments:<p>Changed.</p>' > /dev/null
+        for side in calibre cousoir; do
+            port=19090
+            [ "$side" = cousoir ] && port=19091
+            rm -rf "$work/wireless-$side"
+            mkdir -p "$work/wireless-$side"
+            cp -a --reflink=auto "$work/wireless-library" "$work/wireless-$side/library"
+            python3 -I "$root/tests/wireless/fake_koreader.py" --port "$port" --inbox "$work/wireless-inbox-$side" \
+                --transcript "$work/wireless-$side-$round.json" --wait 60 > "$work/wireless-client.log" 2>&1 &
+            client=$!
+            if [ "$side" = calibre ]; then
+                oracle "$root/tools/oracle/send_books.py" -- "$work/wireless-$side/library" "wireless:$port" 0 \
+                    "$work/wireless-ops-$round.json"
+            elif ! "$cli" wireless --library "$work/wireless-$side/library" --port "$port" --wait 60 \
+                "$work/wireless-ops-$round.json" > "$work/wireless-cli.log" 2>&1; then
+                echo "wireless: cousoir-cli wireless failed:"
+                tail -5 "$work/wireless-cli.log"
+                status=1
+            fi
+            wait "$client"
+        done
+        if python3 -I "$root/tests/wireless/compare.py" --files-by-name \
+            "$work/wireless-calibre-$round.json" "$work/wireless-inbox-calibre" \
+            "$work/wireless-cousoir-$round.json" "$work/wireless-inbox-cousoir" > "$work/wireless-diff.txt"; then
+            echo "wireless: connection $round alike, $(grep -c '"op": "SEND_BOOK"' "$work/wireless-cousoir-$round.json") books sent"
+        else
+            echo "wireless: connection $round differs from Calibre's:"
+            head -60 "$work/wireless-diff.txt"
+            status=1
+        fi
+    done
+}
+
+wireless
+
 # Notes cousoir-cli writes, changes and removes on a copy of the fixture
 # with the notes Calibre wrote (tests/data/notes), then read, searched,
 # changed and brought back by Calibre itself (tools/oracle/notes_check.py):
