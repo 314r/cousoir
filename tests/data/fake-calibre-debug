@@ -3,8 +3,11 @@
 # jobs, "-e <job>.py -- <job folder>": a conversion reports progress and
 # writes what the job writes; a metadata download writes the books of
 # download/identified.json, or covers made of edits/large.jpg as
-# single_covers() saves them. After COUSOIR_FAKE_DELAY seconds if set;
-# COUSOIR_FAKE_FAIL makes a download fail with its log.
+# single_covers() saves them, failing as it does on a cover saved already.
+# After COUSOIR_FAKE_DELAY seconds if set; COUSOIR_FAKE_FAIL makes a
+# download fail with its log, COUSOIR_FAKE_FAIL_COVERS the covers after the
+# first, and COUSOIR_FAKE_IGNORE names fields Calibre is set to leave aside,
+# "tags" or "publisher".
 folder="$4"
 data=$(dirname "$(readlink -f "$0")")
 case "$2" in
@@ -18,11 +21,16 @@ case "$2" in
         mkdir -p "$folder/covers"
         for name in "Google,,1200,,1800,,jpeg" "Amazon.com{0},,300,,450,,jpeg"; do
             cp "$data/edits/large.jpg" "$folder/covers/$name.cover"
-            mkdir "$folder/covers/$name.cover.done"
+            mkdir "$folder/covers/$name.cover.done" || exit 1
+            if [ -n "$COUSOIR_FAKE_FAIL_COVERS" ]; then
+                echo "Covers unreachable" > "$folder/log.txt"
+                exit 1
+            fi
         done
         printf '{"covers": true}' > "$folder/result.json"
     else
-        cp "$data/download/identified.json" "$folder/result.json"
+        sed "s/\"ignore_fields\": \[\]/\"ignore_fields\": [\"$COUSOIR_FAKE_IGNORE\"]/" \
+            "$data/download/identified.json" > "$folder/result.json"
     fi
     exit 0
     ;;

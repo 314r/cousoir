@@ -7,6 +7,8 @@
 #include <QTemporaryDir>
 #include <QUrl>
 
+#include <algorithm>
+
 #include "book.h"
 #include "book_library.h"
 #include "calibre_job.h"
@@ -83,17 +85,18 @@ QVariantList MetadataDownloader::results() const
 QVariantList MetadataDownloader::covers() const
 {
     QVariantList covers;
+    if (m_bookId == 0)
+        return covers;
+    // Kept unless another is picked, as in Calibre's dialog.
     const QString own = coverUrl();
-    if (!own.isEmpty()) {
-        const QSize size = QImageReader(QUrl(own).toLocalFile()).size();
-        covers.append(QVariantMap{
-            { QStringLiteral("source"), tr("Current cover") },
-            { QStringLiteral("width"), size.width() },
-            { QStringLiteral("height"), size.height() },
-            { QStringLiteral("url"), own },
-            { QStringLiteral("own"), true },
-        });
-    }
+    const QSize size = own.isEmpty() ? QSize() : QImageReader(QUrl(own).toLocalFile()).size();
+    covers.append(QVariantMap{
+        { QStringLiteral("source"), own.isEmpty() ? tr("No cover") : tr("Current cover") },
+        { QStringLiteral("width"), size.width() },
+        { QStringLiteral("height"), size.height() },
+        { QStringLiteral("url"), own },
+        { QStringLiteral("own"), true },
+    });
     for (const MetadataDownload::Cover &cover : m_covers) {
         covers.append(QVariantMap{
             { QStringLiteral("source"), cover.source },
@@ -109,6 +112,11 @@ QVariantList MetadataDownloader::covers() const
 bool MetadataDownloader::searchingCovers() const
 {
     return m_coversRunning;
+}
+
+QString MetadataDownloader::coversError() const
+{
+    return m_coversError;
 }
 
 QString MetadataDownloader::search(int bookId)
@@ -138,24 +146,31 @@ QVariantList MetadataDownloader::fields(int result) const
 
 void MetadataDownloader::searchCovers(int result)
 {
-    if (m_state != QLatin1String("found") || result < 0 || result >= m_identified.books.size() || m_coversRunning)
+    if (m_state != QLatin1String("found") || result < 0 || result >= m_identified.books.size())
         return;
+    // Those asked for before stop.
+    stopCovers();
     // The dialog's: the book's title and authors, the identifiers found.
     m_query.identifiers = m_identified.books.at(result).identifiers;
     m_covers.clear();
+    m_coversError.clear();
     start(true);
 }
 
-QString MetadataDownloader::apply(int result, const QStringList &fields, int cover)
+QString MetadataDownloader::apply(int result, const QStringList &fields, const QString &coverUrl)
 {
     if (!m_library || m_state != QLatin1String("found") || result < 0 || result >= m_identified.books.size())
         return tr("There is nothing downloaded to save.");
     QVariantMap changes = m_library->downloadedChanges(m_bookId, m_identified.books.at(result), fields,
                                                        m_identified.appendComments);
-    // The covers found come after the book's own.
-    const int found = cover - (coverUrl().isEmpty() ? 0 : 1);
-    if (cover >= 0 && found >= 0 && found < m_covers.size())
-        changes.insert(QStringLiteral("coverFile"), m_covers.at(found).file);
+    if (!coverUrl.isEmpty()) {
+        const QString file = QUrl(coverUrl).toLocalFile();
+        const auto found = std::find_if(m_covers.cbegin(), m_covers.cend(),
+                                        [&file](const MetadataDownload::Cover &cover) { return cover.file == file; });
+        if (found == m_covers.cend())
+            return tr("That cover is no longer there.");
+        changes.insert(QStringLiteral("coverFile"), found->file);
+    }
     // The edit has read the cover when it returns.
     const QString error = changes.isEmpty() ? QString() : m_library->updateBook(m_bookId, changes);
     if (error.isEmpty())
@@ -170,12 +185,20 @@ void MetadataDownloader::cancel()
     m_folder.reset();
     m_identified = {};
     m_covers.clear();
-    const bool coversWere = m_coversRunning;
+    m_coversError.clear();
     m_coversRunning = false;
     m_bookId = 0;
     setState(QStringLiteral("idle"));
-    if (coversWere)
-        emit coversChanged();
+    emit coversChanged();
+}
+
+void MetadataDownloader::stopCovers()
+{
+    if (!m_coversRunning)
+        return;
+    stopProcess();
+    m_coverPoll.stop();
+    m_coversRunning = false;
 }
 
 void MetadataDownloader::setProgram(const QString &program)
@@ -205,9 +228,12 @@ void MetadataDownloader::start(bool covers)
             MetadataDownload::prepareIdentify(m_folder->path(), m_query, &error);
     }
     if (!error.isEmpty()) {
-        if (covers)
-            return;
-        setState(QStringLiteral("failed"), error);
+        if (covers) {
+            m_coversError = error;
+            emit coversChanged();
+        } else {
+            setState(QStringLiteral("failed"), error);
+        }
         return;
     }
     m_process = new QProcess(this);
@@ -225,12 +251,13 @@ void MetadataDownloader::start(bool covers)
         if (m_coversRunning) {
             m_coversRunning = false;
             m_coverPoll.stop();
+            m_coversError = tr("Cannot run Calibre to download covers.");
             emit coversChanged();
         } else {
             setState(QStringLiteral("failed"), tr("Cannot run Calibre to download metadata."));
         }
     });
-    m_process->start(m_program, MetadataDownload::arguments(m_folder->path()));
+    // Before it starts: a start that fails at once says so on its own.
     if (covers) {
         m_coversRunning = true;
         m_coverPoll.start();
@@ -238,6 +265,7 @@ void MetadataDownloader::start(bool covers)
     } else {
         setState(QStringLiteral("searching"));
     }
+    m_process->start(m_program, MetadataDownload::arguments(m_folder->path()));
 }
 
 void MetadataDownloader::finishJob()
@@ -249,10 +277,13 @@ void MetadataDownloader::finishJob()
         m_coverPoll.stop();
         m_coversRunning = false;
         QList<MetadataDownload::Cover> covers;
-        if (MetadataDownload::readCovers(m_folder->path(), &covers, &error))
+        if (MetadataDownload::readCovers(m_folder->path(), &covers, &error)) {
             m_covers = covers;
-        else
-            readCovers();
+        } else {
+            // Those it saved before it stopped, and why.
+            m_covers = MetadataDownload::coversFound(m_folder->path());
+            m_coversError = error;
+        }
         emit coversChanged();
         return;
     }
@@ -262,7 +293,11 @@ void MetadataDownloader::finishJob()
         return;
     }
     if (identified.books.isEmpty()) {
-        setState(QStringLiteral("failed"), tr("Calibre's sources found nothing for this book."));
+        // The sources' log tells whether they could be asked.
+        const QString log = CalibreJob::logTail(m_folder->path());
+        setState(QStringLiteral("failed"), log.isEmpty() ? tr("Calibre's sources found nothing for this book.")
+                                                         : tr("Calibre's sources found nothing for this book. "
+                                                              "Their log ends with: %1").arg(log));
         return;
     }
     m_identified = identified;

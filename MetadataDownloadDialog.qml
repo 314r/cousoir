@@ -10,9 +10,11 @@ import Cousoir
 // Download metadata: what Calibre's sources find on the web for the open
 // book. The books found on the left; the one picked beside the book's own
 // values, each field ticked to take it, the ones that differ ticked first.
-// Covers shows the covers found, the book's own first; Save takes the
-// fields ticked and the cover picked as one change, which Revert undoes.
-// Esc closes and stops the download.
+// Covers shows the covers found, the book's own first and kept unless
+// another is picked; Save takes the fields ticked and the cover picked as
+// one change, which Revert undoes. Space ticks a field, the arrows pick a
+// cover, Enter saves or presses the button it is on; Esc closes and stops
+// the download.
 Popup {
     id: dialog
 
@@ -22,15 +24,13 @@ Popup {
     property var rows: []
     property var ticked: ({})
     // The cover picked by its address, which stays as covers come in and
-    // are sorted; the first one, the book's own if it has one, until then.
+    // are sorted; empty for the book's own.
     property string coverUrl: ""
-    readonly property int cover: {
-        const covers = downloader.covers
-        const index = covers.findIndex(cover => cover.url === coverUrl)
-        return index >= 0 ? index : 0
-    }
     // The book found whose covers were asked for.
     property int coversResult: -1
+    readonly property bool coverPicked: coversResult === result && coverUrl !== ""
+    // The covers, kept as they come so that the grid only adds them.
+    property bool syncingCovers: false
     // "fields", then "covers".
     property string page: "fields"
     property string bookTitle: ""
@@ -53,6 +53,51 @@ Popup {
         dialog.coverUrl = ""
         dialog.coversResult = -1
         open()
+    }
+
+    // The covers model follows the downloader's list: new covers added at
+    // its end, the whole of it again when it changes otherwise.
+    function syncCovers() {
+        const covers = dialog.downloader.covers
+        dialog.syncingCovers = true
+        let same = covers.length >= coverModel.count
+        for (let i = 0; same && i < coverModel.count; ++i)
+            same = coverModel.get(i).url === covers[i].url
+        if (!same)
+            coverModel.clear()
+        for (let i = coverModel.count; i < covers.length; ++i) {
+            const cover = covers[i]
+            coverModel.append({ name: cover.source, pixelWidth: cover.width, pixelHeight: cover.height,
+                                url: cover.url, own: cover.own })
+        }
+        coverGrid.currentIndex = dialog.coverIndex()
+        dialog.syncingCovers = false
+    }
+
+    // The row of the cover picked in the model, the book's own's for none.
+    function coverIndex() {
+        for (let i = 0; i < coverModel.count; ++i) {
+            if (dialog.coverUrl !== "" ? coverModel.get(i).url === dialog.coverUrl : coverModel.get(i).own)
+                return i
+        }
+        return coverModel.count > 0 ? 0 : -1
+    }
+
+    function pickCover(index) {
+        if (index < 0 || index >= coverModel.count)
+            return
+        const cover = coverModel.get(index)
+        dialog.coverUrl = cover.own ? "" : cover.url
+        coverGrid.currentIndex = index
+    }
+
+    // Enter: the button it is on, else Save.
+    function pressEnter() {
+        const item = dialog.contentItem.Window.activeFocusItem
+        if (item && item.checkable !== undefined && item.clicked !== undefined)
+            item.clicked()
+        else
+            dialog.save()
     }
 
     function pick(index) {
@@ -85,7 +130,7 @@ Popup {
         if (!dialog.found)
             return
         const fields = dialog.rows.filter(row => dialog.ticked[row.key]).map(row => row.key)
-        const error = dialog.downloader.apply(dialog.result, fields, dialog.page === "covers" ? dialog.cover : -1)
+        const error = dialog.downloader.apply(dialog.result, fields, dialog.coverPicked ? dialog.coverUrl : "")
         if (error) {
             dialog.failed(error)
             return
@@ -116,7 +161,18 @@ Popup {
         function onStateChanged() {
             if (dialog.downloader.state === "found")
                 dialog.pick(0)
+            // Over elsewhere, when another library opens.
+            else if (dialog.downloader.state === "idle" && dialog.opened)
+                dialog.close()
         }
+
+        function onCoversChanged() {
+            dialog.syncCovers()
+        }
+    }
+
+    ListModel {
+        id: coverModel
     }
 
     Overlay.modal: Rectangle {
@@ -153,8 +209,8 @@ Popup {
     contentItem: ColumnLayout {
         spacing: Theme.gutter
 
-        Keys.onReturnPressed: dialog.save()
-        Keys.onEnterPressed: dialog.save()
+        Keys.onReturnPressed: dialog.pressEnter()
+        Keys.onEnterPressed: dialog.pressEnter()
 
         RowLayout {
             Layout.fillWidth: true
@@ -250,6 +306,7 @@ Popup {
                 highlightMoveDuration: 0
                 keyNavigationEnabled: true
                 focus: dialog.page === "fields"
+                activeFocusOnTab: true
                 ScrollBar.vertical: ThinScrollBar {}
                 onCurrentIndexChanged: {
                     if (currentIndex >= 0 && currentIndex !== dialog.result)
@@ -330,7 +387,18 @@ Popup {
                 spacing: Theme.gutter
                 model: dialog.rows
                 boundsBehavior: Flickable.StopAtBounds
+                keyNavigationEnabled: true
+                activeFocusOnTab: true
+                highlightMoveDuration: 0
                 ScrollBar.vertical: ThinScrollBar {}
+                onActiveFocusChanged: {
+                    if (activeFocus && currentIndex < 0 && count > 0)
+                        currentIndex = 0
+                }
+                Keys.onSpacePressed: {
+                    if (currentIndex >= 0)
+                        dialog.toggle(dialog.rows[currentIndex].key)
+                }
 
                 delegate: Rectangle {
                     id: fieldRow
@@ -344,6 +412,8 @@ Popup {
                     width: fieldList.width - 2 * Theme.gutter
                     implicitHeight: fieldLayout.implicitHeight + Theme.gutter
                     color: fieldMouse.containsMouse ? Theme.hover : "transparent"
+                    border.width: fieldList.activeFocus && ListView.isCurrentItem ? 1 : 0
+                    border.color: Theme.accent
 
                     RowLayout {
                         id: fieldLayout
@@ -411,7 +481,10 @@ Popup {
 
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: dialog.toggle(fieldRow.modelData.key)
+                        onClicked: {
+                            fieldList.currentIndex = fieldRow.index
+                            dialog.toggle(fieldRow.modelData.key)
+                        }
                     }
                 }
             }
@@ -427,7 +500,7 @@ Popup {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.gutter
-                visible: dialog.downloader.searchingCovers || dialog.downloader.covers.length === 0
+                visible: dialog.downloader.searchingCovers || coverModel.count <= 1 || dialog.downloader.coversError
 
                 BusyIndicator {
                     Layout.preferredWidth: Theme.rowHeight
@@ -437,10 +510,16 @@ Popup {
                 }
 
                 Label {
+                    objectName: "downloadCoversStatus"
+
                     Layout.fillWidth: true
                     text: dialog.downloader.searchingCovers ? qsTr("Looking for covers…")
-                                                            : qsTr("No cover was found.")
-                    color: Theme.textMuted
+                        : dialog.downloader.coversError ? dialog.downloader.coversError
+                        : qsTr("No cover was found.")
+                    color: dialog.downloader.coversError && !dialog.downloader.searchingCovers ? Theme.danger : Theme.textMuted
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 3
+                    elide: Text.ElideRight
                 }
             }
 
@@ -455,16 +534,27 @@ Popup {
                 clip: true
                 cellWidth: coverWidth + 2 * Theme.gutter
                 cellHeight: Math.round(coverWidth * 1.5) + 3 * Theme.rowHeight
-                model: dialog.downloader.covers
+                model: coverModel
                 boundsBehavior: Flickable.StopAtBounds
+                keyNavigationEnabled: true
+                highlightMoveDuration: 0
                 ScrollBar.vertical: ThinScrollBar {}
+                // The arrows pick, as a click does.
+                onCurrentIndexChanged: {
+                    if (activeFocus && !dialog.syncingCovers && currentIndex >= 0)
+                        dialog.pickCover(currentIndex)
+                }
 
                 delegate: Item {
                     id: coverCell
 
-                    required property var modelData
+                    required property string name
+                    required property int pixelWidth
+                    required property int pixelHeight
+                    required property string url
+                    required property bool own
                     required property int index
-                    readonly property bool isCurrent: index === dialog.cover
+                    readonly property bool isCurrent: dialog.coverUrl !== "" ? url === dialog.coverUrl : own
 
                     objectName: "downloadCover" + index
                     width: coverGrid.cellWidth
@@ -486,7 +576,7 @@ Popup {
                         Image {
                             Layout.preferredWidth: coverGrid.coverWidth
                             Layout.preferredHeight: Math.round(coverGrid.coverWidth * 1.5)
-                            source: coverCell.modelData.url
+                            source: coverCell.url
                             sourceSize.width: coverGrid.coverWidth * 2
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
@@ -496,7 +586,7 @@ Popup {
 
                         Label {
                             Layout.fillWidth: true
-                            text: coverCell.modelData.source
+                            text: coverCell.name
                             color: coverCell.isCurrent ? Theme.textBright : Theme.text
                             font.pointSize: Theme.fontPointSizeCaption
                             horizontalAlignment: Text.AlignHCenter
@@ -505,8 +595,8 @@ Popup {
 
                         Label {
                             Layout.fillWidth: true
-                            text: coverCell.modelData.width > 0
-                                ? qsTr("%1 × %2").arg(coverCell.modelData.width).arg(coverCell.modelData.height) : ""
+                            text: coverCell.pixelWidth > 0
+                                ? qsTr("%1 × %2").arg(coverCell.pixelWidth).arg(coverCell.pixelHeight) : ""
                             color: Theme.textFaint
                             font.pointSize: Theme.fontPointSizeLabel
                             horizontalAlignment: Text.AlignHCenter
@@ -518,9 +608,9 @@ Popup {
 
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: dialog.coverUrl = coverCell.modelData.url
+                        onClicked: dialog.pickCover(coverCell.index)
                         onDoubleClicked: {
-                            dialog.coverUrl = coverCell.modelData.url
+                            dialog.pickCover(coverCell.index)
                             dialog.save()
                         }
                     }
@@ -540,10 +630,10 @@ Popup {
                 Layout.fillWidth: true
                 visible: dialog.found
                 text: dialog.page === "fields"
-                    ? qsTr("Fields to take: %1 of %2").arg(dialog.tickedCount).arg(dialog.rows.length)
-                    : dialog.downloader.covers[dialog.cover] && dialog.downloader.covers[dialog.cover].own
-                        ? qsTr("The cover stays as it is")
-                        : qsTr("This cover replaces the book's")
+                    ? (dialog.coverPicked ? qsTr("Fields to take: %1 of %2, and the cover picked")
+                                          : qsTr("Fields to take: %1 of %2")).arg(dialog.tickedCount).arg(dialog.rows.length)
+                    : dialog.coverPicked ? qsTr("This cover replaces the book's")
+                                         : qsTr("The cover stays as it is")
                 color: Theme.textMuted
                 font.pointSize: Theme.fontPointSizeCaption
                 elide: Text.ElideRight
@@ -595,7 +685,7 @@ Popup {
                 objectName: "downloadSave"
 
                 visible: dialog.found
-                enabled: dialog.tickedCount > 0 || dialog.page === "covers"
+                enabled: dialog.tickedCount > 0 || dialog.coverPicked
                 variant: "primary"
                 text: qsTr("Save")
                 onClicked: dialog.save()

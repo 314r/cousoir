@@ -52,25 +52,19 @@ def path(name):
     return os.path.join(folder, name)
 
 
-with open(path('job.json'), encoding='utf-8') as f:
-    job = json.load(f)
-with open(path('log.txt'), 'w', encoding='utf-8') as log_file:
-    try:
-        from calibre.ebooks.metadata.opf2 import OPF
-        from calibre.ebooks.metadata.sources.prefs import msprefs
-        from calibre.ebooks.metadata.sources.update import update_sources
-        from calibre.ebooks.metadata.sources.worker import single_identify
-        from calibre.utils.date import is_date_undefined
-        from calibre.utils.logging import GUILog
+def main(job, log_file):
+    from calibre.ebooks.metadata.opf2 import OPF
+    from calibre.ebooks.metadata.sources.prefs import msprefs
+    from calibre.ebooks.metadata.sources.update import update_sources
+    from calibre.ebooks.metadata.sources.worker import single_identify
+    from calibre.utils.date import is_date_undefined
+    from calibre.utils.logging import GUILog
 
-        update_sources(wait_for_completion=True)
-        opfs, has_covers, caches, log_dump = single_identify(job['title'], job['authors'], dict(job['identifiers']))
-        log = GUILog()
-        log.load(log_dump)
-        log_file.write(log.plain_text)
-    except Exception:
-        log_file.write(traceback.format_exc())
-        raise
+    update_sources(wait_for_completion=True)
+    opfs, has_covers, caches, log_dump = single_identify(job['title'], job['authors'], dict(job['identifiers']))
+    log = GUILog()
+    log.load(log_dump)
+    log_file.write(log.plain_text)
     books = []
     for opf, has_cover in zip(opfs, has_covers):
         r = OPF(BytesIO(opf), basedir=os.getcwd(), populate_spine=False).to_book_metadata()
@@ -96,6 +90,16 @@ with open(path('log.txt'), 'w', encoding='utf-8') as log_file:
     with open(path('result.json'), 'w', encoding='utf-8') as f:
         json.dump({'books': books, 'ignore_fields': list(msprefs['ignore_fields']),
                    'append_comments': bool(msprefs['append_comments'])}, f)
+
+
+with open(path('job.json'), encoding='utf-8') as f:
+    job = json.load(f)
+with open(path('log.txt'), 'w', encoding='utf-8') as log_file:
+    try:
+        main(job, log_file)
+    except Exception:
+        log_file.write(traceback.format_exc())
+        raise
 )";
 
 // The covers job of the dialog's CoverWorker: single_covers(), with the
@@ -111,34 +115,42 @@ def path(name):
     return os.path.join(folder, name)
 
 
+def main(job, log_file):
+    from calibre.ebooks.metadata.sources.worker import single_covers
+    from calibre.utils.logging import GUILog
+
+    caches = {}
+    if os.path.exists(path('caches.pickle')):
+        with open(path('caches.pickle'), 'rb') as f:
+            caches = pickle.load(f)
+    os.makedirs(path('covers'), exist_ok=True)
+    log_dump = single_covers(job['title'], job['authors'], dict(job['identifiers']), caches, path('covers'))
+    log = GUILog()
+    log.load(log_dump)
+    log_file.write(log.plain_text)
+    with open(path('result.json'), 'w', encoding='utf-8') as f:
+        json.dump({'covers': True}, f)
+
+
 with open(path('job.json'), encoding='utf-8') as f:
     job = json.load(f)
 with open(path('log.txt'), 'w', encoding='utf-8') as log_file:
     try:
-        from calibre.ebooks.metadata.sources.worker import single_covers
-        from calibre.utils.logging import GUILog
-
-        caches = {}
-        if os.path.exists(path('caches.pickle')):
-            with open(path('caches.pickle'), 'rb') as f:
-                caches = pickle.load(f)
-        os.makedirs(path('covers'), exist_ok=True)
-        log_dump = single_covers(job['title'], job['authors'], dict(job['identifiers']), caches, path('covers'))
-        log = GUILog()
-        log.load(log_dump)
-        log_file.write(log.plain_text)
+        main(job, log_file)
     except Exception:
         log_file.write(traceback.format_exc())
         raise
-    with open(path('result.json'), 'w', encoding='utf-8') as f:
-        json.dump({'covers': True}, f)
 )";
 
 bool prepare(const QString &folder, const char *kind, const char *script, const MetadataDownload::Query &query,
              QString *error)
 {
-    // The identify job's result goes, as the covers job runs in its folder.
+    // The identify job's result goes, as the covers job runs in its folder,
+    // and so do the covers of a covers job before: single_covers() fails on
+    // a cover it saved already.
     QFile::remove(QDir(folder).filePath(QStringLiteral("result.json")));
+    if (qstrcmp(kind, "covers") == 0)
+        QDir(QDir(folder).filePath(QStringLiteral("covers"))).removeRecursively();
     QJsonArray identifiers;
     for (const auto &[type, value] : query.identifiers)
         identifiers.append(QJsonArray{ type, value });
@@ -178,8 +190,9 @@ QString commentsToHtml(const QString &comments)
     if (comments.trimmed().startsWith(u'<'))
         return comments;
     QString text = comments;
+    // prepare_string_for_xml(): the entities read, then escaped.
     if (!text.contains(u'<'))
-        text.replace(u'&', QStringLiteral("&amp;")).replace(u'<', QStringLiteral("&lt;")).replace(u'>', QStringLiteral("&gt;"));
+        text = CalibreText::replaceEntities(text).replace(u'&', QStringLiteral("&amp;")).replace(u'<', QStringLiteral("&lt;")).replace(u'>', QStringLiteral("&gt;"));
     QStringList parts;
     for (const QString &part : text.split(QStringLiteral("\n\n")))
         parts.append(QStringLiteral("<p class=\"description\">%1</p>").arg(QString(part).replace(u'\n', QStringLiteral("<br />"))));
@@ -317,8 +330,11 @@ QVariantMap changes(const LibraryData &data, const Book &book, const CalibreConf
             for (const FacetItem &author : data.authors)
                 sorts.insert(author.name.toLower(), author.sort);
             QStringList parts;
-            for (const QString &author : found.authors)
-                parts.append(sorts.value(author.toLower(), CalibreText::authorToAuthorSort(author, config.tweaks)));
+            for (const QString &author : found.authors) {
+                const QString part = sorts.value(author.toLower(), CalibreText::authorToAuthorSort(author, config.tweaks));
+                if (!part.isEmpty())
+                    parts.append(part);
+            }
             sort = parts.join(QStringLiteral(" & "));
         }
         changes.insert(QStringLiteral("authorSort"), sort);
@@ -371,7 +387,8 @@ QVariantMap changes(const LibraryData &data, const Book &book, const CalibreConf
     }
     if (use("comments") && !found.comments.trimmed().isEmpty()) {
         QString comments = found.comments;
-        if (appendComments && !book.comments.isEmpty())
+        // The editor's value of a description of spaces is nothing.
+        if (appendComments && !book.comments.trimmed().isEmpty())
             comments = commentsToHtml(book.comments) + QStringLiteral("\n\n") + commentsToHtml(found.comments);
         changes.insert(QStringLiteral("comments"), comments);
     }
