@@ -56,6 +56,9 @@ struct Preferences
     QMap<QString, QList<QPair<QString, QString>>> userCategories;
     // The virtual library Calibre opens the library with.
     QString virtualLibraryOnStartup;
+    // Whether a yes-or-no custom column has a third value, none, or none is
+    // no.
+    bool boolsAreTristate = true;
 
     // From the preferences table's rows, key and JSON value.
     static Preferences fromRows(const QHash<QString, QString> &rows);
@@ -96,8 +99,8 @@ private:
     QHash<int, qsizetype> m_tagRows;
     QHash<int, qsizetype> m_seriesRows;
     QHash<int, qsizetype> m_publisherRows;
-    // The custom columns' search terms, "#genre": known to the parser, not
-    // searched yet.
+    // The custom columns' search terms, "#genre", and "#saga_index" for a
+    // series column's numbers.
     QStringList m_customTerms;
 };
 

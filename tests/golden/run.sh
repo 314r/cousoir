@@ -52,8 +52,10 @@ oracle() {
     fi
 }
 
+# A third argument names the custom fields Calibre lists and Cousoir does not,
+# a composite column's, which Calibre's template language computes.
 compare() {
-    local name=$1 source=$2
+    local name=$1 source=$2 skipped=${3:-}
     for side in calibre cousoir; do
         cp -a --reflink=auto "$source" "$work/$name-$side"
         # Dropbox conflict copies are not part of the library.
@@ -61,7 +63,7 @@ compare() {
             \( -iname '*conflicted copy*' -o -iname '*copie en conflit*' -o -iname '*case conflict*' \) -delete
     done
     calibredb list --with-library "$work/$name-calibre" --for-machine --fields all \
-        | sed "s|$work/$name-calibre|@LIBRARY@|g" > "$work/$name-calibre.json"
+        | sed -e "s|$work/$name-calibre|@LIBRARY@|g" ${skipped:+-e "/\"\\*$skipped\":/d"} > "$work/$name-calibre.json"
     "$cli" list --library "$work/$name-cousoir" \
         | sed "s|$work/$name-cousoir|@LIBRARY@|g" > "$work/$name-cousoir.json"
     if cmp -s "$work/$name-calibre.json" "$work/$name-cousoir.json"; then
@@ -74,6 +76,7 @@ compare() {
 }
 
 compare fixture "$root/tests/data/library"
+compare custom "$root/tests/data/library-custom" computed
 # Two thousand made-up books, for the names, titles and files six books
 # leave out: names in other scripts, long titles, the same book twice.
 "$tool" make-library "$work/generated" 2000 7 > /dev/null
@@ -134,6 +137,7 @@ searches() {
 }
 
 searches fixture "$root/tests/data/library"
+searches custom "$root/tests/data/library-custom"
 searches generated "$work/generated"
 
 # The same edits written by Calibre and by Cousoir, then compared table by

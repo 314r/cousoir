@@ -45,10 +45,9 @@ struct SearchFold
 struct SearchWords
 {
     const char *language;
-    const char *today;
-    const char *yesterday;
-    const char *thisMonth;
-    const char *daysAgo;
+    // today, yesterday, thismonth, daysago, No, no, Yes, yes, unchecked,
+    // checked, empty and blank.
+    const char *words[12];
 };
 
 #include "calibre_search.inc"
@@ -663,16 +662,16 @@ std::optional<QDate> parseQueryDate(const QString &text)
     return std::nullopt;
 }
 
-// The words a date query takes in Calibre's interface language, and in
-// English: today, yesterday, thismonth and daysago.
-QStringList dateWords(const QString &language, int which)
+// A word a search takes in Calibre's interface language, lower case: today,
+// yesterday, thismonth, daysago, No, no, Yes, yes, unchecked, checked, empty
+// and blank, by their place.
+QStringList localWords(const QString &language, int which)
 {
     QStringList words;
     for (const SearchWords &entry : searchWords) {
         if (language == QLatin1String(entry.language)
             || (language.size() > 2 && language.left(2) == QLatin1String(entry.language))) {
-            const char *texts[4] = { entry.today, entry.yesterday, entry.thisMonth, entry.daysAgo };
-            words.append(lower(QString::fromUtf8(texts[which])));
+            words.append(lower(QString::fromUtf8(entry.words[which])));
             break;
         }
     }
@@ -754,6 +753,10 @@ Preferences Preferences::fromRows(const QHash<QString, QString> &rows)
     preferences.virtualLibraryOnStartup =
         QJsonDocument::fromJson("[" + rows.value(QStringLiteral("virtual_lib_on_startup")).toUtf8() + "]")
             .array().at(0).toString();
+    if (rows.contains(QStringLiteral("bools_are_tristate")))
+        preferences.boolsAreTristate =
+            QJsonDocument::fromJson("[" + rows.value(QStringLiteral("bools_are_tristate")).toUtf8() + "]")
+                .array().at(0).toBool(true);
     return preferences;
 }
 
@@ -788,8 +791,11 @@ Index::Index(const LibraryData &data, const Preferences &preferences, const Cali
     items(data.tags, &m_tagNames, &m_tagRows);
     items(data.series, &m_seriesNames, &m_seriesRows);
     items(data.publishers, &m_publisherNames, &m_publisherRows);
-    for (const QString &label : data.customColumns)
-        m_customTerms.append(u'#' + label);
+    for (const CustomColumn &column : data.customColumns) {
+        m_customTerms.append(u'#' + column.label);
+        if (column.datatype == QLatin1String("series"))
+            m_customTerms.append(u'#' + column.label + QStringLiteral("_index"));
+    }
 }
 
 // Parser of db/search.py: a search over the books of an index, among a
@@ -939,9 +945,24 @@ private:
             return invert ? m_universe & ~found : found;
         }
 
-        if (m_index.m_customTerms.contains(location)) {
-            fail(tr("Cousoir cannot search custom columns yet: %1").arg(location));
-            return found;
+        if (const std::optional<Custom> custom = customOf(location)) {
+            const QString &type = custom->column->datatype;
+            if (custom->seriesIndex)
+                return numericSearch(location, lower(query), DataType::Float, candidates);
+            if (type == QLatin1String("composite")) {
+                fail(tr("Cousoir does not compute composite columns, which Calibre's templates make: %1").arg(location));
+                return found;
+            }
+            if (type == QLatin1String("datetime"))
+                return dateSearch(location, lower(query), candidates);
+            if (type == QLatin1String("int") || type == QLatin1String("float") || type == QLatin1String("rating"))
+                return numericSearch(location, lower(query), custom->type, candidates);
+            if (custom->column->multiple && query.size() > 1 && query.at(0) == u'#'
+                && QStringView(u"=<>!").contains(query.at(1)))
+                return countSearch(location, lower(query.mid(1)), candidates);
+            if (type == QLatin1String("bool"))
+                return booleanSearch(location, lower(query), candidates);
+            return textSearch(location, query, candidates);
         }
 
         if (const Field *field = fieldOf(location)) {
@@ -1088,7 +1109,122 @@ private:
                 // Searched as text, a book's identifiers are their types.
                 for (const auto &identifier : book.identifiers)
                     hit = hit || test(identifier.first, nullptr);
+            } else if (const std::optional<Custom> custom = customOf(location)) {
+                const QVariant value = customValue(book, *custom);
+                if (custom->column->multiple) {
+                    for (const QString &item : value.toStringList())
+                        hit = hit || test(item, nullptr);
+                } else if (!value.isNull()) {
+                    hit = test(value.toString(), nullptr);
+                }
             }
+            if (hit)
+                found.setBit(row);
+        }
+        return found;
+    }
+
+    // A custom column a search term names, "#genre", or its series' numbers,
+    // "#saga_index"; and the kind of values a search compares.
+    struct Custom
+    {
+        qsizetype index = -1;
+        const CustomColumn *column = nullptr;
+        bool seriesIndex = false;
+        DataType type = DataType::None;
+    };
+
+    std::optional<Custom> customOf(const QString &key) const
+    {
+        if (!key.startsWith(u'#'))
+            return std::nullopt;
+        const QList<CustomColumn> &columns = m_index.m_data.customColumns;
+        for (qsizetype index = 0; index < columns.size(); ++index) {
+            const CustomColumn &column = columns.at(index);
+            const bool numbers = column.datatype == QLatin1String("series")
+                && key == u'#' + column.label + QStringLiteral("_index");
+            if (key != u'#' + column.label && !numbers)
+                continue;
+            Custom custom{ index, &column, numbers, DataType::Text };
+            const QString &type = column.datatype;
+            if (numbers || type == QLatin1String("float"))
+                custom.type = DataType::Float;
+            else if (type == QLatin1String("int"))
+                custom.type = DataType::Int;
+            else if (type == QLatin1String("rating"))
+                custom.type = DataType::Rating;
+            else if (type == QLatin1String("datetime"))
+                custom.type = DataType::DateTime;
+            else if (type == QLatin1String("bool") || type == QLatin1String("composite"))
+                custom.type = DataType::None;
+            return custom;
+        }
+        return std::nullopt;
+    }
+
+    // A book's value of a custom column: null when it has none.
+    QVariant customValue(const Book &book, const Custom &custom) const
+    {
+        const CustomValue value = book.custom.value(custom.index);
+        if (custom.seriesIndex)
+            return value.value.isNull() ? QVariant() : QVariant(value.seriesIndex);
+        return value.value;
+    }
+
+    // Whether a custom column's rating counts half stars, which a search
+    // compares as they are rather than in whole stars.
+    static bool halfStars(const CustomColumn &column)
+    {
+        return column.datatype == QLatin1String("rating")
+            && QJsonDocument::fromJson(column.display).object().value(QLatin1String("allow_half_stars")).toBool();
+    }
+
+    // BooleanSearch: yes, no, or none when bools_are_tristate.
+    QBitArray booleanSearch(const QString &field, const QString &query, const QBitArray &candidates)
+    {
+        QBitArray found = empty(m_books.size());
+        const QString language = m_index.m_interfaceLanguage;
+        // local_forms(): the translation in lower case, composed and not.
+        const auto local = [&language](std::initializer_list<int> which) {
+            QSet<QString> forms;
+            for (const int index : which) {
+                for (const QString &word : localWords(language, index)) {
+                    for (const auto form : { QString::NormalizationForm_C, QString::NormalizationForm_D,
+                                             QString::NormalizationForm_KC, QString::NormalizationForm_KD })
+                        forms.insert(word.normalized(form));
+                }
+            }
+            return forms;
+        };
+        const QSet<QString> no = QSet<QString>{ QStringLiteral("unchecked"), QStringLiteral("_unchecked"),
+                                                QStringLiteral("no"), QStringLiteral("_no") } + local({ 4, 5, 8 });
+        const QSet<QString> noAndFalse = no + QSet<QString>{ QStringLiteral("false") };
+        const QSet<QString> noAndTrue = no + QSet<QString>{ QStringLiteral("true") };
+        const QSet<QString> yes = QSet<QString>{ QStringLiteral("checked"), QStringLiteral("_checked"),
+                                                 QStringLiteral("yes"), QStringLiteral("_yes"), QStringLiteral("true") }
+            + local({ 6, 7, 9 });
+        const QSet<QString> blank = QSet<QString>{ QStringLiteral("blank"), QStringLiteral("_blank"),
+                                                   QStringLiteral("empty"), QStringLiteral("_empty"),
+                                                   QStringLiteral("false") } + local({ 10, 11 });
+        if (!(noAndFalse + yes + blank).contains(query)) {
+            fail(tr("Invalid boolean query \"%1\"").arg(query));
+            return found;
+        }
+        const Custom custom = *customOf(field);
+        const bool tristate = m_index.m_preferences.boolsAreTristate;
+        for (qsizetype row = 0; row < m_books.size(); ++row) {
+            if (!candidates.testBit(row))
+                continue;
+            const QVariant value = customValue(m_books.at(row), custom);
+            bool hit = false;
+            if (!tristate)
+                hit = value.isNull() || !value.toBool() ? noAndFalse.contains(query) : yes.contains(query);
+            else if (value.isNull())
+                hit = blank.contains(query);
+            else if (!value.toBool())
+                hit = noAndTrue.contains(query);
+            else
+                hit = yes.contains(query);
             if (hit)
                 found.setBit(row);
         }
@@ -1113,6 +1249,12 @@ private:
                 if (key != QLatin1String("series_sort") && key != QLatin1String("id") && key != QLatin1String("uuid")
                     && !virtualField(key))
                     locations.append(key);
+            }
+            // The custom columns but a composite, which Cousoir cannot
+            // compute.
+            for (const QString &term : m_index.m_customTerms) {
+                if (customOf(term)->column->datatype != QLatin1String("composite"))
+                    locations.append(term);
             }
         } else {
             locations.append(location);
@@ -1140,7 +1282,9 @@ private:
             }
 
             const Field *metadata = fieldOf(field);
-            const DataType type = metadata && field != QLatin1String("series_sort") ? metadata->type : DataType::None;
+            const std::optional<Custom> custom = customOf(field);
+            const DataType type = custom ? custom->type
+                : metadata && field != QLatin1String("series_sort") ? metadata->type : DataType::None;
             if (type == DataType::Rating || type == DataType::Float || type == DataType::Int) {
                 if (intQuery || numberOk)
                     found |= numberInAll(field, type, number, intQuery, current);
@@ -1207,6 +1351,19 @@ private:
                 present = !blank(book.uuid);
             else if (field == QLatin1String("series_sort"))
                 present = book.seriesId > 0;
+            else if (const std::optional<Custom> custom = customOf(field)) {
+                const QVariant value = customValue(book, *custom);
+                if (custom->column->multiple) {
+                    const QStringList items = value.toStringList();
+                    present = std::any_of(items.cbegin(), items.cend(), [](const QString &item) { return !blank(item); });
+                } else if (custom->type == DataType::Text) {
+                    present = !value.isNull() && !blank(value.toString());
+                } else if (custom->type == DataType::DateTime) {
+                    present = !value.isNull();
+                } else {
+                    present = !value.isNull() && value.toDouble() != 0;
+                }
+            }
             if (present)
                 found.setBit(row);
         }
@@ -1224,7 +1381,17 @@ private:
                 continue;
             const Book &book = m_books.at(row);
             bool hit = false;
-            if (type == DataType::Rating)
+            if (const std::optional<Custom> custom = customOf(field)) {
+                const QVariant value = customValue(book, *custom);
+                if (value.isNull())
+                    hit = false;
+                else if (type == DataType::Rating)
+                    hit = integer && value.toLongLong() == *integer * 2;
+                else if (type == DataType::Float)
+                    hit = value.toDouble() == number;
+                else
+                    hit = integer && value.toLongLong() == *integer;
+            } else if (type == DataType::Rating)
                 hit = integer && book.rating > 0 && book.rating == *integer * 2;
             else if (type == DataType::Float) {
                 const std::optional<double> value = field == QLatin1String("size")
@@ -1254,8 +1421,10 @@ private:
         return size;
     }
 
-    static QDateTime dateOf(const Book &book, const QString &field)
+    QDateTime dateOf(const Book &book, const QString &field) const
     {
+        if (const std::optional<Custom> custom = customOf(field))
+            return customValue(book, *custom).toDateTime();
         if (field == QLatin1String("timestamp"))
             return book.timestamp;
         if (field == QLatin1String("pubdate"))
@@ -1328,7 +1497,7 @@ private:
         const Relation kind = relation(&query);
         const QString language = m_index.m_interfaceLanguage;
         const auto is = [&](int which, const char *english) {
-            QStringList words = dateWords(language, which);
+            QStringList words = localWords(language, which);
             words << QLatin1String(english) << u'_' + QLatin1String(english);
             return words;
         };
@@ -1382,9 +1551,16 @@ private:
         QBitArray found = empty(m_books.size());
         if (query.isEmpty())
             return found;
-        // A rating is an item of the book, none for most.
-        const bool many = field == QLatin1String("rating");
+        // A rating is an item of the book, none for most; a custom column's
+        // with half stars compares as it is.
+        const std::optional<Custom> custom = customOf(field);
+        const bool half = custom && halfStars(*custom->column);
+        const bool many = field == QLatin1String("rating") || (custom && custom->type == DataType::Rating);
         const auto value = [&](const Book &book) -> std::optional<double> {
+            if (custom) {
+                const QVariant value = customValue(book, *custom);
+                return value.isNull() ? std::nullopt : std::optional<double>(value.toDouble());
+            }
             if (field == QLatin1String("rating"))
                 return book.rating > 0 ? std::optional<double>(book.rating) : std::nullopt;
             if (field == QLatin1String("cover"))
@@ -1405,7 +1581,8 @@ private:
         if (many && (query == QLatin1String("true") || query == QLatin1String("false"))) {
             QBitArray rated = empty(m_books.size());
             for (qsizetype row = 0; row < m_books.size(); ++row) {
-                if (candidates.testBit(row) && value(m_books.at(row)).value_or(0) > 0)
+                const std::optional<double> v = candidates.testBit(row) ? value(m_books.at(row)) : std::nullopt;
+                if (v && (half || *v > 0))
                     rated.setBit(row);
             }
             return query == QLatin1String("true") ? rated : candidates & ~rated;
@@ -1430,7 +1607,7 @@ private:
                     query.chop(1);
             }
             bool ok = false;
-            if (type == DataType::Float) {
+            if (type == DataType::Float || half) {
                 target = query.trimmed().toDouble(&ok);
             } else {
                 // int(), which takes no decimals.
@@ -1443,6 +1620,8 @@ private:
                 return found;
             }
             target *= multiplier;
+            if (half)
+                target = std::nearbyint(target * 2);
         }
 
         for (qsizetype row = 0; row < m_books.size(); ++row) {
@@ -1467,7 +1646,7 @@ private:
                 if (v) {
                     double number = *v;
                     // Ratings compare in whole stars.
-                    if (type == DataType::Rating && number != 0)
+                    if (type == DataType::Rating && !half && number != 0)
                         number = std::floor(number / 2);
                     hit = compare(kind, number, target);
                 }
@@ -1496,6 +1675,8 @@ private:
                 return book.tagIds.size();
             if (field == QLatin1String("identifiers"))
                 return book.identifiers.size();
+            if (const std::optional<Custom> custom = customOf(field))
+                return customValue(book, *custom).toStringList().size();
             return 0;
         };
         if (query == QLatin1String("true") || query == QLatin1String("false")) {

@@ -494,6 +494,96 @@ bool isKnownSchema(int userVersion, const QString &fingerprint)
     });
 }
 
+// The custom columns and each book's values, as Calibre's tables read them
+// in db/tables.py: a normalized column's items by link order, a series'
+// number from its link's extra, the others one row per book. A composite's
+// values are Calibre's to compute.
+template<typename BookWithId>
+bool readCustomColumns(SqliteDb &db, QList<Book> &books, const BookWithId &bookWithId, QList<CustomColumn> *columns,
+                       QString *error)
+{
+    columns->clear();
+    QStringList tables;
+    if (!forEachRow(db, QStringLiteral("SELECT name FROM sqlite_master WHERE type='table'"),
+                    [&](SqliteStatement &row) { tables.append(row.text(0)); }, error)
+        || !forEachRow(db, QStringLiteral("SELECT id, label, name, datatype, is_multiple, normalized, editable, display "
+                                          "FROM custom_columns WHERE mark_for_delete=0 ORDER BY id"),
+                       [&](SqliteStatement &row) {
+                           CustomColumn column;
+                           column.id = int(row.integer(0));
+                           column.label = row.text(1);
+                           column.name = row.text(2);
+                           column.datatype = row.text(3);
+                           column.multiple = row.integer(4) != 0;
+                           column.normalized = row.integer(5) != 0;
+                           column.editable = row.integer(6) != 0;
+                           column.display = row.text(7).toUtf8();
+                           columns->append(column);
+                       }, error)) {
+        return false;
+    }
+    // initialize_custom_columns() leaves out a column whose tables are gone.
+    columns->removeIf([&tables](const CustomColumn &column) {
+        const QString table = QStringLiteral("custom_column_%1").arg(column.id);
+        const QString link = QStringLiteral("books_custom_column_%1_link").arg(column.id);
+        return !tables.contains(table) || (column.normalized && !tables.contains(link));
+    });
+    for (Book &book : books)
+        book.custom.resize(columns->size());
+
+    for (qsizetype index = 0; index < columns->size(); ++index) {
+        const CustomColumn &column = columns->at(index);
+        if (column.datatype == QLatin1String("composite"))
+            continue;
+        const auto convert = [&column](SqliteStatement &row, int at) -> QVariant {
+            if (row.isNull(at))
+                return {};
+            const QString &type = column.datatype;
+            if (type == QLatin1String("int") || type == QLatin1String("rating"))
+                return row.integer(at);
+            if (type == QLatin1String("float"))
+                return row.real(at);
+            if (type == QLatin1String("bool"))
+                return row.integer(at) != 0;
+            if (type == QLatin1String("datetime"))
+                return parseDate(row.value(at));
+            return row.text(at);
+        };
+        const bool series = column.datatype == QLatin1String("series");
+        const QString sql = column.normalized
+            ? QStringLiteral("SELECT l.book, v.value%1 FROM books_custom_column_%2_link l "
+                             "JOIN custom_column_%2 v ON v.id=l.value ORDER BY l.id")
+                  .arg(series ? QStringLiteral(", l.extra") : QString()).arg(column.id)
+            : QStringLiteral("SELECT book, value FROM custom_column_%1").arg(column.id);
+        if (!forEachRow(db, sql, [&](SqliteStatement &row) {
+                Book *book = bookWithId(row.integer(0));
+                if (!book)
+                    return;
+                CustomValue &value = book->custom[index];
+                const QVariant read = convert(row, 1);
+                if (column.multiple) {
+                    QStringList values = value.value.toStringList();
+                    values.append(read.toString());
+                    value.value = values;
+                } else {
+                    value.value = read;
+                }
+                if (series)
+                    value.seriesIndex = row.isNull(2) ? 1.0 : row.real(2);
+            }, error)) {
+            return false;
+        }
+        // A book with none of several values has an empty list.
+        if (column.multiple) {
+            for (Book &book : books) {
+                if (book.custom[index].value.isNull())
+                    book.custom[index].value = QStringList();
+            }
+        }
+    }
+    return true;
+}
+
 bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
 {
     data->userVersion = db.value(QStringLiteral("PRAGMA user_version")).toInt();
@@ -506,15 +596,11 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
     data->trashExpirySeconds = expiryOk ? std::max<qint64>(24 * 3600, qint64(expiry)) : 14 * 24 * 3600;
 
     for (const char *key : { "saved_searches", "virtual_libraries", "grouped_search_terms", "user_categories",
-                             "virtual_lib_on_startup" }) {
+                             "virtual_lib_on_startup", "bools_are_tristate" }) {
         SqliteStatement preference(db, QStringLiteral("SELECT val FROM preferences WHERE key=?"));
         preference.bind(1, QString::fromLatin1(key));
         if (preference.step())
             data->preferences.insert(QString::fromLatin1(key), preference.text(0));
-    }
-    if (!forEachRow(db, QStringLiteral("SELECT label FROM custom_columns WHERE mark_for_delete=0 ORDER BY id"),
-                    [&](SqliteStatement &row) { data->customColumns.append(row.text(0)); }, error)) {
-        return false;
     }
 
     QList<Book> books;
@@ -664,6 +750,9 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
         std::sort(book.formats.begin(), book.formats.end(),
                   [](const BookFormat &a, const BookFormat &b) { return a.format < b.format; });
     }
+
+    if (!readCustomColumns(db, books, bookWithId, &data->customColumns, error))
+        return false;
 
     data->books = std::move(books);
     data->authors = facetItems(authors, authorCounts);

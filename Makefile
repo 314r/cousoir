@@ -30,11 +30,13 @@ run: build
 test: build
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
 
-# Rebuilds tests/data/library and its calibredb listing, and the book files of
-# tests/data/import, with Calibre.
+# Rebuilds tests/data/library and its calibredb listing, the book files of
+# tests/data/import, and tests/data/library-custom, the same library with a
+# custom column of each kind, with Calibre.
 fixtures: build
 	COUSOIR_TEST_TOOL=$(abspath $(BUILD_DIR))/cousoir-test-tool tools/make_fixture_library.sh
 	COUSOIR_TEST_TOOL=$(abspath $(BUILD_DIR))/cousoir-test-tool tools/make_import_fixtures.sh
+	tools/make_custom_library.sh
 
 # Records what Calibre computes, for the tests and the tables Cousoir takes
 # from it: title and author sorts, folder and file names, the transliteration

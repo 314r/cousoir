@@ -7,6 +7,7 @@
 #include <QPair>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 // One file of a book, from Calibre's data table.
 struct BookFormat
@@ -18,6 +19,35 @@ struct BookFormat
     qint64 size = 0;
     // The file found in the book's folder; empty when it is missing.
     QString file;
+};
+
+// A custom column of the library, as custom_columns describes it.
+struct CustomColumn
+{
+    int id = 0;
+    // "genre" for #genre.
+    QString label;
+    QString name;
+    // text, comments, series, enumeration, int, float, rating, datetime,
+    // bool or composite.
+    QString datatype;
+    // Several values per book, as tags have.
+    bool multiple = false;
+    // Its values are items with a link table, as authors and tags are.
+    bool normalized = false;
+    bool editable = true;
+    // How Calibre shows it, as JSON: the template of a composite, the values
+    // of an enumeration, half stars.
+    QByteArray display;
+};
+
+// A book's value of a custom column: null when it has none. A list for a
+// column of several values; else text, a number, a date or true and false.
+struct CustomValue
+{
+    QVariant value;
+    // The book's number in a series column.
+    double seriesIndex = 1;
 };
 
 // A row of Calibre's books table and the items linked to it. Ids are those
@@ -63,6 +93,9 @@ struct Book
     // The settings Calibre's last conversion of the book saved for the next
     // one, its conversion_options row as stored; empty when there is none.
     QByteArray conversionOptions;
+
+    // Its custom columns' values, in the order of the library's columns.
+    QList<CustomValue> custom;
 
     // From the book's folder rather than the database: its cover.jpg, empty
     // when there is none, and the cover's modification time in ms.
@@ -113,8 +146,8 @@ struct LibraryData
     qint64 trashExpirySeconds = 14 * 24 * 3600;
     // metadata.db as it was copied.
     FileIdentity source;
-    // The labels of the custom columns, "genre" for #genre.
-    QStringList customColumns;
+    // The custom columns, by id.
+    QList<CustomColumn> customColumns;
     // The preferences a search reads, by key, as JSON: saved searches,
     // virtual libraries, grouped search terms and user categories.
     QHash<QString, QString> preferences;

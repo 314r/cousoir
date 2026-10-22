@@ -37,7 +37,7 @@ int searchBooks(const QStringList &arguments)
     QJsonArray results;
     QString restriction;
     for (const QString &line : QString::fromUtf8(queries.readAll()).split(u'\n')) {
-        if (line.trimmed().isEmpty() || line.startsWith(u'#'))
+        if (line.trimmed().isEmpty() || line.startsWith(QLatin1String("# ")))
             continue;
         if (line.startsWith(QLatin1String("@vl"))) {
             const QString name = line.mid(3).trimmed();

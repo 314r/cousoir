@@ -1,6 +1,7 @@
 # The searches the golden test runs through Calibre's search and Cousoir's,
-# on the fixture and on made-up libraries; "@vl NAME" restricts the lines
-# after it to a virtual library, as the Calibre window does.
+# on the fixture, the fixture with custom columns and made-up libraries;
+# "@vl NAME" restricts the lines after it to a virtual library, as the
+# Calibre window does. A line starting with "# " is a comment.
 
 # Words, anywhere.
 ecume
@@ -323,6 +324,86 @@ words:montagne
 @favoris:.true
 @favoris:x
 @Favoris.Sous:true
+
+# Custom columns: of several values, text, yes or no, ratings, numbers,
+# dates, long text, a fixed list, a series and its numbers.
+#genre:sf
+#genre:=SF
+#genre:fantas
+#genre:true
+#genre:false
+#genre:#>1
+#genre:#=0
+#genre:#abc
+#people:curie
+#people:=jean dupont
+#note:note
+#note:"=une note"
+#note:ca
+#note:true
+#note:false
+#read:true
+#read:false
+#read:yes
+#read:no
+#read:checked
+#read:unchecked
+#read:empty
+#read:blank
+#read:oui
+#read:non
+#read:maybe
+#myrating:4
+#myrating:>3
+#myrating:5
+#myrating:true
+#myrating:false
+#myrating:3.5
+#half:3.5
+#half:>3
+#half:3
+#half:true
+#half:false
+#pagecount:320
+#pagecount:0
+#pagecount:>100
+#pagecount:true
+#pagecount:false
+#pagecount:abc
+#price:12.5
+#price:>5
+#price:3
+#price:true
+#started:2024
+#started:2024-03
+#started:<2000
+#started:true
+#started:false
+#review:bien
+#review:true
+#review:false
+#shelf:b
+#shelf:=B
+#shelf:true
+#shelf:false
+#saga:cycle
+#saga:=Cycle
+#saga:autre
+#saga:true
+#saga:false
+#saga_index:3.5
+#saga_index:>1
+#saga_index:true
+#saga_index:false
+#nothing:x
+#genre:sf and not #read:yes
+bien
+cycle
+12.5
+320
+curie
+"une note"
+3.5
 
 # Other scripts.
 достоевский

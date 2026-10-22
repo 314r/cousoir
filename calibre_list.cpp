@@ -14,7 +14,7 @@ namespace {
 // keep their ".0".
 struct PyValue
 {
-    enum class Kind { String, Integer, Float, List, Dict };
+    enum class Kind { String, Integer, Float, Boolean, List, Dict };
 
     Kind kind = Kind::String;
     QString string;
@@ -41,6 +41,13 @@ struct PyValue
         PyValue result;
         result.kind = Kind::Float;
         result.real = value;
+        return result;
+    }
+    static PyValue boolean(bool value)
+    {
+        PyValue result;
+        result.kind = Kind::Boolean;
+        result.integer = value ? 1 : 0;
         return result;
     }
     static PyValue list(const QStringList &values)
@@ -117,6 +124,9 @@ void write(QByteArray &out, const PyValue &value, int depth)
         return;
     case PyValue::Kind::Float:
         out += floatRepr(value.real);
+        return;
+    case PyValue::Kind::Boolean:
+        out += value.integer ? "true" : "false";
         return;
     case PyValue::Kind::List:
         if (value.items.isEmpty()) {
@@ -211,6 +221,37 @@ QByteArray machineList(const LibraryData &data)
         entry.insert(QStringLiteral("title"), PyValue::text(book->title));
         if (!book->uuid.isNull())
             entry.insert(QStringLiteral("uuid"), PyValue::text(book->uuid));
+
+        // The custom columns as *label, but a composite's, which Calibre
+        // computes; a date it has not is "None", any other value missing is
+        // left out.
+        for (qsizetype index = 0; index < data.customColumns.size(); ++index) {
+            const CustomColumn &column = data.customColumns.at(index);
+            const QVariant value = book->custom.value(index).value;
+            const QString key = u'*' + column.label;
+            const QString &type = column.datatype;
+            if (type == QLatin1String("composite"))
+                continue;
+            if (type == QLatin1String("datetime")) {
+                entry.insert(key, PyValue::text(value.isNull() ? QStringLiteral("None")
+                                                               : CalibreDb::isoFormat(value.toDateTime())));
+                continue;
+            }
+            if (column.multiple) {
+                entry.insert(key, PyValue::list(value.toStringList()));
+                continue;
+            }
+            if (value.isNull())
+                continue;
+            if (type == QLatin1String("int") || type == QLatin1String("rating"))
+                entry.insert(key, PyValue::number(value.toLongLong()));
+            else if (type == QLatin1String("float"))
+                entry.insert(key, PyValue::floating(value.toDouble()));
+            else if (type == QLatin1String("bool"))
+                entry.insert(key, PyValue::boolean(value.toBool()));
+            else
+                entry.insert(key, PyValue::text(value.toString()));
+        }
         list.items.append(entry);
     }
 
