@@ -167,6 +167,44 @@ Calibre 7 keeps notes on authors, series, tags and publishers in
 - An item's note shown beside its books, read from `notes.db` as Calibre
   reads it; a search on notes later.
 
+## Second plan: useful without Calibre
+
+After goal 12 the user asked for ambition over polish: features people
+feel, Calibre's library format and interoperability kept exact, but
+Calibre itself needed for less. Goals 11 and 13 stay; these come first.
+
+### 14. A Kobo without Calibre
+
+Sending to a Kobo needs Calibre today: its job converts to KEPUB, puts the
+library's metadata in the copy, picks the file's path and writes
+metadata.calibre. Cousoir does it all itself; Calibre, when installed, is
+no longer needed for it.
+
+- KEPUB conversion in C++, after Calibre's `kepubify.py`: sentence spans,
+  the book-columns wrappers, Kobo's styles, a title page when there is none.
+- The library's metadata and cover put into the copy, as Calibre's EPUB
+  metadata writer does.
+- The KoboTouch driver's file path and metadata.calibre entry.
+- Checked by the golden test against Calibre's own send: the Kobo each
+  leaves must be read alike by both.
+
+### 15. The library on the local network
+
+An OPDS catalog served by Cousoir, for KOReader, phone readers and other
+e-readers: books by author, series, tag and search, covers, downloads; a
+simple web page to browse and download from a browser. No Calibre.
+
+### 16. Metadata and covers from the web without Calibre
+
+Cousoir's own sources, Open Library and Google Books over their public
+APIs, in the dialog of goal 9 when Calibre is not installed or beside
+Calibre's results. Tests against a local fake server.
+
+### 17. Highlights from a Kindle
+
+The Kindle's "My Clippings.txt" read like the Kobo's notes: by book,
+copied or saved as Markdown.
+
 ### Always
 
 - Bugs found on the way are fixed, with a test.
@@ -189,6 +227,10 @@ Calibre 7 keeps notes on authors, series, tags and publishers in
 | 10. The list's columns | done |
 | 11. Instant saves | planned |
 | 12. Language names | done |
+| 14. A Kobo without Calibre | next |
+| 15. The library on the network | planned |
+| 16. Metadata from the web without Calibre | planned |
+| 17. Kindle highlights | planned |
 | 13. Notes | planned |
 
 ## Journal
