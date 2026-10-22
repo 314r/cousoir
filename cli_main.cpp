@@ -30,6 +30,7 @@
 #include "concurrency_guard.h"
 #include "conversion.h"
 #include "device_files.h"
+#include "kepub.h"
 #include "kindle.h"
 #include "kindle_send.h"
 #include "kobo.h"
@@ -462,12 +463,19 @@ bool send(const QString &libraryPath, const CalibreConfig &config, const QString
         sent = outcome.sent;
         unsendable = outcome.unsendable;
     } else {
-        if (!KoboSend::prepare(data, bookIds, reader.kobo, Kobo::formatMap(CalibreConfig::configDirectory()),
-                               job.path(), &error)) {
+        // Cousoir alone without Calibre, or when asked to.
+        const bool native = SendJob::program().isEmpty() || !qEnvironmentVariableIsEmpty("COUSOIR_NATIVE_SEND");
+        const QStringList formats = Kobo::formatMap(CalibreConfig::configDirectory());
+        const bool prepared = native ? KoboSend::prepareNatively(data, bookIds, reader.kobo, formats,
+                                                                 CalibreConfig::configDirectory(),
+                                                                 config.interfaceLanguage, job.path(), &error)
+                                     : KoboSend::prepare(data, bookIds, reader.kobo, formats, job.path(), &error);
+        if (!prepared) {
             err() << error << Qt::endl;
             return false;
         }
-        const KoboSend::Outcome outcome = KoboSend::run(job.path(), config.interfaceLanguage);
+        const KoboSend::Outcome outcome = native ? KoboSend::outcome(job.path(), 0)
+                                                 : KoboSend::run(job.path(), config.interfaceLanguage);
         if (!outcome.ok || !KoboSend::apply(job.path(), outcome, reader.kobo, &error)) {
             err() << (outcome.ok ? error : outcome.error) << Qt::endl;
             return false;
@@ -1018,7 +1026,9 @@ int main(int argc, char *argv[])
         "  template  Print what each template of a JSON array makes of each book.\n"
         "  download  Print what Calibre's metadata sources, on the web, find for the\n"
         "          book of the id given, and what it would change; --covers adds the\n"
-        "          covers found.\n\n"
+        "          covers found.\n"
+        "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
+        "          kepubify BOOK.epub BOOK.kepub\n\n"
         "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
         "Goyal and the Calibre contributors, https://calibre-ebook.com. GPL v3."));
     parser.addHelpOption();
@@ -1058,6 +1068,15 @@ int main(int argc, char *argv[])
             return 2;
         }
         return search(path, arguments.mid(1).join(u' '), parser.value(limitOption).toInt());
+    }
+    if (arguments.value(0) == QLatin1String("kepubify") && arguments.size() == 3) {
+        QString error;
+        Kepub::Options options;
+        if (!Kepub::kepubify(arguments.at(1), arguments.at(2), options, &error)) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+        return 0;
     }
     const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device")
         || arguments.value(0) == QLatin1String("template") || arguments.value(0) == QLatin1String("download");

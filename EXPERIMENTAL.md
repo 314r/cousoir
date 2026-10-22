@@ -227,7 +227,7 @@ copied or saved as Markdown.
 | 10. The list's columns | done |
 | 11. Instant saves | planned |
 | 12. Language names | done |
-| 14. A Kobo without Calibre | next |
+| 14. A Kobo without Calibre | done; a PDF goes without metadata |
 | 15. The library on the network | planned |
 | 16. Metadata from the web without Calibre | planned |
 | 17. Kindle highlights | planned |
@@ -742,4 +742,26 @@ Left for later: column widths of one's own, and the cover grid's sort.
 - From goal 10's review: a reload whose custom columns changed showed
   their values under the wrong headers; the list's columns follow each
   load now. The rest of that review was corner cases, left as they are.
+
+### 2026-10-22 — goal 14, a Kobo without Calibre (`exp-kobo`)
+
+- `Kepub` ports Calibre's kepubify on a small XML tree (Qt's stream reader
+  and writer, HTML entities made references): the pages of a test book
+  with lists, tables, notes, code, SVG, entities and two languages come out
+  byte for byte as Calibre's. It also converts books whose container names
+  a missing package first, which Calibre refuses. Without Calibre, Convert
+  to KEPUB uses it, on a worker thread, the library's metadata and cover
+  put into the copy.
+- Sending to a Kobo without Calibre: the driver's save template through
+  Cousoir's template engine, Calibre's filename cleaning and shortening,
+  the book's entry in metadata.calibre as Calibre's JsonCodec writes it
+  (thumbnail included), driveinfo.calibre, and the entries of books the
+  Kobo took in rewritten as KoboTouch's books() rewrites them. The paths
+  are Calibre's to the character.
+- The golden test runs the Kobo steps a second time with Cousoir sending
+  alone (`COUSOIR_NATIVE_SEND`), compared with Calibre's own sends in a
+  mode that lets the KEPUBs and thumbnails be Cousoir's: alike, and
+  Calibre, connecting, knows the books Cousoir sent.
+- Left for later: a PDF's metadata written into the copy, and a Kindle
+  without Calibre.
 

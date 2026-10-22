@@ -101,8 +101,10 @@ private slots:
     void addsAndRemovesFormats();
     void movesBooksToTrash();
     void convertsBooks();
+    void convertsWithoutCalibre();
     void downloadsMetadata();
     void sendsToKobos();
+    void sendsToKobosWithoutCalibre();
     void sendsToKindles();
     void checksLibrary();
     void mergesAuthorVariants();
@@ -1163,9 +1165,77 @@ void BookLibraryTest::downloadsMetadata()
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 }
 
+// Without Calibre, a KEPUB made by Cousoir of the book's EPUB goes into the
+// library as Calibre's would.
+void BookLibraryTest::convertsWithoutCalibre()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    ConversionService service;
+    service.setNative(true);
+    service.setLibrary(library.get());
+    QVERIFY(service.available());
+    QVERIFY(!service.calibre());
+    QCOMPARE(service.formatsFor(1), QStringList{ QStringLiteral("KEPUB") });
+    // A PDF alone, nothing.
+    QVERIFY(service.formatsFor(5).isEmpty());
+    QVERIFY(!service.convert(1, QStringLiteral("AZW3")).isEmpty());
+    QSignalSpy converted(&service, &ConversionService::converted);
+    QCOMPARE(service.convert(1, QStringLiteral("KEPUB")), QString());
+    QVERIFY(converted.wait(10000));
+    QVERIFY(waitForSave(library.get()));
+    library->setCurrentBookId(1);
+    QTRY_COMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.kepub"))));
+}
+
 // A Kobo shows up while mounted, with its books matched with the library's;
 // books go to it through Calibre, a stand-in here, and come off it; ejected,
 // it stays out until plugged in again.
+// Without Calibre, Cousoir sends to a Kobo itself: the EPUB as a KEPUB at
+// the driver's place, the book in metadata.calibre, and the Kobo's list
+// with it, matched with the library's book.
+void BookLibraryTest::sendsToKobosWithoutCalibre()
+{
+    auto library = open();
+    QVERIFY(library);
+    QTemporaryDir kobo;
+    QVERIFY(makeKobo(kobo.path()));
+    const QString root = QDir::cleanPath(kobo.path());
+    QTemporaryDir config;
+    QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
+    DeviceLibrary devices;
+    devices.setNative(true);
+    devices.setConfigDirectory(config.path());
+    devices.setVolumeProvider([&volumes] { return volumes; }, 20);
+    devices.setLibrary(library.get());
+    QTRY_COMPARE(devices.devices().size(), 1);
+    devices.setCurrentRoot(root);
+    QTRY_VERIFY(!devices.loading());
+    QSignalSpy sent(&devices, &DeviceLibrary::sent);
+    QCOMPARE(devices.send({ 1, 5 }, root), QString());
+    QVERIFY(sent.wait(10000));
+    const QString kepub = QStringLiteral("Vian, Boris/Ecume des jours, L_ - Boris Vian.kepub.epub");
+    QVERIFY(QFileInfo::exists(QDir(root).filePath(kepub)));
+    QVERIFY(QFileInfo::exists(QDir(root).filePath(QStringLiteral("Dupont, Jean-Pierre/Manuel technique - Jean-Pierre Dupont.pdf"))));
+    QFile metadata(QDir(root).filePath(QStringLiteral("metadata.calibre")));
+    QVERIFY(metadata.open(QIODevice::ReadOnly));
+    const QJsonArray books = QJsonDocument::fromJson(metadata.readAll()).array();
+    QCOMPARE(books.size(), 2);
+    QCOMPARE(books.first().toObject().value(QStringLiteral("lpath")).toString(), kepub);
+    QCOMPARE(books.first().toObject().value(QStringLiteral("uuid")).toString(), library->data().book(1)->uuid);
+    QVERIFY(QFileInfo::exists(QDir(root).filePath(QStringLiteral("driveinfo.calibre"))));
+    // The Kobo's list has them, matched with the library's books.
+    QTRY_COMPARE(devices.rows().size(), 2);
+    QStringList matched;
+    for (const QVariant &row : devices.rows())
+        matched.append(QString::number(row.toMap().value(QStringLiteral("bookId")).toInt()));
+    matched.sort();
+    QCOMPARE(matched, (QStringList{ QStringLiteral("1"), QStringLiteral("5") }));
+}
+
 void BookLibraryTest::sendsToKobos()
 {
     auto library = open();

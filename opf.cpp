@@ -104,6 +104,27 @@ QString seriesIndexText(double index)
 // columns take their rec_index.
 constexpr int builtInFields = 23;
 
+
+QList<QPair<QString, QString>> keptMetadata(const QByteArray &previous)
+{
+    QList<QPair<QString, QString>> kept;
+    QXmlStreamReader reader(previous);
+    while (!reader.atEnd()) {
+        if (reader.readNext() != QXmlStreamReader::StartElement || reader.name() != QLatin1String("meta"))
+            continue;
+        const QString name = reader.attributes().value(QLatin1String("name")).toString();
+        if (name.startsWith(QLatin1String("calibre:user_metadata:")) || name == QLatin1String("calibre:annotation")
+            || name == QLatin1String("calibre:user_categories")) {
+            kept.append({ name, reader.attributes().value(QLatin1String("content")).toString() });
+        }
+    }
+    return kept;
+}
+
+} // namespace
+
+namespace Opf {
+
 // serialize_user_metadata(): each custom column, by key, as its field
 // metadata with the book's value, in json.dumps()'s spelling; a composite's
 // as its template made it.
@@ -195,26 +216,6 @@ QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book 
 }
 
 // The calibre: metadata of `previous` Cousoir has no data for.
-QList<QPair<QString, QString>> keptMetadata(const QByteArray &previous)
-{
-    QList<QPair<QString, QString>> kept;
-    QXmlStreamReader reader(previous);
-    while (!reader.atEnd()) {
-        if (reader.readNext() != QXmlStreamReader::StartElement || reader.name() != QLatin1String("meta"))
-            continue;
-        const QString name = reader.attributes().value(QLatin1String("name")).toString();
-        if (name.startsWith(QLatin1String("calibre:user_metadata:")) || name == QLatin1String("calibre:annotation")
-            || name == QLatin1String("calibre:user_categories")) {
-            kept.append({ name, reader.attributes().value(QLatin1String("content")).toString() });
-        }
-    }
-    return kept;
-}
-
-} // namespace
-
-namespace Opf {
-
 QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settings &settings, const QByteArray &previous,
                          const ExactDates *exact)
 {

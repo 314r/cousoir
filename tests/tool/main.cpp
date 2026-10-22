@@ -22,7 +22,7 @@ struct Command
 const Command commands[] = {
     { "compare-libraries", Tool::compareLibraries, 2, 7,
       "[--files-only] [--added-from N] [--converted BOOK:FORMAT,...] CALIBRE COUSOIR" },
-    { "compare-devices", Tool::compareDevices, 2, 3, "[--lpaths-only] CALIBRE COUSOIR" },
+    { "compare-devices", Tool::compareDevices, 2, 4, "[--lpaths-only] [--native] CALIBRE COUSOIR" },
     { "compare-reads", Tool::compareReads, 2, 2, "CALIBRE.json COUSOIR.json" },
     { "compare-reading", Tool::compareReading, 2, 2, "CALIBRE.json DEVICE.json" },
     { "compare-templates", Tool::compareTemplates, 2, 2, "CALIBRE.json COUSOIR.json" },

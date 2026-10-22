@@ -520,7 +520,18 @@ int DeviceLibrary::deviceCount() const
 
 bool DeviceLibrary::available() const
 {
-    return !m_program.isEmpty();
+    // A Kobo needs no Calibre.
+    return true;
+}
+
+bool DeviceLibrary::sendsNatively() const
+{
+    return m_program.isEmpty() || m_native;
+}
+
+void DeviceLibrary::setNative(bool native)
+{
+    m_native = native;
 }
 
 bool DeviceLibrary::writable() const
@@ -592,11 +603,11 @@ QString DeviceLibrary::send(const QVariantList &bookIds, const QString &root)
 {
     if (!m_library)
         return tr("No library is open.");
-    if (!available())
-        return tr("Sending books needs Calibre, which is not installed.");
     if (!m_writable)
         return readOnlyReason();
     const Connected *connected = find(root);
+    if (connected && connected->kind == Kind::Kindle && m_program.isEmpty())
+        return tr("Sending books to a Kindle needs Calibre, which is not installed.");
     if (!connected)
         return tr("The device is no longer connected.");
     if (connected->kind == Kind::Kindle && connected->loading)
@@ -1001,9 +1012,21 @@ void DeviceLibrary::startNext()
             return;
         }
         m_jobs.first().link = std::move(prepared.second);
-        startProcess(folder);
+        if (m_jobs.first().kind == Kind::Kobo && sendsNatively())
+            finishSend(0);
+        else
+            startProcess(folder);
     });
-    if (job.kind == Kind::Kobo) {
+    if (job.kind == Kind::Kobo && sendsNatively()) {
+        // Cousoir's own send: the KEPUBs made, the Kobo's lists written.
+        watcher->setFuture(QtConcurrent::run([data, bookIds = job.bookIds, device = connected->kobo, formats, folder,
+                                              config = m_configDirectory,
+                                              language = m_library->interfaceLanguage()] {
+            QString error;
+            KoboSend::prepareNatively(data, bookIds, device, formats, config, language, folder, &error);
+            return Prepared{ error, nullptr };
+        }));
+    } else if (job.kind == Kind::Kobo) {
         watcher->setFuture(QtConcurrent::run([data, bookIds = job.bookIds, device = connected->kobo, formats, folder] {
             QString error;
             KoboSend::prepare(data, bookIds, device, formats, folder, &error);
@@ -1068,6 +1091,11 @@ void DeviceLibrary::finishJob()
     const int exitCode = m_process->exitStatus() == QProcess::NormalExit ? m_process->exitCode() : -1;
     m_process->deleteLater();
     m_process = nullptr;
+    finishSend(exitCode);
+}
+
+void DeviceLibrary::finishSend(int exitCode)
+{
     Job &running = m_jobs.first();
     const QString folder = m_folder->path();
     const Connected *connected = find(running.root);

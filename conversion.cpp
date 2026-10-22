@@ -443,7 +443,9 @@ void addTo(CommitEngine::Request *request, const Book &book, const QString &form
         }
     }
     request->newFormats.append({ book.id, outcome.file, upper });
-    request->conversionOptions.append({ book.id, outcome.options });
+    // Cousoir's own conversion has no settings to keep.
+    if (!outcome.options.isEmpty())
+        request->conversionOptions.append({ book.id, outcome.options });
 }
 
 } // namespace Conversion

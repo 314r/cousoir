@@ -425,7 +425,9 @@ round_trip
 #
 #   devices <kobo|kindle> <name> <library> <books first> <books then> <book removed>
 devices() {
-    local kind=$1 name=$2 library=$3 side step lpath product=0 calibre_device cousoir_device
+    local kind=$1 name=$2 library=$3 side step lpath product=0 calibre_device cousoir_device native=()
+    # Cousoir sending without Calibre: its KEPUBs are its own.
+    [ -n "${COUSOIR_NATIVE_SEND:-}" ] && native=(--native)
     for side in calibre cousoir; do
         rm -rf "$work/$name-library-$side" "$work/$name-$side"
         cp -a --reflink=auto "$library" "$work/$name-library-$side"
@@ -469,7 +471,7 @@ devices() {
         fi
         local only=()
         [ "$step" = 3 ] && only=(--lpaths-only)
-        if "$tool" compare-devices "${only[@]}" "$work/$name-calibre" "$work/$name-cousoir" \
+        if "$tool" compare-devices "${only[@]}" "${native[@]}" "$work/$name-calibre" "$work/$name-cousoir" \
             > "$work/$name.txt"; then
             echo "$name step $step: $(tail -1 "$work/$name.txt")"
         else
@@ -500,7 +502,7 @@ devices() {
         "$cli" device --library "$work/$name-library-cousoir" "$listed" | "$tool" device-books \
             > "$work/$name-listed-$side.json"
     done
-    if "$tool" compare-devices "$work/$name-read-calibre" "$work/$name-read-cousoir" \
+    if "$tool" compare-devices "${native[@]}" "$work/$name-read-calibre" "$work/$name-read-cousoir" \
         > "$work/$name.txt"; then
         echo "$name once Calibre connects: $(tail -1 "$work/$name.txt")"
     else
@@ -524,6 +526,8 @@ devices() {
 }
 
 devices kobo kobo "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
+# The same, Cousoir sending without Calibre.
+COUSOIR_NATIVE_SEND=1 devices kobo kobo-native "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
 devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
 
 # What a Kobo knows of the reading of its books, read by Calibre's Kobo
