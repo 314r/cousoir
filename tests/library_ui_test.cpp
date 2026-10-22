@@ -892,8 +892,11 @@ void LibraryUiTest::editsCustomColumns()
     };
     QCOMPARE(custom(QStringLiteral("#genre")).value(QStringLiteral("text")).toString(), QStringLiteral("SF, Classique"));
     QCOMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(), QStringLiteral("Bien"));
-    // A composite is Calibre's to compute.
-    QVERIFY(custom(QStringLiteral("#computed")).isEmpty());
+    // A composite shows as its template makes it, and cannot be edited.
+    QCOMPARE(custom(QStringLiteral("#computed")).value(QStringLiteral("text")).toString(),
+             QStringLiteral("L'Écume des jours by Boris Vian"));
+    QVERIFY(!custom(QStringLiteral("#computed")).value(QStringLiteral("editable")).toBool());
+    QCOMPARE(control("field_#computed")->property("value").toString(), QStringLiteral("L'Écume des jours by Boris Vian"));
 
     // A save keeps the other fields as they are, focus and typing with them.
     const QPointer<QQuickItem> price = control("field_#price");
@@ -902,6 +905,13 @@ void LibraryUiTest::editsCustomColumns()
     waitForSave();
     QTRY_COMPARE(custom(QStringLiteral("#note")).value(QStringLiteral("text")).toString(), QStringLiteral("Autre note"));
     QVERIFY(price && price == control("field_#price"));
+
+    // A change the template reads computes it again.
+    retype("field_title", QStringLiteral("L'Arrache-coeur"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#computed")).value(QStringLiteral("text")).toString(),
+                 QStringLiteral("L'Arrache-coeur by Boris Vian"));
 
     // A number takes digits only.
     retype("field_#pagecount", QStringLiteral("abc"));

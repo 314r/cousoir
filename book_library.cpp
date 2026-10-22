@@ -1181,9 +1181,6 @@ QVariantList BookLibrary::customFields(const Book &book) const
     QVariantList fields;
     for (qsizetype index = 0; index < m_data.customColumns.size(); ++index) {
         const CustomColumn &column = m_data.customColumns.at(index);
-        // A composite's value is Calibre's to compute.
-        if (column.datatype == QLatin1String("composite"))
-            continue;
         const QJsonObject display = QJsonDocument::fromJson(column.display).object();
         const bool names = display.value(QLatin1String("is_names")).toBool();
         const QString interpretAs = display.value(QLatin1String("interpret_as")).toString();
@@ -1194,7 +1191,10 @@ QVariantList BookLibrary::customFields(const Book &book) const
         // What the page shows, and what the field edits.
         QString text;
         QString editText;
-        if (column.multiple) {
+        if (type == QLatin1String("composite")) {
+            // As its template made it.
+            text = value.value.toString();
+        } else if (column.multiple) {
             text = value.value.toStringList().join(names ? QStringLiteral(" & ") : QStringLiteral(", "));
             editText = text;
         } else if (value.value.isNull()) {
@@ -1231,7 +1231,7 @@ QVariantList BookLibrary::customFields(const Book &book) const
             { QStringLiteral("datatype"), type },
             { QStringLiteral("multiple"), column.multiple },
             { QStringLiteral("names"), names },
-            { QStringLiteral("editable"), column.editable },
+            { QStringLiteral("editable"), column.editable && type != QLatin1String("composite") },
             { QStringLiteral("halfStars"), display.value(QLatin1String("allow_half_stars")).toBool() },
             { QStringLiteral("html"), html },
             // A long text holding more than its text shows, a table or an

@@ -31,6 +31,12 @@ db add_custom_column review Review comments
 db add_custom_column shelf Shelf enumeration --display '{"enum_values": ["A", "B", "C"]}'
 db add_custom_column saga Saga series
 db add_custom_column computed Computed composite --display '{"composite_template": "{title} by {authors}"}'
+db add_custom_column pagesort "Pages sorted" composite \
+    --display '{"composite_template": "{#pagecount}", "composite_sort": "number"}'
+db add_custom_column started2 "Started as text" composite \
+    --display '{"composite_template": "program: format_date($$#started, \"yyyy-MM-dd\")", "composite_sort": "date"}'
+db add_custom_column labels Labels composite --is-multiple \
+    --display '{"composite_template": "{tags},{#genre}"}'
 
 db set_custom genre 1 "SF,Classique"
 db set_custom genre 2 SF

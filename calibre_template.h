@@ -98,6 +98,11 @@ private:
 // error in `error`, the text Calibre writes after its "TEMPLATE ERROR".
 QString evaluate(const QString &templateText, const Library &library, const Book &book, QString *error = nullptr);
 
+// Calibre's parse_date() of a text: ISO forms, or dateutil's day, month and
+// year in some order with English names; local unless it says otherwise.
+// None for text that is no date.
+std::optional<QDateTime> parseDate(const QString &text);
+
 // Puts each composite column's value in the books' custom values, as
 // Calibre computes it when it reads it: text, even for a column of several
 // values, which only a search splits at its commas. Calibre's interface

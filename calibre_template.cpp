@@ -661,6 +661,11 @@ QString evaluate(const QString &templateText, const Library &library, const Book
     return formatter.safeFormat(templateText, proxy, error);
 }
 
+std::optional<QDateTime> parseDate(const QString &text)
+{
+    return Internal::parseDate(text);
+}
+
 void computeComposites(LibraryData *data, const QString &interfaceLanguage, const QSet<int> *only)
 {
     QList<int> columns;

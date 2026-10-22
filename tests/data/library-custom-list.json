@@ -5,9 +5,11 @@
       "SF",
       "Classique"
     ],
+    "*labels": "Classique, Roman,SF, Classique",
     "*myrating": 8,
     "*note": "Une note",
     "*pagecount": 320,
+    "*pagesort": "320",
     "*people": [
       "Jean Dupont",
       "Marie Curie"
@@ -16,6 +18,7 @@
     "*review": "<p>Bien</p>",
     "*saga": "Cycle",
     "*started": "2024-03-04T23:00:00+00:00",
+    "*started2": "2024-03-05",
     "author_sort": "Vian, Boris",
     "authors": "Boris Vian",
     "comments": "<div><p style=\"color:#000000\">Un roman d\u2019amour <font face=\"Arial\">fou</font>.</p><p>Paris, <em>1946</em>.</p></div>",
@@ -31,7 +34,7 @@
     "languages": [
       "fra"
     ],
-    "last_modified": "2026-10-22T12:29:33+00:00",
+    "last_modified": "2026-10-22T13:33:20+00:00",
     "pubdate": "1947-03-20T00:00:00+00:00",
     "publisher": "Gallimard",
     "rating": 8,
@@ -51,11 +54,14 @@
       "SF"
     ],
     "*half": 7,
+    "*labels": "Fantasy,SF",
+    "*pagesort": "",
     "*people": [],
     "*price": 12.5,
     "*read": false,
     "*saga": "Cycle",
     "*started": "None",
+    "*started2": "",
     "author_sort": "Cook, Glen",
     "authors": "Glen Cook",
     "cover": "@LIBRARY@/Glen Cook/The Black Company (2)/cover.jpg",
@@ -69,7 +75,7 @@
     "languages": [
       "eng"
     ],
-    "last_modified": "2026-10-22T12:29:33+00:00",
+    "last_modified": "2026-10-22T13:33:20+00:00",
     "pubdate": "1984-05-02T00:00:00+00:00",
     "publisher": "Tor",
     "rating": 10,
@@ -86,11 +92,14 @@
   {
     "*computed": "Shadows Linger by Glen Cook",
     "*genre": [],
+    "*labels": "Fantasy,",
     "*note": "\u00c7'a \u00e9t\u00e9 lu",
+    "*pagesort": "",
     "*people": [],
     "*price": 3.0,
     "*shelf": "B",
     "*started": "None",
+    "*started2": "",
     "author_sort": "Cook, Glen",
     "authors": "Glen Cook",
     "cover": "@LIBRARY@/Glen Cook/Shadows Linger (3)/cover.jpg",
@@ -103,7 +112,7 @@
     "languages": [
       "eng"
     ],
-    "last_modified": "2026-10-22T12:29:33+00:00",
+    "last_modified": "2026-10-22T13:33:20+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "series": "Chronicles of the Black Company",
     "series_index": 2.0,
@@ -122,10 +131,13 @@
       "Fantastique",
       "SF"
     ],
+    "*labels": "Fantasy, Humour,Humour, Fantastique, SF",
     "*pagecount": 0,
+    "*pagesort": "0",
     "*people": [],
     "*price": 100000.0,
     "*started": "None",
+    "*started2": "",
     "author_sort": "Pratchett, Terry & Gaiman, Neil",
     "authors": "Terry Pratchett & Neil Gaiman",
     "comments": "The world will end next Saturday.",
@@ -142,7 +154,7 @@
     "languages": [
       "eng"
     ],
-    "last_modified": "2026-10-22T12:29:33+00:00",
+    "last_modified": "2026-10-22T13:33:20+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "publisher": "Gollancz",
     "rating": 7,
@@ -159,9 +171,12 @@
   {
     "*computed": "Manuel technique by Jean-Pierre Dupont",
     "*genre": [],
+    "*labels": "Technique,",
+    "*pagesort": "",
     "*people": [],
     "*price": 1e-05,
     "*started": "1999-12-30T23:00:00+00:00",
+    "*started2": "1999-12-31",
     "author_sort": "Dupont, Jean-Pierre",
     "authors": "Jean-Pierre Dupont",
     "formats": [
@@ -173,7 +188,7 @@
     "languages": [
       "fra"
     ],
-    "last_modified": "2026-10-22T12:29:33+00:00",
+    "last_modified": "2026-10-22T13:33:20+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "series_index": 1.0,
     "size": 591,
@@ -187,10 +202,13 @@
   {
     "*computed": "Le Petit Prince by Antoine de Saint-Exup\u00e9ry",
     "*genre": [],
+    "*labels": ",",
     "*myrating": 10,
+    "*pagesort": "",
     "*people": [],
     "*saga": "Autre",
     "*started": "None",
+    "*started2": "",
     "author_sort": "Saint-Exup\u00e9ry, Antoine de",
     "authors": "Antoine de Saint-Exup\u00e9ry",
     "cover": "@LIBRARY@/Antoine de Saint-Exupery/Le Petit Prince (6)/cover.jpg",
@@ -201,7 +219,7 @@
     "languages": [
       "fra"
     ],
-    "last_modified": "2026-10-22T12:29:33+00:00",
+    "last_modified": "2026-10-22T13:33:20+00:00",
     "pubdate": "0101-01-01T00:00:00+00:00",
     "series": "Contes",
     "series_index": 1.5,
