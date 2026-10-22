@@ -101,7 +101,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 On Arch Linux and Omarchy:
 
 ```bash
-sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine sqlite libzip icu snowball libmtp calibre
+sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine sqlite libzip icu libstemmer libmtp calibre
 git clone https://github.com/314r/cousoir.git
 cd cousoir
 make install
