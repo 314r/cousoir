@@ -175,6 +175,7 @@ edits() {
 }
 
 edits "$root/tests/data/edits/edits.json"
+edits "$root/tests/data/edits/bulk.json"
 
 # Books and formats added, moved to the trash and restored, then one copy of
 # a book kept with the formats of another, step by step on both copies, each

@@ -181,8 +181,10 @@ std::optional<QMap<QString, Table>> tables(const QString &path, const LibraryOpt
             if (name == QLatin1String("books_pages_link"))
                 row[column("timestamp")] = QStringLiteral("<now>");
             // Calibre inserts a book's identifiers from a set, in no
-            // particular order.
-            if (name == QLatin1String("identifiers"))
+            // particular order; and queues the books whose metadata.opf it
+            // writes again in the order its writes reach them, which tells
+            // nothing: the queue is compared by its books.
+            if (name == QLatin1String("identifiers") || name == QLatin1String("metadata_dirtied"))
                 row[column("id")] = QStringLiteral("<id>");
             table.rows.append(row);
         }

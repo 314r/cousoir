@@ -188,15 +188,30 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         files.rollback(nullptr);
         return fail(message);
     };
-    for (const BookEdit &edit : request.edits) {
+    const auto applyEdit = [&](const BookEdit &edit) {
         const QSet<int> dirtiedBefore = std::exchange(state.dirtied, {});
         if (!FieldWriters::apply(db, edit, context, &state, &error))
-            return undo(error);
+            return false;
         // Cache.set_field() moves the files of every book a title or author
         // change touched.
         if (edit.movesFiles())
             moved.unite(state.dirtied);
         state.dirtied.unite(dirtiedBefore);
+        return true;
+    };
+    for (const BookEdit &edit : request.edits) {
+        if (!applyEdit(edit))
+            return undo(error);
+    }
+    for (const BulkEdit &bulk : request.bulkEdits) {
+        LibraryData current;
+        current.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
+        if (!CalibreDb::readLibrary(db, &current, &error))
+            return undo(error);
+        for (const BookEdit &edit : bulk.edits(current, request.config.tweaks)) {
+            if (!applyEdit(edit))
+                return undo(error);
+        }
     }
     for (const int book : std::as_const(moved)) {
         if (!BookOperations::updatePath(db, files, request.libraryPath, book, unknown, &error))

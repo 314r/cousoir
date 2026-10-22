@@ -63,14 +63,22 @@ void BookListModel::setRows(const QList<Book> &books, QList<qsizetype> order, co
         return;
     }
     const int before = count();
+    const qsizetype selected = m_selected.size();
     beginResetModel();
     m_books = books;
     m_order = std::move(order);
     m_coverKey = coverKey;
     m_rowOf.clear();
+    // The books the list no longer shows are no longer selected.
+    QSet<int> shown;
+    for (const qsizetype index : std::as_const(m_order))
+        shown.insert(m_books.at(index).id);
+    m_selected.intersect(shown);
     endResetModel();
     if (count() != before)
         emit countChanged();
+    if (m_selected.size() != selected)
+        emit selectionChanged();
 }
 
 int BookListModel::count() const
@@ -105,6 +113,7 @@ QVariantMap BookListModel::get(int row) const
         { QStringLiteral("rating"), BookDisplay::rating(book.rating) },
         { QStringLiteral("cover"), book.coverFile.isEmpty()
               ? QString() : CoverCache::url(m_coverKey, book.id, book.coverModified) },
+        { QStringLiteral("selected"), m_selected.contains(book.id) },
     };
 }
 
@@ -121,6 +130,75 @@ int BookListModel::indexOf(int bookId) const
             m_rowOf.insert(m_books.at(m_order.at(row)).id, int(row));
     }
     return m_rowOf.value(bookId, -1);
+}
+
+int BookListModel::selectedCount() const
+{
+    return int(m_selected.size());
+}
+
+void BookListModel::select(int row, const QString &mode)
+{
+    const int id = idAt(row);
+    if (!id)
+        return;
+    const QSet<int> before = m_selected;
+    if (mode == QLatin1String("toggle")) {
+        if (!m_selected.remove(id))
+            m_selected.insert(id);
+        m_anchor = id;
+    } else if (mode == QLatin1String("range") && indexOf(m_anchor) >= 0) {
+        const int from = indexOf(m_anchor);
+        m_selected.clear();
+        for (int i = std::min(from, row); i <= std::max(from, row); ++i)
+            m_selected.insert(idAt(i));
+    } else {
+        m_selected = { id };
+        m_anchor = id;
+    }
+    selectionUpdated(before);
+}
+
+void BookListModel::selectAll()
+{
+    const QSet<int> before = m_selected;
+    for (int row = 0; row < count(); ++row)
+        m_selected.insert(idAt(row));
+    selectionUpdated(before);
+}
+
+bool BookListModel::isSelected(int row) const
+{
+    return m_selected.contains(idAt(row));
+}
+
+QVariantList BookListModel::selectedIds() const
+{
+    QVariantList ids;
+    for (int row = 0; row < count() && ids.size() < m_selected.size(); ++row) {
+        if (m_selected.contains(idAt(row)))
+            ids.append(idAt(row));
+    }
+    return ids;
+}
+
+void BookListModel::selectionUpdated(const QSet<int> &before)
+{
+    if (before == m_selected)
+        return;
+    // One signal for the span of the rows that changed.
+    int first = -1;
+    int last = -1;
+    for (const int id : (before - m_selected) + (m_selected - before)) {
+        const int row = indexOf(id);
+        if (row < 0)
+            continue;
+        first = first < 0 ? row : std::min(first, row);
+        last = std::max(last, row);
+    }
+    if (first >= 0)
+        emit dataChanged(index(first), index(last));
+    emit selectionChanged();
 }
 
 int BookListModel::rowCount(const QModelIndex &parent) const
