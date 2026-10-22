@@ -8,6 +8,23 @@
 #include <QJsonObject>
 #include <QObject>
 
+#include <QBuffer>
+#include <QDateTime>
+#include <QImage>
+#include <QRegularExpression>
+#include <QUuid>
+
+#include <cmath>
+
+#include "book.h"
+#include "calibre_db.h"
+#include "calibre_job.h"
+#include "calibre_template.h"
+#include "calibre_text.h"
+#include "device_books.h"
+#include "kepub.h"
+#include "opf.h"
+#include "python_json.h"
 #include "send_job.h"
 
 namespace {
@@ -143,9 +160,363 @@ QJsonArray identity(const QString &path)
     return { info.size(), info.lastModified().toMSecsSinceEpoch() };
 }
 
+// limit_component(): a part of a path at most 254 bytes in UTF-8.
+QString limitComponent(const QString &part)
+{
+    QString text = part;
+    while (text.toUtf8().size() > 254)
+        text.chop(1);
+    return text;
+}
+
+// shorten_component(): a part shortened by `by` characters from its middle.
+QString shortenComponent(const QString &part, qsizetype by)
+{
+    const qsizetype size = part.size();
+    if (size < by)
+        return part;
+    const qsizetype keep = (size - by) / 2;
+    if (keep <= 0)
+        return part;
+    return part.left(keep) + part.right(keep);
+}
+
+// shorten_components_to(): the parts of a path shortened in proportion
+// until it is `length` long.
+QStringList shortenComponentsTo(qsizetype length, QStringList components, bool lastHasExtension)
+{
+    for (QString &component : components)
+        component = limitComponent(component);
+    const QString path = components.join(u'/');
+    const qsizetype extra = path.size() - length;
+    if (extra < 1)
+        return components;
+    QStringList result;
+    for (qsizetype i = 0; i < components.size(); ++i) {
+        const QString &part = components.at(i);
+        const qsizetype delta = qsizetype(std::ceil(double(part.size()) / double(path.size()) * double(extra)));
+        const bool last = i == components.size() - 1;
+        QString shortened;
+        if (delta > part.size()) {
+            shortened = last ? part.left(1) : QString();
+        } else if (lastHasExtension && last) {
+            const qsizetype dot = part.lastIndexOf(u'.');
+            const QString base = dot > 0 ? part.left(dot) : part;
+            const QString extension = dot > 0 ? part.mid(dot) : QString();
+            shortened = shortenComponent(base, delta) + (extension == QLatin1String(".") ? QString() : extension);
+            if (shortened.startsWith(u'.'))
+                shortened.prepend(u'x');
+        } else {
+            shortened = shortenComponent(part, delta);
+        }
+        result.append(shortened);
+    }
+    return result;
+}
+
+// Calibre's ISO dates in metadata.calibre: "2015-07-07T18:41:43+00:00",
+// "None" for the undefined date.
+PythonJson::Value isoDate(const QDateTime &date)
+{
+    return PythonJson::Value::from(CalibreDb::isUndefinedDate(date) ? QStringLiteral("None") : CalibreDb::isoFormat(date));
+}
+
+// KoboTouch's thumbnail of the cover for metadata.calibre: [width, height,
+// JPEG in base 64], 68 pixels high.
+PythonJson::Value thumbnail(const Book &book)
+{
+    if (book.coverFile.isEmpty())
+        return PythonJson::Value::null();
+    const QImage cover(book.coverFile);
+    if (cover.isNull())
+        return PythonJson::Value::null();
+    const QImage small = cover.scaledToHeight(68, Qt::SmoothTransformation);
+    QByteArray jpeg;
+    QBuffer buffer(&jpeg);
+    buffer.open(QIODevice::WriteOnly);
+    small.save(&buffer, "JPEG", 75);
+    PythonJson::Value value;
+    value.kind = PythonJson::Value::Kind::List;
+    value.items = { PythonJson::Value::from(small.width()), PythonJson::Value::from(small.height()),
+                    PythonJson::Value::from(QString::fromLatin1(jpeg.toBase64())) };
+    return value;
+}
+
+// The book's entry in metadata.calibre, as Calibre's JsonCodec writes it
+// for a book it sent.
+PythonJson::Value bookEntry(const LibraryData &data, const Book &book, const QString &lpath, qint64 size)
+{
+    using PythonJson::Value;
+    const auto textOrNull = [](const QString &text) { return text.isEmpty() ? Value::null() : Value::from(text); };
+    Value user = Value::dict();
+    for (const auto &[key, json] : Opf::userMetadata(data, book))
+        user.insert(key, PythonJson::parse(json.toUtf8()));
+    Value sorts = Value::dict();
+    for (qsizetype i = 0; i < book.authors.size(); ++i) {
+        const int id = book.authorIds.value(i);
+        QString sort;
+        for (const FacetItem &author : data.authors) {
+            if (author.id == id)
+                sort = author.sort;
+        }
+        sorts.insert(book.authors.at(i), Value::from(sort));
+    }
+    Value identifiers = Value::dict();
+    for (const auto &[type, value] : book.identifiers)
+        identifiers.insert(type, Value::from(value));
+    Value entry = Value::dict();
+    entry.insert(QStringLiteral("comments"), textOrNull(book.comments));
+    entry.insert(QStringLiteral("size"), Value::from(size));
+    entry.insert(QStringLiteral("user_metadata"), user);
+    entry.insert(QStringLiteral("series"), textOrNull(book.series));
+    entry.insert(QStringLiteral("rights"), Value::null());
+    entry.insert(QStringLiteral("link_maps"), Value::dict());
+    entry.insert(QStringLiteral("mime"), Value::null());
+    entry.insert(QStringLiteral("authors"), Value::from(book.authors));
+    entry.insert(QStringLiteral("book_producer"), Value::null());
+    entry.insert(QStringLiteral("application_id"), Value::from(book.id));
+    entry.insert(QStringLiteral("series_index"), book.series.isEmpty() ? Value::null() : Value::from(book.seriesIndex));
+    entry.insert(QStringLiteral("last_modified"), isoDate(book.lastModified));
+    entry.insert(QStringLiteral("author_sort_map"), sorts);
+    entry.insert(QStringLiteral("user_categories"), Value::dict());
+    entry.insert(QStringLiteral("db_id"), Value::null());
+    entry.insert(QStringLiteral("uuid"), Value::from(book.uuid));
+    entry.insert(QStringLiteral("cover"), Value::null());
+    entry.insert(QStringLiteral("tags"), Value::from(book.tags));
+    entry.insert(QStringLiteral("lpath"), Value::from(lpath));
+    entry.insert(QStringLiteral("identifiers"), identifiers);
+    entry.insert(QStringLiteral("timestamp"), isoDate(book.timestamp));
+    entry.insert(QStringLiteral("publication_type"), Value::null());
+    entry.insert(QStringLiteral("pages"), Value::from(std::max(0, book.pages)));
+    entry.insert(QStringLiteral("pubdate"), isoDate(book.pubdate));
+    entry.insert(QStringLiteral("publisher"), textOrNull(book.publisher));
+    entry.insert(QStringLiteral("thumbnail"), thumbnail(book));
+    entry.insert(QStringLiteral("author_sort"), Value::from(book.authorSort));
+    entry.insert(QStringLiteral("languages"), Value::from(book.languages));
+    entry.insert(QStringLiteral("rating"), book.rating > 0 ? Value::from(book.rating) : Value::null());
+    entry.insert(QStringLiteral("title"), Value::from(book.title));
+    entry.insert(QStringLiteral("title_sort"), Value::from(book.sort));
+    return entry;
+}
+
 } // namespace
 
 namespace KoboSend {
+
+DriverSettings driverSettings(const QString &configDirectory)
+{
+    DriverSettings settings;
+    QFile file(QDir(configDirectory).filePath(QStringLiteral("device_drivers_KOBOTOUCH.py.json")));
+    if (!file.open(QIODevice::ReadOnly))
+        return settings;
+    const QJsonObject json = QJsonDocument::fromJson(file.readAll()).object();
+    if (json.value(QLatin1String("save_template")).isString())
+        settings.saveTemplate = json.value(QLatin1String("save_template")).toString();
+    if (json.value(QLatin1String("kepubify")).isBool())
+        settings.kepubify = json.value(QLatin1String("kepubify")).toBool();
+    if (json.value(QLatin1String("use_subdirs")).isBool())
+        settings.useSubdirs = json.value(QLatin1String("use_subdirs")).toBool();
+    return settings;
+}
+
+QString uploadPath(const LibraryData &data, const Book &book, const QString &root, const QString &extension, bool kepub,
+                   const DriverSettings &settings, const QString &interfaceLanguage)
+{
+    // MAX_PATH_LEN of KoboTouch.
+    constexpr qsizetype maxLength = 185;
+    // get_component_metadata(): the title by its sort, the series sorted as
+    // a title, and no "/" in a value, which would make a folder.
+    Book values = book;
+    const auto clean = [](QString text) { return text.replace(u'/', u'_').replace(u'\\', u'_'); };
+    values.title = clean(book.sort.isEmpty() ? book.title : book.sort);
+    values.authors.clear();
+    for (const QString &author : book.authors)
+        values.authors.append(clean(author));
+    values.authorSort = clean(book.authorSort);
+    values.series = clean(CalibreText::titleSort(book.series, book.languages.value(0), CalibreText::Tweaks::defaults(),
+                                                 interfaceLanguage));
+    values.publisher = clean(book.publisher);
+    QStringList tags;
+    for (const QString &tag : book.tags)
+        tags.append(clean(tag));
+    values.tags = tags;
+    const CalibreTemplate::Library library(data, interfaceLanguage);
+    QString error;
+    const QString formatted = CalibreTemplate::evaluate(settings.saveTemplate, library, values, &error);
+    const QString appId = QString::number(book.id);
+    QStringList components;
+    for (const QString &part : formatted.split(u'/')) {
+        const QString trimmed = part.trimmed();
+        if (!trimmed.isEmpty())
+            components.append(CalibreText::asciiFilename(trimmed));
+    }
+    components.removeAll(QString());
+    if (components.isEmpty())
+        components.append(appId);
+    components = shortenComponentsTo(maxLength - appId.size() - 1, components, false);
+    // filename_callback(): a KEPUB's ".kepub.epub".
+    const QString name = components.last() + (kepub ? QStringLiteral(".kepub") : QString()) + extension;
+    components.last() = CalibreText::asciiFilename(name);
+    if (components.last().startsWith(u'.') || components.last().startsWith(u'_'))
+        components.last() = u'x' + components.last().mid(1);
+    if (!settings.useSubdirs)
+        components = { components.last() };
+    for (QString &component : components) {
+        // remove_trailing_periods().
+        while (component.endsWith(u'.'))
+            component = component.chopped(1).trimmed();
+        if (component.isEmpty())
+            component = QStringLiteral("x");
+    }
+    components = shortenComponentsTo(maxLength - QDir::cleanPath(root).size(), components, true);
+    // KoboTouch's sanitize_path_components().
+    static const QRegularExpression invalid(QStringLiteral("[\\/\\\\\\?%\\*:;\\|\"'><\\$!]"));
+    for (QString &component : components)
+        component.replace(invalid, QStringLiteral("_"));
+    return components.join(u'/');
+}
+
+bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, const Kobo::Device &device,
+                     const QStringList &formatMap, const QString &configDirectory, const QString &interfaceLanguage,
+                     const QString &folder, QString *error)
+{
+    const DriverSettings settings = driverSettings(configDirectory);
+    const QDir root(device.root);
+    const QDir staging(QDir(folder).filePath(QStringLiteral("device")));
+    QDir().mkpath(staging.path());
+    // What tells, at apply(), that the Kobo changed meanwhile.
+    QJsonObject identities;
+    for (const char *name : deviceFiles)
+        identities.insert(QLatin1String(name), identity(root.filePath(QLatin1String(name))));
+    QFile metadataFile(root.filePath(QStringLiteral("metadata.calibre")));
+    QList<QByteArray> entries = metadataFile.open(QIODevice::ReadOnly) ? DeviceBooks::arrayElements(metadataFile.readAll())
+                                                                       : QList<QByteArray>();
+    // KoboTouch's books(), which a send reads first, gives the books the Kobo
+    // took in their type from its database, and no thumbnail.
+    QHash<QString, QString> mimes;
+    QString listError;
+    for (const DeviceBook &onDevice : Kobo::books(device, &listError)) {
+        if (!onDevice.mime.isEmpty())
+            mimes.insert(onDevice.lpath, onDevice.mime);
+    }
+    for (QByteArray &element : entries) {
+        PythonJson::Value entry = PythonJson::parse(element);
+        const auto mime = mimes.constFind(entry.text(QStringLiteral("lpath")));
+        if (entry.kind != PythonJson::Value::Kind::Dict || mime == mimes.cend())
+            continue;
+        entry.insert(QStringLiteral("mime"), PythonJson::Value::from(*mime));
+        entry.insert(QStringLiteral("thumbnail"), PythonJson::Value::null());
+        PythonJson::Format indented;
+        indented.indent = 2;
+        indented.ensureAscii = true;
+        element = PythonJson::dumps(entry, indented).toUtf8().replace("\n", "\n  ");
+    }
+    QJsonArray sent;
+    QJsonArray unsendable;
+    QStringList files;
+    for (const int bookId : bookIds) {
+        const Book *book = data.book(bookId);
+        if (!book)
+            continue;
+        QStringList formats;
+        for (const BookFormat &format : book->formats) {
+            if (!format.file.isEmpty())
+                formats.append(format.format);
+        }
+        const QString format = DeviceBooks::sendFormat(formats, formatMap);
+        if (format.isEmpty()) {
+            unsendable.append(book->title);
+            continue;
+        }
+        QString source;
+        for (const BookFormat &bookFormat : book->formats) {
+            if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
+                source = bookFormat.file;
+        }
+        const bool epub = format.compare(QLatin1String("EPUB"), Qt::CaseInsensitive) == 0;
+        const bool kepub = format.compare(QLatin1String("KEPUB"), Qt::CaseInsensitive) == 0 || (epub && settings.kepubify);
+        const QString extension = epub || kepub ? QStringLiteral(".epub") : u'.' + format.toLower();
+        const QString lpath = uploadPath(data, *book, device.root, extension, kepub, settings, interfaceLanguage);
+        const QString target = staging.filePath(lpath);
+        QDir().mkpath(QFileInfo(target).path());
+        if (epub && settings.kepubify) {
+            // The library's metadata and cover in the KEPUB, as Calibre's
+            // send puts them in what it sends.
+            Kepub::Options options;
+            options.language = book->languages.value(0, QStringLiteral("en"));
+            options.title = book->title;
+            options.authors = book->authors.join(QStringLiteral(" & "));
+            QFile cover(book->coverFile);
+            if (!book->coverFile.isEmpty() && cover.open(QIODevice::ReadOnly))
+                options.cover = cover.readAll();
+            Kepub::Metadata metadata;
+            metadata.title = book->title;
+            metadata.authors = book->authors;
+            metadata.authorSort = book->authorSort;
+            metadata.publisher = book->publisher;
+            metadata.languages = book->languages;
+            metadata.tags = book->tags;
+            metadata.series = book->series;
+            metadata.seriesIndex = book->seriesIndex;
+            metadata.comments = book->comments;
+            metadata.uuid = book->uuid;
+            metadata.identifiers = book->identifiers;
+            options.metadata = metadata;
+            if (!Kepub::kepubify(source, target, options, error))
+                return false;
+        } else if (!SendJob::copyInto(source, target, error)) {
+            return false;
+        }
+        // The book's entry, in place of one at the same place.
+        const PythonJson::Value entry = bookEntry(data, *book, lpath, QFileInfo(target).size());
+        PythonJson::Format format2;
+        format2.indent = 2;
+        format2.ensureAscii = true;
+        QByteArray text = PythonJson::dumps(entry, format2).toUtf8();
+        text.replace("\n", "\n  ");
+        entries.removeIf([&lpath](const QByteArray &element) {
+            return PythonJson::parse(element).text(QStringLiteral("lpath")) == lpath;
+        });
+        entries.append(text);
+        sent.append(QJsonObject{ { QStringLiteral("book"), bookId }, { QStringLiteral("lpath"), lpath } });
+        files.append(lpath);
+    }
+    if (!sent.isEmpty()) {
+        // driveinfo.calibre, as Calibre leaves it after a send.
+        QFile infoFile(root.filePath(QStringLiteral("driveinfo.calibre")));
+        PythonJson::Value info = infoFile.open(QIODevice::ReadOnly) ? PythonJson::parse(infoFile.readAll()) : PythonJson::Value::dict();
+        if (info.kind != PythonJson::Value::Kind::Dict)
+            info = PythonJson::Value::dict();
+        if (info.text(QStringLiteral("device_store_uuid")).isEmpty())
+            info.insert(QStringLiteral("device_store_uuid"),
+                        PythonJson::Value::from(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        if (info.text(QStringLiteral("device_name")).isEmpty())
+            info.insert(QStringLiteral("device_name"), PythonJson::Value::from(QStringLiteral("Kobo eReader")));
+        info.insert(QStringLiteral("location_code"), PythonJson::Value::from(QStringLiteral("main")));
+        info.insert(QStringLiteral("last_library_uuid"), PythonJson::Value::from(data.uuid));
+        info.insert(QStringLiteral("date_last_connected"),
+                    PythonJson::Value::from(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)));
+        info.insert(QStringLiteral("prefix"), PythonJson::Value::from(QDir::cleanPath(device.root) + u'/'));
+        if (!CalibreJob::writeFile(staging.filePath(QStringLiteral("driveinfo.calibre")),
+                                PythonJson::dumps(info).toUtf8(), error)
+            || !CalibreJob::writeFile(staging.filePath(QStringLiteral("metadata.calibre")),
+                                   DeviceBooks::joinElements(entries), error))
+            return false;
+        files << QStringLiteral("driveinfo.calibre") << QStringLiteral("metadata.calibre");
+    }
+    const QJsonObject job{
+        { QStringLiteral("device"), device.root },
+        { QStringLiteral("identities"), identities },
+    };
+    const QJsonObject result{
+        { QStringLiteral("sent"), sent },
+        { QStringLiteral("unsendable"), unsendable },
+        { QStringLiteral("files"), QJsonArray::fromStringList(files) },
+        { QStringLiteral("clear_covers"), true },
+    };
+    return CalibreJob::writeFile(QDir(folder).filePath(QStringLiteral("job.json")), QJsonDocument(job).toJson(), error)
+        && CalibreJob::writeFile(QDir(folder).filePath(QStringLiteral("result.json")), QJsonDocument(result).toJson(), error);
+}
 
 bool prepare(const LibraryData &data, const QList<int> &bookIds, const Kobo::Device &device,
              const QStringList &formatMap, const QString &folder, QString *error)

@@ -13,6 +13,11 @@
 // for a conversion.
 namespace Opf {
 
+// serialize_user_metadata(): each custom column, by key, as its field
+// metadata with the book's value, in json.dumps()'s spelling; a composite's
+// as its template made it.
+QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book &book);
+
 struct Settings
 {
     // Calibre's interface language: the language of a book without one and

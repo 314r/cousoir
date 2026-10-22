@@ -73,6 +73,8 @@ struct DeviceBook
     QString imageId;
     // A Kobo's id for the book in its database.
     QString contentId;
+    // The type the Kobo's database gives its file: "application/x-kobo-epub+zip".
+    QString mime;
     // What the reader knows of its reading.
     ReadingState reading;
     // Set by match(): the library book it is, 0 when none.

@@ -65,7 +65,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   Calibre conversion settings.
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
   exactly where Calibre puts them, and each app recognises the books the other
-  sent.
+  sent. A Kobo needs no Calibre: Cousoir makes its KEPUBs itself.
 - 🖍️ **Your reading, back from the Kobo.** How far you got in each book, and
   your highlights and notes by chapter, copied or saved as Markdown, still
   there once the Kobo is unplugged.

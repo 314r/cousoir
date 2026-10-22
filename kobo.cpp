@@ -434,6 +434,7 @@ QList<DeviceBook> books(const Device &device, QString *error)
                 continue;
             // path_from_contentid().
             DeviceBook book;
+            book.mime = mimeType;
             if ((contentType == QLatin1String("6") || contentType == QLatin1String("10"))
                 && mimeType == QLatin1String("application/x-kobo-epub+zip")
                 && !contentId.startsWith(onboard)) {

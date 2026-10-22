@@ -463,12 +463,19 @@ bool send(const QString &libraryPath, const CalibreConfig &config, const QString
         sent = outcome.sent;
         unsendable = outcome.unsendable;
     } else {
-        if (!KoboSend::prepare(data, bookIds, reader.kobo, Kobo::formatMap(CalibreConfig::configDirectory()),
-                               job.path(), &error)) {
+        // Cousoir alone without Calibre, or when asked to.
+        const bool native = SendJob::program().isEmpty() || !qEnvironmentVariableIsEmpty("COUSOIR_NATIVE_SEND");
+        const QStringList formats = Kobo::formatMap(CalibreConfig::configDirectory());
+        const bool prepared = native ? KoboSend::prepareNatively(data, bookIds, reader.kobo, formats,
+                                                                 CalibreConfig::configDirectory(),
+                                                                 config.interfaceLanguage, job.path(), &error)
+                                     : KoboSend::prepare(data, bookIds, reader.kobo, formats, job.path(), &error);
+        if (!prepared) {
             err() << error << Qt::endl;
             return false;
         }
-        const KoboSend::Outcome outcome = KoboSend::run(job.path(), config.interfaceLanguage);
+        const KoboSend::Outcome outcome = native ? KoboSend::outcome(job.path(), 0)
+                                                 : KoboSend::run(job.path(), config.interfaceLanguage);
         if (!outcome.ok || !KoboSend::apply(job.path(), outcome, reader.kobo, &error)) {
             err() << (outcome.ok ? error : outcome.error) << Qt::endl;
             return false;

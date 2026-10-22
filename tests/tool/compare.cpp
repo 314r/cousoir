@@ -683,6 +683,11 @@ int compareLibraries(const QStringList &arguments)
 // - driveinfo.calibre without the time of the connection, the uuid drawn for
 //   a new device or the folder a Kobo is mounted on.
 //
+// With --native, Cousoir sent without Calibre: its KEPUBs are its own, so a
+// book file only has to be a KEPUB with Kobo's spans, and metadata.calibre
+// and driveinfo.calibre leave out the cover's thumbnail bytes and Calibre's
+// version.
+//
 // Prints each difference and exits with 1 when there is one.
 
 namespace {
@@ -726,7 +731,7 @@ bool truthy(const QJsonValue &value)
     }
 }
 
-std::optional<QMap<QString, QJsonObject>> deviceMetadata(const QString &path)
+std::optional<QMap<QString, QJsonObject>> deviceMetadata(const QString &path, bool native = false)
 {
     const std::optional<QJsonValue> books = readJson(path);
     if (!books)
@@ -739,14 +744,20 @@ std::optional<QMap<QString, QJsonObject>> deviceMetadata(const QString &path)
         else
             book.insert(QStringLiteral("cover"), get(book, QStringLiteral("cover")));
         const QString lpath = book.value(QLatin1String("lpath")).toString();
-        if (lpath.toLower().endsWith(QLatin1String(".epub")))
+        if (lpath.toLower().endsWith(QLatin1String(".epub")) || native)
             book.insert(QStringLiteral("size"), QStringLiteral("<size>"));
+        if (native) {
+            // Cousoir's thumbnail is of the library's cover, when there is
+            // one; Calibre's also of a PDF's first page.
+            book.insert(QStringLiteral("thumbnail"), QStringLiteral("<thumbnail>"));
+            book.insert(QStringLiteral("cover"), QStringLiteral("<cover>"));
+        }
         found.insert(lpath, book);
     }
     return found;
 }
 
-std::optional<QJsonObject> driveinfo(const QString &path, const QString &root)
+std::optional<QJsonObject> driveinfo(const QString &path, const QString &root, bool native = false)
 {
     const std::optional<QJsonValue> read = readJson(path);
     if (!read)
@@ -754,6 +765,8 @@ std::optional<QJsonObject> driveinfo(const QString &path, const QString &root)
     QJsonObject info = read->toObject();
     info.insert(QStringLiteral("date_last_connected"), QStringLiteral("<now>"));
     info.insert(QStringLiteral("device_store_uuid"), QStringLiteral("<uuid>"));
+    if (native)
+        info.remove(QStringLiteral("calibre_version"));
     if (info.contains(QLatin1String("prefix")))
         info.insert(QStringLiteral("prefix"), info.value(QLatin1String("prefix"))
                                                   .toString()
@@ -766,11 +779,12 @@ std::optional<QJsonObject> driveinfo(const QString &path, const QString &root)
 int compareDevices(const QStringList &arguments)
 {
     const bool lpathsOnly = arguments.contains(QStringLiteral("--lpaths-only"));
+    const bool native = arguments.contains(QStringLiteral("--native"));
     QStringList paths;
     for (const QString &argument : arguments) {
         if (!argument.startsWith(QLatin1String("--"))) {
             paths.append(argument);
-        } else if (argument != QLatin1String("--lpaths-only")) {
+        } else if (argument != QLatin1String("--lpaths-only") && argument != QLatin1String("--native")) {
             err() << "Unknown option: " << argument << Qt::endl;
             return 2;
         }
@@ -798,8 +812,8 @@ int compareDevices(const QStringList &arguments)
             problems.append(QStringLiteral("%1 only on the %2 device")
                                 .arg(rel, fa.contains(rel) ? QStringLiteral("Calibre") : QStringLiteral("Cousoir")));
         } else if (rel == QLatin1String("metadata.calibre")) {
-            const auto ma = deviceMetadata(fa[rel]);
-            const auto mb = deviceMetadata(fb[rel]);
+            const auto ma = deviceMetadata(fa[rel], native);
+            const auto mb = deviceMetadata(fb[rel], native);
             if (!ma || !mb) {
                 problems.append(QStringLiteral("metadata.calibre cannot be read"));
                 continue;
@@ -829,13 +843,26 @@ int compareDevices(const QStringList &arguments)
                 }
             }
         } else if (rel == QLatin1String("driveinfo.calibre")) {
-            const auto da = driveinfo(fa[rel], calibreDevice);
-            const auto db = driveinfo(fb[rel], cousoirDevice);
+            const auto da = driveinfo(fa[rel], calibreDevice, native);
+            const auto db = driveinfo(fb[rel], cousoirDevice, native);
             if (!da || !db)
                 problems.append(QStringLiteral("driveinfo.calibre cannot be read"));
             else if (*da != *db)
                 problems.append(QStringLiteral("driveinfo.calibre differs:\n    Calibre: %1\n    Cousoir: %2")
                                     .arg(display(*da), display(*db)));
+        } else if (native && !rel.endsWith(QLatin1String(".kepub.epub")) && !rel.endsWith(QLatin1String(".calibre"))
+                   && !rel.startsWith(u'.')) {
+            // Cousoir puts no metadata in a file it does not convert.
+            continue;
+        } else if (native && rel.endsWith(QLatin1String(".kepub.epub"))) {
+            const std::optional<ZipEntries> zip = readZip(fb[rel]);
+            QByteArray pages;
+            if (zip) {
+                for (const auto &[name, data] : *zip)
+                    pages += data;
+            }
+            if (!pages.contains("koboSpan"))
+                problems.append(QStringLiteral("%1 is no KEPUB").arg(rel));
         } else if (content(fa[rel]) != content(fb[rel])) {
             problems.append(QStringLiteral("%1 differs").arg(rel));
         }

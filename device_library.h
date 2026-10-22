@@ -143,6 +143,8 @@ public:
     // are no volumes or Kindles until a test gives some.
     void setVolumeProvider(VolumeProvider provider, int intervalMs);
     void setKindleProvider(KindleProvider provider);
+    // For the tests: a Kobo sent to by Cousoir alone, even with Calibre.
+    void setNative(bool native);
     void setProgram(const QString &program);
     void setEjector(Ejector ejector);
     void setConfigDirectory(const QString &directory);
@@ -208,6 +210,11 @@ private:
     void startProcess(const QString &folder);
     void readProgress();
     void finishJob();
+    // The rest of a send, once its files are ready: Calibre's job ended with
+    // `exitCode`, or Cousoir's own made them.
+    void finishSend(int exitCode);
+    // Cousoir sends to a Kobo itself: without Calibre, or when told.
+    bool sendsNatively() const;
     void finishCopy(bool ok, const QString &error);
     void stopProcess();
 
@@ -216,6 +223,7 @@ private:
     KindleProvider m_kindles;
     QTimer m_scanTimer;
     QString m_program;
+    bool m_native = false;
     Ejector m_ejector;
     QString m_configDirectory;
     QList<Connected> m_devices;

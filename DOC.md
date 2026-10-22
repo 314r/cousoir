@@ -483,6 +483,15 @@ Cousoir departs from Calibre here:
 
 ## Converting books
 
+Without Calibre, Convert to KEPUB still works on a book with an EPUB:
+Cousoir makes the KEPUB itself, as Calibre's KEPUB conversion of an EPUB
+does (`ebooks/oeb/polish/kepubify.py`): each sentence of each page in
+Kobo's numbered spans, the body in Kobo's `book-columns` and `book-inner`
+divisions, Kobo's styles and script, a title page when the book opens on
+none, and the library's metadata and cover in the copy. Its pages come out
+byte for byte as Calibre's. `cousoir-cli kepubify BOOK.epub BOOK.kepub` does
+it on a file.
+
 The Convert to buttons of the Files section of a book's details, the row menu
 or Ctrl+Shift+K and Ctrl+Shift+A convert the book to KEPUB, for a Kobo, or
 AZW3, for a Kindle; Cousoir asks first when the book has a file of that
@@ -559,6 +568,16 @@ KEPUB on the way, Calibre's quick KEPUB; and places the file as
 `{author_sort}/{title} - {authors}.kepub.epub` unless changed. Cousoir copies
 each file whole under a hidden name, then renames it, and deletes the Kobo's
 cached covers of the books sent so it makes them again.
+
+Without Calibre, Cousoir sends to a Kobo by itself, following Calibre's Kobo
+driver and its settings when Calibre left some: an EPUB made a KEPUB by
+Cousoir's own converter (see [Converting books](#converting-books)) with
+the library's metadata and cover, the file at the driver's save template,
+and the book written into metadata.calibre and driveinfo.calibre as Calibre
+writes them, so that Calibre, when it connects later, knows the books
+Cousoir sent. The golden test sends the same books both ways and has
+Calibre read both Kobos. A PDF goes as it is, without the library's
+metadata, which Calibre would write into it. A Kindle still needs Calibre.
 
 What the Kobo knows of each book's reading shows too, read from its
 database as Calibre's Kobo driver reads it to fetch annotations: the Kobo's
