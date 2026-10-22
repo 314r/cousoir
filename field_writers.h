@@ -76,5 +76,11 @@ std::optional<QDateTime> parseOnlyDate(const QString &text, const QDateTime &now
 // it: taken as it is, to the microsecond, for putting a date back or adding
 // a book. Empty for any other text.
 std::optional<CalibreDate> parseExactDate(const QString &text);
+// parse_date(x, assume_utc=False, as_utc=False) of a custom column's date,
+// in UTC: a date and time as written, local unless it says otherwise, or a
+// date alone at midnight here, a missing month this month's and a missing
+// day the 15th. Calibre's undefined date stays undefined. Empty for any
+// other text.
+std::optional<QDateTime> parseCustomDate(const QString &text);
 
 } // namespace FieldWriters

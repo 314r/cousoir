@@ -382,3 +382,33 @@ Left for later: custom columns as table columns, to see and sort them in
 the list; composite columns, whose values Calibre computes from templates
 (goal 8). The golden comparison leaves composite values out of the
 `metadata.opf` files.
+
+### 2026-10-22 — a review of goal 5 (`exp-review2`)
+
+An agent reviewed the custom columns with fresh eyes. What it found, each
+checked against the code and Calibre's:
+
+- Revert failed whole when a custom date had been cleared: the undefined
+  date was kept as a text the date writer refused. It is kept as nothing,
+  which Calibre's adapter makes undefined again, and the writer takes the
+  undefined date's text too. Tested.
+- A custom date with a time and no zone was taken as UTC; Calibre's
+  `parse_date(assume_utc=False)` takes it as local. And the pane accepted
+  dates (`2024/03/06`) the writer then refused: both use one parser now.
+  Tested.
+- Every save rebuilt every custom column's field, losing focus and what was
+  typed in the next one. The fields now follow the columns' keys, which
+  change only with the library's columns. Tested.
+- A long text column holding a table or an image lost them when edited from
+  its text, silently. It is read-only in the pane, which says why, as the
+  description warns before saving. Tested.
+- Floats were laid out as Qt's shortest form, `1e+05` where Python writes
+  `100000.0`, in `cousoir-cli list` and the OPF files. `floatRepr()` now
+  follows `repr()`; the custom fixture has 100000 and 0.00001, which the
+  golden test lists as `calibredb` does.
+- A whole-star rating column showed "None" for an odd rating set elsewhere;
+  the stored value is always among the choices. Tested.
+- Not changed: custom dates lose their fraction of a second when read, but
+  so do Calibre's (`c_parse()` in `db/tables.py` reads to the second), so
+  lists, OPF files and restored books match Calibre's. Words alone not
+  looking in composite columns is documented, until goal 8 computes them.

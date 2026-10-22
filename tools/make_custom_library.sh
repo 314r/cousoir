@@ -47,6 +47,8 @@ db set_custom pagecount 1 320
 db set_custom pagecount 4 0
 db set_custom price 2 12.5
 db set_custom price 3 3
+db set_custom price 4 100000
+db set_custom price 5 0.00001
 db set_custom started 1 2024-03-05
 db set_custom started 5 1999-12-31
 db set_custom review 1 "<p>Bien</p>"

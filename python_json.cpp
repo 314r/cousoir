@@ -417,10 +417,31 @@ QString floatRepr(double value)
         return QStringLiteral("NaN");
     if (std::isinf(value))
         return value > 0 ? QStringLiteral("Infinity") : QStringLiteral("-Infinity");
-    QString text = QString::number(value, 'g', QLocale::FloatingPointShortest);
-    if (!text.contains(u'.') && !text.contains(u'e') && !text.contains(u'n'))
-        text += QStringLiteral(".0");
-    return text;
+    // The shortest digits that read back, laid out as repr() lays them:
+    // positional from 1e-4 up to 1e16, else with an exponent of at least two
+    // digits.
+    const QString scientific = QString::number(value, 'e', QLocale::FloatingPointShortest);
+    const qsizetype e = scientific.indexOf(u'e');
+    QString digits = scientific.left(e);
+    const bool negative = digits.startsWith(u'-');
+    if (negative)
+        digits.remove(0, 1);
+    digits.remove(u'.');
+    const int exponent = scientific.mid(e + 1).toInt();
+    QString text;
+    if (exponent < -4 || exponent >= 16) {
+        text = digits.left(1);
+        if (digits.size() > 1)
+            text += u'.' + digits.mid(1);
+        text += QStringLiteral("e%1%2").arg(exponent < 0 ? u'-' : u'+').arg(std::abs(exponent), 2, 10, QLatin1Char('0'));
+    } else if (exponent < 0) {
+        text = QStringLiteral("0.") + QString(-exponent - 1, u'0') + digits;
+    } else if (digits.size() <= exponent + 1) {
+        text = digits + QString(exponent + 1 - digits.size(), u'0') + QStringLiteral(".0");
+    } else {
+        text = digits.left(exponent + 1) + u'.' + digits.mid(exponent + 1);
+    }
+    return negative ? u'-' + text : text;
 }
 
 } // namespace PythonJson

@@ -1208,7 +1208,7 @@ QVariantList BookLibrary::customFields(const Book &book) const
                                                                        : BookDisplay::date(value.value.toDateTime());
             editText = text;
         } else if (type == QLatin1String("float")) {
-            text = QLocale::c().toString(value.value.toDouble(), 'g', QLocale::FloatingPointShortest);
+            text = PythonJson::floatRepr(value.value.toDouble());
             editText = text;
         } else if (type == QLatin1String("series")) {
             text = tr("%1 [%2]").arg(value.value.toString(), BookDisplay::seriesIndex(value.seriesIndex));
@@ -1233,6 +1233,10 @@ QVariantList BookLibrary::customFields(const Book &book) const
             { QStringLiteral("editable"), column.editable },
             { QStringLiteral("halfStars"), display.value(QLatin1String("allow_half_stars")).toBool() },
             { QStringLiteral("html"), html },
+            // A long text holding more than its text shows, a table or an
+            // image, which saving from its text would leave out.
+            { QStringLiteral("losesFormatting"), type == QLatin1String("comments") && html
+                                                     && Description::losesFormatting(value.value.toString()) },
             { QStringLiteral("choices"), choices },
             { QStringLiteral("text"), text },
             { QStringLiteral("editText"), editText },
@@ -1272,8 +1276,13 @@ QVariantMap BookLibrary::editableValues(const Book &book) const
             continue;
         const CustomValue value = book.custom.value(index);
         const QString key = u'#' + column.label;
-        values.insert(key, column.datatype == QLatin1String("datetime") && !value.value.isNull()
-                               ? QVariant(CalibreDb::isoFormat(value.value.toDateTime())) : value.value);
+        // A date as its exact text, the undefined date as nothing, which
+        // Calibre's adapter makes undefined again.
+        if (column.datatype == QLatin1String("datetime") && !value.value.isNull())
+            values.insert(key, CalibreDb::isUndefinedDate(value.value.toDateTime())
+                                   ? QString() : CalibreDb::isoFormat(value.value.toDateTime()));
+        else
+            values.insert(key, value.value);
         if (column.datatype == QLatin1String("series") && !value.value.isNull())
             values.insert(key + QStringLiteral("_index"), value.seriesIndex);
     }
@@ -1289,6 +1298,11 @@ bool BookLibrary::isDate(const QString &text) const
 {
     return text.trimmed().isEmpty() || FieldWriters::parseOnlyDate(text, QDateTime::currentDateTimeUtc())
         || FieldWriters::parseExactDate(text);
+}
+
+bool BookLibrary::isCustomDate(const QString &text) const
+{
+    return text.trimmed().isEmpty() || FieldWriters::parseCustomDate(text);
 }
 
 void BookLibrary::openBackupFolder()

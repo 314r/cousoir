@@ -227,6 +227,9 @@ public:
     Q_INVOKABLE void undoBulkEdit();
     // Whether `text` is a date updateBook() takes for pubdate.
     Q_INVOKABLE bool isDate(const QString &text) const;
+    // Whether a custom column takes the text as a date, as its writer reads
+    // it.
+    Q_INVOKABLE bool isCustomDate(const QString &text) const;
     // A description's text as the HTML it saves as.
     Q_INVOKABLE QString textToHtml(const QString &text) const;
     // Shows the folder of backups in the file manager.
