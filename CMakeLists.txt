@@ -163,13 +163,18 @@ qt_add_library(cousoir_core STATIC
     send_job.h
     sqlite_db.cpp
     sqlite_db.h
+    wireless.cpp
+    wireless.h
+    wireless_send.cpp
+    wireless_send.h
 )
 target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-# Kobo's script, which a KEPUB carries.
+# Kobo's script, which a KEPUB carries, and what Calibre's wireless
+# device server tells the apps.
 qt_add_resources(cousoir_core "core_resources"
     PREFIX "/cousoir"
     BASE assets
-    FILES assets/kobo/kobo.js
+    FILES assets/kobo/kobo.js assets/wireless/calibre.json
 )
 target_link_libraries(cousoir_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP}
@@ -414,7 +419,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts calibre_notes test_tool)
+                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts calibre_notes wireless test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)

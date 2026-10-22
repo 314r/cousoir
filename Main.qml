@@ -433,7 +433,8 @@ ThemedWindow {
                                                  : qsTr("Send to %1").arg(device.name),
                 device === devices.devices[0] ? "Ctrl+D" : "", "ereader",
                 books > 0 && devices.available && devices.writable)
-            add("eject:" + device.root, qsTr("Eject %1").arg(device.name), "", "eject", device.ejectable === true)
+            add("eject:" + device.root, (device.kind === "wireless" ? qsTr("Disconnect %1") : qsTr("Eject %1")).arg(device.name),
+                "", "eject", device.ejectable === true)
         }
         add("trash", books > 1 ? qsTr("Move %1 books to the trash").arg(books) : qsTr("Move to the trash"), "Del",
             "trash", books > 0 && library.writable)
@@ -813,6 +814,7 @@ ThemedWindow {
         calibreLanguage: librarySettings.calibreLanguage
         share: session.share
         sharingSettings: sharingSettings
+        devices: window.devices
 
         onThemeModeSelected: function(mode) {
             window.setThemeMode(mode)
@@ -1542,8 +1544,9 @@ ThemedWindow {
                         visible: window.deviceShown && window.devices.current.ejectable === true
                         enabled: !window.devices.busy
                         variant: "outline"
-                        text: qsTr("Eject")
-                        tip: qsTr("Eject %1 so it can be unplugged").arg(window.devices.current.name || "")
+                        text: window.devices.current.kind === "wireless" ? qsTr("Disconnect") : qsTr("Eject")
+                        tip: (window.devices.current.kind === "wireless" ? qsTr("Let %1 go") : qsTr("Eject %1 so it can be unplugged"))
+                            .arg(window.devices.current.name || "")
                         icon.source: "assets/icons/eject.svg"
                         onClicked: window.ejectDevice()
                     }

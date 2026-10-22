@@ -23,6 +23,7 @@
 #include "calibre_db.h"
 #include "calibre_fts.h"
 #include "calibre_languages.h"
+#include "fake_wireless_app.h"
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
@@ -109,6 +110,7 @@ private slots:
     void changesRating();
     void editsDescription();
     void keepsNotes();
+    void sendsToWirelessApps();
     void editsCustomColumns();
     void changesCovers();
     void movesBooksToTrashAndBack();
@@ -701,6 +703,8 @@ void LibraryUiTest::sharesOnTheNetwork()
     QVERIFY(share);
     QVERIFY(!share->running());
 
+    // The page laid out: its button where it stays.
+    QVERIFY(QQuickTest::qWaitForPolish(settings));
     const QList<QQuickItem *> button = visualDescendants(settings->contentItem(), QStringLiteral("networkShareButton"));
     QCOMPARE(button.size(), 1);
     QTest::mouseClick(settings, Qt::LeftButton, Qt::NoModifier, button.constFirst()->mapToScene(
@@ -1269,6 +1273,54 @@ void LibraryUiTest::keepsNotes()
     QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();
     QMetaObject::invokeMethod(library(), "reload");
     QTRY_VERIFY(!control("notePane")->isVisible());
+}
+
+void LibraryUiTest::sendsToWirelessApps()
+{
+    // Calibre's wireless device server, on a port of the test's.
+    QTcpServer spare;
+    QVERIFY(spare.listen(QHostAddress::LocalHost));
+    const int port = spare.serverPort();
+    spare.close();
+    auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
+    QVERIFY(devices);
+    devices->setWireless(true, port, QString());
+    QTRY_VERIFY(devices->wirelessListening());
+    QCOMPARE(devices->wirelessPort(), port);
+
+    // An app connects: a reader among the others.
+    FakeWireless::FakeApp app;
+    app.connectTo(quint16(port));
+    QTRY_COMPARE(devices->devices().size(), 1);
+    const QVariantMap device = devices->devices().constFirst().toMap();
+    QCOMPARE(device.value(QStringLiteral("kind")).toString(), QStringLiteral("wireless"));
+    QCOMPARE(device.value(QStringLiteral("name")).toString(), QStringLiteral("KOReader (Kobo_Libra2)"));
+    const QString root = device.value(QStringLiteral("root")).toString();
+    QTRY_VERIFY(control(QStringLiteral("sidebar_device:") + root));
+
+    // A book goes, with its metadata, under Calibre's name for it.
+    QSignalSpy sent(devices, &DeviceLibrary::sent);
+    QCOMPARE(devices->send({ 1 }, root), QString());
+    QTRY_COMPARE(sent.size(), 1);
+    QCOMPARE(app.books.size(), 1);
+    const Book *book = qobject_cast<BookLibrary *>(library())->data().book(1);
+    QCOMPARE(app.books.constFirst().data, readAll(book->formats.constFirst().file));
+    QCOMPARE(app.books.constFirst().metadata.text(QStringLiteral("lpath")), QStringLiteral("Ecume des jours, L' - Boris Vian (1).epub"));
+    QCOMPARE(app.books.constFirst().metadata.text(QStringLiteral("title")), QStringLiteral("L'Écume des jours"));
+
+    // Listed on its page, as the library's book; removed from there.
+    click(QStringLiteral("sidebar_device:%1").arg(root).toUtf8().constData());
+    QTRY_COMPARE(devices->rows().size(), 1);
+    QCOMPARE(devices->rows().constFirst().toMap().value(QStringLiteral("bookId")).toInt(), 1);
+    QCOMPARE(devices->remove({ QStringLiteral("Ecume des jours, L' - Boris Vian (1).epub") }), QString());
+    QTRY_VERIFY(app.books.isEmpty());
+    QTRY_VERIFY(devices->rows().isEmpty());
+
+    // Let go, it leaves the readers.
+    QCOMPARE(devices->eject(root), QString());
+    QTRY_VERIFY(devices->devices().isEmpty());
+    devices->setWireless(false, 0, QString());
+    QVERIFY(!devices->wirelessListening());
 }
 
 void LibraryUiTest::editsCustomColumns()

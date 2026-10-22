@@ -43,6 +43,9 @@ public:
     QString codeOfName(const QString &name) const;
     // Whether Calibre's table was read.
     bool fromCalibre() const;
+    // A message of Calibre's in the interface language, as its _() gives
+    // it; the message itself when Calibre has no translation.
+    QString translate(const QString &message) const;
 
 private:
     std::shared_ptr<const Iso639> m_iso639;
