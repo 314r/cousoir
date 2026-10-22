@@ -304,10 +304,14 @@ QByteArray categoryFeed(const LibraryData &data, const QString &kind, const QStr
         if (counts.value(item.id) > 0)
             sorted.append(item);
     }
-    std::sort(sorted.begin(), sorted.end(), [](const FacetItem &a, const FacetItem &b) {
-        const QString x = a.sort.isEmpty() ? a.name : a.sort;
-        const QString y = b.sort.isEmpty() ? b.name : b.sort;
-        return QString::localeAwareCompare(x, y) < 0;
+    // Languages by the names shown, their sort being their code.
+    const bool languages = kind == QLatin1String("languages");
+    const auto key = [&](const FacetItem &item) {
+        return languages ? CalibreText::languageName(item.sort, interfaceLanguage)
+                         : item.sort.isEmpty() ? item.name : item.sort;
+    };
+    std::sort(sorted.begin(), sorted.end(), [&](const FacetItem &a, const FacetItem &b) {
+        return QString::localeAwareCompare(key(a), key(b)) < 0;
     });
     QByteArray out;
     QXmlStreamWriter xml(&out);
@@ -386,7 +390,10 @@ nav { display: flex; justify-content: center; gap: 12px; padding: 0 16px 24px; }
         const Book &book = data.books.at(rows.at(i));
         html += QStringLiteral("<div class=\"book\">");
         if (!book.coverFile.isEmpty())
-            html += QStringLiteral("<img loading=\"lazy\" src=\"/thumb/%1\" alt=\"\">").arg(book.id);
+            // The cover's time in the address: a new cover is no cached one.
+            html += QStringLiteral("<img loading=\"lazy\" src=\"/thumb/%1?v=%2\" alt=\"\">")
+                        .arg(book.id)
+                        .arg(book.coverModified);
         else
             html += QStringLiteral("<div class=\"nocover\"></div>");
         html += QStringLiteral("<div class=\"title\">%1</div>").arg(escape(book.title));

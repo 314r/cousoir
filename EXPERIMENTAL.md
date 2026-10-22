@@ -793,3 +793,14 @@ Left for later: column widths of one's own, and the cover grid's sort.
 - Docs: the stale "Converting/Sending needs Calibre" sentences of DOC.md
   now say what needs Calibre since goal 14.
 
+### 2026-10-22 — a review of goal 15 (`exp-review6`)
+
+A review found no crash, hang or security hole; it found four small bugs,
+fixed with tests: the web page's thumbnails cached an hour past a cover's
+change (now `?v=` the cover's time), languages listed by code rather than
+by name, an empty library name from `cousoir-cli serve --library PATH/`,
+and a log saying 200 for a file gone from the disk. It also noted that a
+remembered share starts again unnoticed, on a café's network for
+instance: the status bar now shows the library shared, a click away from
+the Network section.
+

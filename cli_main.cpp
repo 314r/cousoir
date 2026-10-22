@@ -143,7 +143,7 @@ int serve(const QString &libraryPath, int port, const QString &password)
         catalog.find = [&library](const QString &query, const QList<BookSort::Level> &sort, QString *error) {
             return LibraryServer::findBooks(library->data, *library->index, library->sorter.get(), query, sort, error);
         };
-        catalog.name = QFileInfo(libraryPath).fileName();
+        catalog.name = QDir(libraryPath).dirName();
         catalog.interfaceLanguage = CalibreConfig::load().interfaceLanguage;
         server.setCatalog(catalog);
     };
