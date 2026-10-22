@@ -401,6 +401,8 @@ ThemedWindow {
         }
         add("add", qsTr("Add books…"), "Ctrl+N", "plus", library.writable && !library.importing)
         add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
+        add("download", qsTr("Download metadata and covers"), "", "globe",
+            session.bookOpen && library.writable && downloads.available)
         add("kepub", books > 1 ? qsTr("Convert %1 books to KEPUB").arg(books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
             "refresh", books > 0 && library.writable && conversions.available)
         add("azw3", books > 1 ? qsTr("Convert %1 books to AZW3").arg(books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
@@ -457,6 +459,8 @@ ThemedWindow {
             addBooksDialog.open()
         } else if (hit.key === "reader") {
             openInReader()
+        } else if (hit.key === "download") {
+            downloadMetadata()
         } else if (hit.key === "kepub" || hit.key === "azw3") {
             convertBooks(targetIds(), hit.key.toUpperCase())
         } else if (hit.key.startsWith("send:")) {
@@ -484,6 +488,14 @@ ThemedWindow {
         } else if (hit.key === "backups") {
             library.openBackupFolder()
         }
+    }
+
+    // Calibre's sources asked about the open book, out of any field first.
+    function downloadMetadata() {
+        if (!session.bookOpen)
+            return
+        bookPage.finishEditing()
+        downloadDialog.start(window.book.id, window.book.title || "")
     }
 
     function showNotice(message, isError = true) {
@@ -622,6 +634,7 @@ ThemedWindow {
     readonly property BookLibrary library: session.library
     readonly property ConcurrencyGuard guard: session.guard
     readonly property ConversionService conversions: session.conversions
+    readonly property MetadataDownloader downloads: session.downloads
     readonly property DeviceLibrary devices: session.devices
 
     Timer {
@@ -836,6 +849,20 @@ ThemedWindow {
         onActivated: {
             commandPalette.commands = window.paletteCommands()
             commandPalette.show()
+        }
+    }
+
+    MetadataDownloadDialog {
+        id: downloadDialog
+
+        downloader: window.downloads
+        onFailed: function(message) { window.showNotice(message) }
+        onSaved: function(title) {
+            window.showNotice(qsTr("“%1” updated from the web; Revert changes undoes it.").arg(title), false)
+        }
+        onClosed: {
+            if (session.bookOpen)
+                bookPage.forceActiveFocus()
         }
     }
 
@@ -1380,6 +1407,17 @@ ThemedWindow {
                         variant: "danger"
                         text: qsTr("Revert")
                         onClicked: bookPage.revertChanges()
+                    }
+
+                    FlatButton {
+                        objectName: "downloadMetadataButton"
+
+                        visible: session.bookOpen && !bookPage.confirmingRevert && window.library.writable
+                                 && window.downloads.available
+                        iconOnly: true
+                        text: qsTr("Download metadata and covers")
+                        icon.source: "assets/icons/globe.svg"
+                        onClicked: window.downloadMetadata()
                     }
 
                     FlatButton {

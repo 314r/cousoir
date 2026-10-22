@@ -184,6 +184,7 @@ set(COUSOIR_QML_FILES
     ListTable.qml
     Main.qml
     MetaRow.qml
+    MetadataDownloadDialog.qml
     SearchField.qml
     SettingsWindow.qml
     Sidebar.qml
