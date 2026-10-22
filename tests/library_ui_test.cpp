@@ -90,6 +90,7 @@ private slots:
     void refusesInvalidValues();
     void changesRating();
     void editsDescription();
+    void editsCustomColumns();
     void changesCovers();
     void movesBooksToTrashAndBack();
     void editsManyBooks();
@@ -866,6 +867,76 @@ void LibraryUiTest::editsDescription()
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
     library()->setProperty("currentBookId", 1);
     QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString(), QString());
+}
+
+void LibraryUiTest::editsCustomColumns()
+{
+    // The library with a custom column of each kind.
+    m_libraryPath = m_libraryDir->filePath(QStringLiteral("custom"));
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library-custom"), m_libraryPath));
+    library()->setProperty("libraryPath", m_libraryPath);
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool()
+                                 && library()->property("libraryPath").toString() == m_libraryPath, 10000);
+    // Tall enough for every field without scrolling.
+    m_window->resize(1240, 1400);
+    openWritable(1);
+    const auto custom = [this](const QString &key) {
+        for (const QVariant &field : library()->property("currentBook").toMap().value(QStringLiteral("custom")).toList()) {
+            if (field.toMap().value(QStringLiteral("key")).toString() == key)
+                return field.toMap();
+        }
+        return QVariantMap();
+    };
+    QCOMPARE(custom(QStringLiteral("#genre")).value(QStringLiteral("text")).toString(), QStringLiteral("SF, Classique"));
+    QCOMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(), QStringLiteral("Bien"));
+    // A composite is Calibre's to compute.
+    QVERIFY(custom(QStringLiteral("#computed")).isEmpty());
+
+    retype("field_#note", QStringLiteral("Autre note"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#note")).value(QStringLiteral("text")).toString(), QStringLiteral("Autre note"));
+
+    // A number takes digits only.
+    retype("field_#pagecount", QStringLiteral("abc"));
+    QVERIFY(control("field_#pagecount")->property("invalid").toBool());
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    retype("field_#price", QStringLiteral("9,5"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#price")).value(QStringLiteral("text")).toString(), QStringLiteral("9.5"));
+
+    // Long text in HTML edits as the description does.
+    retype("field_#review", QStringLiteral("**Tres** bien"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(),
+                 QStringLiteral("**Tres** bien"));
+
+    // Yes or no, and a list of values, choose.
+    click("field_#read");
+    QTRY_VERIFY(control("field_#read")->property("popup").value<QObject *>()->property("visible").toBool());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#read")).value(QStringLiteral("text")).toString(), QStringLiteral("No"));
+    click("field_#shelf");
+    QTRY_VERIFY(control("field_#shelf")->property("popup").value<QObject *>()->property("visible").toBool());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#shelf")).value(QStringLiteral("text")).toString(), QStringLiteral("A"));
+
+    // Revert puts them all back.
+    click("revertChangesButton");
+    QTRY_VERIFY(control("confirmRevertButton") && control("confirmRevertButton")->isVisible());
+    click("confirmRevertButton");
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#note")).value(QStringLiteral("text")).toString(), QStringLiteral("Une note"));
+    QCOMPARE(custom(QStringLiteral("#read")).value(QStringLiteral("text")).toString(), QStringLiteral("Yes"));
+    QCOMPARE(custom(QStringLiteral("#shelf")).value(QStringLiteral("text")).toString(), QString());
+    QCOMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(), QStringLiteral("Bien"));
+    QCOMPARE(custom(QStringLiteral("#price")).value(QStringLiteral("text")).toString(), QString());
 }
 
 void LibraryUiTest::changesCovers()

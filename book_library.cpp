@@ -19,6 +19,9 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
 #include <QRegularExpression>
 #include <QUrl>
@@ -1105,6 +1108,7 @@ void BookLibrary::rebuildCurrentBook()
         { QStringLiteral("identifiersText"), identifierTexts.join(QStringLiteral(", ")) },
         { QStringLiteral("pubdateText"), CalibreDb::isUndefinedDate(book->pubdate)
               ? QString() : book->pubdate.toUTC().date().toString(Qt::ISODate) },
+        { QStringLiteral("custom"), customFields(*book) },
     };
     if (m_currentBook == current)
         return;
@@ -1171,12 +1175,80 @@ CalibreConfig BookLibrary::effectiveConfig() const
     return config;
 }
 
+QVariantList BookLibrary::customFields(const Book &book) const
+{
+    QVariantList fields;
+    for (qsizetype index = 0; index < m_data.customColumns.size(); ++index) {
+        const CustomColumn &column = m_data.customColumns.at(index);
+        // A composite's value is Calibre's to compute.
+        if (column.datatype == QLatin1String("composite"))
+            continue;
+        const QJsonObject display = QJsonDocument::fromJson(column.display).object();
+        const bool names = display.value(QLatin1String("is_names")).toBool();
+        const QString interpretAs = display.value(QLatin1String("interpret_as")).toString();
+        const bool html = column.datatype == QLatin1String("comments") && interpretAs != QLatin1String("short-text")
+            && interpretAs != QLatin1String("long-text") && interpretAs != QLatin1String("markdown");
+        const CustomValue value = book.custom.value(index);
+        const QString &type = column.datatype;
+        // What the page shows, and what the field edits.
+        QString text;
+        QString editText;
+        if (column.multiple) {
+            text = value.value.toStringList().join(names ? QStringLiteral(" & ") : QStringLiteral(", "));
+            editText = text;
+        } else if (value.value.isNull()) {
+        } else if (type == QLatin1String("rating")) {
+            text = BookDisplay::rating(value.value.toInt());
+            editText = value.value.toString();
+        } else if (type == QLatin1String("bool")) {
+            text = value.value.toBool() ? tr("Yes") : tr("No");
+            editText = value.value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+        } else if (type == QLatin1String("datetime")) {
+            text = CalibreDb::isUndefinedDate(value.value.toDateTime()) ? QString()
+                                                                       : BookDisplay::date(value.value.toDateTime());
+            editText = text;
+        } else if (type == QLatin1String("float")) {
+            text = QLocale::c().toString(value.value.toDouble(), 'g', QLocale::FloatingPointShortest);
+            editText = text;
+        } else if (type == QLatin1String("series")) {
+            text = tr("%1 [%2]").arg(value.value.toString(), BookDisplay::seriesIndex(value.seriesIndex));
+            editText = value.value.toString();
+        } else if (type == QLatin1String("comments")) {
+            // HTML unless the column says it holds plain text or Markdown.
+            text = html ? Description::toText(value.value.toString()) : value.value.toString();
+            editText = text;
+        } else {
+            text = value.value.toString();
+            editText = text;
+        }
+        QStringList choices;
+        for (const QJsonValue &choice : display.value(QLatin1String("enum_values")).toArray())
+            choices.append(choice.toString());
+        fields.append(QVariantMap{
+            { QStringLiteral("key"), u'#' + column.label },
+            { QStringLiteral("name"), column.name },
+            { QStringLiteral("datatype"), type },
+            { QStringLiteral("multiple"), column.multiple },
+            { QStringLiteral("names"), names },
+            { QStringLiteral("editable"), column.editable },
+            { QStringLiteral("halfStars"), display.value(QLatin1String("allow_half_stars")).toBool() },
+            { QStringLiteral("html"), html },
+            { QStringLiteral("choices"), choices },
+            { QStringLiteral("text"), text },
+            { QStringLiteral("editText"), editText },
+            { QStringLiteral("seriesIndexText"), value.value.isNull() ? QString()
+                                                                      : BookDisplay::seriesIndex(value.seriesIndex) },
+        });
+    }
+    return fields;
+}
+
 QVariantMap BookLibrary::editableValues(const Book &book) const
 {
     QStringList identifiers;
     for (const auto &identifier : book.identifiers)
         identifiers.append(identifier.first + u':' + identifier.second);
-    return {
+    QVariantMap values{
         { QStringLiteral("title"), book.title },
         { QStringLiteral("sort"), book.sort },
         { QStringLiteral("authors"), book.authors },
@@ -1193,6 +1265,24 @@ QVariantMap BookLibrary::editableValues(const Book &book) const
                                                                               : CalibreDb::isoFormat(book.pubdate) },
         { QStringLiteral("comments"), book.comments },
     };
+    // The custom columns, as updateBook() takes them back.
+    for (qsizetype index = 0; index < m_data.customColumns.size(); ++index) {
+        const CustomColumn &column = m_data.customColumns.at(index);
+        if (column.datatype == QLatin1String("composite"))
+            continue;
+        const CustomValue value = book.custom.value(index);
+        const QString key = u'#' + column.label;
+        values.insert(key, column.datatype == QLatin1String("datetime") && !value.value.isNull()
+                               ? QVariant(CalibreDb::isoFormat(value.value.toDateTime())) : value.value);
+        if (column.datatype == QLatin1String("series") && !value.value.isNull())
+            values.insert(key + QStringLiteral("_index"), value.seriesIndex);
+    }
+    return values;
+}
+
+QString BookLibrary::textToHtml(const QString &text) const
+{
+    return Description::toHtml(text);
 }
 
 bool BookLibrary::isDate(const QString &text) const

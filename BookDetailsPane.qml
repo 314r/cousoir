@@ -112,6 +112,10 @@ FocusScope {
         property string placeholder
         property bool number: false
         property bool allowEmpty: true
+        // A custom column Calibre keeps from editing.
+        property bool readOnly: false
+        // What the text saves as, when not as it is.
+        property var saveAs: null
         // A check of the typed text beyond emptiness.
         property var check: null
         readonly property bool valid: accepts(field.text)
@@ -142,7 +146,8 @@ FocusScope {
 
         function commit() {
             if (field.text.trim() !== detail.value.trim() && valid)
-                pane.save(detail.key, detail.number ? Number(field.text.trim().replace(",", ".")) : field.text)
+                pane.save(detail.key, detail.number ? Number(field.text.trim().replace(",", "."))
+                                    : detail.saveAs ? detail.saveAs(field.text) : field.text)
             // The saved value once it is in, or the old one.
             revert()
         }
@@ -168,7 +173,7 @@ FocusScope {
             placeholderText: detail.placeholder
             horizontalAlignment: detail.number ? TextInput.AlignRight : TextInput.AlignLeft
             invalid: !detail.valid
-            enabled: pane.editable
+            enabled: pane.editable && !detail.readOnly
             Accessible.name: detail.label
 
             onTextEdited: detail.typed = true
@@ -187,6 +192,54 @@ FocusScope {
             Layout.fillWidth: true
             visible: detail.number
         }
+    }
+
+    // A custom column of a few values: a rating, yes or no, or one of a
+    // list. Choosing saves.
+    component CustomChoice: RowLayout {
+        id: choiceRow
+
+        property var field: ({})
+        readonly property string stored: field.editText || (field.datatype === "rating" ? "0" : "")
+        readonly property var choices: field.datatype === "rating"
+            ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(rating => field.halfStars || rating % 2 === 0).map(rating => ({
+                value: String(rating),
+                label: rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+            }))
+            : field.datatype === "bool"
+            ? [{ value: "", label: "—" }, { value: "true", label: qsTr("Yes") }, { value: "false", label: qsTr("No") }]
+            : [{ value: "", label: "—" }].concat((field.choices || []).map(choice => ({ value: choice, label: choice })))
+
+        Layout.fillWidth: true
+        spacing: Theme.rowPadding
+
+        Label {
+            Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+            Layout.minimumWidth: Layout.preferredWidth
+            text: choiceRow.field.name || ""
+            color: Theme.textMuted
+            elide: Text.ElideRight
+        }
+
+        ChoiceBox {
+            readonly property bool detailField: true
+
+            objectName: "field_" + (choiceRow.field.key || "")
+            Layout.preferredWidth: Math.round(14 * Theme.charWidth)
+            model: choiceRow.choices
+            currentIndex: Math.max(0, choiceRow.choices.findIndex(choice => choice.value === choiceRow.stored))
+            enabled: pane.editable && choiceRow.field.editable === true
+            Accessible.name: choiceRow.field.name || ""
+            onActivated: function(index) {
+                const value = choiceRow.choices[index].value
+                if (value !== choiceRow.stored)
+                    pane.save(choiceRow.field.key, value === "" ? null : value)
+                currentIndex = Qt.binding(() => Math.max(0, choiceRow.choices.findIndex(
+                    choice => choice.value === choiceRow.stored)))
+            }
+        }
+
+        Item { Layout.fillWidth: true }
     }
 
     ScrollView {
@@ -238,6 +291,19 @@ FocusScope {
                         label: modelData.label
                         value: modelData.value
                         link: modelData.url
+                    }
+                }
+
+                Repeater {
+                    model: pane.book.custom || []
+
+                    delegate: MetaRow {
+                        required property var modelData
+
+                        objectName: "fact_" + modelData.key
+                        visible: modelData.text.length > 0
+                        label: modelData.name
+                        value: modelData.text
                     }
                 }
             }
@@ -354,6 +420,66 @@ FocusScope {
                     label: qsTr("Identifiers")
                     value: pane.book.identifiersText || ""
                     placeholder: qsTr("isbn:…, goodreads:…")
+                }
+
+                // The library's custom columns, each edited by its kind.
+                Repeater {
+                    model: pane.book.custom || []
+
+                    delegate: ColumnLayout {
+                        id: customField
+
+                        required property var modelData
+                        readonly property string type: modelData.datatype
+                        readonly property bool choice: type === "rating" || type === "bool" || type === "enumeration"
+
+                        Layout.fillWidth: true
+                        spacing: Math.round(6 * Theme.spacingScale)
+
+                        Component {
+                            id: textField
+
+                            DetailField {
+                                key: customField.modelData.key
+                                label: customField.modelData.name
+                                value: customField.modelData.editText
+                                readOnly: !customField.modelData.editable
+                                placeholder: customField.type === "datetime" ? qsTr("YYYY-MM-DD")
+                                    : customField.modelData.multiple ? (customField.modelData.names ? qsTr("Name & name")
+                                                                                                    : qsTr("value, value"))
+                                    : ""
+                                check: customField.type === "int" ? (text => /^\s*([+-]?\d+)?\s*$/.test(text))
+                                    : customField.type === "float"
+                                    ? (text => !text.trim() || isFinite(Number(text.trim().replace(",", "."))))
+                                    : customField.type === "datetime" ? (text => pane.library.isDate(text)) : null
+                                saveAs: customField.type === "float" ? (text => text.trim().replace(",", "."))
+                                    : customField.modelData.html ? (text => pane.library.textToHtml(text)) : null
+                            }
+                        }
+
+                        Component {
+                            id: choiceField
+
+                            CustomChoice {
+                                field: customField.modelData
+                            }
+                        }
+
+                        // Only the control its kind uses.
+                        Loader {
+                            Layout.fillWidth: true
+                            sourceComponent: customField.choice ? choiceField : textField
+                        }
+
+                        DetailField {
+                            visible: customField.type === "series" && customField.modelData.editText.length > 0
+                            key: customField.modelData.key + "_index"
+                            label: qsTr("Number")
+                            value: customField.modelData.seriesIndexText || "1"
+                            readOnly: !customField.modelData.editable
+                            number: true
+                        }
+                    }
                 }
 
                 MetaRow {

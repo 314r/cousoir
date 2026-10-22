@@ -227,6 +227,8 @@ public:
     Q_INVOKABLE void undoBulkEdit();
     // Whether `text` is a date updateBook() takes for pubdate.
     Q_INVOKABLE bool isDate(const QString &text) const;
+    // A description's text as the HTML it saves as.
+    Q_INVOKABLE QString textToHtml(const QString &text) const;
     // Shows the folder of backups in the file manager.
     Q_INVOKABLE void openBackupFolder();
 
@@ -395,6 +397,11 @@ private:
     const QList<qsizetype> &sortedBooks();
     // What the current book's fields hold, as updateBook() takes them.
     QVariantMap editableValues(const Book &book) const;
+    // The book's custom columns as the page shows and edits them: { key,
+    // name, datatype, multiple, names, editable, halfStars, html, choices,
+    // text, editText, seriesIndexText }, a composite left out; long text in
+    // HTML edits as the description does.
+    QVariantList customFields(const Book &book) const;
     // Keeps the current book as it is before its first change.
     void keepOriginal(const Book &book);
     CalibreConfig effectiveConfig() const;
