@@ -946,3 +946,21 @@ a PDF or a comic goes as a file copy.
   highlight made, written as the viewer writes it, shown again and
   removed; and a PDF.
 
+### 2026-10-22 — Calibre's full text tokenizer (`exp-fts`)
+
+Studying notes for goal 13 showed that Calibre registers its own FTS5
+tokenizer under SQLite's names, `unicode61` and `porter`, on every
+connection: the annotations' index in metadata.db is made with it, not
+with SQLite's. The highlights Cousoir's reader writes since goal 19 were
+indexed by SQLite's tokenizer, word for word different on French text
+(apostrophes, accents, "ß"): Calibre, rewriting such a row later, would
+have removed words the index never had, which damages an FTS5 index.
+
+`CalibreFts` ports `sqlite_extension.cpp`'s tokenizer (ICU's word breaks,
+case folding, words also without their diacritics, Snowball's stemmers)
+and registers it as Calibre does on every connection Cousoir writes
+through. A new oracle tokenizes ten texts, accented, CJK, Thai, Greek,
+with Calibre's own, in English and French, plain and stemmed: the port
+gives the same terms at the same places. Cousoir now needs ICU and
+Snowball's libstemmer, both of which Calibre itself needs.
+

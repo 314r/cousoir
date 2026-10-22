@@ -801,7 +801,11 @@ computer or from Dropbox, reloads the library after a moment; F5 or Ctrl+R
 reloads it at once. A reload that fails while Calibre writes keeps the books
 shown and says so in the status bar.
 
-The connection is set up as Calibre's: its SQL functions (`title_sort`,
+The connection is set up as Calibre's: its full text tokenizer, which
+Calibre registers in place of SQLite's `unicode61` and `porter` (ICU's word
+breaks in Calibre's interface language, case folding, each word also
+without its diacritics, Snowball's stemmers), so that the annotations
+Cousoir writes are indexed word for word as Calibre indexes them; its SQL functions (`title_sort`,
 `author_to_author_sort`, `uuid4`, `books_list_filter` and the legacy
 aggregates), its temporary author triggers, foreign keys and a 10 s busy
 timeout. `title_sort` follows Calibre's interface language and tweaks on this
@@ -965,8 +969,9 @@ columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 
 - Qt 6.9 or later with QML, Quick, Quick Controls 2, SVG, Network, Xml,
   Concurrent and, on Linux, D-Bus
-- SQLite 3.31 or later
+- SQLite 3.31 or later, with FTS5
 - libzip
+- ICU and Snowball's libstemmer, for Calibre's full text tokenizer
 - For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
 - For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs; built
@@ -1162,6 +1167,11 @@ The tests check the port against Calibre itself:
   `/proc/net/unix`, a fake Dropbox socket, Syncthing and Nextcloud folders
   made in a temporary folder and a file system type given in place of the
   real one.
+- `calibre_fts_tests` tokenizes ten texts, accented, with apostrophes, in
+  Japanese, Chinese, Thai and Greek, with the port of Calibre's FTS5
+  tokenizer, plain and stemmed, in English and French, and compares the
+  terms and their places with those Calibre's own makes
+  (`tools/oracle/fts_oracle.py`).
 - `epub_book_tests` reads EPUB 3 and EPUB 2 books: their spine, their table
   of contents from nav or NCX, nested, and paths resolved. The UI tests read
   `tests/data/reader/voyage.epub` (`tools/make_reader_fixture.py`) in the
