@@ -1454,6 +1454,7 @@ ThemedWindow {
                         book: window.book
                         detailsVisible: window.detailsVisible
                         onFailed: function(message) { window.showNotice(message) }
+                        onNoticed: function(message) { window.showNotice(message, false) }
                         onConvertRequested: function(format) { window.convertBook(window.book.id, format) }
                         onSendRequested: function(root) { window.sendBook(window.book.id, root) }
                     }

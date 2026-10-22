@@ -19,6 +19,9 @@ Rectangle {
         { key: "authors", title: qsTr("Authors"), chars: 18, drop: 3 },
         { key: "format", title: qsTr("Format"), chars: 6, drop: 1 },
         { key: "size", title: qsTr("Size"), chars: 9, right: true, drop: 2 },
+        { key: "reading", title: qsTr("Read"), chars: 5, right: true, drop: 5 },
+        { key: "notes", title: qsTr("Notes"), chars: 5, right: true, drop: 6,
+          format: row => row.notes > 0 ? String(row.notes) : "" },
         { key: "library", title: qsTr("Library"), chars: 8, drop: 4,
           format: row => row.bookId > 0 ? qsTr("Yes") : row.purchased ? qsTr("Bought") : "" }
     ]

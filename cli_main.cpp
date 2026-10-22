@@ -514,8 +514,32 @@ int device(const QString &libraryPath, const QString &spec)
     DeviceBooks::match(&books, data);
     QJsonArray list;
     for (const DeviceBook &book : std::as_const(books)) {
+        // What the reader knows of the book's reading, as
+        // tools/oracle/kobo_reading.py prints Calibre's.
+        QJsonArray notes;
+        for (const ReaderNote &note : book.reading.notes) {
+            notes.append(QJsonObject{
+                { QStringLiteral("location"), note.location },
+                { QStringLiteral("type"), note.type },
+                { QStringLiteral("text"), note.text },
+                { QStringLiteral("annotation"), note.annotation },
+                { QStringLiteral("chapter"), note.chapter },
+                { QStringLiteral("chapter_title"), note.chapterTitle },
+                { QStringLiteral("chapter_progress"), note.chapterProgress },
+                { QStringLiteral("created"), note.created },
+            });
+        }
+        const QJsonObject reading{
+            { QStringLiteral("status"), book.reading.status },
+            { QStringLiteral("percent_read"), book.reading.percent ? QJsonValue(*book.reading.percent) : QJsonValue() },
+            { QStringLiteral("last_read"), book.reading.lastRead.isEmpty() ? QJsonValue() : QJsonValue(book.reading.lastRead) },
+            { QStringLiteral("seconds_spent"), book.reading.secondsSpent },
+            { QStringLiteral("notes"), notes },
+        };
         list.append(QJsonObject{
             { QStringLiteral("lpath"), book.lpath },
+            { QStringLiteral("content_id"), book.contentId },
+            { QStringLiteral("reading"), reading },
             { QStringLiteral("title"), book.title },
             { QStringLiteral("authors"), QJsonArray::fromStringList(book.authors) },
             { QStringLiteral("format"), book.format },

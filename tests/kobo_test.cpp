@@ -184,6 +184,80 @@ private slots:
 
     // KoboTouch's books(): the database's, with metadata.calibre's for those
     // Calibre sent, then those sent since.
+    // What the Kobo knows of each book's reading: begun, finished or not,
+    // how far, when, and the highlights, notes and bookmarks it shows, in
+    // the order and with the chapters Calibre gives them.
+    void readsReading()
+    {
+        QTemporaryDir kobo;
+        QString error;
+        QVERIFY2(makeKobo(kobo.path(), &error), qPrintable(error));
+        {
+            SqliteDb db;
+            QVERIFY2(db.open(QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite")),
+                             SqliteDb::Mode::ReadWrite, &error),
+                     qPrintable(error));
+            QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-reading.sql"))),
+                             &error),
+                     qPrintable(error));
+        }
+        const QList<DeviceBook> books = Kobo::books(Kobo::describe(kobo.path(), {}), &error);
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        const auto find = [&books](const QString &contentId) -> const ReadingState * {
+            for (const DeviceBook &book : books) {
+                if (book.contentId == contentId)
+                    return &book.reading;
+            }
+            return nullptr;
+        };
+
+        const ReadingState *ecume = find(QStringLiteral("file:///mnt/onboard/Vian, Boris/Ecume.kepub.epub"));
+        QVERIFY(ecume);
+        QCOMPARE(ecume->status, 1);
+        QCOMPARE(ecume->percent, std::optional<int>(43));
+        QCOMPARE(ecume->lastRead, QStringLiteral("2026-10-20T21:14:03Z"));
+        QCOMPARE(ecume->secondsSpent, 5400);
+        QStringList kinds;
+        for (const ReaderNote &note : ecume->notes)
+            kinds.append(QStringLiteral("%1 %2 %3").arg(note.location).arg(note.type, note.chapterTitle));
+        // The hidden highlight is left out; the note whose id has no "!" has
+        // no chapter.
+        QCOMPARE(kinds, QStringList({ QStringLiteral("0 Highlight "), QStringLiteral("1 Highlight Un"),
+                                      QStringLiteral("2 Highlight Un"), QStringLiteral("3 Annotation Un"),
+                                      QStringLiteral("1000 Bookmark Deux"),
+                                      QStringLiteral("2000 Unknown annotation type Trois"),
+                                      QStringLiteral("2001 Highlight Trois") }));
+        QCOMPARE(ecume->notes.at(1).chapterProgress, 12.35);
+        QCOMPARE(ecume->notes.at(3).annotation, QStringLiteral("Le nénuphar, déjà ?"));
+        QCOMPARE(ecume->notes.at(3).created, QStringLiteral("2026-10-18T20:15:00.000"));
+
+        // Finished: 100 whatever its percent; a chapter sharing another's
+        // index takes the place of one of its notes.
+        const ReadingState *mort = find(QStringLiteral("file:///mnt/onboard/Pratchett, Terry/Mort.epub"));
+        QVERIFY(mort);
+        QCOMPARE(mort->status, 2);
+        QCOMPARE(mort->percent, std::optional<int>(100));
+        QCOMPARE(mort->notes.size(), 4);
+        QCOMPARE(mort->notes.at(1).text, QStringLiteral("Binky"));
+        // As Markdown: a heading per chapter that has a title.
+        QCOMPARE(DeviceBooks::notesMarkdown(QStringLiteral("Mort"), { QStringLiteral("Terry Pratchett") }, mort->notes),
+                 QStringLiteral("# Mort\n\nTerry Pratchett\n\n> Ysabell\n\n## Chapter 3\n\n> Binky\n\n"
+                                "## Chapter 1\n\n> THERE IS NO JUSTICE.\n\n## Chapter 2\n\n> Mort\n"));
+
+        const ReadingState *bought = find(QStringLiteral("5b0e1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d"));
+        QVERIFY(bought);
+        QCOMPARE(bought->status, 0);
+        QCOMPARE(bought->percent, std::optional<int>(0));
+        QVERIFY(bought->lastRead.isEmpty());
+        QCOMPARE(bought->notes.size(), 1);
+        QCOMPARE(bought->notes.first().chapterTitle, QStringLiteral("Opening"));
+
+        const ReadingState *notes = find(QStringLiteral("file:///mnt/onboard/Notes.pdf"));
+        QVERIFY(notes);
+        QCOMPARE(notes->status, 1);
+        QVERIFY(!notes->percent);
+    }
+
     void listsBooks()
     {
         QTemporaryDir kobo;

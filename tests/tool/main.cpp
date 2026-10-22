@@ -24,6 +24,7 @@ const Command commands[] = {
       "[--files-only] [--added-from N] [--converted BOOK:FORMAT,...] CALIBRE COUSOIR" },
     { "compare-devices", Tool::compareDevices, 2, 3, "[--lpaths-only] CALIBRE COUSOIR" },
     { "compare-reads", Tool::compareReads, 2, 2, "CALIBRE.json COUSOIR.json" },
+    { "compare-reading", Tool::compareReading, 2, 2, "CALIBRE.json DEVICE.json" },
     { "conversion-settings", Tool::conversionSettings, 1, 1, "LIBRARY" },
     { "kobo-import", Tool::koboImport, 1, 1, "KOBO" },
     { "kindle-sync", Tool::kindleSync, 1, 1, "KINDLE" },

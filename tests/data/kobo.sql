@@ -34,8 +34,12 @@ CREATE TABLE Shelf (CreationDate TEXT, Id TEXT, InternalName TEXT, LastModified 
 CREATE TABLE ShelfContent (ShelfName TEXT, ContentId TEXT, DateModified TEXT, _IsDeleted BOOL, _IsSynced BOOL,
     PRIMARY KEY (ShelfName, ContentId));
 CREATE TABLE Bookmark (BookmarkID TEXT NOT NULL, VolumeID TEXT NOT NULL, ContentID TEXT NOT NULL,
-    StartContainerPath TEXT, EndContainerPath TEXT, Text TEXT, Annotation TEXT, DateCreated TEXT,
-    PRIMARY KEY (BookmarkID));
+    StartContainerPath TEXT NOT NULL, StartContainerChildIndex INTEGER NOT NULL, StartOffset INTEGER NOT NULL,
+    EndContainerPath TEXT NOT NULL, EndContainerChildIndex INTEGER NOT NULL, EndOffset INTEGER NOT NULL,
+    Text TEXT, Annotation TEXT, ExtraAnnotationData BLOB, DateCreated TEXT,
+    ChapterProgress REAL NOT NULL DEFAULT 0, Hidden BOOL NOT NULL DEFAULT 0, Version TEXT, DateModified TEXT,
+    Creator TEXT, UUID TEXT, UserID TEXT, SyncTime TEXT, Published BIT DEFAULT false, ContextString TEXT,
+    Type TEXT, PRIMARY KEY (BookmarkID));
 CREATE TABLE volume_shortcovers (volumeId TEXT NOT NULL, shortcoverId TEXT NOT NULL, VolumeIndex INTEGER,
     PRIMARY KEY (volumeId, shortcoverId));
 CREATE TABLE content_keys (volumeId TEXT NOT NULL, elementId TEXT NOT NULL, elementKey TEXT,

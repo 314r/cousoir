@@ -9,8 +9,8 @@
 // The edit is saved into the library: give it a copy.
 //
 // With --screenshot, it draws the window instead, in a section, with a
-// search, a virtual library or a book open, and saves the picture; the
-// library is only read.
+// search, a virtual library, a book open or a folder standing for a Kobo
+// plugged in, and saves the picture; the library is only read.
 //
 //   tools/sandbox.sh build/cousoir-benchmark --screenshot shot.png --search tag:sf LIBRARY
 
@@ -288,6 +288,8 @@ struct Shot
     int book = 0;
     int selected = 0;
     QStringList clicks;
+    // A folder that stands for a Kobo plugged in.
+    QString kobo;
 };
 
 int screenshot(const QString &path, const Shot &shot)
@@ -299,10 +301,18 @@ int screenshot(const QString &path, const Shot &shot)
     if (!window)
         return 1;
     QObject *library = window->property("library").value<QObject *>();
+    if (!shot.kobo.isEmpty()) {
+        auto *devices = window->property("devices").value<DeviceLibrary *>();
+        const QString kobo = QDir(shot.kobo).absolutePath();
+        devices->setVolumeProvider([kobo] { return QList<Volume>{ { kobo, QString() } }; }, 100);
+        devices->refresh();
+        QTest::qWaitFor([devices] { return !devices->devices().isEmpty() && !devices->loading(); }, 10000);
+    }
     if (!shot.virtualLibrary.isEmpty())
         library->setProperty("virtualLibrary", shot.virtualLibrary);
     if (!shot.section.isEmpty())
-        window->setProperty("section", shot.section);
+        window->setProperty("section", QString(shot.section).replace(QStringLiteral("@KOBO@"),
+                                                                     QDir(shot.kobo).absolutePath()));
     if (!shot.search.isEmpty())
         library->setProperty("searchText", shot.search);
     if (shot.book > 0)
@@ -361,6 +371,8 @@ int main(int argc, char *argv[])
                        QStringLiteral("count") });
     parser.addOption({ QStringLiteral("click"), QStringLiteral("A control to click, by its objectName."),
                        QStringLiteral("name") });
+    parser.addOption({ QStringLiteral("kobo"), QStringLiteral("A folder standing for a Kobo plugged in."),
+                       QStringLiteral("folder") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -382,6 +394,7 @@ int main(int argc, char *argv[])
         shot.book = parser.value(QStringLiteral("book")).toInt();
         shot.selected = parser.value(QStringLiteral("select")).toInt();
         shot.clicks = parser.values(QStringLiteral("click"));
+        shot.kobo = parser.value(QStringLiteral("kobo"));
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);

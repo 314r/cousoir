@@ -1,11 +1,15 @@
 #include "device_library.h"
 
+#include <QClipboard>
 #include <QCollator>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QLocale>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QStorageInfo>
+#include <QTimeZone>
 #include <QtConcurrent>
 
 #include <algorithm>
@@ -111,6 +115,50 @@ void udisksEject(const Kobo::Device &device, std::function<void(const QString &)
 #endif
 
 // As the library shows the size of its files.
+// The notes worth showing: a highlight of nothing, which Calibre keeps, says
+// nothing.
+QList<ReaderNote> shownNotes(const ReadingState &reading)
+{
+    QList<ReaderNote> notes = reading.notes;
+    notes.removeIf([](const ReaderNote &note) {
+        return note.type != QLatin1String("Bookmark") && note.text.trimmed().isEmpty()
+            && note.annotation.trimmed().isEmpty();
+    });
+    return notes;
+}
+
+// How far a book is read, in a few words.
+QString stateText(const ReadingState &reading)
+{
+    if (reading.status == 2)
+        return QObject::tr("Finished");
+    if (reading.status == 1)
+        return reading.percent ? QObject::tr("%1 % read").arg(*reading.percent) : QObject::tr("Being read");
+    return {};
+}
+
+// A date the reader wrote, in UTC unless it says otherwise, as a local day.
+QString dayText(const QString &written)
+{
+    QDateTime date = QDateTime::fromString(written, Qt::ISODateWithMs);
+    if (!date.isValid())
+        return written.left(10);
+    if (date.timeSpec() == Qt::LocalTime && !written.endsWith(u'Z') && !written.contains(u'+'))
+        date.setTimeZone(QTimeZone::UTC);
+    return date.toLocalTime().toString(QStringLiteral("yyyy-MM-dd"));
+}
+
+// Time spent reading: hours and minutes, or minutes.
+QString durationText(qint64 seconds)
+{
+    if (seconds < 60)
+        return {};
+    const qint64 minutes = seconds / 60;
+    if (minutes < 60)
+        return QObject::tr("%1 min").arg(minutes);
+    return QObject::tr("%1 h %2 min").arg(minutes / 60).arg(minutes % 60);
+}
+
 QString sizeText(qint64 size)
 {
     return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
@@ -302,9 +350,85 @@ QVariantList DeviceLibrary::rows() const
             { QStringLiteral("size"), sizeText(book.size) },
             { QStringLiteral("bookId"), book.bookId },
             { QStringLiteral("purchased"), book.purchased },
+            { QStringLiteral("reading"), book.reading.status == 2 ? QStringLiteral("✓")
+                  : book.reading.status == 1 ? (book.reading.percent ? QStringLiteral("%1 %").arg(*book.reading.percent)
+                                                                     : QStringLiteral("…"))
+                                             : QString() },
+            { QStringLiteral("notes"), int(shownNotes(book.reading).size()) },
         });
     }
     return rows;
+}
+
+QVariantList DeviceLibrary::reading(int bookId) const
+{
+    QVariantList copies;
+    if (bookId <= 0)
+        return copies;
+    for (const Connected &connected : m_devices) {
+        for (const DeviceBook &book : connected.books) {
+            if (book.bookId != bookId)
+                continue;
+            const ReadingState &reading = book.reading;
+            if (reading.status == 0 && reading.notes.isEmpty())
+                continue;
+            QVariantList notes;
+            const QList<ReaderNote> shown = shownNotes(reading);
+            const ReaderNote *previous = nullptr;
+            for (const ReaderNote &note : shown) {
+                const bool newChapter = !previous || previous->chapter != note.chapter
+                    || previous->chapterTitle != note.chapterTitle;
+                previous = &note;
+                notes.append(QVariantMap{
+                    { QStringLiteral("newChapter"), newChapter },
+                    { QStringLiteral("type"), note.type },
+                    { QStringLiteral("text"), note.text },
+                    { QStringLiteral("annotation"), note.annotation },
+                    { QStringLiteral("chapter"), note.chapterTitle },
+                    { QStringLiteral("progress"), note.chapterProgress },
+                    { QStringLiteral("created"), dayText(note.created) },
+                });
+            }
+            copies.append(QVariantMap{
+                { QStringLiteral("root"), connected.root },
+                { QStringLiteral("lpath"), book.lpath },
+                { QStringLiteral("name"), connected.name },
+                { QStringLiteral("format"), book.format },
+                { QStringLiteral("status"), reading.status },
+                { QStringLiteral("percent"), reading.percent.value_or(-1) },
+                { QStringLiteral("state"), stateText(reading) },
+                { QStringLiteral("lastRead"), reading.lastRead.isEmpty() ? QString() : dayText(reading.lastRead) },
+                { QStringLiteral("timeSpent"), durationText(reading.secondsSpent) },
+                { QStringLiteral("notes"), notes },
+            });
+        }
+    }
+    return copies;
+}
+
+QString DeviceLibrary::notesMarkdown(const QString &root, const QString &lpath) const
+{
+    const Connected *connected = find(root);
+    if (!connected)
+        return {};
+    for (const DeviceBook &book : connected->books) {
+        if (book.lpath == lpath)
+            return DeviceBooks::notesMarkdown(book.title, book.authors, shownNotes(book.reading));
+    }
+    return {};
+}
+
+void DeviceLibrary::copyNotes(const QString &root, const QString &lpath) const
+{
+    QGuiApplication::clipboard()->setText(notesMarkdown(root, lpath));
+}
+
+QString DeviceLibrary::saveNotes(const QString &root, const QString &lpath, const QUrl &file) const
+{
+    QSaveFile out(file.isLocalFile() ? file.toLocalFile() : file.toString());
+    if (!out.open(QIODevice::WriteOnly) || out.write(notesMarkdown(root, lpath).toUtf8()) < 0 || !out.commit())
+        return tr("Cannot write %1: %2").arg(QFileInfo(out.fileName()).fileName(), out.errorString());
+    return {};
 }
 
 bool DeviceLibrary::loading() const
