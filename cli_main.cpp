@@ -235,6 +235,8 @@ int wireless(const QString &libraryPath, int port, const QString &password, cons
     int status = 0;
     qsizetype step = 0;
     QPointer<WirelessConnection> connection;
+    // The copies sent, with the library's metadata in them.
+    QTemporaryDir copies;
     std::function<void()> nextStep;
     nextStep = [&] {
         if (!connection)
@@ -255,12 +257,15 @@ int wireless(const QString &libraryPath, int port, const QString &password, cons
                     status = 1;
                     continue;
                 }
-                QString file;
-                for (const BookFormat &bookFormat : book->formats) {
-                    if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
-                        file = bookFormat.file;
-                }
                 const QString extension = u'.' + format.toLower();
+                const QString file = copies.filePath(QString::number(book->id) + extension);
+                QString copyError;
+                if (!WirelessSend::prepareFile(data, *book, format, file, config.interfaceLanguage,
+                                               CalibreConfig::configDirectory(), &copyError)) {
+                    err() << copyError << Qt::endl;
+                    status = 1;
+                    continue;
+                }
                 QString lpath = connection->lpathOfUuid(book->uuid, extension);
                 if (lpath.isEmpty())
                     lpath = WirelessSend::uploadPath(data, *book, extension, connection->app(), config.interfaceLanguage);

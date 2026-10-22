@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id" prefix="calibre: https://calibre-ebook.com rendition: http://www.idpf.org/vocab/rendition/# ibooks: http://vocabulary.itunes.apple.com/rdf/ibooks/vocabulary-extensions-1.0/">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:identifier id="pub-id">urn:isbn:9780765319227</dc:identifier>
+    <dc:identifier>calibre:77</dc:identifier>
+    <dc:identifier>uuid:0b6a3f3e-6d47-4f0b-8f8c-111111111111</dc:identifier>
+    <dc:identifier>urn:google:AbCdEf</dc:identifier>
+    <dc:identifier>https://example.com/book</dc:identifier>
+    <dc:identifier></dc:identifier>
+    <dc:identifier opf:scheme="AMAZON">B00TEST</dc:identifier>
+    <dc:title id="t1">Old Title</dc:title>
+    <meta refines="#t1" property="title-type">main</meta>
+    <meta refines="#t1" property="file-as">Old Title, The</meta>
+    <dc:title id="t2">An Old Subtitle</dc:title>
+    <meta refines="#t2" property="title-type">subtitle</meta>
+    <dc:creator id="c1">Old Author</dc:creator>
+    <meta refines="#c1" property="role" scheme="marc:relators">aut</meta>
+    <meta refines="#c1" property="file-as">Author, Old</meta>
+    <meta refines="#c1" property="display-seq">1</meta>
+    <dc:creator id="c2">An Illustrator</dc:creator>
+    <meta refines="#c2" property="role" scheme="marc:relators">ill</meta>
+    <dc:contributor id="p1">Some Producer</dc:contributor>
+    <meta refines="#p1" property="role" scheme="marc:relators">bkp</meta>
+    <dc:language>en-GB</dc:language>
+    <dc:language>fr-CA</dc:language>
+    <dc:date>2001-02-03</dc:date>
+    <dc:publisher>Old House</dc:publisher>
+    <dc:subject>Old Tag</dc:subject>
+    <dc:subject>Other</dc:subject>
+    <dc:description>Old description.</dc:description>
+    <dc:rights>All rights reserved.</dc:rights>
+    <meta property="calibre:rating">4</meta>
+    <meta property="belongs-to-collection" id="s1">Old Series</meta>
+    <meta refines="#s1" property="collection-type">series</meta>
+    <meta refines="#s1" property="group-position">3</meta>
+    <meta property="belongs-to-collection" id="s2">A Set</meta>
+    <meta refines="#s2" property="collection-type">set</meta>
+    <meta name="calibre:title_sort" content="Old"/>
+    <meta name="calibre:series" content="Older Series"/>
+    <meta name="calibre:series_index" content="2"/>
+    <meta name="calibre:rating" content="6"/>
+    <meta property="dcterms:modified">2020-05-05T05:05:05Z</meta>
+    <meta property="rendition:layout">reflowable</meta>
+    <meta property="ibooks:specified-fonts">true</meta>
+  </metadata>
+  <manifest>
+    <item id="css" href="styles/main.css" media-type="text/css"/>
+    <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="img" href="images/Cover.PNG" media-type="image/png" properties="cover-image"/>
+    <item id="font" href="fonts/a.ttf" media-type="application/vnd.ms-opentype"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="pic" href="images/b.jpg" media-type="image/jpeg"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="c1"/>
+    <itemref idref="c2"/>
+  </spine>
+</package>

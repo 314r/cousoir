@@ -1436,12 +1436,16 @@ void DeviceLibrary::sendWireless(const Job &job, const Connected &connected)
         if (!format.isEmpty())
             existing.insert(bookId, connection->lpathOfUuid(book->uuid, u'.' + format.toLower()));
     }
-    // The covers' thumbnails take a moment.
+    // The copies sent, the library's metadata written into them, and the
+    // covers' thumbnails take a moment; the copies stay until the send ends.
+    const QString base = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("sends"));
+    QDir().mkpath(base);
+    const auto copies = std::make_shared<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
     auto *watcher = new QFutureWatcher<QList<Wireless::Outgoing>>(this);
-    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, connection] {
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, connection, copies] {
         watcher->deleteLater();
         const QList<Wireless::Outgoing> books = watcher->result();
-        const auto done = [this](bool ok, const QString &error) {
+        const auto done = [this, copies](bool ok, const QString &error) {
             if (m_destroying)
                 return;
             m_wirelessSending = false;
@@ -1468,19 +1472,19 @@ void DeviceLibrary::sendWireless(const Job &job, const Connected &connected)
         connection->send(books, done);
     });
     watcher->setFuture(QtConcurrent::run([data, bookIds = job.bookIds, app = connection->app(), existing,
-                                          language = m_library->interfaceLanguage()] {
+                                          language = m_library->interfaceLanguage(), folder = copies->path(),
+                                          config = m_configDirectory] {
         QList<Wireless::Outgoing> books;
         for (const int bookId : bookIds) {
             const Book *book = data.book(bookId);
             const QString format = book ? WirelessSend::format(*book, app) : QString();
             if (format.isEmpty())
                 continue;
-            QString file;
-            for (const BookFormat &bookFormat : book->formats) {
-                if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
-                    file = bookFormat.file;
-            }
             const QString extension = u'.' + format.toLower();
+            const QString file = QDir(folder).filePath(QString::number(bookId) + extension);
+            QString error;
+            if (!WirelessSend::prepareFile(data, *book, format, file, language, config, &error))
+                continue;
             QString lpath = existing.value(bookId);
             if (lpath.isEmpty())
                 lpath = WirelessSend::uploadPath(data, *book, extension, app, language);

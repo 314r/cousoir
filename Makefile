@@ -56,3 +56,4 @@ oracle:
 	calibre-debug -e tools/oracle/fts_oracle.py -- tests/data/oracle/fts.json
 	calibre-debug -e tools/oracle/notes_fixture.py -- tests/data
 	CALIBRE_OVERRIDE_LANG=en calibre-debug -e tools/oracle/wireless_oracle.py -- .
+	CALIBRE_OVERRIDE_LANG=en calibre-debug -e tools/oracle/epub_meta_oracle.py -- tests/data/epubmeta

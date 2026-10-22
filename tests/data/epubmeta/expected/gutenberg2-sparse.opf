@@ -1,0 +1,25 @@
+<?xml version="1.0"  encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id">
+  <metadata xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <dc:title>Unknown</dc:title>
+    <dc:creator opf:role="aut" opf:file-as="Unknown">Unknown</dc:creator>
+    <dc:rights>Public domain in the USA.</dc:rights>
+    <dc:identifier opf:scheme="URI" id="id">http://www.gutenberg.org/84</dc:identifier>
+    <dc:language xsi:type="dcterms:RFC4646">en-US</dc:language>
+    <dc:subject>Science fiction</dc:subject>
+    <dc:subject>Horror tales</dc:subject>
+    <dc:date>0101-01-01T00:00:00+00:00</dc:date>
+    <dc:date opf:event="conversion">2024-01-01T00:00:00+00:00</dc:date>
+    <dc:source>https://www.gutenberg.org/files/84/84-h/84-h.htm</dc:source>
+    <dc:identifier opf:scheme="calibre">c2a91d0e-0000-4000-8000-000000000006</dc:identifier>
+    <meta name="cover" content="item1"/>
+  </metadata>
+  <manifest>
+    <item href="pg84-images.html" id="item2" media-type="application/xhtml+xml"/>
+    <item href="toc.ncx" id="ncx" media-type="application/x-dtbncx+xml"/>
+    <item href="cover image.jpg" id="item1" media-type="image/jpeg"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="item2" linear="yes"/>
+  </spine>
+</package>

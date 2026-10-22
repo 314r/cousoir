@@ -1,0 +1,40 @@
+<opf:package xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0" unique-identifier="BookId" prefix="calibre: https://calibre-ebook.com">
+  <opf:metadata>
+    <dc:title id="id">Good Omens</dc:title>
+    <dc:creator id="id-1">Terry Pratchett</dc:creator>
+    <dc:identifier>isbn:9780575048003</dc:identifier>
+    <dc:identifier>calibre:4</dc:identifier>
+    <dc:identifier>uuid:c2a91d0e-0000-4000-8000-000000000004</dc:identifier>
+    <dc:identifier id="BookId">urn:uuid:12345678-1234-1234-1234-123456789012</dc:identifier>
+    <dc:language>en</dc:language>
+    <dc:date>1990-05-01T12:00:00+00:00</dc:date>
+    <dc:publisher>Gollancz</dc:publisher>
+    <dc:subject>Fantasy</dc:subject>
+    <opf:meta refines="#id" property="title-type">main</opf:meta>
+    <opf:meta refines="#id" property="file-as">Good Omens</opf:meta>
+    <!-- a comment in the metadata -->
+    <opf:meta refines="#id-1" property="role" scheme="marc:relators">aut</opf:meta>
+    <opf:meta refines="#id-1" property="file-as">Pratchett, Terry</opf:meta>
+    <opf:meta property="calibre:rating">10</opf:meta>
+    <opf:meta property="calibre:user_metadata">{
+  "#count": {
+    "#value#": 12,
+    "datatype": "int",
+    "is_multiple": null,
+    "is_multiple2": {},
+    "label": "count",
+    "name": "Count"
+  }
+}</opf:meta>
+  </opf:metadata>
+  <opf:manifest>
+    <!-- a comment in the manifest -->
+    <opf:item id="b" href="b.xhtml" media-type="application/xhtml+xml"/>
+    <opf:item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+    <opf:item href="OEBPS/cover.jpg" id="cover" media-type="image/jpeg" properties="cover-image"/>
+  </opf:manifest>
+  <opf:spine>
+    <opf:itemref idref="a"/>
+    <opf:itemref idref="b"/>
+  </opf:spine>
+</opf:package>

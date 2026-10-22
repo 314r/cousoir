@@ -538,7 +538,8 @@ COUSOIR_NATIVE_SEND=1 devices kindle kindle-native "$root/tests/data/library" '[
 # connects three times: books are sent; the library changes a book's
 # metadata, which goes to the app on connecting, then a book is removed and
 # others sent; nothing changed. Each time, what each server told the app
-# and the books it kept must be alike (tests/wireless/compare.py).
+# and the books it kept, their files with the library's metadata written
+# into them, must be alike (tests/wireless/compare.py).
 wireless() {
     local round side port client
     rm -rf "$work"/wireless-*
@@ -571,7 +572,7 @@ JSON
             fi
             wait "$client"
         done
-        if python3 -I "$root/tests/wireless/compare.py" --files-by-name \
+        if python3 -I "$root/tests/wireless/compare.py" \
             "$work/wireless-calibre-$round.json" "$work/wireless-inbox-calibre" \
             "$work/wireless-cousoir-$round.json" "$work/wireless-inbox-cousoir" > "$work/wireless-diff.txt"; then
             echo "wireless: connection $round alike, $(grep -c '"op": "SEND_BOOK"' "$work/wireless-cousoir-$round.json") books sent"

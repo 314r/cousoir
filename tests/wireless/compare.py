@@ -9,8 +9,10 @@
 # uuid given the app, Calibre's temporary cover files), the keep-alive NOOPs,
 # whose number depends on timing, and the thumbnails' JPEG data, whose
 # encoders differ (their sizes are compared). The books' files compare by
-# their content: an EPUB by its entries, the OPF's modification time aside;
-# with --files-by-name, by their names only, and the lengths sent aside.
+# their content: an EPUB by its entries, the OPF's modification time aside,
+# its length, which the ZIP's compression makes, left out; a PDF, whose
+# metadata Calibre writes and Cousoir does not, by its name only. With
+# --files-by-name, every file by its name only, and the lengths sent aside.
 
 import difflib
 import hashlib
@@ -23,7 +25,7 @@ import zipfile
 
 def normalize_book(book):
     book = dict(book)
-    if BY_NAME:
+    if not sized(book.get('lpath')):
         book['size'] = None
     thumbnail = book.get('thumbnail')
     if isinstance(thumbnail, list) and len(thumbnail) == 3:
@@ -36,14 +38,25 @@ def normalize_book(book):
 BY_NAME = '--files-by-name' in sys.argv
 
 
+def by_name(lpath):
+    return BY_NAME or (lpath or '').lower().endswith('.pdf')
+
+
+def sized(lpath):
+    # A file whose length is compared: not a ZIP container, nor one compared
+    # by name.
+    return not by_name(lpath) and not (lpath or '').lower().endswith(('.epub', '.kepub'))
+
+
 def normalize(transcript):
     result = []
+    lpath = None
     for message in transcript:
         op, arg = message['op'], message.get('arg')
         if op == 'NOOP' and arg == {}:
             continue
         if op == 'BINARY':
-            result.append({'op': op, 'length': None if BY_NAME else message['length']})
+            result.append({'op': op, 'length': message['length'] if sized(lpath) else None})
             continue
         arg = json.loads(json.dumps(arg))
         if op == 'GET_INITIALIZATION_INFO':
@@ -53,8 +66,9 @@ def normalize(transcript):
             arg['date_last_connected'] = '<now>'
             arg['device_store_uuid'] = '<uuid>'
         elif op == 'SEND_BOOK':
+            lpath = arg.get('lpath')
             arg['metadata'] = normalize_book(arg['metadata'])
-            if BY_NAME:
+            if not sized(lpath):
                 arg['length'] = None
         elif op == 'SEND_BOOK_METADATA':
             arg['data'] = normalize_book(arg['data'])
@@ -90,7 +104,8 @@ def inbox(folder):
             if name in ('metadata.calibre', 'driveinfo.calibre'):
                 continue
             path = os.path.join(root, name)
-            files[os.path.relpath(path, folder)] = None if BY_NAME else file_content(path)
+            name = os.path.relpath(path, folder)
+            files[name] = None if by_name(name) else file_content(path)
     return {'books': books, 'files': files}
 
 
