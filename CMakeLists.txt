@@ -102,6 +102,8 @@ qt_add_library(cousoir_core STATIC
     file_transaction.h
     identifier_links.cpp
     identifier_links.h
+    kepub.cpp
+    kepub.h
     kindle.cpp
     kindle.h
     kindle_send.cpp
@@ -134,6 +136,12 @@ qt_add_library(cousoir_core STATIC
     sqlite_db.h
 )
 target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# Kobo's script, which a KEPUB carries.
+qt_add_resources(cousoir_core "core_resources"
+    PREFIX "/cousoir"
+    BASE assets
+    FILES assets/kobo/kobo.js
+)
 target_link_libraries(cousoir_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP}
 )

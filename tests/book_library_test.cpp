@@ -101,6 +101,7 @@ private slots:
     void addsAndRemovesFormats();
     void movesBooksToTrash();
     void convertsBooks();
+    void convertsWithoutCalibre();
     void downloadsMetadata();
     void sendsToKobos();
     void sendsToKindles();
@@ -1161,6 +1162,32 @@ void BookLibraryTest::downloadsMetadata()
     QVERIFY(timer.elapsed() < 10000);
     qunsetenv("COUSOIR_FAKE_DELAY");
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+}
+
+// Without Calibre, a KEPUB made by Cousoir of the book's EPUB goes into the
+// library as Calibre's would.
+void BookLibraryTest::convertsWithoutCalibre()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    ConversionService service;
+    service.setNative(true);
+    service.setLibrary(library.get());
+    QVERIFY(service.available());
+    QVERIFY(!service.calibre());
+    QCOMPARE(service.formatsFor(1), QStringList{ QStringLiteral("KEPUB") });
+    // A PDF alone, nothing.
+    QVERIFY(service.formatsFor(5).isEmpty());
+    QVERIFY(!service.convert(1, QStringLiteral("AZW3")).isEmpty());
+    QSignalSpy converted(&service, &ConversionService::converted);
+    QCOMPARE(service.convert(1, QStringLiteral("KEPUB")), QString());
+    QVERIFY(converted.wait(10000));
+    QVERIFY(waitForSave(library.get()));
+    library->setCurrentBookId(1);
+    QTRY_COMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.kepub"))));
 }
 
 // A Kobo shows up while mounted, with its books matched with the library's;

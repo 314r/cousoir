@@ -406,7 +406,7 @@ ThemedWindow {
         add("kepub", books > 1 ? qsTr("Convert %1 books to KEPUB").arg(books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
             "refresh", books > 0 && library.writable && conversions.available)
         add("azw3", books > 1 ? qsTr("Convert %1 books to AZW3").arg(books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
-            "refresh", books > 0 && library.writable && conversions.available)
+            "refresh", books > 0 && library.writable && conversions.calibre)
         for (const device of devices.devices) {
             add("send:" + device.root, books > 1 ? qsTr("Send %1 books to %2").arg(books).arg(device.name)
                                                  : qsTr("Send to %1").arg(device.name),
