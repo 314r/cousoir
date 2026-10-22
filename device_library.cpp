@@ -267,6 +267,11 @@ DeviceLibrary::DeviceLibrary(QObject *parent)
 
 DeviceLibrary::~DeviceLibrary()
 {
+    // The app connected is let go while this is whole: what it was doing
+    // ends here, and is told to no one.
+    m_destroying = true;
+    delete m_wireless;
+    m_wireless = nullptr;
     stopProcess();
     if (m_copy)
         m_copy->waitForFinished();
@@ -288,6 +293,8 @@ void DeviceLibrary::setLibrary(BookLibrary *library)
     m_library = library;
     if (m_library) {
         connect(m_library, &BookLibrary::libraryChanged, this, &DeviceLibrary::rematch);
+        // The apps that connect are told the library's uuid once it is read.
+        connect(m_library, &BookLibrary::libraryChanged, this, &DeviceLibrary::startWireless);
         // A send waits for the changes before it.
         connect(m_library, &BookLibrary::savingChanged, this, &DeviceLibrary::startNext);
         connect(m_library, &BookLibrary::loadingChanged, this, &DeviceLibrary::startNext);
@@ -698,7 +705,7 @@ QString DeviceLibrary::remove(const QStringList &lpaths)
         for (const DeviceBook &book : std::as_const(books))
             removed.append(book.lpath);
         connected->wireless->remove(removed, [this](bool ok, const QString &error) {
-            if (!ok)
+            if (!ok && !m_destroying)
                 emit failed(error);
         });
         return {};
@@ -766,6 +773,13 @@ QString DeviceLibrary::eject(const QString &root)
 void DeviceLibrary::cancel(int bookId)
 {
     const auto matches = [bookId](const Job &job) { return bookId == 0 || job.bookIds.contains(bookId); };
+    // A book going to an app stops only with the connection, which the app
+    // makes again; once the batches waiting are dropped.
+    QPointer<WirelessConnection> stopped;
+    if (m_wirelessSending && matches(m_jobs.first())) {
+        if (const Connected *connected = find(m_jobs.first().root))
+            stopped = connected->wireless;
+    }
     // A copy under way ends; a batch being made ready is dropped with its
     // folder, and a Kindle's connection with it.
     if ((m_process || m_folder) && !m_copy && matches(m_jobs.first())) {
@@ -778,6 +792,8 @@ void DeviceLibrary::cancel(int bookId)
     m_jobs.erase(std::remove_if(m_jobs.begin() + from, m_jobs.end(), matches), m_jobs.end());
     if (m_jobs.size() != before)
         emit jobsChanged();
+    if (stopped)
+        stopped->close(tr("Sending was stopped."));
     startNext();
 }
 
@@ -1426,6 +1442,8 @@ void DeviceLibrary::sendWireless(const Job &job, const Connected &connected)
         watcher->deleteLater();
         const QList<Wireless::Outgoing> books = watcher->result();
         const auto done = [this](bool ok, const QString &error) {
+            if (m_destroying)
+                return;
             m_wirelessSending = false;
             if (m_jobs.isEmpty())
                 return;

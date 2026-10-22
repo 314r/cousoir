@@ -1101,3 +1101,27 @@ Left for part 2: Calibre writes the library's metadata and cover into the
 EPUB it sends; Cousoir sends the library's file, and the golden test
 compares the files by name until it does the same.
 
+
+### 2026-10-22 — a review of goal 20, part 1 (`exp-review11`)
+
+The framing, the replies KOReader gives, the cache's keys and the datagram
+answer came out right. Five bugs, fixed:
+
+- A send waiting behind another request when the app vanished (a Kobo
+  asleep, its Wi-Fi gone) was never told: the send stayed "under way" and
+  every later one, to any reader, waited behind it. What waits is now told
+  when the connection goes, and Stop closes the connection of a send under
+  way.
+- Quitting during a send to an app could crash: the server is now let go
+  first, while the device library is whole.
+- The uuid an app gives named the file of its metadata cache: an app on the
+  network could have named any `.json` file of the user's. A digest of it
+  names the file now.
+- Apps were told an empty library uuid, read before the library was: it is
+  told again once the library is read.
+- A long listing, a book at a time, had to end within the minute: the
+  minute now counts from the last message.
+
+`book_library_tests` failed once in the full run, an edit queued during
+another not applied, and not in fifteen runs alone: the test now says why
+a save is refused, for the next time.
