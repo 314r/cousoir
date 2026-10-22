@@ -9,6 +9,8 @@
 #include <QObject>
 #include <QSaveFile>
 
+#include <algorithm>
+
 namespace {
 
 QJsonObject toJson(const ReadingLog::Entry &entry)
@@ -107,6 +109,34 @@ bool write(const QString &file, const Log &log, QString *error)
         return false;
     }
     return true;
+}
+
+bool sameEntries(const Log &log, const QString &device, const QHash<QString, QList<Entry>> &entries, const QDate &today)
+{
+    // Compared as written, but for when.
+    const auto key = [](const QString &uuid, Entry entry) {
+        entry.seen = {};
+        return QJsonDocument(QJsonObject{ { QStringLiteral("uuid"), uuid },
+                                          { QStringLiteral("entry"), toJson(entry) } }).toJson(QJsonDocument::Compact);
+    };
+    QList<QByteArray> before;
+    QList<QByteArray> after;
+    for (auto it = log.constBegin(); it != log.constEnd(); ++it) {
+        for (const Entry &entry : it.value()) {
+            if (entry.device != device)
+                continue;
+            if (entry.seen.toUTC().date() != today)
+                return false;
+            before.append(key(it.key(), entry));
+        }
+    }
+    for (auto it = entries.constBegin(); it != entries.constEnd(); ++it) {
+        for (const Entry &entry : it.value())
+            after.append(key(it.key(), entry));
+    }
+    std::sort(before.begin(), before.end());
+    std::sort(after.begin(), after.end());
+    return before == after;
 }
 
 void replaceDevice(Log *log, const QString &device, const QHash<QString, QList<Entry>> &entries)

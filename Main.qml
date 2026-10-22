@@ -435,9 +435,17 @@ ThemedWindow {
     }
 
     function runPaletteHit(hit) {
+        // A description being edited is saved first; the book open closes
+        // for anything but an action on it.
+        bookPage.finishEditing()
+        if (hit.kind !== "action" && session.bookOpen)
+            closeBook()
         if (hit.kind === "book") {
             openBook(hit.id)
         } else if (hit.kind === "section") {
+            // The section shown goes back to its own list.
+            if (section === hit.key && session.filterOpen)
+                library.clearFilter()
             section = hit.key
             focusCurrentList()
         } else if (hit.kind !== "action") {

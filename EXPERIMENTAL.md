@@ -452,3 +452,28 @@ checked against the code and Calibre's:
   measures.
 - `cousoir-benchmark --screenshot` takes `--key` and `--type`, to draw the
   palette open.
+
+### 2026-10-22 — a review of goals 6 and 7 (`exp-review3`)
+
+An agent reviewed the Kobo's reading and the palette. What it found, each
+checked and fixed:
+
+- A palette pick from an open book, or for the section shown, did nothing
+  visible: the book stayed open over the list it changed. The book now
+  closes first, and the section shown goes back to its list. Tested.
+- Leaving a book through the palette dropped a description being edited.
+  It is saved first. Tested.
+- The reading log could lose everything a Kobo told: recorded while the
+  library was still loading, or had failed to, no book matched and the
+  Kobo's entries were replaced by none. It is recorded only once the
+  library is in.
+- The log was written again on every save, on the window's thread, looking
+  up each book through all the library's: it is now written when a Kobo
+  tells something new or first on a day, with the books found by id.
+- The book page's reading followed the reader's whole list, sorted again on
+  each change; it follows a count of readers now.
+- Calibre rounds a chapter's progress with Python's round(), a tie to the
+  even digit: 3.125 is 3.12, which Cousoir made 3.13. The fixture has such
+  a tie now, read alike by both.
+- Save proposed a broken file name for a title with "#"; a reader that
+  failed to load hid what it had told before.

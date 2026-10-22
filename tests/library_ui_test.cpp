@@ -1014,6 +1014,31 @@ void LibraryUiTest::findsWithPalette()
     QTest::keyClick(m_window, Qt::Key_Return);
     QTRY_VERIFY(control("trashPage")->isVisible());
 
+    // From a book whose description is being edited: the text is saved,
+    // the book closes, and the author's books show.
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    openWritable(1);
+    click("editDescriptionButton");
+    QTRY_VERIFY(control("descriptionEditor")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_End, Qt::ControlModifier);
+    typeText(QStringLiteral(" Saved"));
+    QCOMPARE(find(QStringLiteral("pratch")).value(QStringLiteral("kind")).toString(), QStringLiteral("authors"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+    QTRY_COMPARE(library()->property("filter").toMap().value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Terry Pratchett"));
+    waitForSave();
+    QTRY_VERIFY(library()->property("books").value<BookListModel *>() && bookRows().size() == 1);
+    // The section shown, picked again, goes back to its list.
+    QCOMPARE(find(QStringLiteral("authors")).value(QStringLiteral("key")).toString(), QStringLiteral("authors"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(library()->property("filter").toMap().isEmpty());
+    QTRY_VERIFY(control("facetPage")->isVisible());
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString()
+                    .contains(QStringLiteral("Saved")));
+    QMetaObject::invokeMethod(m_window, "closeBook");
+
     QTest::keySequence(m_window, QKeySequence(QStringLiteral("Ctrl+K")));
     QTRY_VERIFY(palette->property("opened").toBool());
     QTRY_VERIFY(control("paletteField")->hasActiveFocus());
@@ -1021,7 +1046,6 @@ void LibraryUiTest::findsWithPalette()
     QTRY_VERIFY(control("paletteEmpty")->isVisible());
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTRY_VERIFY(!palette->property("opened").toBool());
-    QVERIFY(control("trashPage")->isVisible());
 }
 
 void LibraryUiTest::changesCovers()

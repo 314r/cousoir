@@ -24,6 +24,7 @@
 #include <QVariant>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 #include <unistd.h>
@@ -69,6 +70,20 @@ QString extensionOf(const QString &path)
             return path.mid(dot);
     }
     return {};
+}
+
+// Python's round(x, 2): the nearest number of two decimals, a tie to the
+// even one, as x stands exactly.
+double roundTwo(double value)
+{
+    // x * 100 is exact in a long double: 53 bits of x and 7 of 100.
+    const long double scaled = static_cast<long double>(value) * 100;
+    const long double below = std::floor(scaled);
+    if (scaled - below == 0.5L) {
+        const long double even = std::fmod(below, 2.0L) == 0 ? below : below + 1;
+        return QString::number(double(even / 100), 'f', 2).toDouble();
+    }
+    return QString::number(value, 'f', 2).toDouble();
 }
 
 // text[:index] in Python, where find()'s -1 drops the last character.
@@ -156,7 +171,7 @@ QList<ReaderNote> readNotes(SqliteDb &db, const QString &contentId, bool withDat
         }
         note.location = note.chapter * 1000 + count;
         // round(100 * progress, 2), at most 100; none counts as 0.
-        note.chapterProgress = std::min(QString::number(100 * rows.real(4), 'f', 2).toDouble(), 100.0);
+        note.chapterProgress = std::min(roundTwo(100 * rows.real(4)), 100.0);
         note.created = text(rows, 11);
         notes.insert(note.location, note);
         previousChapter = note.chapter;

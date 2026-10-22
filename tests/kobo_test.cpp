@@ -250,8 +250,10 @@ private slots:
         QCOMPARE(bought->status, 0);
         QCOMPARE(bought->percent, std::optional<int>(0));
         QVERIFY(bought->lastRead.isEmpty());
-        QCOMPARE(bought->notes.size(), 1);
+        QCOMPARE(bought->notes.size(), 2);
         QCOMPARE(bought->notes.first().chapterTitle, QStringLiteral("Opening"));
+        // round(3.125, 2) is 3.12, a tie going to the even digit.
+        QCOMPARE(bought->notes.first().chapterProgress, 3.12);
 
         const ReadingState *notes = find(QStringLiteral("file:///mnt/onboard/Notes.pdf"));
         QVERIFY(notes);
