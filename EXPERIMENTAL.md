@@ -209,6 +209,29 @@ quota for anonymous callers.
 The Kindle's "My Clippings.txt" read like the Kobo's notes: by book,
 copied or saved as Markdown.
 
+## Third plan: the rest of the way without Calibre
+
+With plan 2, a Kobo, metadata from the web and the library on the network
+no longer need Calibre. These go further; goals 11 and 13 stay.
+
+### 18. A Kindle without Calibre
+
+Sending to a Kindle by itself, as goal 14 does for a Kobo: the library's
+metadata written into the AZW3 or MOBI copy as Calibre's MOBI metadata
+writer does (`ebooks/metadata/mobi.py`), the cover thumbnail Amazon's
+covers bug needs, the APNX page numbers by Calibre's fast method, the
+file's path and metadata.calibre. The golden test compares with Calibre's
+own send.
+
+### 19. Reading in Cousoir
+
+A reader for EPUB (Qt WebEngine) and PDF (Qt Pdf), opened from a book's
+page: pages, the table of contents, a search, the position kept. The
+position and the highlights are kept where Calibre's viewer keeps them,
+in the library's `last_read_positions` and `annotations` tables, so that
+each opens where the other stopped and shows the other's highlights.
+Built only when Qt WebEngine is there.
+
 ### Always
 
 - Bugs found on the way are fixed, with a test.
@@ -236,6 +259,8 @@ copied or saved as Markdown.
 | 16. Metadata from the web without Calibre | done, with Open Library |
 | 17. Kindle highlights | done |
 | 13. Notes | planned |
+| 18. A Kindle without Calibre | planned |
+| 19. Reading in Cousoir | planned |
 
 ## Journal
 
