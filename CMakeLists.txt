@@ -106,6 +106,8 @@ qt_add_library(cousoir_core STATIC
     kobo_send.h
     library_check.cpp
     library_check.h
+    metadata_download.cpp
+    metadata_download.h
     mtp.cpp
     mtp.h
     opf.cpp

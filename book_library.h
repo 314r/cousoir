@@ -19,6 +19,7 @@
 #include "book_operations.h"
 #include "calibre_config.h"
 #include "calibre_search.h"
+#include "metadata_download.h"
 #include "commit_engine.h"
 #include "library_check.h"
 
@@ -168,6 +169,11 @@ public:
     void setCurrentBookId(int bookId);
     QVariantMap currentBook() const;
     const LibraryData &data() const;
+    // update_from_mi() of Calibre's Edit metadata dialog: what a book found
+    // by a download changes of `bookId`, for the fields chosen, as
+    // updateBook() takes it; empty for a book that is gone.
+    QVariantMap downloadedChanges(int bookId, const MetadataDownload::Found &found, const QStringList &fields,
+                                  bool appendComments) const;
     bool writable() const;
     void setWritable(bool writable);
     bool saving() const;

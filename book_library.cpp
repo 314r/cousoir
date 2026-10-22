@@ -1337,6 +1337,13 @@ void BookLibrary::openBackupFolder()
     QDesktopServices::openUrl(QUrl::fromLocalFile(backupFolder()));
 }
 
+QVariantMap BookLibrary::downloadedChanges(int bookId, const MetadataDownload::Found &found, const QStringList &fields,
+                                           bool appendComments) const
+{
+    const Book *book = findBook(bookId);
+    return book ? MetadataDownload::changes(m_data, *book, effectiveConfig(), found, fields, appendComments) : QVariantMap();
+}
+
 QString BookLibrary::updateBook(int bookId, const QVariantMap &changes)
 {
     const Book *book = findBook(bookId);

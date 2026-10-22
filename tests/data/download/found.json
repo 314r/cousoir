@@ -1,0 +1,40 @@
+[
+    {
+        "title": "The Black Company",
+        "authors": ["Glen Cook"],
+        "publisher": "Tor Fantasy",
+        "pubdate": "1984-05-01T23:30:00+00:00",
+        "tags": ["Fantasy", "Dark fantasy", "fiction"],
+        "rating": 4.3,
+        "comments": "<p>Mercenaries in a <b>dark</b> war.</p>",
+        "languages": ["eng"],
+        "identifiers": {"isbn": "9780812521399", "google": "xE4_AAAA"},
+        "series": "The Chronicles of the Black Company",
+        "series_index": 1,
+        "has_cover": true
+    },
+    {
+        "title": "Shadows Linger: A Novel of the Black Company",
+        "authors": ["Glen Cook", "Anne Other Writer"],
+        "pubdate": "0101-01-01T00:00:00+00:00",
+        "series_index": 2.5,
+        "comments": "Plain text & summary.\nWith a line.\n\nSecond paragraph."
+    },
+    {
+        "title": "L'Écume des jours",
+        "authors": ["Boris Vian"],
+        "publisher": "Le Livre de Poche",
+        "tags": ["roman", "Littérature française"],
+        "rating": 5,
+        "languages": ["fr"],
+        "identifiers": {"isbn": "9782253140870", "amazon_fr": "2253140872"},
+        "has_cover": true
+    },
+    {
+        "title": "Good Omens: The Nice and Accurate Prophecies of Agnes Nutter, Witch",
+        "authors": ["Terry Pratchett", "Neil Gaiman"],
+        "comments": "<div><p>Armageddon, <i>again</i>.</p></div>",
+        "series": "   ",
+        "rating": 4.75
+    }
+]
