@@ -26,6 +26,7 @@ QJsonObject toJson(const ReadingLog::Entry &entry)
             { QStringLiteral("chapterProgress"), note.chapterProgress },
             { QStringLiteral("location"), note.location },
             { QStringLiteral("created"), note.created },
+            { QStringLiteral("position"), note.position },
         });
     }
     return {
@@ -66,6 +67,7 @@ ReadingLog::Entry fromJson(const QJsonObject &object)
             note.value(QLatin1String("chapterProgress")).toDouble(),
             note.value(QLatin1String("location")).toInt(),
             note.value(QLatin1String("created")).toString(),
+            note.value(QLatin1String("position")).toString(),
         });
     }
     return entry;

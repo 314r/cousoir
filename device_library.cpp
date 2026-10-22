@@ -387,6 +387,7 @@ QVariantList DeviceLibrary::reading(int bookId) const
                 { QStringLiteral("chapter"), note.chapterTitle },
                 { QStringLiteral("progress"), note.chapterProgress },
                 { QStringLiteral("created"), dayText(note.created) },
+                { QStringLiteral("position"), note.position },
             });
         }
         copies.append(QVariantMap{
@@ -408,7 +409,7 @@ QVariantList DeviceLibrary::reading(int bookId) const
         // A reader still being read, or that cannot be, tells what it told.
         if (!device.loading && device.error.isEmpty())
             connected.insert(deviceId(device));
-        for (const DeviceBook &book : device.books) {
+        for (const DeviceBook &book : device.books + device.clippings) {
             if (book.bookId == bookId)
                 copy(device.name, book.format, book.reading, libraryBook->title, libraryBook->authors, {});
         }
@@ -440,6 +441,14 @@ QString DeviceLibrary::deviceId(const Connected &connected) const
     return serial.isEmpty() ? connected.name : serial;
 }
 
+void DeviceLibrary::matchKindle(Connected &connected)
+{
+    DeviceBooks::match(&connected.books, m_library->data());
+    connected.clippings = connected.allClippings;
+    DeviceBooks::match(&connected.clippings, m_library->data());
+    Kindle::attachClippings(&connected.books, &connected.clippings);
+}
+
 const ReadingLog::Log &DeviceLibrary::readingLog() const
 {
     const QString path = m_library ? CousoirPaths::readingFile(m_library->libraryPath()) : QString();
@@ -463,7 +472,7 @@ void DeviceLibrary::recordReading(const Connected &connected)
     for (const Book &book : m_library->data().books)
         byId.insert(book.id, &book);
     QHash<QString, QList<ReadingLog::Entry>> entries;
-    for (const DeviceBook &book : connected.books) {
+    for (const DeviceBook &book : connected.books + connected.clippings) {
         if (book.bookId <= 0 || (book.reading.status == 0 && book.reading.notes.isEmpty()))
             continue;
         const Book *libraryBook = byId.value(book.bookId);
@@ -876,6 +885,7 @@ void DeviceLibrary::load(const QString &root)
     struct Read
     {
         QList<DeviceBook> books;
+        QList<DeviceBook> clippings;
         QString error;
         bool opened = false;
         QString name;
@@ -891,6 +901,7 @@ void DeviceLibrary::load(const QString &root)
             return;
         const Read read = watcher->result();
         loaded->books = read.books;
+        loaded->allClippings = read.clippings;
         loaded->error = read.error;
         loaded->loading = false;
         if (read.opened) {
@@ -898,8 +909,10 @@ void DeviceLibrary::load(const QString &root)
             loaded->serial = read.serial;
             loaded->freeBytes = read.freeBytes;
         }
-        if (m_library)
-            DeviceBooks::match(&loaded->books, m_library->data());
+        if (m_library) {
+            matchKindle(*loaded);
+            recordReading(*loaded);
+        }
         emit devicesChanged();
         emit rowsChanged();
     });
@@ -913,6 +926,7 @@ void DeviceLibrary::load(const QString &root)
         // come back.
         Kindle::restoreThumbnails(*link->files, &read.error);
         read.books = Kindle::books(*link->files, &read.error);
+        read.clippings = Kindle::clippings(*link->files, &read.error);
         read.name = Kindle::name(Kindle::readDriveInfo(*link->files), link->device.friendlyName, link->device.modelName);
         read.serial = link->device.serial;
         read.freeBytes = link->files->freeBytes();
@@ -925,8 +939,11 @@ void DeviceLibrary::rematch()
     if (!m_library)
         return;
     for (Connected &connected : m_devices) {
-        DeviceBooks::match(&connected.books, m_library->data());
-        if (connected.kind == Kind::Kobo && !connected.loading)
+        if (connected.kind == Kind::Kindle)
+            matchKindle(connected);
+        else
+            DeviceBooks::match(&connected.books, m_library->data());
+        if (!connected.loading)
             recordReading(connected);
     }
     emit rowsChanged();

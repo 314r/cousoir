@@ -108,6 +108,7 @@ private slots:
     void sendsToKobos();
     void sendsToKobosWithoutCalibre();
     void sendsToKindles();
+    void readsKindleClippings();
     void checksLibrary();
     void mergesAuthorVariants();
     void keepsOneCopy();
@@ -1459,6 +1460,56 @@ void BookLibraryTest::sendsToKindles()
 
     kindles = {};
     QTRY_VERIFY(devices.devices().isEmpty());
+}
+
+// The highlights and notes of a Kindle's My Clippings.txt, on the book's
+// page, on the Kindle's, and still there once it is unplugged.
+void BookLibraryTest::readsKindleClippings()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    QTemporaryDir kindle;
+    const QDir root(kindle.path());
+    QVERIFY(root.mkpath(QStringLiteral("documents")));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kindle/My Clippings.txt"),
+                        root.filePath(QStringLiteral("documents/My Clippings.txt"))));
+    QVERIFY(writeAll(root.filePath(QStringLiteral("documents/L'Écume des jours - Boris Vian.azw3")), "book"));
+    QTemporaryDir config;
+    QList<KindleSlot> kindles{ { 0, 0, 0x9981, kindle.path() } };
+    DeviceLibrary devices;
+    devices.setProgram(QStringLiteral(COUSOIR_TEST_TOOL));
+    devices.setConfigDirectory(config.path());
+    devices.setVolumeProvider([] { return QList<Volume>(); }, 20);
+    devices.setKindleProvider([&kindles] { return kindles; });
+    devices.setLibrary(library.get());
+    QTRY_COMPARE(devices.devices().size(), 1);
+    devices.setCurrentRoot(devices.devices().first().toMap().value(QStringLiteral("root")).toString());
+    QTRY_VERIFY(!devices.loading());
+
+    // On the Kindle: the book's notes counted.
+    QVariantMap ecumeRow;
+    for (const QVariant &row : devices.rows()) {
+        if (row.toMap().value(QStringLiteral("bookId")).toInt() == 1)
+            ecumeRow = row.toMap();
+    }
+    QCOMPARE(ecumeRow.value(QStringLiteral("notes")).toInt(), 4);
+    const QVariantList reading = devices.reading(1);
+    QCOMPARE(reading.size(), 1);
+    const QVariantList notes = reading.first().toMap().value(QStringLiteral("notes")).toList();
+    QCOMPARE(notes.size(), 4);
+    QCOMPARE(notes.first().toMap().value(QStringLiteral("position")).toString(), QStringLiteral("page 12, location 170-172"));
+    QCOMPARE(notes.first().toMap().value(QStringLiteral("created")).toString(), QStringLiteral("2024-03-03"));
+    QVERIFY(reading.first().toMap().value(QStringLiteral("markdown")).toString().contains(QStringLiteral("Le ton du livre")));
+    // A book no longer on the Kindle keeps its notes.
+    QCOMPARE(devices.reading(6).size(), 1);
+
+    kindles = {};
+    QTRY_VERIFY(devices.devices().isEmpty());
+    const QVariantList kept = devices.reading(6);
+    QCOMPARE(kept.size(), 1);
+    QVERIFY(!kept.first().toMap().value(QStringLiteral("connected")).toBool());
+    QCOMPARE(kept.first().toMap().value(QStringLiteral("notes")).toList().size(), 1);
 }
 
 namespace {

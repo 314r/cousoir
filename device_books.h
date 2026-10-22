@@ -29,6 +29,9 @@ struct ReaderNote
     int location = 0;
     // When it was made, as the reader wrote it.
     QString created;
+    // Where it is when the reader tells no chapter, a Kindle's "page 12,
+    // location 170-172"; empty otherwise.
+    QString position;
 };
 
 // What a reader knows of the reading of a book.
