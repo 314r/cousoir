@@ -36,6 +36,7 @@
 #include "metadata_downloader.h"
 #include "cover_cache.h"
 #include "device_library.h"
+#include "highlight_browser.h"
 #include "library_share.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
@@ -181,6 +182,7 @@ void registerTypes()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<LibraryShare>("Cousoir", 1, 0, "LibraryShare");
+    qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif

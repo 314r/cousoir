@@ -293,7 +293,7 @@ Calibre keeps the index Cousoir adds to.
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
 | 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
 | 20. Reader apps over the network | done; Bonjour, collections and read columns later |
-| 21. The library's highlights | planned |
+| 21. The library's highlights | under way on `exp-highlights`: search and export done, the page next |
 | 22. Searching the books' text | planned |
 
 ## Journal
@@ -1155,4 +1155,23 @@ The XML tree and the ZIP code of the KEPUB port moved to `xml_tree` and
 `book_zip`, shared. Sends to apps write the metadata into EPUB, AZW3 and
 MOBI copies, and the wireless golden test compares the files sent entry by
 entry; plain EPUBs sent to a Kobo get it too.
+
+### 2026-10-22 — goal 21, the library's highlights (`exp-highlights`), stopped midway
+
+Stopped here at the user's request; the branch is not merged.
+
+Done: `AnnotationSearch`, a port of Calibre's `all_annotations()` and
+`search_annotations()` (its full text index, stemmed or not, snippets with
+the words found marked), `sorted_items()` and the text and Markdown export
+of its "Browse annotations". Calibre's own API saved highlights and
+bookmarks in a copy of the fixture (`tools/oracle/annotations_oracle.py`,
+`tests/data/annotations`), and ten searches find what Calibre finds, in its
+order, with its snippets. `HighlightBrowser`, the model for QML, groups
+them by book, and the library counts them, under "highlights" in
+`counts()`.
+
+Next: `HighlightsPage.qml` (search field, type filter, the list grouped by
+book, open in the reader at the highlight through a `ReaderWindow.openAt()`,
+copy and save the export), its place under Library in the sidebar and in
+Main.qml's pages, a UI test, then the docs.
 

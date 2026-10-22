@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #endif
 
+#include "annotation_search.h"
 #include "calibre_date.h"
 #include "calibre_fts.h"
 #include "calibre_template.h"
@@ -803,6 +804,7 @@ bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLangua
     data->tags = facetItems(tags, tagCounts);
     data->publishers = facetItems(publishers, publisherCounts);
     data->languages = facetItems(languages, languageCounts);
+    data->annotationCount = AnnotationSearch::count(db);
     if (!data->libraryPath.isEmpty())
         readNotes(data);
     return true;

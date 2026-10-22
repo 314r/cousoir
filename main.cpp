@@ -7,6 +7,7 @@
 #include "conversion_service.h"
 #include "metadata_downloader.h"
 #include "device_library.h"
+#include "highlight_browser.h"
 #include "library_share.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
@@ -38,6 +39,7 @@ int main(int argc, char *argv[])
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<LibraryShare>("Cousoir", 1, 0, "LibraryShare");
+    qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif

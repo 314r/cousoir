@@ -173,6 +173,8 @@ qt_add_library(cousoir_core STATIC
     book_zip.h
     epub_metadata.cpp
     epub_metadata.h
+    annotation_search.cpp
+    annotation_search.h
 )
 target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # Kobo's script, which a KEPUB carries, and what Calibre's wireless
@@ -200,6 +202,8 @@ qt_add_library(cousoir_models STATIC
     cover_cache.h
     device_library.cpp
     device_library.h
+    highlight_browser.cpp
+    highlight_browser.h
     library_share.cpp
     library_share.h
     metadata_downloader.cpp
@@ -425,7 +429,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts calibre_notes wireless epub_metadata test_tool)
+                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts calibre_notes wireless epub_metadata annotation_search test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)
