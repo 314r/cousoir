@@ -871,3 +871,16 @@ the Network section.
   `book_library_tests`: the notes on the book's page and the Kindle's, and
   after unplugging.
 
+### 2026-10-22 — a review of goals 16 and 17 (`exp-review7`)
+
+Five bugs, fixed with tests: `cousoir-cli download --covers` without
+Calibre waited forever for a book without covers (an answer known at once
+came before the event loop ran: now queued, and dropped once stopped); a
+Kindle Calibre holds kept its clippings, shown twice after a rematch; the
+same book under two headings of My Clippings.txt lost one heading's notes
+(now both, in order); a clipping's date, the Kindle's local time, was read
+as UTC and could show the day before (now with this computer's offset);
+and Open Library's dates without a day took the first, the day before in
+UTC east of Greenwich: now as Calibre's `parse_only_date()`, the 15th, never
+the first or last day of a month.
+

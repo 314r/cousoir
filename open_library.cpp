@@ -6,6 +6,7 @@
 // itself is Open Library's API (https://openlibrary.org/dev/docs/api/search).
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QImageReader>
@@ -273,7 +274,7 @@ QList<Candidate> parseSearch(const QByteArray &json, const MetadataDownload::Que
         const QString published = strings(edition.value(QLatin1String("publish_date"))).value(0);
         found.pubdate = parseDate(published);
         if (!found.pubdate && work.contains(QLatin1String("first_publish_year")))
-            found.pubdate = QDate(work.value(QLatin1String("first_publish_year")).toInt(), 1, 1);
+            found.pubdate = parseDate(QString::number(work.value(QLatin1String("first_publish_year")).toInt()));
         for (const QString &code : strings(edition.value(QLatin1String("language")))) {
             const QString language = canonicalLanguage(code);
             if (!language.isEmpty() && !found.languages.contains(language))
@@ -361,13 +362,27 @@ QUrl coverUrl(const Site &site, qint64 id)
 
 std::optional<QDate> parseDate(const QString &raw)
 {
+    // parse_only_date() of Calibre's utils/date.py, as its sources read a
+    // date: what is missing taken from the 15th of this month, then
+    // fix_only_date(), so that the day stays the same in every time zone.
+    const QDate today = QDateTime::currentDateTimeUtc().date();
+    const auto fixed = [](int year, int month, int day) -> std::optional<QDate> {
+        QDate date(year, month, day);
+        if (!date.isValid())
+            date = QDate(year, month, 1).addMonths(1).addDays(-1);
+        if (!date.isValid())
+            return std::nullopt;
+        if (date.addDays(1).month() > date.month())
+            date = date.addDays(-1);
+        if (date.day() == 1)
+            date = date.addDays(1);
+        return date;
+    };
     const QString text = raw.trimmed();
     static const QRegularExpression iso(QStringLiteral("^(\\d{4})(?:-(\\d{1,2})(?:-(\\d{1,2}))?)?$"));
     if (const QRegularExpressionMatch match = iso.match(text); match.hasMatch()) {
-        const QDate date(match.captured(1).toInt(), match.hasCaptured(2) ? match.captured(2).toInt() : 1,
-                         match.hasCaptured(3) ? match.captured(3).toInt() : 1);
-        if (date.isValid())
-            return date;
+        return fixed(match.captured(1).toInt(), match.hasCaptured(2) ? match.captured(2).toInt() : today.month(),
+                     match.hasCaptured(3) ? match.captured(3).toInt() : 15);
     }
     static const QStringList months{ QStringLiteral("jan"), QStringLiteral("feb"), QStringLiteral("mar"),
                                      QStringLiteral("apr"), QStringLiteral("may"), QStringLiteral("jun"),
@@ -392,10 +407,7 @@ std::optional<QDate> parseDate(const QString &raw)
         if (const QRegularExpressionMatch match = dayNumber.match(text); match.hasMatch())
             day = match.captured(1).toInt();
     }
-    QDate date(yearMatch.captured(1).toInt(), month > 0 ? month : 1, day > 0 ? day : 1);
-    if (!date.isValid())
-        date = QDate(yearMatch.captured(1).toInt(), month > 0 ? month : 1, 1);
-    return date.isValid() ? std::optional<QDate>(date) : std::nullopt;
+    return fixed(yearMatch.captured(1).toInt(), month > 0 ? month : today.month(), day > 0 ? day : 15);
 }
 
 void rank(QList<Candidate> *candidates, const MetadataDownload::Query &query, const QString &interfaceLanguage)
@@ -491,7 +503,9 @@ void Client::search(bool byIsbn)
 {
     const QUrl url = searchUrl(m_site, m_query, byIsbn, m_language);
     if (url.isEmpty()) {
-        emit identified({}, tr("The book has no title, author or ISBN to look for."));
+        // Queued, as an answer would come: a caller waits for it once the
+        // call returns.
+        later([this] { emit identified({}, tr("The book has no title, author or ISBN to look for.")); });
         return;
     }
     QNetworkReply *reply = get(url);
@@ -555,7 +569,7 @@ void Client::covers(int index, const QString &folder)
     const QList<qint64> ids = m_candidates.value(index).covers.mid(0, coverLimit);
     m_coversLeft = int(ids.size());
     if (m_coversLeft == 0) {
-        emit coversFinished({});
+        later([this] { emit coversFinished({}); });
         return;
     }
     for (const qint64 id : ids) {
@@ -584,8 +598,21 @@ void Client::covers(int index, const QString &folder)
     }
 }
 
+void Client::later(const std::function<void()> &answer)
+{
+    // Dropped if the request is stopped meanwhile.
+    QMetaObject::invokeMethod(
+        this,
+        [this, answer, generation = m_generation] {
+            if (generation == m_generation)
+                answer();
+        },
+        Qt::QueuedConnection);
+}
+
 void Client::stop()
 {
+    ++m_generation;
     for (const QPointer<QNetworkReply> &reply : std::exchange(m_identifyReplies, {})) {
         if (reply) {
             reply->disconnect(this);
@@ -598,6 +625,7 @@ void Client::stop()
 
 void Client::stopCovers()
 {
+    ++m_generation;
     for (const QPointer<QNetworkReply> &reply : std::exchange(m_coverReplies, {})) {
         if (reply) {
             reply->disconnect(this);

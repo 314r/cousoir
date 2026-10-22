@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QRegularExpression>
+#include <QTimeZone>
 
 #include <algorithm>
 
@@ -151,8 +152,11 @@ QString readDate(const QString &raw)
     const QDate date(year.captured(1).toInt(), month, day);
     if (!date.isValid() || !clock.isValid())
         return {};
-    // The Kindle's own time, without a zone.
-    return QDateTime(date, clock).toString(Qt::ISODate);
+    // The Kindle's clock is this computer's, likely: its local time, with
+    // the offset, read back as the same day.
+    QDateTime local(date, clock);
+    local.setTimeZone(QTimeZone::fromSecondsAheadOfUtc(local.offsetFromUtc()));
+    return local.toString(Qt::ISODate);
 }
 
 QList<Clipping> parse(const QByteArray &file)

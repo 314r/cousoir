@@ -217,7 +217,12 @@ void attachClippings(QList<DeviceBook> *books, QList<DeviceBook> *clippings)
                                      [&clipped](const DeviceBook &book) { return book.bookId == clipped.bookId; });
         if (on == books->end())
             continue;
-        on->reading = clipped.reading;
+        // The same book under two headings, an Amazon copy and one sent for
+        // instance: the notes of both, in the book's order.
+        on->reading.status = std::max(on->reading.status, clipped.reading.status);
+        on->reading.notes += clipped.reading.notes;
+        std::stable_sort(on->reading.notes.begin(), on->reading.notes.end(),
+                         [](const ReaderNote &a, const ReaderNote &b) { return a.location < b.location; });
         clippings->removeAt(i);
     }
 }

@@ -8,6 +8,7 @@
 #include <QString>
 #include <QUrl>
 
+#include <functional>
 #include <optional>
 
 #include "metadata_download.h"
@@ -107,6 +108,7 @@ signals:
 
 private:
     QNetworkReply *get(const QUrl &url);
+    void later(const std::function<void()> &answer);
     void search(bool byIsbn);
     void searched(QNetworkReply *reply, bool byIsbn);
     void finishIdentify();
@@ -121,6 +123,8 @@ private:
     QList<QPointer<QNetworkReply>> m_identifyReplies;
     QList<QPointer<QNetworkReply>> m_coverReplies;
     int m_worksLeft = 0;
+    // Counts the requests stopped, for the answers queued before.
+    int m_generation = 0;
     int m_coversLeft = 0;
     QString m_coversError;
 };

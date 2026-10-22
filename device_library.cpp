@@ -878,6 +878,8 @@ void DeviceLibrary::load(const QString &root)
     // Calibre, open on the computer, has the Kindle's one MTP connection.
     if (!m_writable) {
         connected->books.clear();
+        connected->clippings.clear();
+        connected->allClippings.clear();
         connected->error = readOnlyReason();
         emit rowsChanged();
         return;

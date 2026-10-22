@@ -49,6 +49,7 @@ private slots:
     void identifiesByIsbn();
     void fallsBackToTheTitle();
     void downloadsCovers();
+    void answersLater();
     void saysWhenOffline();
 };
 
@@ -103,7 +104,7 @@ void MetadataWebTest::readsTheSearch()
     QCOMPARE(ecume.found.title, QStringLiteral("L'Écume des jours"));
     QCOMPARE(ecume.found.authors, QStringList{ QStringLiteral("Boris Vian") });
     QCOMPARE(ecume.found.publisher, QStringLiteral("Librairie Generale Francaise"));
-    QCOMPARE(ecume.found.pubdate, std::optional<QDate>(QDate(1999, 12, 1)));
+    QCOMPARE(ecume.found.pubdate, std::optional<QDate>(QDate(1999, 12, 15)));
     QCOMPARE(ecume.found.languages, QStringList{ QStringLiteral("fra") });
     QCOMPARE(ecume.found.identifiers, (QList<QPair<QString, QString>>{ { QStringLiteral("isbn"), QStringLiteral("9782253140870") } }));
     QVERIFY(ecume.found.tags.contains(QStringLiteral("Jazz")));
@@ -141,7 +142,7 @@ void MetadataWebTest::readsSeriesAndSkipsDuplicates()
     QCOMPARE(first.series, QStringLiteral("The Black Company"));
     QCOMPARE(first.tags, (QStringList{ QStringLiteral("Dark fantasy"), QStringLiteral("High fantasy") }));
     QCOMPARE(first.publisher, QStringLiteral("Tor Fantasy"));
-    QCOMPARE(first.pubdate, std::optional<QDate>(QDate(1990, 4, 1)));
+    QCOMPARE(first.pubdate, std::optional<QDate>(QDate(1990, 4, 15)));
     QCOMPARE(first.identifiers.value(0).second, QStringLiteral("9780812508420"));
 }
 
@@ -149,13 +150,17 @@ void MetadataWebTest::parsesDates_data()
 {
     QTest::addColumn<QString>("text");
     QTest::addColumn<QDate>("date");
-    QTest::newRow("year") << QStringLiteral("1984") << QDate(1984, 1, 1);
-    QTest::newRow("month") << QStringLiteral("1990-04") << QDate(1990, 4, 1);
+    // As Calibre's parse_only_date(): the 15th of this month for what is
+    // missing, never the first or last day of a month.
+    QTest::newRow("year") << QStringLiteral("1984") << QDate(1984, QDateTime::currentDateTimeUtc().date().month(), 15);
+    QTest::newRow("month") << QStringLiteral("1990-04") << QDate(1990, 4, 15);
     QTest::newRow("day") << QStringLiteral("2001-05-03") << QDate(2001, 5, 3);
-    QTest::newRow("words") << QStringLiteral("December 1999") << QDate(1999, 12, 1);
+    QTest::newRow("first") << QStringLiteral("2001-05-01") << QDate(2001, 5, 2);
+    QTest::newRow("last") << QStringLiteral("2001-04-30") << QDate(2001, 4, 29);
+    QTest::newRow("words") << QStringLiteral("December 1999") << QDate(1999, 12, 15);
     QTest::newRow("american") << QStringLiteral("May 3, 2001") << QDate(2001, 5, 3);
     QTest::newRow("british") << QStringLiteral("3rd May 2001") << QDate(2001, 5, 3);
-    QTest::newRow("abbreviated") << QStringLiteral("Sept. 2010") << QDate(2010, 9, 1);
+    QTest::newRow("abbreviated") << QStringLiteral("Sept. 2010") << QDate(2010, 9, 15);
     QTest::newRow("printed") << QStringLiteral("c1995") << QDate();
     QTest::newRow("none") << QStringLiteral("n.d.") << QDate();
 }
@@ -266,6 +271,27 @@ void MetadataWebTest::downloadsCovers()
     QCOMPARE(cover.height, 450);
     QVERIFY(QFileInfo::exists(cover.file));
     QVERIFY(cover.file.startsWith(folder.path()));
+}
+
+void MetadataWebTest::answersLater()
+{
+    // Even what is known at once comes once the call has returned, for a
+    // caller that waits on an event loop then.
+    OpenLibrary::Client client;
+    QSignalSpy identified(&client, &OpenLibrary::Client::identified);
+    client.identify(query({}, {}), {}, QStringLiteral("en"), {});
+    QCOMPARE(identified.size(), 0);
+    QVERIFY(identified.wait(1000));
+    QVERIFY(!identified.first().at(1).toString().isEmpty());
+
+    QSignalSpy finished(&client, &OpenLibrary::Client::coversFinished);
+    client.covers(0, {});
+    QCOMPARE(finished.size(), 0);
+    QVERIFY(finished.wait(1000));
+    // Stopped first, never.
+    client.covers(0, {});
+    client.stop();
+    QVERIFY(!finished.wait(200));
 }
 
 void MetadataWebTest::saysWhenOffline()
