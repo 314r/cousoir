@@ -122,6 +122,51 @@ searches run it. Cousoir shows no composite and cannot search one.
 - Composite columns shown, searched and written into `metadata.opf` as
   Calibre computes them; `template:` searches.
 
+### 9. Metadata and covers from the web, through Calibre
+
+Calibre fills a book's metadata and cover from Google, Amazon and other
+sources; Cousoir cannot. Calibre's own `fetch-ebook-metadata` does the
+fetching, as `calibre-debug` does the conversions.
+
+- A Download action on a book, run in the background: the sources' answer
+  shown beside the book's own values, each field picked or left, the cover
+  among the ones found; saved as an edit is, with Undo.
+- No network in the tests: a fake `fetch-ebook-metadata` answers with an
+  OPF and a cover.
+
+### 10. The list's columns
+
+The table shows a fixed set of columns.
+
+- A chooser of the columns shown and their order, custom columns
+  included, kept per library.
+- Sorting by any of them as Calibre sorts it, checked against Calibre's
+  `multisort()`.
+
+### 11. Saves stay instant at any size
+
+A change re-reads the whole library: 1.1 s at 50 000 books, on the worker
+thread, before the window shows it.
+
+- Re-read only the books a change touched, and the items they link to.
+- The window shows the saved value at once; measured by the benchmark.
+
+### 12. Calibre's language names
+
+Languages show and search by English names. Calibre has them in its own
+language, from its ISO 639 translations.
+
+- Language names and their search in Calibre's language, from tables
+  generated from Calibre; `language_strings()` in templates too.
+
+### 13. Notes
+
+Calibre 7 keeps notes on authors, series, tags and publishers in
+`.calnotes`. Cousoir shows none.
+
+- An item's note shown beside its books, read from `notes.db` as Calibre
+  reads it; a search on notes later.
+
 ### Always
 
 - Bugs found on the way are fixed, with a test.
@@ -140,6 +185,11 @@ searches run it. Cousoir shows no composite and cannot search one.
 | 6. Reading life from the readers | done for the Kobo; a Kindle's clippings, later |
 | 7. A command palette | done |
 | 8. Calibre's templates | done |
+| 9. Metadata from the web | next |
+| 10. The list's columns | planned |
+| 11. Instant saves | planned |
+| 12. Language names | planned |
+| 13. Notes | planned |
 
 ## Journal
 
