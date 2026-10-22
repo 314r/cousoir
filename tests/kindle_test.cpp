@@ -1,6 +1,7 @@
 #include <QtTest>
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDirIterator>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -83,23 +84,26 @@ private slots:
         QCOMPARE(first.page, 12);
         QCOMPARE(first.start, 170);
         QCOMPARE(first.end, 171);
-        QCOMPARE(first.added, QStringLiteral("2024-03-03T22:15:32"));
+        // The Kindle's local time, with this computer's offset.
+        QCOMPARE(first.added.left(19), QStringLiteral("2024-03-03T22:15:32"));
+        QCOMPARE(QDateTime::fromString(first.added, Qt::ISODate).toLocalTime().date(), QDate(2024, 3, 3));
         QCOMPARE(first.text, QStringLiteral("Chick, Alise, Chloé et Colin"));
         QCOMPARE(clippings.at(3).kind, KindleClippings::Clipping::Kind::Bookmark);
-        QCOMPARE(clippings.at(4).added, QStringLiteral("2024-03-04T00:30:00"));
+        QCOMPARE(clippings.at(4).added.left(19), QStringLiteral("2024-03-04T00:30:00"));
+        QCOMPARE(QDateTime::fromString(clippings.at(4).added, Qt::ISODate).toLocalTime().date(), QDate(2024, 3, 4));
         // In French.
         QCOMPARE(clippings.at(6).kind, KindleClippings::Clipping::Kind::Highlight);
         QCOMPARE(clippings.at(6).start, 300);
-        QCOMPARE(clippings.at(6).added, QStringLiteral("2024-03-02T21:05:09"));
+        QCOMPARE(clippings.at(6).added.left(19), QStringLiteral("2024-03-02T21:05:09"));
         QCOMPARE(clippings.at(7).kind, KindleClippings::Clipping::Kind::Note);
         // "Loc. 1702-05" of the older Kindles.
         QCOMPARE(clippings.at(8).start, 1702);
         QCOMPARE(clippings.at(8).end, 1705);
-        QCOMPARE(clippings.at(8).added, QStringLiteral("2011-01-03T20:12:00"));
+        QCOMPARE(clippings.at(8).added.left(19), QStringLiteral("2011-01-03T20:12:00"));
         // In German.
         QCOMPARE(clippings.at(11).title, QStringLiteral("Der Prozess"));
         QCOMPARE(clippings.at(11).kind, KindleClippings::Clipping::Kind::Highlight);
-        QCOMPARE(clippings.at(11).added, QStringLiteral("2024-03-03T10:15:32"));
+        QCOMPARE(clippings.at(11).added.left(19), QStringLiteral("2024-03-03T10:15:32"));
         QCOMPARE(KindleClippings::readDate(QStringLiteral("Added on someday")), QString());
     }
 
@@ -173,6 +177,23 @@ private slots:
             left.append(QStringLiteral("%1:%2").arg(book.title).arg(book.bookId));
         QCOMPARE(left, (QStringList{ QStringLiteral("Le Petit Prince:6"), QStringLiteral("Good Omens:4"),
                                      QStringLiteral("Manuel technique:5"), QStringLiteral("Der Prozess:0") }));
+        // The same book under two headings: the notes of both, in order.
+        QList<DeviceBook> twice(2);
+        for (int i = 0; i < 2; ++i) {
+            twice[i].bookId = 1;
+            ReaderNote note;
+            note.type = QStringLiteral("Highlight");
+            note.text = QString::number(i);
+            note.location = 20 - i * 10;
+            twice[i].reading.notes = { note };
+        }
+        QList<DeviceBook> onKindle(1);
+        onKindle.first().bookId = 1;
+        Kindle::attachClippings(&onKindle, &twice);
+        QVERIFY(twice.isEmpty());
+        QCOMPARE(onKindle.first().reading.notes.size(), 2);
+        QCOMPARE(onKindle.first().reading.notes.first().text, QStringLiteral("1"));
+
         // A Kindle without the file has none.
         QVERIFY(QFile::remove(root.filePath(QStringLiteral("documents/My Clippings.txt"))));
         FolderFiles bare(root.path(), true);
