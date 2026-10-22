@@ -100,6 +100,9 @@ QString checkDoi(const QString &text);
 // article.
 QString fuzzyTitle(const QString &title, const Tweaks &tweaks, const QString &interfaceLanguage);
 
+// fmt_sidx(): "2" for a whole series index, "2.5" otherwise.
+QString seriesIndexText(double index);
+
 // _get_next_series_num_for_list(): the index a book added to a series takes,
 // after the indices its books have.
 double nextSeriesIndex(QList<double> indices, const Tweaks &tweaks);

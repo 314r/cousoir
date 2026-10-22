@@ -228,7 +228,7 @@ copied or saved as Markdown.
 | 11. Instant saves | planned |
 | 12. Language names | done |
 | 14. A Kobo without Calibre | done; a PDF goes without metadata |
-| 15. The library on the network | planned |
+| 15. The library on the network | done |
 | 16. Metadata from the web without Calibre | planned |
 | 17. Kindle highlights | planned |
 | 13. Notes | planned |
@@ -764,4 +764,32 @@ Left for later: column widths of one's own, and the cover grid's sort.
   Calibre, connecting, knows the books Cousoir sent.
 - Left for later: a PDF's metadata written into the copy, and a Kindle
   without Calibre.
+
+### 2026-10-22 — goal 15, the library on the local network (`exp-server`)
+
+- `LibraryServer`, a small HTTP/1.1 server of Cousoir's own on
+  `QTcpServer` (Qt's HTTP server module is not installed here, and nothing
+  is installed outside the folder): GET and HEAD, a connection per
+  request, files sent as the client takes them, thumbnails made on the
+  thread pool and kept, Basic authentication with a password, read only.
+- `Opds` writes the OPDS 1.2 catalog: newest, by title, authors, series,
+  tags, publishers and languages (by name in Calibre's interface
+  language), each leading to its books; searches in Calibre's language
+  through the library's own index and sorter; pages of 50 with next and
+  previous links; each book described as Calibre's content server
+  describes it, and downloads named as it names them. A web page for
+  browsers searches and downloads.
+- Settings, Network: Share the library, the addresses with a QR code for a
+  phone's camera and Copy, the port (8090, beside Calibre's 8080) and a
+  password, remembered. `cousoir-cli serve` does it without the
+  application and reads the library again when Calibre changes it.
+- `QrCode`: byte mode, level M, versions 1 to 40; the modules of five
+  addresses match libqrencode's with the same mask, and zbarimg reads
+  Cousoir's own back.
+- Tests: `library_server_tests` follows the catalog's links as a reader
+  would on 127.0.0.1; `qr_code_tests`; a UI test turns sharing on and reads
+  the catalog. The smoke test of `cousoir-cli serve` ran in a network
+  namespace of its own (`unshare -rn`), loopback only.
+- Docs: the stale "Converting/Sending needs Calibre" sentences of DOC.md
+  now say what needs Calibre since goal 14.
 

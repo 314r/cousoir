@@ -55,6 +55,8 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | `calibre_languages.cpp` | `src/calibre/utils/localization.py`: `calibre_langcode_to_name()`, `canonicalize_lang()`, `lang_map()`, `translator_for_lang()` and its fallbacks, `locale_fallbacks()`, `available_translations()` |
 | `kepub.cpp` | `src/calibre/ebooks/oeb/polish/kepubify.py`: `kepubify_container()`, `add_kobo_spans()`, `wrap_body_contents()`, `add_style_and_script()`, `remove_kobo_markup_from_html()`, `add_dummy_title_page()`, `is_probably_a_title_page()`; `resources/templates/kobo.js` (in `assets/kobo`) |
 | `kobo_send.cpp` (without Calibre) | `src/calibre/devices/utils.py`: `create_upload_path()`; `src/calibre/library/save_to_disk.py`: `get_components()`, `get_component_metadata()`; `src/calibre/utils/filenames.py`: `shorten_components_to()`, `shorten_component()`, `limit_component()`; `src/calibre/devices/kobo/driver.py`: KoboTouch's `MAX_PATH_LEN`, `sanitize_path_components()`, `filename_callback()`, its settings; `src/calibre/ebooks/metadata/book/json_codec.py`: the book's entry in metadata.calibre; `src/calibre/devices/usbms/device.py`: driveinfo.calibre |
+| `opds.cpp` | `src/calibre/srv/opds.py`: `ACQUISITION_ENTRY()`'s description of a book (rating, tags, series, then the comments) and its image links, the navigation by category, a series' books in series order |
+| `library_server.cpp` | `src/calibre/srv/code.py`: `book_filename()`, the name of a downloaded book |
 | `book_sort.cpp` | `src/calibre/db/cache.py`: `multisort()`; `src/calibre/db/fields.py`: each field's `sort_keys_for_books()`, sort and default keys, `SeriesField`'s title sort in the book's language, `CompositeField`'s number, date, bool and list keys; `src/calibre/db/view.py`: `add_to_sort_history()`; `src/calibre/gui2/library/views.py`: the list's saved state, `cleanup_sort_history()` and `apply_sort_history()` |
 | `calibre_search.cpp` | `src/calibre/utils/search_query_parser.py`: `Parser`, `SearchQueryParser`'s evaluation, saved searches |
 | | `src/calibre/db/search.py`: `_matchkind()`, `_match()`, `DateSearch`, `NumericSearch`, `KeyPairSearch`, `Parser.get_matches()`, `get_user_category_matches()`, `Search._do_search()` |
@@ -177,6 +179,18 @@ license. They keep their MIT notice, in [`LICENSES/MIT.txt`](LICENSES/MIT.txt).
 
 The look follows [Omarchy](https://omarchy.org)'s style, and the Omarchy theme
 reads the colors of the current Omarchy theme.
+
+## Project Nayuki's QR Code generator
+
+`qr_code.cpp` follows the structure of Project Nayuki's
+[QR Code generator library](https://www.nayuki.io/page/qr-code-generator-library),
+Copyright (c) Project Nayuki, MIT license (its notice is in
+[`LICENSES/MIT.txt`](LICENSES/MIT.txt)): the Reed-Solomon arithmetic, the
+blocks and their interleaving, the drawing of the patterns and the
+codewords, and the masks. Its codes are compared, module by module, with
+those of [libqrencode](https://fukuchi.org/works/qrencode/)'s `qrencode`,
+and read back with [ZBar](https://github.com/mchehab/zbar)'s `zbarimg`, in
+the tests.
 
 ## Lucide
 
