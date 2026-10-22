@@ -101,13 +101,13 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 On Arch Linux and Omarchy:
 
 ```bash
-sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine sqlite libzip icu libstemmer libmtp calibre
+sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine sqlite libzip icu libstemmer xxhash libmtp calibre
 git clone https://github.com/314r/cousoir.git
 cd cousoir
 make install
 ```
 
-On other distributions, you need Qt 6.9 or later, SQLite, libzip, ICU, Snowball's libstemmer, CMake 3.21
+On other distributions, you need Qt 6.9 or later, SQLite, libzip, ICU, Snowball's libstemmer, xxHash, CMake 3.21
 or later and a C++20 compiler; libmtp for a Kindle; Qt WebEngine for the
 reader. [DOC.md](DOC.md) has the details.
 

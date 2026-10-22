@@ -860,6 +860,10 @@ int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine
 //                                               of an identify job's folder,
 //                                               for the book as it was before
 //                                               the file's changes
+//   { "note": { "field": "tags", "item": 3, "name": "Fantasy",
+//               "html": "<p>…</p>", "text": "…" } }   an item's note, as
+//                                               Calibre 7 keeps them; no html
+//                                               removes it
 //   { "send": { "books": [1, 2], "device": "/run/media/…/KOBOeReader" } }
 //   { "removeFromDevice": { "device": …, "lpaths": ["Vian, Boris/…"] } }
 // A device is a Kobo's folder, "mtp" or "mtp:SERIAL" for a Kindle, or
@@ -937,6 +941,13 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             if (!warning.isEmpty())
                 err() << book.files.first() << QStringLiteral(": ") << warning << Qt::endl;
             request.newBooks.append(book);
+            continue;
+        }
+        if (op.contains(QLatin1String("note"))) {
+            const QJsonObject note = op.value(QLatin1String("note")).toObject();
+            request.notes.append({ note.value(QLatin1String("field")).toString(), note.value(QLatin1String("item")).toInt(),
+                                   note.value(QLatin1String("name")).toString(), note.value(QLatin1String("html")).toString(),
+                                   note.value(QLatin1String("text")).toString() });
             continue;
         }
         if (op.contains(QLatin1String("convert"))) {

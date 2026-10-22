@@ -304,6 +304,8 @@ struct Shot
     QSize size{ 1240, 820 };
     QString theme;
     QString section;
+    // The item of the section whose books show.
+    int item = 0;
     QString search;
     QString virtualLibrary;
     int book = 0;
@@ -352,6 +354,8 @@ int screenshot(const QString &path, const Shot &shot)
     if (!shot.section.isEmpty())
         window->setProperty("section", QString(shot.section).replace(QStringLiteral("@KOBO@"),
                                                                      QDir(shot.kobo).absolutePath()));
+    if (shot.item > 0)
+        QMetaObject::invokeMethod(library, "openFacetItem", Q_ARG(int, shot.item));
     if (!shot.search.isEmpty())
         library->setProperty("searchText", shot.search);
     if (shot.book > 0)
@@ -448,6 +452,7 @@ int main(int argc, char *argv[])
     parser.addOption({ QStringLiteral("size"), QStringLiteral("The window's size, 1240x820."), QStringLiteral("WxH") });
     parser.addOption({ QStringLiteral("theme"), QStringLiteral("light or dark."), QStringLiteral("theme") });
     parser.addOption({ QStringLiteral("section"), QStringLiteral("The section shown."), QStringLiteral("key") });
+    parser.addOption({ QStringLiteral("item"), QStringLiteral("The section's item whose books show."), QStringLiteral("id") });
     parser.addOption({ QStringLiteral("search"), QStringLiteral("The search typed."), QStringLiteral("text") });
     parser.addOption({ QStringLiteral("vl"), QStringLiteral("The virtual library."), QStringLiteral("name") });
     parser.addOption({ QStringLiteral("book"), QStringLiteral("The book open."), QStringLiteral("id") });
@@ -482,6 +487,7 @@ int main(int argc, char *argv[])
             shot.size = QSize(size.at(0).toInt(), size.at(1).toInt());
         shot.theme = parser.value(QStringLiteral("theme"));
         shot.section = parser.value(QStringLiteral("section"));
+        shot.item = parser.value(QStringLiteral("item")).toInt();
         shot.search = parser.value(QStringLiteral("search"));
         shot.virtualLibrary = parser.value(QStringLiteral("vl"));
         shot.book = parser.value(QStringLiteral("book")).toInt();

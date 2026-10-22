@@ -531,6 +531,38 @@ COUSOIR_NATIVE_SEND=1 devices kobo kobo-native "$root/tests/data/library" '[1, 2
 devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
 COUSOIR_NATIVE_SEND=1 devices kindle kindle-native "$root/tests/data/library" '[2, 5]' '[2]' 5
 
+# Notes cousoir-cli writes, changes and removes on a copy of the fixture
+# with the notes Calibre wrote (tests/data/notes), then read, searched,
+# changed and brought back by Calibre itself (tools/oracle/notes_check.py):
+# the notes' full text index must be as Calibre's own tokenizer makes it.
+notes() {
+    local library="$work/notes-library"
+    rm -rf "$library"
+    cp -a --reflink=auto "$root/tests/data/library" "$library"
+    rm -rf "$library/.calnotes"
+    cp -a "$root/tests/data/notes/.calnotes" "$library/.calnotes"
+    cat > "$work/notes-ops.json" <<'JSON'
+[{"note": {"field": "tags", "item": 3, "name": "Fantasy", "html": "<p>Other worlds, élégantes.</p>", "text": "Other worlds, élégantes."}},
+ {"note": {"field": "publisher", "item": 2, "name": "Tor", "html": "<p>New York.</p>", "text": "New York."}},
+ {"note": {"field": "series", "item": 2, "name": "Contes", "html": ""}}]
+JSON
+    if ! "$cli" apply --library "$library" "$work/notes-ops.json" > "$work/notes.log" 2>&1; then
+        echo "notes: cousoir-cli apply failed:"
+        tail -5 "$work/notes.log"
+        status=1
+        return 0
+    fi
+    if oracle "$root/tools/oracle/notes_check.py" -- "$library" > "$work/notes-check.txt"; then
+        echo "notes: Calibre reads, searches, changes and brings back the notes Cousoir wrote"
+    else
+        echo "notes: Calibre and Cousoir's notes differ:"
+        cat "$work/notes-check.txt"
+        status=1
+    fi
+}
+
+notes
+
 # What a Kobo knows of the reading of its books, read by Calibre's Kobo
 # Bookmark (tools/oracle/kobo_reading.py) and by `cousoir-cli device`, on a
 # fake Kobo whose database has books read, finished and bought, with

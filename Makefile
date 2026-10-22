@@ -54,3 +54,4 @@ oracle:
 	CALIBRE_OVERRIDE_LANG=en calibre-debug -e tools/oracle/source_oracle.py -- tests/data/oracle/source.json
 	calibre-debug -e tools/oracle/mobi_oracle.py -- tests/data
 	calibre-debug -e tools/oracle/fts_oracle.py -- tests/data/oracle/fts.json
+	calibre-debug -e tools/oracle/notes_fixture.py -- tests/data

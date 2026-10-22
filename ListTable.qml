@@ -11,10 +11,11 @@ import Cousoir
 // which a monospace font makes exact. When the first column would drop below
 // `minNameChars`, lanes leave in `drop` order.
 //
-// A column is { key, title, chars?, right?, drop?, sort?, format? }. Its text
-// is format(row), or the row's value under `key`. Columns with a `sort` key
-// are clickable and show the direction of `sortOption`; a right click on a
-// header asks for the column's menu.
+// A column is { key, title, chars?, right?, drop?, sort?, format?, blank? }.
+// Its text is format(row), or the row's value under `key`; an empty one shows
+// "—", unless `blank`. Columns with a `sort` key are clickable and show the
+// direction of `sortOption`; a right click on a header asks for the column's
+// menu.
 //
 // Rows whose `selected` is true are shown selected besides the current one;
 // clicks with Ctrl or Shift, Shift with the moving keys and Ctrl+A ask for a
@@ -82,7 +83,9 @@ Item {
 
     function cellText(row, column) {
         const text = column.format ? column.format(row) : row[column.key]
-        return text === undefined || text === null || text === "" ? "—" : String(text)
+        if (text === undefined || text === null || text === "")
+            return column.blank ? "" : "—"
+        return String(text)
     }
 
     function activate(index) {
