@@ -23,6 +23,8 @@ struct CalibreConfig
     bool readFileMetadata = true;
     QStringList newBookTags;
     bool swapAuthorNames = false;
+    // Sorting: numbers in texts compared as numbers (numeric_collation).
+    bool numericCollation = false;
 
     // CALIBRE_CONFIG_DIRECTORY, as Calibre honours it, or Calibre's default
     // folder for this platform.

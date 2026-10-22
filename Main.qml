@@ -682,10 +682,6 @@ ThemedWindow {
             window.showNotice(message)
         }
 
-        function onSortOptionChanged() {
-            layoutSettings.sortOption = window.library.sortOption
-        }
-
         function onSavingChanged() {
             window.sendConverted()
         }
@@ -758,7 +754,6 @@ ThemedWindow {
         category: "Layout"
         property bool showDetails: true
         property bool gridMode: false
-        property string sortOption: "title"
     }
 
     Settings {
@@ -1036,7 +1031,6 @@ ThemedWindow {
         applyOmarchyTheme()
         applyThemeMode()
         setTextScalePercent(appearanceSettings.textScalePercent)
-        library.sortOption = layoutSettings.sortOption
         booksPage.focusList()
     }
 

@@ -52,6 +52,8 @@ qt_add_library(cousoir_core STATIC
     book_import.h
     book_operations.cpp
     book_operations.h
+    book_sort.cpp
+    book_sort.h
     calibre_config.cpp
     calibre_config.h
     calibre_date.h
@@ -333,6 +335,7 @@ if(BUILD_TESTING)
         tests/tool/main.cpp
         tests/tool/readers.cpp
         tests/tool/search.cpp
+    tests/tool/sort.cpp
     )
     target_link_libraries(cousoir-test-tool PRIVATE cousoir_core)
     cousoir_configure_test_executable(cousoir-test-tool)

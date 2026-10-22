@@ -327,14 +327,37 @@ void LibraryUiTest::listsSearchesAndSortsBooks()
 
     // A header click sorts, a second one reverses. The header shows again
     // with the books: once it is laid out.
-    click("bookAddedColumn");
-    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("added"));
-    click("bookAddedColumn");
-    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("addedDesc"));
+    click("bookTimestampColumn");
+    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("timestamp"));
+    click("bookTimestampColumn");
+    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("timestampDesc"));
     QCOMPARE(bookRows().first().toMap().value(QStringLiteral("title")).toString(),
              QStringLiteral("Le Petit Prince"));
-    // The order is remembered.
-    QTRY_COMPARE(QSettings().value(QStringLiteral("Layout/sortOption")).toString(), QStringLiteral("addedDesc"));
+    // The order is remembered for the library, the sorts before it too.
+    const QString uuid = library()->property("libraryUuid").toString();
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Library/sortHistory/%1").arg(uuid)).toString(),
+                 QStringLiteral(R"([["timestamp",false],["title",true]])"));
+
+    // A right click on a header shows its menu: a column hidden, another
+    // shown beside it.
+    QQuickItem *authors = control("bookAuthorsColumn");
+    QVERIFY(authors);
+    QTest::mouseClick(m_window, Qt::RightButton, Qt::NoModifier, authors->mapToScene(QPointF(4, 4)).toPoint());
+    QTRY_VERIFY(object("columnMenu")->property("opened").toBool());
+    clickVisible("columnMenu_hide");
+    QTRY_COMPARE(library()->property("columns").toStringList(),
+                 (QStringList{ QStringLiteral("title"), QStringLiteral("series"), QStringLiteral("formats"),
+                               QStringLiteral("timestamp"), QStringLiteral("rating") }));
+    QTRY_VERIFY(!control("bookAuthorsColumn"));
+    QQuickItem *series = control("bookSeriesColumn");
+    QVERIFY(series);
+    QTest::mouseClick(m_window, Qt::RightButton, Qt::NoModifier, series->mapToScene(QPointF(4, 4)).toPoint());
+    QTRY_VERIFY(object("columnMenu")->property("opened").toBool());
+    clickVisible("columnMenu_show:tags");
+    QTRY_COMPARE(library()->property("columns").toStringList(),
+                 (QStringList{ QStringLiteral("title"), QStringLiteral("series"), QStringLiteral("tags"),
+                               QStringLiteral("formats"), QStringLiteral("timestamp"), QStringLiteral("rating") }));
+    QTRY_VERIFY(control("bookTagsColumn") && control("bookTagsColumn")->isVisible());
 }
 
 void LibraryUiTest::opensAndClosesBook()

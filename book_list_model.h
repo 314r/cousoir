@@ -21,13 +21,16 @@ QString series(const Book &book);
 QString rating(int rating);
 // The local date, "2015-07-07"; empty for Calibre's undefined date.
 QString date(const QDateTime &date);
+// What the list shows of a field of the book: a built-in field by Calibre's
+// name, "pubdate", or a custom column by its search term, "#genre".
+QString field(const Book &book, const QString &key, const QList<CustomColumn> &columns);
 
 } // namespace BookDisplay
 
 // The books the list shows, in their order: one row per book, whose single
 // role, `modelData` in a delegate, is a map of what the list shows of it,
 // { id, title, authors, series, formats, added, rating, cover, selected },
-// made when a row is shown. The rows point into the library's books, which
+// and the text of each column shown by its key, made when a row is shown. The rows point into the library's books, which
 // the model shares rather than copies. The books selected are kept by id:
 // a sort keeps them, a search drops those it hides.
 class BookListModel : public QAbstractListModel
@@ -46,6 +49,10 @@ public:
     // the views that their values changed, keeping their place. Returns
     // whether the rows changed.
     bool setRows(const QList<Book> &books, QList<qsizetype> order, const QString &coverKey);
+
+    // The columns whose text the rows have, by field key, and the library's
+    // custom columns they may name.
+    void setColumns(const QStringList &keys, const QList<CustomColumn> &customColumns);
 
     int count() const;
     // The ids of the rows, in order.
@@ -77,6 +84,8 @@ signals:
 private:
     QList<Book> m_books;
     QList<qsizetype> m_order;
+    QStringList m_columns;
+    QList<CustomColumn> m_customColumns;
     QString m_coverKey;
     // Row by book id, made when first asked.
     mutable QHash<int, int> m_rowOf;

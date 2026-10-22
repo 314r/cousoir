@@ -628,7 +628,7 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
     data->trashExpirySeconds = expiryOk ? std::max<qint64>(24 * 3600, qint64(expiry)) : 14 * 24 * 3600;
 
     for (const char *key : { "saved_searches", "virtual_libraries", "grouped_search_terms", "user_categories",
-                             "virtual_lib_on_startup", "bools_are_tristate" }) {
+                             "virtual_lib_on_startup", "bools_are_tristate", "library_view books view state" }) {
         SqliteStatement preference(db, QStringLiteral("SELECT val FROM preferences WHERE key=?"));
         preference.bind(1, QString::fromLatin1(key));
         if (preference.step())

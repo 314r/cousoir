@@ -9,6 +9,8 @@
 #include <QLocale>
 #include <QStandardPaths>
 
+#include <limits>
+
 namespace {
 
 QJsonObject readObject(const QString &path)
@@ -61,6 +63,17 @@ void readTweaks(const QJsonObject &json, CalibreText::Tweaks *tweaks)
         tweaks->seriesIndexAutoIncrement.clear();
         tweaks->seriesIndexAutoIncrementNumber = increment.toDouble();
     }
+    // A number, or "minimum" or "maximum".
+    const QJsonValue undefined = json.value(QLatin1String("value_for_undefined_numbers_when_sorting"));
+    if (undefined.isDouble())
+        tweaks->valueForUndefinedNumbers = undefined.toDouble();
+    else if (undefined.toString() == QLatin1String("minimum"))
+        tweaks->valueForUndefinedNumbers = -std::numeric_limits<double>::infinity();
+    else if (undefined.toString() == QLatin1String("maximum"))
+        tweaks->valueForUndefinedNumbers = std::numeric_limits<double>::infinity();
+    const QJsonValue levels = json.value(QLatin1String("maximum_resort_levels"));
+    if (levels.isDouble())
+        tweaks->maximumResortLevels = levels.toInt();
     const QJsonValue articles = json.value(QLatin1String("per_language_title_sort_articles"));
     if (articles.isObject()) {
         tweaks->perLanguageTitleSortArticles.clear();
@@ -113,6 +126,8 @@ CalibreConfig CalibreConfig::load(const QString &directory)
     if (global.value(QLatin1String("swap_author_names")).isBool())
         config.swapAuthorNames = global.value(QLatin1String("swap_author_names")).toBool();
     config.newBookTags = strings(global.value(QLatin1String("new_book_tags")));
+    if (global.value(QLatin1String("numeric_collation")).isBool())
+        config.numericCollation = global.value(QLatin1String("numeric_collation")).toBool();
 
     readTweaks(readObject(dir.filePath(QStringLiteral("tweaks.json"))), &config.tweaks);
     return config;

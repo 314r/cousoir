@@ -13,7 +13,8 @@ import Cousoir
 //
 // A column is { key, title, chars?, right?, drop?, sort?, format? }. Its text
 // is format(row), or the row's value under `key`. Columns with a `sort` key
-// are clickable and show the direction of `sortOption`.
+// are clickable and show the direction of `sortOption`; a right click on a
+// header asks for the column's menu.
 //
 // Rows whose `selected` is true are shown selected besides the current one;
 // clicks with Ctrl or Shift, Shift with the moving keys and Ctrl+A ask for a
@@ -53,6 +54,9 @@ Item {
 
     signal activated(int index)
     signal sortRequested(string sort)
+    // A right click on a column's header: show its actions at (x, y) in
+    // `header`.
+    signal columnMenuRequested(string key, Item header, real x, real y)
     // A right click on a row, or Menu or Shift+F10 on the current one: show
     // the row's actions at (x, y) in `row`.
     signal menuRequested(int index, Item row, real x, real y)
@@ -137,7 +141,8 @@ Item {
 
                         required property var modelData
                         readonly property bool sortable: modelData.sort !== undefined
-                        readonly property bool active: sortable && table.sortOption.startsWith(modelData.sort)
+                        readonly property bool active: sortable && (table.sortOption === modelData.sort
+                                                                    || table.sortOption === modelData.sort + "Desc")
                         readonly property bool descending: table.sortOption.endsWith("Desc")
 
                         objectName: table.name + modelData.key.charAt(0).toUpperCase() + modelData.key.slice(1) + "Column"
@@ -172,10 +177,15 @@ Item {
                             id: headerMouse
 
                             anchors.fill: parent
-                            enabled: headerCell.sortable
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: table.sortRequested(headerCell.modelData.sort)
+                            cursorShape: headerCell.sortable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: function(mouse) {
+                                if (mouse.button === Qt.RightButton)
+                                    table.columnMenuRequested(headerCell.modelData.key, headerCell, mouse.x, mouse.y)
+                                else if (headerCell.sortable)
+                                    table.sortRequested(headerCell.modelData.sort)
+                            }
                         }
                     }
                 }

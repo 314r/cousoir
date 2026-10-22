@@ -16,6 +16,7 @@
 #include "book.h"
 #include "book_edit.h"
 #include "book_list_model.h"
+#include "book_sort.h"
 #include "book_operations.h"
 #include "calibre_config.h"
 #include "calibre_search.h"
@@ -78,7 +79,17 @@ class BookLibrary : public QObject
     // name, the count empty when the search cannot run;
     // the section "search:<name>" lists a saved search's books.
     Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
+    // The list's sort, as its first field: "title", "timestamp", "#genre"…,
+    // with "Desc" for the reverse order. Earlier sorts break its ties, as
+    // Calibre's sort history does.
     Q_PROPERTY(QString sortOption READ sortOption WRITE setSortOption NOTIFY sortOptionChanged)
+    // The list's columns, by field, the title first; kept for each library,
+    // Calibre's own at first.
+    Q_PROPERTY(QStringList columns READ columns WRITE setColumns NOTIFY columnsChanged)
+    // Every column the list can show, those shown first in their order:
+    // { key, title, kind, shown }, kind "text", "number", "date", "rating"
+    // or "long".
+    Q_PROPERTY(QVariantList availableColumns READ availableColumns NOTIFY columnsChanged)
     Q_PROPERTY(QString facetSortOption READ facetSortOption WRITE setFacetSortOption NOTIFY facetSortOptionChanged)
     Q_PROPERTY(int currentBookId READ currentBookId WRITE setCurrentBookId NOTIFY currentBookChanged)
     Q_PROPERTY(QVariantMap currentBook READ currentBook NOTIFY currentBookChanged)
@@ -158,10 +169,11 @@ public:
     QString virtualLibraryError() const;
     QString sectionError() const;
     QVariantList savedSearches() const;
-    // "title", "authors", "series", "added" or "rating", with "Desc" for the
-    // reverse order.
     QString sortOption() const;
     void setSortOption(const QString &sortOption);
+    QStringList columns() const;
+    void setColumns(const QStringList &columns);
+    QVariantList availableColumns() const;
     // "name" or "count", with "Desc" for the reverse order.
     QString facetSortOption() const;
     void setFacetSortOption(const QString &sortOption);
@@ -200,6 +212,9 @@ public:
     // Narrows the books to the item with `id` of the current browse section,
     // clearing the search.
     Q_INVOKABLE void openFacetItem(int id);
+    // Sorts the list by `field`, the other way round when it is sorted by it
+    // already.
+    Q_INVOKABLE void sortBy(const QString &field);
     // Back to the section's items, with the search cleared.
     Q_INVOKABLE void clearFilter();
     // Opens a book's file with the desktop's application for it: `format`,
@@ -304,6 +319,7 @@ signals:
     void virtualLibraryChanged();
     void savedSearchesChanged();
     void sortOptionChanged();
+    void columnsChanged();
     void facetSortOptionChanged();
     void currentBookChanged();
     // A reload failed while the books read before stay shown.
@@ -340,10 +356,8 @@ private:
     struct BookIndex
     {
         CalibreSearch::Index search;
-        std::vector<QCollatorSortKey> titleKeys;
-        std::vector<QCollatorSortKey> authorKeys;
-        // The sort of the book's series, empty for none.
-        std::vector<QCollatorSortKey> seriesKeys;
+        // The books' sort keys, those of `sortFields` made already.
+        std::shared_ptr<const BookSort::Sorter> sorter;
         QHash<int, qsizetype> rowOf;
     };
 
@@ -399,7 +413,12 @@ private:
     // The undo of a bulk edit just saved: the fields it set, before and
     // after, by book.
     void keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before);
-    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config);
+    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config, const QStringList &sortFields);
+    // The fields of the sort history, whose keys a load makes.
+    QStringList sortFields() const;
+    // The columns and sort kept for the library, else Calibre's.
+    void restoreView();
+    void saveView();
     // The rows of the virtual library, or all, and the saved searches'
     // counts in it, after a load or another choice.
     void applyVirtualLibrary();
@@ -463,7 +482,7 @@ private:
     QVariantList m_savedSearches;
     // sortedBooks(), and the sort it is for; empty until asked.
     QList<qsizetype> m_sorted;
-    QString m_sortedBy;
+    QList<BookSort::Level> m_sortedBy;
 
     QString m_section = QStringLiteral("books");
     QString m_filterKind;
@@ -472,7 +491,11 @@ private:
     int m_scopeCount = 0;
     QVariantList m_facetRows;
     QString m_searchText;
-    QString m_sortOption = QStringLiteral("title");
+    // The sorts asked for, the last first, maximum_resort_levels of them.
+    QList<BookSort::Level> m_sortHistory{ { QStringLiteral("title"), true } };
+    QStringList m_columns;
+    // The library whose columns and sort these are.
+    QString m_viewOf;
     QString m_facetSortOption = QStringLiteral("name");
     int m_currentBookId = 0;
     QVariantMap m_currentBook;

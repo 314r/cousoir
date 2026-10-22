@@ -73,9 +73,11 @@ class BookLibraryTest : public QObject
 
 private slots:
     void initTestCase();
+    void init();
     void loadsLibrary();
     void sortsBooks_data();
     void sortsBooks();
+    void keepsColumnsAndSort();
     void searchesBooks_data();
     void searchesBooks();
     void keepsRowsInPlace();
@@ -115,6 +117,13 @@ void BookLibraryTest::initTestCase()
     QStandardPaths::setTestModeEnabled(true);
     QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
     QCoreApplication::setApplicationName(QStringLiteral("book-library"));
+    QSettings().clear();
+}
+
+// Each test starts with no columns or sort kept: the fixture's copies are
+// all the same library.
+void BookLibraryTest::init()
+{
     QSettings().clear();
 }
 
@@ -162,11 +171,16 @@ void BookLibraryTest::sortsBooks_data()
     QTest::newRow("title") << QStringLiteral("title") << QList<int>{ 2, 1, 4, 5, 6, 3 };
     QTest::newRow("titleDesc") << QStringLiteral("titleDesc") << QList<int>{ 3, 6, 5, 4, 1, 2 };
     QTest::newRow("authors") << QStringLiteral("authors") << QList<int>{ 2, 3, 5, 4, 6, 1 };
-    // In series order, books in no series last.
-    QTest::newRow("series") << QStringLiteral("series") << QList<int>{ 2, 3, 6, 1, 4, 5 };
-    QTest::newRow("added") << QStringLiteral("added") << QList<int>{ 1, 2, 3, 4, 5, 6 };
-    QTest::newRow("addedDesc") << QStringLiteral("addedDesc") << QList<int>{ 6, 5, 4, 3, 2, 1 };
+    // As Calibre sorts them: books in no series first, by title as the list
+    // was sorted before; the series in the order of their numbers.
+    QTest::newRow("series") << QStringLiteral("series") << QList<int>{ 1, 4, 5, 2, 3, 6 };
+    QTest::newRow("seriesDesc") << QStringLiteral("seriesDesc") << QList<int>{ 6, 3, 2, 1, 4, 5 };
+    QTest::newRow("timestamp") << QStringLiteral("timestamp") << QList<int>{ 1, 2, 3, 4, 5, 6 };
+    // Reversed, books added the same second keep their order.
+    QTest::newRow("timestampDesc") << QStringLiteral("timestampDesc") << QList<int>{ 6, 4, 5, 3, 2, 1 };
     QTest::newRow("rating") << QStringLiteral("rating") << QList<int>{ 5, 6, 3, 4, 1, 2 };
+    // An undefined date is Calibre's year 101.
+    QTest::newRow("pubdate") << QStringLiteral("pubdate") << QList<int>{ 4, 5, 6, 3, 1, 2 };
 }
 
 void BookLibraryTest::sortsBooks()
@@ -637,6 +651,72 @@ void BookLibraryTest::editsBooks()
     QVERIFY(!library->updateBook(2, { { QStringLiteral("pubdate"), QStringLiteral("someday") } }).isEmpty());
     QVERIFY(!library->updateBook(2, { { QStringLiteral("colour"), QStringLiteral("red") } }).isEmpty());
     QVERIFY(!library->updateBook(99, { { QStringLiteral("title"), QStringLiteral("X") } }).isEmpty());
+}
+
+// The list's columns and sort are kept for the library, Calibre's own at
+// first; a sort keeps the earlier ones for its ties, as Calibre's list does.
+void BookLibraryTest::keepsColumnsAndSort()
+{
+    auto copy = writableCopy();
+    {
+        auto library = open(copy->path());
+        QVERIFY(library);
+        QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("authors"),
+                                                   QStringLiteral("series"), QStringLiteral("formats"),
+                                                   QStringLiteral("timestamp"), QStringLiteral("rating") }));
+        // Known columns once, the title first.
+        library->setColumns({ QStringLiteral("pubdate"), QStringLiteral("title"), QStringLiteral("nonsense"),
+                              QStringLiteral("pubdate"), QStringLiteral("tags") });
+        QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("pubdate"), QStringLiteral("tags") }));
+        const QVariantList available = library->availableColumns();
+        QCOMPARE(available.at(1).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("pubdate"));
+        QVERIFY(available.at(2).toMap().value(QStringLiteral("shown")).toBool());
+        QVERIFY(!available.at(3).toMap().value(QStringLiteral("shown")).toBool());
+        // The rows have the text of each column.
+        const QVariantMap row = library->books()->get(library->books()->indexOf(4));
+        QCOMPARE(row.value(QStringLiteral("tags")).toString(), QStringLiteral("Fantasy, Humour"));
+        QCOMPARE(library->books()->get(library->books()->indexOf(1)).value(QStringLiteral("pubdate")).toString(),
+                 QStringLiteral("Mar 1947"));
+
+        // Sorted by rating, the books without one by title, as before.
+        library->sortBy(QStringLiteral("rating"));
+        QCOMPARE(library->sortOption(), QStringLiteral("rating"));
+        library->sortBy(QStringLiteral("rating"));
+        QCOMPARE(library->sortOption(), QStringLiteral("ratingDesc"));
+        QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 1, 4, 5, 6, 3 }));
+        // Cousoir's old name.
+        library->setSortOption(QStringLiteral("addedDesc"));
+        QCOMPARE(library->sortOption(), QStringLiteral("timestampDesc"));
+    }
+    {
+        // Kept for the library.
+        auto library = open(copy->path());
+        QVERIFY(library);
+        QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("pubdate"), QStringLiteral("tags") }));
+        QCOMPARE(library->sortOption(), QStringLiteral("timestampDesc"));
+        // Its ties by rating, then title: 4 before 5, added the same second.
+        QCOMPARE(ids(bookRows(*library)), (QList<int>{ 6, 4, 5, 3, 2, 1 }));
+    }
+
+    // Calibre's list as it left it, before Cousoir kept anything.
+    QSettings().clear();
+    SqliteDb db;
+    QString error;
+    QVERIFY(db.open(copy->filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error));
+    QVERIFY(db.exec(QStringLiteral(
+        "INSERT INTO preferences(key, val) VALUES ('library_view books view state', "
+        "'{\"hidden_columns\": [\"tags\", \"size\"], \"column_positions\": {\"ondevice\": 0, \"authors\": 1, "
+        "\"title\": 2, \"tags\": 3, \"size\": 4, \"rating\": 5, \"publisher\": 6}, "
+        "\"sort_history\": [[\"rating\", false], [\"date\", true], [\"title\", true], [\"authors\", true]]}')"),
+                    &error));
+    db.close();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("authors"),
+                                               QStringLiteral("rating"), QStringLiteral("publisher") }));
+    QCOMPARE(library->sortOption(), QStringLiteral("ratingDesc"));
+    // Calibre's three last sorts: the books without a rating by date added.
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 1, 4, 3, 5, 6 }));
 }
 
 void BookLibraryTest::followsSortsLikeCalibre()

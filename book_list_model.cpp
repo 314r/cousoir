@@ -8,10 +8,15 @@
 
 #include "book_list_model.h"
 
+#include <QLocale>
+
 #include <cmath>
 
 #include "calibre_db.h"
+#include "calibre_text.h"
 #include "cover_cache.h"
+#include "description.h"
+#include "python_json.h"
 
 namespace BookDisplay {
 
@@ -39,6 +44,113 @@ QString rating(int rating)
 QString date(const QDateTime &date)
 {
     return CalibreDb::isUndefinedDate(date) ? QString() : date.toLocalTime().date().toString(Qt::ISODate);
+}
+
+namespace {
+
+// A description, or a custom column of comments, as one line of text.
+QString oneLine(const QString &html)
+{
+    return Description::toText(html).simplified();
+}
+
+QString customField(const Book &book, const CustomColumn &column, qsizetype index)
+{
+    const CustomValue value = book.custom.value(index);
+    if (value.value.isNull())
+        return {};
+    const QString &type = column.datatype;
+    if (column.multiple) {
+        const PythonJson::Value display = PythonJson::parse(column.display);
+        const PythonJson::Value *names = display.find(QStringLiteral("is_names"));
+        const bool areNames = names && PythonJson::truthy(*names);
+        if (type == QLatin1String("composite"))
+            return value.value.toString();
+        return value.value.toStringList().join(areNames ? QStringLiteral(" & ") : QStringLiteral(", "));
+    }
+    if (type == QLatin1String("series"))
+        return BookListModel::tr("%1 [%2]").arg(value.value.toString(), seriesIndex(value.seriesIndex));
+    if (type == QLatin1String("rating"))
+        return rating(value.value.toInt());
+    if (type == QLatin1String("bool"))
+        return value.value.toBool() ? BookListModel::tr("Yes") : BookListModel::tr("No");
+    if (type == QLatin1String("datetime"))
+        return date(value.value.toDateTime());
+    if (type == QLatin1String("float"))
+        return PythonJson::floatRepr(value.value.toDouble());
+    if (type == QLatin1String("comments"))
+        return oneLine(value.value.toString());
+    return value.value.toString();
+}
+
+} // namespace
+
+QString field(const Book &book, const QString &key, const QList<CustomColumn> &columns)
+{
+    if (key.startsWith(u'#')) {
+        for (qsizetype index = 0; index < columns.size(); ++index) {
+            if (u'#' + columns.at(index).label == key)
+                return customField(book, columns.at(index), index);
+        }
+        return {};
+    }
+    if (key == QLatin1String("title"))
+        return book.title;
+    if (key == QLatin1String("authors"))
+        return book.authors.join(QStringLiteral(" & "));
+    if (key == QLatin1String("series"))
+        return series(book);
+    if (key == QLatin1String("series_index"))
+        return seriesIndex(book.seriesIndex);
+    if (key == QLatin1String("rating"))
+        return rating(book.rating);
+    if (key == QLatin1String("publisher"))
+        return book.publisher;
+    if (key == QLatin1String("tags"))
+        return book.tags.join(QStringLiteral(", "));
+    if (key == QLatin1String("languages")) {
+        QStringList names;
+        for (const QString &code : book.languages)
+            names.append(CalibreText::languageName(code));
+        return names.join(QStringLiteral(", "));
+    }
+    if (key == QLatin1String("formats")) {
+        QStringList formats;
+        for (const BookFormat &format : book.formats)
+            formats.append(format.format);
+        return formats.join(QStringLiteral(", "));
+    }
+    if (key == QLatin1String("identifiers")) {
+        QStringList identifiers;
+        for (const auto &[type, value] : book.identifiers)
+            identifiers.append(type + u':' + value);
+        return identifiers.join(QStringLiteral(", "));
+    }
+    if (key == QLatin1String("timestamp") || key == QLatin1String("added"))
+        return date(book.timestamp);
+    if (key == QLatin1String("last_modified"))
+        return date(book.lastModified);
+    if (key == QLatin1String("pubdate"))
+        return CalibreDb::isUndefinedDate(book.pubdate)
+            ? QString() : QLocale::c().toString(book.pubdate.toLocalTime().date(), QStringLiteral("MMM yyyy"));
+    if (key == QLatin1String("size")) {
+        qint64 largest = 0;
+        for (const BookFormat &format : book.formats)
+            largest = std::max(largest, format.size);
+        return book.formats.isEmpty() ? QString()
+                                      : QLocale::c().formattedDataSize(largest, 1, QLocale::DataSizeTraditionalFormat);
+    }
+    if (key == QLatin1String("pages"))
+        return book.pages > 0 ? QString::number(book.pages) : QString();
+    if (key == QLatin1String("id"))
+        return QString::number(book.id);
+    if (key == QLatin1String("path"))
+        return book.path;
+    if (key == QLatin1String("uuid"))
+        return book.uuid;
+    if (key == QLatin1String("comments"))
+        return oneLine(book.comments);
+    return {};
 }
 
 } // namespace BookDisplay
@@ -105,7 +217,7 @@ QVariantMap BookListModel::get(int row) const
     QStringList formats;
     for (const BookFormat &format : book.formats)
         formats.append(format.format);
-    return {
+    QVariantMap values{
         { QStringLiteral("id"), book.id },
         { QStringLiteral("title"), book.title },
         { QStringLiteral("authors"), book.authors.join(QStringLiteral(" & ")) },
@@ -117,6 +229,21 @@ QVariantMap BookListModel::get(int row) const
               ? QString() : CoverCache::url(m_coverKey, book.id, book.coverModified) },
         { QStringLiteral("selected"), m_selected.contains(book.id) },
     };
+    for (const QString &key : m_columns) {
+        if (!values.contains(key))
+            values.insert(key, BookDisplay::field(book, key, m_customColumns));
+    }
+    return values;
+}
+
+void BookListModel::setColumns(const QStringList &keys, const QList<CustomColumn> &customColumns)
+{
+    if (keys == m_columns && customColumns.size() == m_customColumns.size())
+        return;
+    m_columns = keys;
+    m_customColumns = customColumns;
+    if (!m_order.isEmpty())
+        emit dataChanged(index(0), index(int(m_order.size()) - 1));
 }
 
 int BookListModel::idAt(int row) const
