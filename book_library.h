@@ -158,6 +158,9 @@ public:
     QString section() const;
     void setSection(const QString &section);
     QVariantMap filter() const;
+    // Keeps `text` as the note of the item the books are of, as Calibre 7
+    // keeps notes; an empty text removes it.
+    Q_INVOKABLE QString setFilterNote(const QString &text);
     int scopeCount() const;
     BookListModel *books();
     QVariantList facetRows() const;

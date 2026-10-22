@@ -64,6 +64,7 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | `kindle_send.cpp` (without Calibre) | `src/calibre/devices/mtp/driver.py`: `get_pref()`, `prefix_for_location()`, `create_upload_path()`, `ensure_parent()`, `upload_books()`, `upload_kindle_thumbnail()`, `upload_apnx()`, `_update_drive_info()`; `src/calibre/devices/mtp/defaults.py`: Amazon's settings; `src/calibre/devices/kindle/driver.py`: `get_apnx_opts()` |
 | `assets/reader/reader.js` | `src/pyj/read_book/cfi.pyj`: `encode()`, `decode()` and their helpers, the highlight wrappers skipped, `at_current()`'s scan from the top left, `cfi_for_selection()`; `src/pyj/read_book/iframe.pyj`: the spine step of a position; `src/pyj/read_book/annotations.pyj`: a highlight's fields, `remove_highlight()` |
 | `book_reader.cpp`, `book_operations.cpp` (positions and highlights) | `src/calibre/db/backend.py`: `save_last_read_position_to_cursor()`, `save_annotations_for_book()`; `src/calibre/db/annotations.py`: `annot_db_data()`; `src/calibre/gui2/viewer/integration.py`: the viewer's user and device; `src/calibre/constants.py`: `builtin_colors_light`, `builtin_colors_dark` |
+| `calibre_notes.cpp`, `calibre_db.cpp` (notes) | `src/calibre/db/notes/connect.py`: `Notes.set_note()`, `set_backup_for()`, `path_to_retired_dir_for_item()`, `retire_entry()`, `trim_retired_dir()`, `hash_key()`, `notes_for()`, `get_note_data()` (read) |
 | `calibre_fts.cpp` | `src/calibre/db/sqlite_extension.cpp`: the FTS5 `Tokenizer` (its UTF-8 decoder, after Björn Höhrmann's, its script blocks, break iterators, diacritics and stemmers) and its registration as `unicode61`, `calibre` and `porter`; `src/calibre/utils/localization.py`: `bcp47_locale_name()` |
 | `book_sort.cpp` | `src/calibre/db/cache.py`: `multisort()`; `src/calibre/db/fields.py`: each field's `sort_keys_for_books()`, sort and default keys, `SeriesField`'s title sort in the book's language, `CompositeField`'s number, date, bool and list keys; `src/calibre/db/view.py`: `add_to_sort_history()`; `src/calibre/gui2/library/views.py`: the list's saved state, `cleanup_sort_history()` and `apply_sort_history()` |
 | `calibre_search.cpp` | `src/calibre/utils/search_query_parser.py`: `Parser`, `SearchQueryParser`'s evaluation, saved searches |
@@ -215,6 +216,8 @@ Feather, MIT license. Their notice is in
 ## Libraries and tools
 
 Cousoir is built with [Qt](https://www.qt.io) and uses
-[SQLite](https://sqlite.org), [libzip](https://libzip.org) and
+[SQLite](https://sqlite.org), [libzip](https://libzip.org),
+[ICU](https://icu.unicode.org), [Snowball](https://snowballstem.org)'s
+libstemmer, [xxHash](https://xxhash.com) and
 [libmtp](https://libmtp.sourceforge.net), and runs poppler's `pdfinfo` and
 `pdftoppm` to read PDF files when Calibre is not installed.

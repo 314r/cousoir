@@ -20,6 +20,9 @@ find_package(SQLite3 REQUIRED)
 find_package(ICU REQUIRED COMPONENTS uc i18n)
 find_path(STEMMER_INCLUDE_DIR libstemmer.h REQUIRED)
 find_library(STEMMER_LIBRARY stemmer REQUIRED)
+# xxHash, for the names Calibre gives the notes it keeps aside.
+find_path(XXHASH_INCLUDE_DIR xxhash.h REQUIRED)
+find_library(XXHASH_LIBRARY xxhash REQUIRED)
 find_package(libzip REQUIRED)
 # UDisks2, to eject a Kobo.
 if(UNIX AND NOT APPLE)
@@ -66,6 +69,8 @@ qt_add_library(cousoir_core STATIC
     calibre_db.cpp
     calibre_fts.cpp
     calibre_fts.h
+    calibre_notes.cpp
+    calibre_notes.h
     calibre_db.h
     calibre_job.cpp
     calibre_job.h
@@ -168,9 +173,9 @@ qt_add_resources(cousoir_core "core_resources"
 )
 target_link_libraries(cousoir_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP}
-    PRIVATE ICU::uc ICU::i18n ${STEMMER_LIBRARY}
+    PRIVATE ICU::uc ICU::i18n ${STEMMER_LIBRARY} ${XXHASH_LIBRARY}
 )
-target_include_directories(cousoir_core PRIVATE ${STEMMER_INCLUDE_DIR})
+target_include_directories(cousoir_core PRIVATE ${STEMMER_INCLUDE_DIR} ${XXHASH_INCLUDE_DIR})
 
 # The models QML uses on top of it, and the system's theme and appearance.
 qt_add_library(cousoir_models STATIC
@@ -230,6 +235,7 @@ set(COUSOIR_QML_FILES
     Main.qml
     MetaRow.qml
     MetadataDownloadDialog.qml
+    NotePanel.qml
     SearchField.qml
     NetworkSettingsPage.qml
     SettingsWindow.qml
@@ -408,7 +414,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts test_tool)
+                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts calibre_notes test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)

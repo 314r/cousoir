@@ -13,6 +13,7 @@
 #include "book_edit.h"
 #include "book_operations.h"
 #include "calibre_config.h"
+#include "calibre_notes.h"
 
 // Writes edits to a library as Calibre would, without the library ever
 // being half written. While Calibre's own lock keeps Calibre from starting:
@@ -54,6 +55,8 @@ struct Request
     // And where a reader stopped in books, and highlights made there.
     QList<QPair<int, ReadPosition>> readPositions;
     QList<QPair<int, Annotation>> annotations;
+    // Notes on items, written first, in the library's notes.db.
+    QList<CalibreNotes::Change> notes;
     // The software writing the metadata.opf files: name and version, and the
     // short name it files under.
     QString producer;
@@ -90,6 +93,8 @@ struct Result
     QList<Book> bulkBefore;
     // The backup made, if any.
     QString backup;
+    // Whether notes were written.
+    bool notesWritten = false;
 };
 
 Result commit(const Request &request);

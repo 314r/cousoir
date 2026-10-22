@@ -258,7 +258,7 @@ Built only when Qt WebEngine is there.
 | 15. The library on the network | done |
 | 16. Metadata from the web without Calibre | done, with Open Library |
 | 17. Kindle highlights | done |
-| 13. Notes | planned |
+| 13. Notes | done; notes with images are read, left to Calibre to change |
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
 | 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
 
@@ -991,3 +991,28 @@ fixed:
 And a PDF that cannot be read no longer polls itself forever; right to left
 books turn their pages.
 
+### 2026-10-22 — goal 13, notes (`exp-notes`)
+
+Calibre 7's notes on authors, series, tags and publishers, read and
+written. Cousoir reads `.calnotes/notes.db` with the library, its links to
+images included; a browse section marks the items with a note, and their
+books show it in a pane beside them, images and links working. Edit writes
+it as the description is written, as text with Markdown's marks, and saves
+it in one change, as `Notes.set_note()` would: the row, its text indexed
+with the tokenizer ported in `exp-fts` (Calibre's search finds "élégantes"
+by "elegantes"), the backup file with Calibre's separators, and, for a note
+removed, the backup kept aside in `retired/<xxh3 of the field and name>`
+with its id, which Calibre takes back when the item comes back; past 256,
+the oldest go, as Calibre trims them. `CalibreNotes::hashKey()` uses xxHash's
+XXH3, as Calibre's `hash_key()` does: a new dependency, small and packaged
+everywhere.
+
+Notes with images stay read-only: writing their resources means Calibre's
+reference counting of `notes_resources_link` and its resource files, which
+Cousoir has no use for yet, and a mistake there loses a user's image.
+
+The fixture (`tools/oracle/notes_fixture.py`) is written by Calibre's own
+API. The golden test applies three note changes with `cousoir-cli apply`
+and has Calibre read, search, change and bring back the notes
+(`tools/oracle/notes_check.py`), checking the index's integrity after each
+step.

@@ -803,6 +803,8 @@ bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLangua
     data->tags = facetItems(tags, tagCounts);
     data->publishers = facetItems(publishers, publisherCounts);
     data->languages = facetItems(languages, languageCounts);
+    if (!data->libraryPath.isEmpty())
+        readNotes(data);
     return true;
 }
 
@@ -865,6 +867,53 @@ bool loadLibrary(const QString &libraryPath, const QString &snapshotPath, const 
     CalibreTemplate::computeComposites(&loaded, config.interfaceLanguage);
     *data = std::move(loaded);
     return true;
+}
+
+QString notesFolder(const QString &libraryPath)
+{
+    return QDir(libraryPath).filePath(QStringLiteral(".calnotes"));
+}
+
+void readNotes(LibraryData *data)
+{
+    data->notes.clear();
+    const QString path = QDir(notesFolder(data->libraryPath)).filePath(QStringLiteral("notes.db"));
+    if (!QFileInfo::exists(path))
+        return;
+    // Read without a lock or a file beside it, as metadata.db's copy is.
+    SqliteDb db;
+    QString error;
+    if (!db.open(path, SqliteDb::Mode::Immutable, &error))
+        return;
+    QHash<int, QPair<QString, int>> byId;
+    for (const QVariantList &row :
+         db.rows(QStringLiteral("SELECT id, item, colname, doc, searchable_text, ctime, mtime FROM notes"))) {
+        const QString field = row.value(2).toString().toLower();
+        const int item = row.value(1).toInt();
+        ItemNote note;
+        note.id = row.value(0).toInt();
+        note.doc = row.value(3).toString();
+        note.searchable = row.value(4).toString();
+        note.created = row.value(5).toDouble();
+        note.modified = row.value(6).toDouble();
+        data->notes[field].insert(item, note);
+        byId.insert(note.id, { field, item });
+    }
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT note, resource FROM notes_resources_link"))) {
+        const auto found = byId.constFind(row.value(0).toInt());
+        if (found != byId.cend())
+            data->notes[found->first][found->second].resources.append(row.value(1).toString());
+    }
+}
+
+QString notesField(const QString &kind)
+{
+    static const QHash<QString, QString> fields{
+        { QStringLiteral("authors"), QStringLiteral("authors") },     { QStringLiteral("series"), QStringLiteral("series") },
+        { QStringLiteral("tags"), QStringLiteral("tags") },           { QStringLiteral("publishers"), QStringLiteral("publisher") },
+        { QStringLiteral("languages"), QStringLiteral("languages") },
+    };
+    return fields.value(kind);
 }
 
 QDateTime undefinedDate()

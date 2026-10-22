@@ -24,6 +24,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QRegularExpression>
+#include <QTextDocument>
 #include <QUrl>
 #include <QPromise>
 #include <QSet>
@@ -415,11 +416,51 @@ QVariantMap BookLibrary::filter() const
         if (item.id == m_filterId)
             name = item.name;
     }
+    // Its note: HTML whose images are the library's resources, and the text
+    // it is edited as.
+    const QString field = CalibreDb::notesField(m_filterKind);
+    const ItemNote note = m_data.notes.value(field).value(m_filterId);
+    QString html = note.doc;
+    static const QRegularExpression resource(QStringLiteral("calres://([a-z0-9]+)/([0-9a-f]+)(\\?[^\"']*)?"));
+    const QString resources = QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("resources"));
+    for (auto it = resource.globalMatch(note.doc); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        const QString digest = match.captured(2);
+        html.replace(match.captured(0), QUrl::fromLocalFile(QDir(resources).filePath(
+                                            digest.left(2) + u'/' + match.captured(1) + u'-' + digest)).toString());
+    }
     return {
         { QStringLiteral("kind"), m_filterKind },
         { QStringLiteral("id"), m_filterId },
         { QStringLiteral("name"), name },
+        // Notes can be kept on it: Calibre 7 opened the library.
+        { QStringLiteral("notes"), !field.isEmpty() && QFileInfo::exists(QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("notes.db"))) },
+        { QStringLiteral("note"), Description::cleaned(html) },
+        { QStringLiteral("noteText"), Description::toText(note.doc) },
+        { QStringLiteral("noteHasImages"), !note.resources.isEmpty() },
     };
+}
+
+QString BookLibrary::setFilterNote(const QString &text)
+{
+    const QString field = CalibreDb::notesField(m_filterKind);
+    if (field.isEmpty())
+        return tr("These items have no notes.");
+    const QVariantMap current = filter();
+    if (current.value(QStringLiteral("noteHasImages")).toBool())
+        return tr("This note has images: change it in Calibre.");
+    CalibreNotes::Change change;
+    change.field = field;
+    change.item = m_filterId;
+    change.itemValue = current.value(QStringLiteral("name")).toString();
+    change.html = Description::toHtml(text);
+    // The text a search finds: the note without its markup.
+    QTextDocument document;
+    document.setHtml(change.html);
+    change.searchable = document.toPlainText();
+    CommitEngine::Request request;
+    request.notes.append(change);
+    return queueChange(request);
 }
 
 int BookLibrary::scopeCount() const
@@ -1181,12 +1222,14 @@ void BookLibrary::rebuildFacetRows()
     if (m_facetSortOption.endsWith(QLatin1String("Desc")))
         std::reverse(items.begin(), items.end());
 
+    const QHash<int, ItemNote> notes = m_data.notes.value(CalibreDb::notesField(m_section));
     QVariantList rows;
     for (const FacetItem &item : std::as_const(items)) {
         rows.append(QVariantMap{
             { QStringLiteral("id"), item.id },
             { QStringLiteral("name"), item.name },
             { QStringLiteral("count"), item.count },
+            { QStringLiteral("hasNote"), notes.contains(item.id) },
         });
     }
     if (m_facetRows == rows)
@@ -1928,6 +1971,11 @@ void BookLibrary::finishCommit()
         // Not when another library was picked meanwhile: its load, waiting
         // for this save, shows it.
         m_backedUp = m_backedUp || !result.backup.isEmpty();
+        if (result.notesWritten && !result.written) {
+            CalibreDb::readNotes(&m_data);
+            emit filterChanged();
+            rebuildFacetRows();
+        }
         if (result.written) {
             m_loaded = true;
             m_lastError.clear();

@@ -159,6 +159,22 @@ struct Annotation
     QString searchable;
 };
 
+// A note of Calibre 7 on an item, an author, series, tag or publisher, as
+// .calnotes/notes.db keeps it.
+struct ItemNote
+{
+    int id = 0;
+    // HTML; its images as calres:// addresses of resources.
+    QString doc;
+    // The item's name, a line, then the note's text: what a search finds.
+    QString searchable;
+    // Seconds since 1970.
+    double created = 0;
+    double modified = 0;
+    // The resources' hashes it uses, "xxh64:5f8c87fa2ca5d829".
+    QStringList resources;
+};
+
 struct LibraryData
 {
     QString libraryPath;
@@ -182,6 +198,9 @@ struct LibraryData
     QList<CustomColumn> customColumns;
     // Where readers stopped, by book.
     QHash<int, QList<ReadPosition>> readPositions;
+    // The notes on items, by Calibre's field ("authors", "publisher",
+    // "#genre") then by item id.
+    QHash<QString, QHash<int, ItemNote>> notes;
     // The preferences a search reads, by key, as JSON: saved searches,
     // virtual libraries, grouped search terms and user categories; and the
     // columns and sort Calibre's list last had.

@@ -7,7 +7,8 @@ import QtQuick.Layouts
 import Cousoir
 
 // A browse section: the library's authors, series, tags, languages or
-// publishers with their number of books. Opening one lists its books.
+// publishers with their number of books, and whether a note is kept on
+// them. Opening one lists its books.
 Rectangle {
     id: page
 
@@ -21,10 +22,16 @@ Rectangle {
         "publishers": { none: qsTr("No publishers yet"), noMatch: qsTr("No publisher matches “%1”") }
     })
     readonly property var noun: nouns[library.section] || nouns.authors
-    readonly property var columns: [
-        { key: "name", title: qsTr("Name"), sort: "name" },
-        { key: "count", title: qsTr("Books"), sort: "count", chars: 6, right: true }
-    ]
+    readonly property var columns: {
+        const columns = [
+            { key: "name", title: qsTr("Name"), sort: "name" },
+            { key: "count", title: qsTr("Books"), sort: "count", chars: 6, right: true }
+        ]
+        // Calibre 7's notes on them, which their books' page shows.
+        if (library.facetRows.some(row => row.hasNote))
+            columns.push({ key: "hasNote", title: qsTr("Note"), chars: 5, blank: true, format: row => row.hasNote ? "¶" : "" })
+        return columns
+    }
 
     signal itemActivated(int id)
 

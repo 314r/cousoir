@@ -303,6 +303,21 @@ Cousoir departs from Calibre on purpose in a few places:
 - With Calibre in Japanese, Korean or Vietnamese, whose folder names come
   from other tables, Cousoir does not write.
 
+## Notes
+
+Calibre 7 keeps a note on any author, series, tag or publisher, in the
+library's `.calnotes` folder. A browse section marks the items that have one
+with ¶; their books show it beside them, in a pane, folded when long (More
+unfolds it), its links opening in the browser and its images shown. Edit, or
+Add a note, writes it as text, with the description's marks (`**bold**`,
+`*italics*`, links, lists, headings); Ctrl+Enter saves, Esc cancels, and an
+empty note removes it. A note is saved as Calibre's `Notes.set_note()` saves
+one: the HTML and its text in `notes.db`, indexed with Calibre's own full
+text tokenizer so that Calibre's search finds it, a backup of it beside, and a
+note removed kept aside in `retired`, where Calibre takes it back should the
+item come back. A note with images is left to Calibre to change. A library
+Calibre 7 never opened has no `notes.db` yet, and no notes in Cousoir either.
+
 ## Several books at once
 
 A click selects a book; Ctrl with a click adds a book to the selection or
@@ -886,7 +901,16 @@ changes, each one on the books as the changes before it left them:
 
 Its keys are `books`, `authors`, `rating`, `publisher`, `series`,
 `numberSeries`, `seriesStart`, `seriesIncrement`, `languages`, `pubdate`,
-`addTags`, `removeTags` and `removeAllTags`. Conversions run first, on the books as the
+`addTags`, `removeTags` and `removeAllTags`. A `note` sets the note of an
+author, series, tag or publisher, by Calibre's field name and the item's id
+and name; an empty `html` removes it:
+
+```json
+[{ "note": { "field": "tags", "item": 3, "name": "Fantasy",
+             "html": "<p>Other worlds.</p>", "text": "Other worlds." } }]
+```
+
+Conversions run first, on the books as the
 library has them, and their files are added with the formats added:
 
 ```json
@@ -972,6 +996,7 @@ columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 - SQLite 3.31 or later, with FTS5
 - libzip
 - ICU and Snowball's libstemmer, for Calibre's full text tokenizer
+- xxHash, for the names Calibre gives the notes it keeps aside
 - For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
 - For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs; built
@@ -1172,6 +1197,15 @@ The tests check the port against Calibre itself:
   tokenizer, plain and stemmed, in English and French, and compares the
   terms and their places with those Calibre's own makes
   (`tools/oracle/fts_oracle.py`).
+- `calibre_notes_tests` reads the notes Calibre's own API wrote into a copy
+  of the fixture library (`tests/data/notes`, `tools/oracle/notes_fixture.py`),
+  an image among them, and writes, changes and removes notes as Calibre does:
+  `notes.db`, its index found by a word without its accents and checked for
+  integrity, the backups, the notes kept aside under Calibre's xxHash names,
+  and a note with images left alone. The golden test then has Calibre read,
+  search, change and bring back the notes `cousoir-cli apply` wrote
+  (`tools/oracle/notes_check.py`). The UI tests read a series' note, write
+  it, empty it, and read an author's note with an image.
 - `epub_book_tests` reads EPUB 3 and EPUB 2 books: their spine, their table
   of contents from nav or NCX, nested, and paths resolved. The UI tests read
   `tests/data/reader/voyage.epub` (`tools/make_reader_fixture.py`) in the

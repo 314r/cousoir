@@ -413,6 +413,23 @@ Rectangle {
             bookIds: visible ? page.library.books.selectedIds : []
             onFailed: function(message) { page.failed(message) }
         }
+
+        Divider {
+            Layout.preferredWidth: 1
+            Layout.fillHeight: true
+            visible: notePane.visible
+        }
+
+        NotePanel {
+            id: notePane
+            objectName: "notePane"
+
+            Layout.preferredWidth: Theme.paneWidth
+            Layout.fillHeight: true
+            visible: page.paneShown && !bulkPane.visible && wanted
+            library: page.library
+            onFailed: function(message) { page.failed(message) }
+        }
     }
 
     ActionMenu {

@@ -154,6 +154,12 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         return fail(QObject::tr("Calibre is open on this computer: close it to change the library."));
     if (CalibreDb::hasJournal(database))
         return fail(QObject::tr("Calibre is writing to the library. Try again in a moment."));
+    // Notes go to their own database, under the same lock.
+    if (!request.notes.isEmpty()) {
+        if (!CalibreNotes::apply(request.libraryPath, request.notes, request.config.interfaceLanguage, &error))
+            return fail(error);
+        result->notesWritten = true;
+    }
 
     const FileIdentity before = CalibreDb::identify(database);
     const QByteArray original = readFile(database, &error);

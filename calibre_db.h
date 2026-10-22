@@ -61,6 +61,15 @@ bool loadLibrary(const QString &libraryPath, const QString &snapshotPath, const 
 // to the second. NULL and text that is no date are Calibre's undefined date.
 QDateTime parseDate(const QVariant &value);
 QDateTime undefinedDate();
+
+// The folder of the library's notes, .calnotes, and its database.
+QString notesFolder(const QString &libraryPath);
+// Reads the library's notes into `data`, whose libraryPath is set: none when
+// Calibre 7 has never opened it.
+void readNotes(LibraryData *data);
+// Calibre's field of a browse section's items: "publisher" for
+// "publishers"; empty for one without notes.
+QString notesField(const QString &kind);
 bool isUndefinedDate(const QDateTime &date);
 // "2015-07-07T18:41:43+00:00", Python's isoformat() of the UTC date.
 QString isoFormat(const QDateTime &date);

@@ -20,6 +20,7 @@
 
 #include <memory>
 
+#include "calibre_db.h"
 #include "calibre_languages.h"
 #include "book_library.h"
 #include "concurrency_guard.h"
@@ -106,6 +107,7 @@ private slots:
     void refusesInvalidValues();
     void changesRating();
     void editsDescription();
+    void keepsNotes();
     void editsCustomColumns();
     void changesCovers();
     void movesBooksToTrashAndBack();
@@ -1135,6 +1137,73 @@ void LibraryUiTest::editsDescription()
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
     library()->setProperty("currentBookId", 1);
     QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString(), QString());
+}
+
+void LibraryUiTest::keepsNotes()
+{
+    // The notes Calibre 7 keeps, on an author with an image and a series.
+    QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/notes/.calnotes"), CalibreDb::notesFolder(m_libraryPath)));
+    makeWritable();
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    const auto filter = [this] { return library()->property("filter").toMap(); };
+
+    // Marked in their section, shown beside their books.
+    click("sidebar_series");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Series"));
+    const QVariantList series = library()->property("facetRows").toList();
+    QCOMPARE(std::count_if(series.cbegin(), series.cend(), [](const QVariant &row) {
+                 return row.toMap().value(QStringLiteral("hasNote")).toBool();
+             }), 1);
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 2));
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Contes"));
+    QTRY_VERIFY(control("notePane")->isVisible());
+    QVERIFY(text("noteText").contains(QStringLiteral("Tales for children")));
+
+    // Written as text, saved as Calibre saves a note.
+    click("editNoteButton");
+    QQuickItem *editor = control("noteEditor");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QCOMPARE(text("noteEditor"), QStringLiteral("Tales for children, *and others*."));
+    editor->setProperty("text", QStringLiteral("Contes **pour** enfants."));
+    QTest::keyClick(m_window, Qt::Key_Return, Qt::ControlModifier);
+    waitForSave();
+    QTRY_VERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("<strong>pour</strong>")));
+    QVERIFY(!editor->isVisible());
+    const QString notes = QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("notes.db"));
+    const auto searchable = [&notes] {
+        SqliteDb db;
+        QString error;
+        return db.open(notes, SqliteDb::Mode::Immutable, &error)
+            ? db.value(QStringLiteral("SELECT searchable_text FROM notes WHERE colname='series' AND item=2"))
+            : QVariant();
+    };
+    QCOMPARE(searchable().toString(), QStringLiteral("Contes\nContes pour enfants."));
+
+    // Emptied, it goes, kept aside for Calibre.
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QString());
+    click("saveNoteButton");
+    waitForSave();
+    QTRY_VERIFY(filter().value(QStringLiteral("note")).toString().isEmpty());
+    QVERIFY(!searchable().isValid());
+    QCOMPARE(text("editNoteButton"), QStringLiteral("Add a note"));
+
+    // A note with images is read, and left to Calibre to change.
+    click("sidebar_authors");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Authors"));
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 2));
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Glen Cook"));
+    QTRY_VERIFY(text("noteText").contains(QStringLiteral("dark")));
+    QVERIFY(!control("editNoteButton")->isVisible());
+    QVERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("file://")));
+
+    // A library Calibre 7 never opened has no notes to show.
+    QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY(!control("notePane")->isVisible());
 }
 
 void LibraryUiTest::editsCustomColumns()
