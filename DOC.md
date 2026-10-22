@@ -123,6 +123,18 @@ Cousoir departs from Calibre here:
 - A date given to `format_date()`, `days_between()` and the like reads as
   ISO dates do, or as day, month and year with English month names, the
   ones Calibre's dateutil reads most.
+- A template that calls itself, or nests too deep, stops with an error
+  past a depth of its own, where Calibre stops at Python's limit.
+- A program whose value is `$` alone, in a composite or a search where
+  Calibre's `$` is None, gives the empty text, where Calibre fails.
+- Integers that do not fit 64 bits are an error in a `for` range and in
+  `range()`; `ceiling()`, `floor()`, `round()` and `mod()` print every
+  digit, as Python does.
+- `urls_from_identifiers()` makes the links of the metadata sources Calibre
+  9.16 has, Google, Amazon and Edelweiss, then ISBN, DOI, arXiv, OCLC, ISSN
+  and URL ones and the links set in Calibre's preferences; it sorts them
+  case and accents aside as Calibre's primary sort key does. An entity in
+  an identifier, `&amp;`, stays as it is.
 
 ## Searching
 

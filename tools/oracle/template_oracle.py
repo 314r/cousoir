@@ -19,7 +19,9 @@ library, templates_path, out = sys.argv[-3:]
 with open(templates_path, encoding='utf-8') as f:
     templates = json.load(f)
 
-cache = open_library(library).new_api
+# The library kept open: a template's with statement reads other books.
+legacy = open_library(library)
+cache = legacy.new_api
 book_ids = sorted(cache.all_book_ids())
 formatter = SafeFormat()
 sentinel = '\x00error\x00'

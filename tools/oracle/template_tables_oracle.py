@@ -44,7 +44,8 @@ for key in fm.all_field_keys():
                    '|'.join(meta.get('search_terms', [])), (meta.get('display') or {}).get('date_format') or ''))
 terms = sorted(fm._search_term_map.items())
 
-words = ('Yes', 'No', 'None', 'Error', 'DRM', 'TEMPLATE ERROR', '%s: unknown function', 'Unknown')
+words = ('Yes', 'No', 'None', 'Error', 'DRM', 'TEMPLATE ERROR', '%s: unknown function', 'Unknown',
+         "No book formats found so the path can't be generated", 'No such variable {0}')
 languages = {'en': (english_lcdata, tuple(words))}
 for lang, translator in get_all_translators():
     data = translator_for_lang(lang)['lcdata'] or english_lcdata

@@ -84,8 +84,8 @@ PyValue dateValue(const QDateTime &date)
 // writes it.
 QString seriesIndexText(double value)
 {
-    if (value == std::floor(value))
-        return QString::number(qint64(value));
+    if (!std::isfinite(value) || value == std::floor(value))
+        return Py::intText(value);
     QString text = QString::number(value, 'f', 2);
     while (text.endsWith(u'0'))
         text.chop(1);
@@ -159,15 +159,7 @@ std::optional<PyValue> BookProxy::attribute(const QString &name) const
         PyValue value;
         value.kind = PyValue::Kind::Dict;
         for (qsizetype i = 0; i < book.authors.size(); ++i) {
-            const int id = book.authorIds.value(i);
-            QString sort;
-            for (const FacetItem &author : library.data().authors) {
-                if (author.id == id) {
-                    sort = author.sort;
-                    break;
-                }
-            }
-            value.dict.append({ book.authors.at(i), sort });
+            value.dict.append({ book.authors.at(i), library.authorSort(book.authorIds.value(i)) });
         }
         return value;
     }
@@ -394,12 +386,14 @@ QString BookProxy::value(const QString &rawKey) const
 
 QString formatDate(const Library &library, const QDateTime &utc, int microsecond, const QString &rawFormat)
 {
-    Q_UNUSED(microsecond);
     const QString format = rawFormat.isEmpty() ? QStringLiteral("dd MMM yyyy") : rawFormat;
     const QDateTime local = utc.toLocalTime();
     if (format == QLatin1String("iso")) {
+        // isoformat(): the microseconds when there are some.
         const int offset = local.offsetFromUtc();
+        const int fraction = microsecond + local.time().msec() * 1000;
         return local.toString(QStringLiteral("yyyy-MM-ddTHH:mm:ss"))
+            + (fraction > 0 ? QStringLiteral(".%1").arg(fraction, 6, 10, QLatin1Char('0')) : QString())
             + QStringLiteral("%1%2:%3").arg(offset < 0 ? u'-' : u'+')
                   .arg(std::abs(offset) / 3600, 2, 10, QLatin1Char('0'))
                   .arg(std::abs(offset) % 3600 / 60, 2, 10, QLatin1Char('0'));

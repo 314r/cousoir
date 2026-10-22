@@ -6,6 +6,8 @@
 #include <QPair>
 #include <QSet>
 #include <QString>
+
+#include "identifier_links.h"
 #include <QStringList>
 
 #include <memory>
@@ -87,6 +89,13 @@ public:
     const Book *book(int id) const;
     // Calibre's sort collator, the interface language's, case aside.
     int compare(const QString &a, const QString &b) const;
+    // Its case sensitive collator, upper case first.
+    int compareCase(const QString &a, const QString &b) const;
+    // The sort of the author of that id.
+    QString authorSort(int authorId) const;
+    // Calibre's links for identifiers the user added, id_link_rules, read
+    // when first asked for.
+    const IdentifierLinks::Rules &linkRules() const;
 
 private:
     struct Private;

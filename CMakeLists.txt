@@ -96,6 +96,8 @@ qt_add_library(cousoir_core STATIC
     field_writers.h
     file_transaction.cpp
     file_transaction.h
+    identifier_links.cpp
+    identifier_links.h
     kindle.cpp
     kindle.h
     kindle_send.cpp
