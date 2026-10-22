@@ -435,10 +435,11 @@ and their latest versions, and the books found come back in its order. The
 one picked shows beside the book's own values, field by field; the fields
 that differ are ticked, but for those Calibre is set to leave aside
 (Preferences, Metadata download, the fields to download). Covers shows the
-covers the sources have for it, the book's own first, as they come and then
-largest first. Save takes the fields ticked, and the cover picked, as one
-change: Revert changes undoes it while the book is open. Esc closes and
-stops the download.
+covers the sources have for it, the book's own first and kept unless
+another is picked, as they come and then largest first. Save takes the
+fields ticked, and the cover picked, as one change: Revert changes undoes it
+while the book is open. Space ticks the field it is on and the arrows pick
+a cover; Esc closes and stops the download.
 
 What a field takes is what Calibre's dialog takes from a download
 (`update_from_mi()`): the title, its sort made again in the book's language;

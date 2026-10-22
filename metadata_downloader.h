@@ -34,10 +34,13 @@ class MetadataDownloader : public QObject
     // The books found, the best first: { title, authors, published,
     // publisher, hasCover, hasSummary }.
     Q_PROPERTY(QVariantList results READ results NOTIFY stateChanged)
-    // The book's own cover, then those found as they come, the largest
-    // first once all are in: { source, width, height, url, own }.
+    // The book's own cover, as Calibre's "Current cover", its url empty when
+    // it has none; then those found as they come, the largest first once
+    // all are in: { source, width, height, url, own }.
     Q_PROPERTY(QVariantList covers READ covers NOTIFY coversChanged)
     Q_PROPERTY(bool searchingCovers READ searchingCovers NOTIFY coversChanged)
+    // Why the covers could not all be found.
+    Q_PROPERTY(QString coversError READ coversError NOTIFY coversChanged)
 
 public:
     explicit MetadataDownloader(QObject *parent = nullptr);
@@ -52,6 +55,7 @@ public:
     QVariantList results() const;
     QVariantList covers() const;
     bool searchingCovers() const;
+    QString coversError() const;
 
     // Looks for the book by its title, authors and identifiers. Returns an
     // error message, empty once the search is on its way.
@@ -60,12 +64,13 @@ public:
     // label, current, found, chosen }, chosen when it differs and Calibre
     // is not set to leave it aside.
     Q_INVOKABLE QVariantList fields(int result) const;
-    // Downloads the covers for the book found at `result`.
+    // Downloads the covers for the book found at `result`, in place of
+    // those asked for before.
     Q_INVOKABLE void searchCovers(int result);
-    // Saves `fields` of the book found at `result` and the cover at
-    // `cover` of covers, none for the book's own or -1. Same returns as
-    // BookLibrary::updateBook(); the download is over.
-    Q_INVOKABLE QString apply(int result, const QStringList &fields, int cover);
+    // Saves `fields` of the book found at `result`, and the cover found of
+    // that url, none for empty. Same returns as BookLibrary::updateBook();
+    // the download is over.
+    Q_INVOKABLE QString apply(int result, const QStringList &fields, const QString &coverUrl = {});
     // Stops the download and forgets it.
     Q_INVOKABLE void cancel();
 
@@ -85,6 +90,7 @@ private:
     void readCovers();
     void stopProcess();
     void setState(const QString &state, const QString &error = {});
+    void stopCovers();
     QString coverUrl() const;
 
     QPointer<BookLibrary> m_library;
@@ -96,6 +102,7 @@ private:
     MetadataDownload::Identified m_identified;
     QList<MetadataDownload::Cover> m_covers;
     bool m_coversRunning = false;
+    QString m_coversError;
     QProcess *m_process = nullptr;
     // The job's folder, the identify job's and then the covers job's.
     std::unique_ptr<QTemporaryDir> m_folder;

@@ -245,6 +245,8 @@ downloads() {
     cp "$root/tests/data/download/download.json" "$dir/"
     oracle "$root/tools/oracle/download_oracle.py" -- identify "$root/metadata_download.cpp" "$dir/found" \
         "$root/tests/data/download/found.json" || return 0
+    cp -a "$dir/found" "$dir/covers"
+    oracle "$root/tools/oracle/download_oracle.py" -- covers "$root/metadata_download.cpp" "$dir/covers" || return 0
     for side in calibre cousoir; do
         cp -a --reflink=auto "$root/tests/data/library" "$work/download-$side"
     done

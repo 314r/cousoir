@@ -1067,8 +1067,29 @@ void BookLibraryTest::downloadsMetadata()
     QCOMPARE(covers.at(1).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Google"));
     QCOMPARE(covers.at(1).toMap().value(QStringLiteral("width")).toInt(), 1200);
     QCOMPARE(covers.at(2).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Amazon.com"));
+    QVERIFY(downloader.coversError().isEmpty());
 
-    QCOMPARE(downloader.apply(0, { QStringLiteral("tags"), QStringLiteral("pubdate"), QStringLiteral("series") }, 1),
+    // Asked for again, for another book found and back, the covers are
+    // those of the last asked; asked for while they come, too.
+    downloader.searchCovers(1);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    QCOMPARE(downloader.covers().size(), 3);
+    QVERIFY(downloader.coversError().isEmpty());
+    qputenv("COUSOIR_FAKE_DELAY", "20");
+    downloader.searchCovers(1);
+    QVERIFY(downloader.searchingCovers());
+    qunsetenv("COUSOIR_FAKE_DELAY");
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    QCOMPARE(downloader.covers().size(), 3);
+    QVERIFY(downloader.coversError().isEmpty());
+
+    // A cover by its address; one that is not there is refused.
+    QVERIFY(!downloader.apply(0, { QStringLiteral("tags") }, QStringLiteral("file:///nowhere/cover.jpg")).isEmpty());
+    QCOMPARE(downloader.apply(0, { QStringLiteral("tags"), QStringLiteral("pubdate"), QStringLiteral("series") },
+                              downloader.covers().at(1).toMap().value(QStringLiteral("url")).toString()),
              QString());
     QCOMPARE(downloader.state(), QStringLiteral("idle"));
     QVERIFY(waitForSave(library.get()));
@@ -1089,6 +1110,34 @@ void BookLibraryTest::downloadsMetadata()
     QVERIFY(waitForSave(library.get()));
     QTRY_COMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(), QStringList{ QStringLiteral("Fantasy") });
     QVERIFY(QImageReader(coverPath).size() != QSize(1466, 2200));
+
+    // Covers that fail tell why, those saved before kept.
+    QCOMPARE(downloader.search(2), QString());
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    qputenv("COUSOIR_FAKE_FAIL_COVERS", "1");
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    qunsetenv("COUSOIR_FAKE_FAIL_COVERS");
+    QVERIFY(downloader.coversError().contains(QStringLiteral("Covers unreachable")));
+    QCOMPARE(downloader.covers().size(), 2);
+
+    // A field Calibre is set to leave aside is not ticked; a book without
+    // a cover keeps having none unless one is picked.
+    qputenv("COUSOIR_FAKE_IGNORE", "tags");
+    QCOMPARE(downloader.search(5), QString());
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    qunsetenv("COUSOIR_FAKE_IGNORE");
+    for (const QVariant &row : downloader.fields(0)) {
+        if (row.toMap().value(QStringLiteral("key")) == QLatin1String("tags"))
+            QVERIFY(!row.toMap().value(QStringLiteral("chosen")).toBool());
+        if (row.toMap().value(QStringLiteral("key")) == QLatin1String("publisher"))
+            QVERIFY(row.toMap().value(QStringLiteral("chosen")).toBool());
+    }
+    QCOMPARE(downloader.covers().size(), 1);
+    QVERIFY(downloader.covers().first().toMap().value(QStringLiteral("own")).toBool());
+    QVERIFY(downloader.covers().first().toMap().value(QStringLiteral("url")).toString().isEmpty());
+    downloader.cancel();
+    QVERIFY(downloader.covers().isEmpty());
 
     // A failure tells what Calibre logged.
     qputenv("COUSOIR_FAKE_FAIL", "1");
