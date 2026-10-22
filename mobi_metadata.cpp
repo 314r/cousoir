@@ -201,15 +201,20 @@ void replaceRecord0(Book *book, const QByteArray &record0)
 {
     QByteArray &data = *book->data;
     const qsizetype first = book->offset(0);
-    QList<QByteArray> rest;
-    for (int i = 1; i < book->count; ++i)
-        rest.append(book->record(i));
-    QByteArray rebuilt = data.left(first) + record0;
+    const qsizetype restStart = book->count > 1 ? book->offset(1) : data.size();
+    // The book once more at most, the rest taken by views of it.
+    QByteArray rebuilt;
+    rebuilt.reserve(first + record0.size() + data.size() - restStart);
+    rebuilt.append(QByteArrayView(data).first(first));
+    rebuilt.append(record0);
     for (int i = 1; i < book->count; ++i) {
         put32(&rebuilt, 78 + 8 * i, quint32(rebuilt.size()));
-        rebuilt += rest.at(i - 1);
+        // A damaged record list gives an empty record, not a read past the end.
+        const qsizetype start = std::min(book->offset(i), data.size());
+        const qsizetype end = std::clamp(book->end(i), start, data.size());
+        rebuilt.append(QByteArrayView(data).sliced(start, end - start));
     }
-    data = rebuilt;
+    data = std::move(rebuilt);
 }
 
 // create_exth(): the first record with `exth` and the title after it.
