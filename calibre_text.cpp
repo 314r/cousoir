@@ -519,6 +519,16 @@ QString checkDoi(const QString &text)
     return doi.match(text).captured(0);
 }
 
+QString seriesIndexText(double index)
+{
+    if (!std::isfinite(index) || index == std::floor(index))
+        return QString::number(qint64(std::isfinite(index) ? index : 0));
+    QString text = QString::number(index, 'f', 2);
+    while (text.endsWith(u'0'))
+        text.chop(1);
+    return text;
+}
+
 QString languageName(const QString &code, const QString &interfaceLanguage)
 {
     return CalibreLanguages::names(interfaceLanguage)->name(code);

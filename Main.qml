@@ -630,6 +630,9 @@ ThemedWindow {
         id: session
         libraryPath: librarySettings.path
         calibreLanguage: librarySettings.calibreLanguage
+        sharing: sharingSettings.enabled
+        sharingPort: sharingSettings.port
+        sharingPassword: sharingSettings.password
     }
     readonly property BookLibrary library: session.library
     readonly property ConcurrencyGuard guard: session.guard
@@ -765,6 +768,15 @@ ThemedWindow {
         property string calibreLanguage: ""
     }
 
+    Settings {
+        id: sharingSettings
+        category: "Sharing"
+        property bool enabled: false
+        property int port: 8090
+        // Empty for none.
+        property string password: ""
+    }
+
     SettingsWindow {
         id: settingsWindow
 
@@ -776,6 +788,8 @@ ThemedWindow {
         guard: window.guard
         customLibraryPath: librarySettings.path
         calibreLanguage: librarySettings.calibreLanguage
+        share: session.share
+        sharingSettings: sharingSettings
 
         onThemeModeSelected: function(mode) {
             window.setThemeMode(mode)
