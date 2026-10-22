@@ -65,6 +65,9 @@ class DeviceLibrary : public QObject
     Q_PROPERTY(QString lastError READ lastError NOTIFY rowsChanged)
     // The library's books on each reader: book id → the readers' names.
     Q_PROPERTY(QVariantMap onDevice READ onDevice NOTIFY rowsChanged)
+    // How many readers are connected, which changes with rows: cheap to
+    // bind on for what reading() tells.
+    Q_PROPERTY(int deviceCount READ deviceCount NOTIFY rowsChanged)
     // Calibre is there to send with.
     Q_PROPERTY(bool available READ available NOTIFY availableChanged)
     Q_PROPERTY(bool writable READ writable NOTIFY writableChanged)
@@ -93,6 +96,7 @@ public:
     bool loading() const;
     QString lastError() const;
     QVariantMap onDevice() const;
+    int deviceCount() const;
     bool available() const;
     bool writable() const;
     QString readOnlyReason() const;

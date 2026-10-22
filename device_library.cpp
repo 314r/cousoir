@@ -405,7 +405,9 @@ QVariantList DeviceLibrary::reading(int bookId) const
     };
     QSet<QString> connected;
     for (const Connected &device : m_devices) {
-        connected.insert(deviceId(device));
+        // A reader still being read, or that cannot be, tells what it told.
+        if (!device.loading && device.error.isEmpty())
+            connected.insert(deviceId(device));
         for (const DeviceBook &book : device.books) {
             if (book.bookId == bookId)
                 copy(device.name, book.format, book.reading, libraryBook->title, libraryBook->authors, {});
@@ -450,18 +452,29 @@ const ReadingLog::Log &DeviceLibrary::readingLog() const
 
 void DeviceLibrary::recordReading(const Connected &connected)
 {
-    if (!m_library || m_library->libraryPath().isEmpty() || !connected.error.isEmpty())
+    // Only once the library is in: before, no book matches it, and the
+    // reader's entries would all go.
+    if (!m_library || !m_library->loaded() || m_library->libraryPath().isEmpty() || !connected.error.isEmpty()
+        || connected.loading)
         return;
     readingLog();
     const QDateTime now = QDateTime::currentDateTimeUtc();
+    QHash<int, const Book *> byId;
+    for (const Book &book : m_library->data().books)
+        byId.insert(book.id, &book);
     QHash<QString, QList<ReadingLog::Entry>> entries;
     for (const DeviceBook &book : connected.books) {
-        const Book *libraryBook = book.bookId > 0 ? m_library->data().book(book.bookId) : nullptr;
-        if (!libraryBook || libraryBook->uuid.isEmpty() || (book.reading.status == 0 && book.reading.notes.isEmpty()))
+        if (book.bookId <= 0 || (book.reading.status == 0 && book.reading.notes.isEmpty()))
+            continue;
+        const Book *libraryBook = byId.value(book.bookId);
+        if (!libraryBook || libraryBook->uuid.isEmpty())
             continue;
         entries[libraryBook->uuid].append({ deviceId(connected), connected.name, book.lpath, book.format, now,
                                             book.reading });
     }
+    // Written when the reader tells something new, or first today.
+    if (ReadingLog::sameEntries(m_readingLog, deviceId(connected), entries, now.date()))
+        return;
     ReadingLog::Log updated = m_readingLog;
     ReadingLog::replaceDevice(&updated, deviceId(connected), entries);
     QString error;
@@ -498,6 +511,11 @@ QVariantMap DeviceLibrary::onDevice() const
         }
     }
     return map;
+}
+
+int DeviceLibrary::deviceCount() const
+{
+    return int(m_devices.size());
 }
 
 bool DeviceLibrary::available() const

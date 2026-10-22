@@ -33,5 +33,7 @@ Log read(const QString &file);
 bool write(const QString &file, const Log &log, QString *error = nullptr);
 // What `device` tells now, by book uuid, in place of what it told before.
 void replaceDevice(Log *log, const QString &device, const QHash<QString, QList<Entry>> &entries);
+// Whether `device` told the same before, on the same day.
+bool sameEntries(const Log &log, const QString &device, const QHash<QString, QList<Entry>> &entries, const QDate &today);
 
 } // namespace ReadingLog

@@ -52,7 +52,7 @@ Rectangle {
     signal noticed(string message)
 
     // What the readers connected know of the book's reading.
-    readonly property var reading: page.devices && page.devices.rows !== undefined && page.book.id
+    readonly property var reading: page.devices && page.book.id && page.devices.deviceCount >= 0
         ? page.devices.reading(page.book.id) : []
     // The notes the save dialog writes, as Markdown.
     property string savingNotes: ""
@@ -443,8 +443,8 @@ Rectangle {
                                 tip: qsTr("Save the highlights and notes as a Markdown file")
                                 onClicked: {
                                     page.savingNotes = copy.modelData.markdown
-                                    notesDialog.selectedFile = notesDialog.currentFolder + "/"
-                                        + (page.book.title || "notes").replace(/[\\/:*?"<>|]/g, "_") + ".md"
+                                    notesDialog.selectedFile = notesDialog.currentFolder + "/" + encodeURIComponent(
+                                        (page.book.title || "notes").replace(/[\\/:*?"<>|]/g, "_") + ".md")
                                     notesDialog.open()
                                 }
                             }

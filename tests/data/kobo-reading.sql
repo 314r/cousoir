@@ -90,7 +90,10 @@ VALUES ('5b0e1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d!OPS!chapter1.html-1', '899', 'appl
 INSERT INTO Bookmark (BookmarkID, VolumeID, ContentID, StartContainerPath, StartContainerChildIndex, StartOffset,
     EndContainerPath, EndContainerChildIndex, EndOffset, Text, Annotation, DateCreated, ChapterProgress, Hidden)
 VALUES ('p1', '5b0e1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d', '5b0e1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d!OPS!chapter1.html',
-     'span#kobo\.1\.1', 1, 2, 'span#kobo\.1\.1', 1, 9, 'Bought words', NULL, '2026-10-01T09:00:00.000', 0.4, 'false');
+     'span#kobo\.1\.1', 1, 2, 'span#kobo\.1\.1', 1, 9, 'Bought words', NULL, '2026-10-01T09:00:00.000', 0.4, 'false'),
+    -- 3.125 % exactly, which Python's round() takes to the even 3.12.
+    ('p2', '5b0e1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d', '5b0e1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d!OPS!chapter1.html',
+     'span#kobo\.2\.1', 2, 1, 'span#kobo\.2\.1', 2, 6, 'Early words', NULL, '2026-10-01T08:00:00.000', 0.03125, 'false');
 
 -- Being read, but the Kobo has no percent for it.
 INSERT INTO content (ContentID, ContentType, MimeType, BookID, Title, Attribution, ___UserID, Accessibility,
