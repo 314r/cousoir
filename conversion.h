@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QByteArray>
-#include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
 
@@ -41,15 +40,10 @@ QString program();
 bool prepare(const LibraryData &data, const Book &book, const QString &format, const QString &interfaceLanguage,
              const QString &folder, QString *error);
 
-// What runs the job in `folder`.
+// What runs the job in `folder`. CalibreJob::environment() gives it
+// Calibre's interface language, which names a table of contents and the like
+// in the book.
 QStringList arguments(const QString &folder);
-// Calibre in `interfaceLanguage`, which names a table of contents and the
-// like in the book, with its temporary files in the job's folder.
-QProcessEnvironment environment(const QString &folder, const QString &interfaceLanguage);
-
-// The share of the work done that a line of the job's output reports, from
-// 0 to 1; -1 for a line that reports none.
-double progress(const QByteArray &line);
 
 struct Outcome
 {

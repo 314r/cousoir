@@ -7,7 +7,6 @@ import Cousoir
 QtObject {
     id: session
 
-    property bool adaptiveTypography: false
     // The library picked in the settings; empty for the one Calibre opens.
     property string libraryPath: ""
     // Calibre's interface language set in the settings; empty for Calibre's.
@@ -55,7 +54,6 @@ QtObject {
         Theme.systemPalette = appearance.palette
         Theme.systemMonoFont = appearance.fixedFont.family
         Theme.systemFontPointSize = appearance.uiFontPointSize
-        Theme.adaptiveTypography = adaptiveTypography
     }
 
     readonly property SystemAppearance appearance: SystemAppearance {
@@ -64,6 +62,4 @@ QtObject {
     }
 
     Component.onCompleted: applySystemAppearance()
-
-    onAdaptiveTypographyChanged: Theme.adaptiveTypography = adaptiveTypography
 }

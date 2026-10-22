@@ -11,13 +11,11 @@ import Cousoir
 ComboBox {
     id: control
 
-    readonly property int inset: Math.round(10 * Theme.spacingScale)
-
     textRole: "label"
     valueRole: "value"
     implicitHeight: Theme.rowHeight
-    leftPadding: inset
-    rightPadding: inset + indicator.width + Theme.gutter
+    leftPadding: Theme.controlInset
+    rightPadding: Theme.controlInset + indicator.width + Theme.gutter
     topPadding: 0
     bottomPadding: 0
     hoverEnabled: true
@@ -30,9 +28,9 @@ ComboBox {
     }
 
     indicator: IconImage {
-        x: control.width - width - control.inset
+        x: control.width - width - Theme.controlInset
         y: Math.round((control.height - height) / 2)
-        width: Math.round(Theme.iconSize * 0.85)
+        width: Theme.smallIconSize
         height: width
         sourceSize: Qt.size(width, height)
         source: "assets/icons/chevron-down.svg"
@@ -54,7 +52,7 @@ ComboBox {
 
         width: ListView.view ? ListView.view.width : 0
         implicitHeight: Theme.rowHeight
-        horizontalPadding: control.inset - 1
+        horizontalPadding: Theme.controlInset - 1
         verticalPadding: 0
         highlighted: control.highlightedIndex === index
         hoverEnabled: true

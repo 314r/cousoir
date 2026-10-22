@@ -81,8 +81,6 @@ struct Findings
     QStringList unreadable;
     // Whether the folder was walked to the end.
     bool scanned = false;
-
-    qsizetype count() const;
 };
 
 Findings check(const LibraryData &data, const Options &options);

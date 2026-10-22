@@ -6,7 +6,7 @@ import QtQuick.Layouts
 
 import Cousoir
 
-ApplicationWindow {
+ThemedWindow {
     id: settingsWindow
     objectName: "settingsWindow"
 
@@ -43,25 +43,6 @@ ApplicationWindow {
     minimumHeight: 400
     modality: Qt.NonModal
     title: qsTr("Settings")
-    color: Theme.canvas
-    font.family: Theme.uiFont
-    font.pointSize: Theme.fontPointSizeBody
-
-    palette.window: Theme.canvas
-    palette.windowText: Theme.text
-    palette.base: Theme.canvas
-    palette.text: Theme.text
-    palette.button: Theme.canvas
-    palette.buttonText: Theme.text
-    palette.highlight: Theme.textSelection
-    palette.highlightedText: Theme.textBright
-    palette.placeholderText: Theme.textFaint
-    palette.toolTipBase: Theme.canvas
-    palette.toolTipText: Theme.text
-    palette.dark: Theme.controlBorder
-    palette.mid: Theme.divider
-    palette.link: Theme.accent
-
     Shortcut {
         sequences: [StandardKey.Close, "Esc"]
         onActivated: settingsWindow.close()

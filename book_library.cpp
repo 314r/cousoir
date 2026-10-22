@@ -120,7 +120,8 @@ QString cleanDescription(const QString &html)
         return {};
     if (!html.contains(u'<')) {
         QStringList paragraphs;
-        for (const QString &paragraph : html.split(QRegularExpression(QStringLiteral("\\n\\s*\\n"))))
+        static const QRegularExpression blankLines(QStringLiteral("\\n\\s*\\n"));
+        for (const QString &paragraph : html.split(blankLines))
             paragraphs.append(QStringLiteral("<p>%1</p>")
                                   .arg(paragraph.toHtmlEscaped().replace(u'\n', QStringLiteral("<br>"))));
         return paragraphs.join(QString());
@@ -179,7 +180,8 @@ const QStringList &readerFormats()
 // The words of a search, each to be found somewhere in a book.
 QStringList searchWords(const QString &text)
 {
-    return CalibreText::foldForSearch(text).split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+    static const QRegularExpression spaces(QStringLiteral("\\s+"));
+    return CalibreText::foldForSearch(text).split(spaces, Qt::SkipEmptyParts);
 }
 
 bool matchesAll(const QString &haystack, const QStringList &words)
@@ -236,6 +238,12 @@ QStringList bookFiles(const QVariantList &urls)
     }
     files.removeDuplicates();
     return files;
+}
+
+// The key of the library's covers in CoverCache: its cache folder's name.
+QString coverKeyOf(const QString &libraryPath)
+{
+    return QFileInfo(CousoirPaths::cacheFolder(libraryPath)).fileName();
 }
 
 } // namespace
@@ -297,6 +305,7 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_libraryPath = cleaned;
     emit libraryPathChanged();
     m_data = {};
+    m_searchTexts.clear();
     m_loaded = false;
     m_filterKind.clear();
     m_filterId = 0;
@@ -304,9 +313,15 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_checkWatcher.cancel();
     m_findings = {};
     m_checkedAt = {};
+    // The changes waiting are the other library's, as was its backup.
+    m_pending.clear();
+    m_importedBooks.clear();
+    m_importedDuplicates.clear();
+    m_backedUp = false;
     rebuildCheck();
     emit libraryChanged();
     emit filterChanged();
+    emit savingChanged();
     rebuildRows();
     rebuildFacetRows();
     rebuildCurrentBook();
@@ -651,11 +666,14 @@ void BookLibrary::applyData(LibraryData data)
 {
     m_data = std::move(data);
     QHash<int, CoverCache::Cover> covers;
+    m_searchTexts.clear();
     for (const Book &book : std::as_const(m_data.books)) {
         if (!book.coverFile.isEmpty())
             covers.insert(book.id, { book.coverFile, book.coverModified });
+        const QStringList searched{ book.title, book.authors.join(u' '), book.series, book.tags.join(u' ') };
+        m_searchTexts.insert(book.id, CalibreText::foldForSearch(searched.join(u' ')));
     }
-    const QString key = QFileInfo(cacheFolder(m_libraryPath)).fileName();
+    const QString key = coverKeyOf(m_libraryPath);
     CoverCache::setCovers(key, cacheFolder(m_libraryPath) + QStringLiteral("/covers"), covers);
 
     if (!m_filterKind.isEmpty()) {
@@ -731,11 +749,7 @@ void BookLibrary::rebuildRows()
 
     const QStringList words = searchWords(m_searchText);
     if (!words.isEmpty()) {
-        books.removeIf([&words](const Book *book) {
-            const QString haystack = CalibreText::foldForSearch(
-                QStringList{ book->title, book->authors.join(u' '), book->series, book->tags.join(u' ') }.join(u' '));
-            return !matchesAll(haystack, words);
-        });
+        books.removeIf([this, &words](const Book *book) { return !matchesAll(m_searchTexts.value(book->id), words); });
     }
 
     QHash<int, QString> seriesSorts;
@@ -772,7 +786,7 @@ void BookLibrary::rebuildRows()
     if (m_sortOption.endsWith(QLatin1String("Desc")))
         std::reverse(books.begin(), books.end());
 
-    const QString coverKey = QFileInfo(cacheFolder(m_libraryPath)).fileName();
+    const QString coverKey = coverKeyOf(m_libraryPath);
     QVariantList rows;
     for (const Book *book : std::as_const(books)) {
         QStringList formats;
@@ -871,7 +885,7 @@ void BookLibrary::rebuildCurrentBook()
     for (const QString &code : book->languages)
         languages.append(CalibreText::languageName(code));
 
-    const QString coverKey = QFileInfo(cacheFolder(m_libraryPath)).fileName();
+    const QString coverKey = coverKeyOf(m_libraryPath);
     const QVariantMap current{
         { QStringLiteral("id"), book->id },
         { QStringLiteral("title"), book->title },
@@ -879,7 +893,6 @@ void BookLibrary::rebuildCurrentBook()
         { QStringLiteral("authors"), book->authors },
         { QStringLiteral("authorSort"), book->authorSort },
         { QStringLiteral("series"), book->series },
-        { QStringLiteral("seriesId"), book->seriesId },
         { QStringLiteral("seriesText"), book->seriesId > 0
               ? tr("Book %1 of %2").arg(seriesIndexText(book->seriesIndex), book->series) : QString() },
         { QStringLiteral("tags"), book->tags },
@@ -891,8 +904,6 @@ void BookLibrary::rebuildCurrentBook()
         { QStringLiteral("added"), localDateTime(book->timestamp) },
         { QStringLiteral("modified"), localDateTime(book->lastModified) },
         { QStringLiteral("path"), book->path },
-        { QStringLiteral("folder"), QDir(m_data.libraryPath).filePath(book->path) },
-        { QStringLiteral("uuid"), book->uuid },
         { QStringLiteral("description"), cleanDescription(book->comments) },
         { QStringLiteral("cover"), book->coverFile.isEmpty()
               ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
@@ -901,7 +912,6 @@ void BookLibrary::rebuildCurrentBook()
         { QStringLiteral("hasCover"), !book->coverFile.isEmpty() },
         // The values as the fields edit them.
         { QStringLiteral("authorsText"), book->authors.join(QStringLiteral(" & ")) },
-        { QStringLiteral("seriesIndex"), book->seriesIndex },
         { QStringLiteral("seriesIndexText"), seriesIndexText(book->seriesIndex) },
         { QStringLiteral("tagsText"), book->tags.join(QStringLiteral(", ")) },
         { QStringLiteral("ratingValue"), book->rating },
@@ -1121,12 +1131,7 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     if (edit.isEmpty())
         return {};
     // With the edits just before it, if the last change waiting is edits.
-    const CommitEngine::Request &last = m_pending.isEmpty() ? CommitEngine::Request() : m_pending.last();
-    const bool editsOnly = !m_pending.isEmpty() && last.formatCopies.isEmpty() && last.formatRemovals.isEmpty()
-        && last.trash.isEmpty()
-        && last.restorations.isEmpty() && last.newBooks.isEmpty() && last.newFormats.isEmpty()
-        && last.conversionOptions.isEmpty();
-    if (editsOnly) {
+    if (!m_pending.isEmpty() && !m_pending.constLast().hasOperations()) {
         m_pending.last().edits.append(edit);
     } else {
         CommitEngine::Request request;
@@ -1180,7 +1185,15 @@ void BookLibrary::startCommit()
 void BookLibrary::finishCommit()
 {
     const CommitEngine::Result result = m_commitWatcher.result();
-    if (result.ok) {
+    if (!result.ok) {
+        // What follows was made on what failed; the library shows what it
+        // holds.
+        m_pending.clear();
+        emit saveFailed(result.error);
+        m_reloadPending = true;
+    } else if (result.data.libraryPath == m_libraryPath) {
+        // Not when another library was picked meanwhile: its load, waiting
+        // for this save, shows it.
         m_backedUp = m_backedUp || !result.backup.isEmpty();
         if (result.written) {
             m_loaded = true;
@@ -1196,12 +1209,6 @@ void BookLibrary::finishCommit()
                 added.append(id);
             emit booksAdded(added);
         }
-    } else {
-        // What follows was made on what failed; the library shows what it
-        // holds.
-        m_pending.clear();
-        emit saveFailed(result.error);
-        m_reloadPending = true;
     }
     emit savingChanged();
     if (std::exchange(m_reloadPending, false))
@@ -1535,7 +1542,7 @@ void BookLibrary::finishCheck()
 void BookLibrary::rebuildCheck()
 {
     const QStringList ignored = m_loaded ? LibraryCheck::ignoredKeys(m_data.uuid) : QStringList();
-    const QString coverKey = QFileInfo(cacheFolder(m_libraryPath)).fileName();
+    const QString coverKey = coverKeyOf(m_libraryPath);
     const auto present = [](const Book &book) {
         QStringList formats;
         for (const BookFormat &format : book.formats) {
@@ -1615,16 +1622,15 @@ void BookLibrary::rebuildCheck()
               { QStringLiteral("authors"), authors } });
     }
 
-    QList<const LibraryCheck::MissingFiles *> missing;
+    QList<std::pair<const Book *, const LibraryCheck::MissingFiles *>> missing;
     for (const LibraryCheck::MissingFiles &entry : std::as_const(m_findings.missing)) {
-        if (findBook(entry.book))
-            missing.append(&entry);
+        if (const Book *book = findBook(entry.book))
+            missing.append({ book, &entry });
     }
-    std::stable_sort(missing.begin(), missing.end(), [this](const auto *a, const auto *b) {
-        return m_collator.compare(findBook(a->book)->sort, findBook(b->book)->sort) < 0;
+    std::stable_sort(missing.begin(), missing.end(), [this](const auto &a, const auto &b) {
+        return m_collator.compare(a.first->sort, b.first->sort) < 0;
     });
-    for (const LibraryCheck::MissingFiles *entry : std::as_const(missing)) {
-        const Book *book = findBook(entry->book);
+    for (const auto &[book, entry] : std::as_const(missing)) {
         add({ { QStringLiteral("kind"), QStringLiteral("missing") },
               { QStringLiteral("key"), LibraryCheck::key(*entry) },
               { QStringLiteral("bookId"), entry->book },
@@ -1661,7 +1667,7 @@ void BookLibrary::rebuildCheck()
 void BookLibrary::rebuildTrash()
 {
     // A removed book's own cover; for removed files, their book's.
-    const QString coverKey = QFileInfo(cacheFolder(m_libraryPath)).fileName();
+    const QString coverKey = coverKeyOf(m_libraryPath);
     const auto trashCover = [&](const TrashEntry &entry) {
         if (!entry.formats.isEmpty()) {
             const Book *book = findBook(entry.bookId);
@@ -1701,13 +1707,7 @@ void BookLibrary::rebuildTrash()
 
 const Book *BookLibrary::findBook(int bookId) const
 {
-    if (bookId <= 0)
-        return nullptr;
-    for (const Book &book : m_data.books) {
-        if (book.id == bookId)
-            return &book;
-    }
-    return nullptr;
+    return bookId > 0 ? m_data.book(bookId) : nullptr;
 }
 
 const QList<FacetItem> *BookLibrary::facetItems(const QString &kind) const

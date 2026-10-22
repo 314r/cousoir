@@ -46,11 +46,6 @@ QVariantMap SystemAppearance::palette() const
     return m_palette;
 }
 
-QFont SystemAppearance::uiFont() const
-{
-    return m_uiFont;
-}
-
 QFont SystemAppearance::fixedFont() const
 {
     return m_fixedFont;

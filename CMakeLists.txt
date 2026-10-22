@@ -41,21 +41,24 @@ endif()
 qt_standard_project_setup(REQUIRES 6.9)
 
 # Reading and writing the library, shared by the application, cousoir-cli
-# and the tests. Qt Gui only for QImage, which covers need; Qt Xml and libzip
-# to read the metadata of the books added.
-set(COUSOIR_LIBRARY_SOURCES
+# and the tests, and built once for all of them. Qt Gui only for QImage,
+# which covers need; Qt Xml and libzip to read the metadata of the books
+# added.
+qt_add_library(cousoir_core STATIC
     book.h
     book_edit.cpp
+    book_edit.h
     book_import.cpp
     book_import.h
     book_operations.cpp
     book_operations.h
-    book_edit.h
     calibre_config.cpp
     calibre_config.h
     calibre_date.h
     calibre_db.cpp
     calibre_db.h
+    calibre_job.cpp
+    calibre_job.h
     calibre_list.cpp
     calibre_list.h
     calibre_lock.cpp
@@ -72,44 +75,46 @@ set(COUSOIR_LIBRARY_SOURCES
     concurrency_guard.h
     conversion.cpp
     conversion.h
+    cousoir_paths.cpp
+    cousoir_paths.h
     device_books.cpp
     device_books.h
     device_files.cpp
     device_files.h
     field_writers.cpp
     field_writers.h
-    kobo.cpp
-    kobo.h
+    file_transaction.cpp
+    file_transaction.h
     kindle.cpp
     kindle.h
     kindle_send.cpp
     kindle_send.h
+    kobo.cpp
+    kobo.h
     kobo_send.cpp
     kobo_send.h
     library_check.cpp
     library_check.h
     mtp.cpp
     mtp.h
-    file_transaction.cpp
-    file_transaction.h
     opf.cpp
     opf.h
     opf_reader.cpp
     opf_reader.h
     pdf_reader.cpp
     pdf_reader.h
-    cousoir_paths.cpp
-    cousoir_paths.h
     send_job.cpp
     send_job.h
     sqlite_db.cpp
     sqlite_db.h
 )
-set(COUSOIR_LIBRARY_LINKS Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP})
+target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(cousoir_core
+    PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP}
+)
 
-# The models QML uses on top of it.
-set(COUSOIR_MODEL_SOURCES
-    ${COUSOIR_LIBRARY_SOURCES}
+# The models QML uses on top of it, and the system's theme and appearance.
+qt_add_library(cousoir_models STATIC
     book_library.cpp
     book_library.h
     conversion_service.cpp
@@ -118,17 +123,14 @@ set(COUSOIR_MODEL_SOURCES
     cover_cache.h
     device_library.cpp
     device_library.h
-)
-set(COUSOIR_MODEL_LINKS ${COUSOIR_LIBRARY_LINKS} Qt6::Concurrent Qt6::Quick ${COUSOIR_DBUS})
-
-qt_add_executable(cousoir
-    main.cpp
-    ${COUSOIR_MODEL_SOURCES}
     omarchy_theme.cpp
     omarchy_theme.h
     system_appearance.cpp
     system_appearance.h
 )
+target_link_libraries(cousoir_models PUBLIC cousoir_core Qt6::Concurrent Qt6::Quick ${COUSOIR_DBUS})
+
+qt_add_executable(cousoir main.cpp)
 
 set_source_files_properties(Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
@@ -159,8 +161,8 @@ set(COUSOIR_QML_FILES
     SettingsWindow.qml
     Sidebar.qml
     SidebarItem.qml
-    StatTile.qml
     Theme.qml
+    ThemedWindow.qml
     ThinScrollBar.qml
     TrashPage.qml
 )
@@ -211,19 +213,16 @@ qt_add_qml_module(cousoir
 
 target_link_libraries(cousoir
     PRIVATE
-        ${COUSOIR_MODEL_LINKS}
+        cousoir_models
         Qt6::Qml
         Qt6::QuickControls2
         Qt6::Svg
 )
 target_compile_definitions(cousoir PRIVATE COUSOIR_VERSION="${COUSOIR_PACKAGE_VERSION}")
 
-qt_add_executable(cousoir-cli
-    cli_main.cpp
-    ${COUSOIR_LIBRARY_SOURCES}
-)
+qt_add_executable(cousoir-cli cli_main.cpp)
 set_target_properties(cousoir-cli PROPERTIES WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
-target_link_libraries(cousoir-cli PRIVATE ${COUSOIR_LIBRARY_LINKS})
+target_link_libraries(cousoir-cli PRIVATE cousoir_core)
 target_compile_definitions(cousoir-cli PRIVATE COUSOIR_VERSION="${COUSOIR_PACKAGE_VERSION}")
 
 install(TARGETS cousoir cousoir-cli
@@ -304,10 +303,8 @@ if(BUILD_TESTING)
         tests/tool/library.cpp
         tests/tool/main.cpp
         tests/tool/readers.cpp
-        sqlite_db.cpp
-        sqlite_db.h
     )
-    target_link_libraries(cousoir-test-tool PRIVATE Qt6::Core Qt6::Gui libzip::zip ${COUSOIR_SQLITE})
+    target_link_libraries(cousoir-test-tool PRIVATE cousoir_core)
     cousoir_configure_test_executable(cousoir-test-tool)
 
     set(COUSOIR_TEST_LOG_DIR "${CMAKE_BINARY_DIR}/test-results")
@@ -324,74 +321,23 @@ if(BUILD_TESTING)
         )
     endfunction()
 
-    qt_add_executable(calibre_text_tests
-        tests/calibre_text_test.cpp
-        ${COUSOIR_LIBRARY_SOURCES}
-    )
-    target_link_libraries(calibre_text_tests PRIVATE ${COUSOIR_LIBRARY_LINKS} Qt6::Test)
-    cousoir_configure_test_executable(calibre_text_tests)
-    cousoir_add_logged_test(calibre_text_tests calibre_text_tests)
-
-    qt_add_executable(calibre_paths_tests
-        tests/calibre_paths_test.cpp
-        ${COUSOIR_LIBRARY_SOURCES}
-    )
-    target_link_libraries(calibre_paths_tests PRIVATE ${COUSOIR_LIBRARY_LINKS} Qt6::Test)
-    cousoir_configure_test_executable(calibre_paths_tests)
-    cousoir_add_logged_test(calibre_paths_tests calibre_paths_tests)
-
-    foreach(name IN ITEMS opf commit_engine conversion kobo kindle library_check)
-        qt_add_executable(${name}_tests
-            tests/${name}_test.cpp
-            ${COUSOIR_LIBRARY_SOURCES}
-        )
-        target_link_libraries(${name}_tests PRIVATE ${COUSOIR_LIBRARY_LINKS} Qt6::Test)
+    foreach(name IN ITEMS calibre_text calibre_paths calibre_db opf commit_engine concurrency_guard conversion kobo
+                          kindle library_check test_tool)
+        qt_add_executable(${name}_tests tests/${name}_test.cpp)
+        target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)
         cousoir_add_logged_test(${name}_tests ${name}_tests)
     endforeach()
 
-    qt_add_executable(calibre_db_tests
-        tests/calibre_db_test.cpp
-        ${COUSOIR_LIBRARY_SOURCES}
-    )
-    target_link_libraries(calibre_db_tests PRIVATE ${COUSOIR_LIBRARY_LINKS} Qt6::Test)
-    cousoir_configure_test_executable(calibre_db_tests)
-    cousoir_add_logged_test(calibre_db_tests calibre_db_tests)
-
-    qt_add_executable(concurrency_guard_tests
-        tests/concurrency_guard_test.cpp
-        ${COUSOIR_LIBRARY_SOURCES}
-    )
-    target_link_libraries(concurrency_guard_tests PRIVATE ${COUSOIR_LIBRARY_LINKS} Qt6::Test)
-    cousoir_configure_test_executable(concurrency_guard_tests)
-    cousoir_add_logged_test(concurrency_guard_tests concurrency_guard_tests)
-
-    qt_add_executable(test_tool_tests
-        tests/test_tool_test.cpp
-        sqlite_db.cpp
-        sqlite_db.h
-    )
-    target_link_libraries(test_tool_tests PRIVATE Qt6::Core Qt6::Gui libzip::zip ${COUSOIR_SQLITE} Qt6::Test)
-    cousoir_configure_test_executable(test_tool_tests)
-    cousoir_add_logged_test(test_tool_tests test_tool_tests)
-
-    qt_add_executable(book_library_tests
-        tests/book_library_test.cpp
-        ${COUSOIR_MODEL_SOURCES}
-    )
-    target_link_libraries(book_library_tests PRIVATE ${COUSOIR_MODEL_LINKS} Qt6::Test)
+    qt_add_executable(book_library_tests tests/book_library_test.cpp)
+    target_link_libraries(book_library_tests PRIVATE cousoir_models Qt6::Test)
     cousoir_configure_test_executable(book_library_tests)
     cousoir_add_logged_test(book_library_tests book_library_tests)
     set_tests_properties(book_library_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-    qt_add_executable(library_ui_tests
-        tests/library_ui_test.cpp
-        ${COUSOIR_MODEL_SOURCES}
-        omarchy_theme.cpp omarchy_theme.h
-        system_appearance.cpp system_appearance.h
-    )
+    qt_add_executable(library_ui_tests tests/library_ui_test.cpp)
     target_link_libraries(library_ui_tests PRIVATE
-        ${COUSOIR_MODEL_LINKS} Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
+        cousoir_models Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
     )
     cousoir_configure_test_executable(library_ui_tests)
     qt_add_resources(library_ui_tests "library_ui"

@@ -67,8 +67,3 @@ bool CalibreLock::heldHere()
 {
     return locksHeld > 0;
 }
-
-bool CalibreLock::held() const
-{
-    return m_socket >= 0;
-}

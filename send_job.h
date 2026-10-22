@@ -4,7 +4,6 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
-#include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
 
@@ -20,11 +19,6 @@ struct LibraryData;
 // outcome.
 namespace SendJob {
 
-// The Python of the job before the device's part: the stand-in for Calibre's
-// window and device manager, then the device's part's send(job), called by
-// main(send) at its end, which writes result.json.
-extern const char script[];
-
 // Calibre's calibre-debug, empty when Calibre is not installed.
 QString program();
 
@@ -39,12 +33,6 @@ bool writeJob(const QString &folder, QJsonObject job, const QList<int> &bookIds,
 bool copyInto(const QString &source, const QString &target, QString *error);
 
 QStringList arguments(const QString &folder);
-// Calibre in `interfaceLanguage`, with its temporary files in the job's
-// folder.
-QProcessEnvironment environment(const QString &folder, const QString &interfaceLanguage);
-// The share of Calibre's part done that a line of the job's output reports,
-// from 0 to 1; -1 for a line that reports none.
-double progress(const QByteArray &line);
 
 struct Sent
 {

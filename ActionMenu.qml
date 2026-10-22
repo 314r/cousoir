@@ -9,38 +9,37 @@ import Cousoir
 // `actions`, a list of { key, title }; `chosen` names the one picked. Items
 // are named <objectName>_<key>.
 Menu {
-    id: menu
+    id: actionMenu
 
     property var actions: []
-    readonly property int inset: Math.round(10 * Theme.spacingScale)
 
     signal chosen(string key)
 
     padding: 1
 
     background: Rectangle {
-        implicitWidth: Math.ceil((menu.actions.reduce((longest, action) => Math.max(longest, action.title.length), 0) + 4)
-            * Theme.charWidth) + 2 * menu.inset
+        implicitWidth: Math.ceil((actionMenu.actions.reduce((longest, action) => Math.max(longest, action.title.length), 0) + 4)
+            * Theme.charWidth) + 2 * Theme.controlInset
         color: Theme.canvas
         border.width: 1
         border.color: Theme.controlBorder
     }
 
     Instantiator {
-        model: menu.actions
+        model: actionMenu.actions
 
         delegate: MenuItem {
             id: item
 
             required property var modelData
 
-            objectName: menu.objectName + "_" + modelData.key
+            objectName: actionMenu.objectName + "_" + modelData.key
             implicitHeight: Theme.rowHeight
-            horizontalPadding: menu.inset - 1
+            horizontalPadding: Theme.controlInset - 1
             verticalPadding: 0
             hoverEnabled: true
             text: modelData.title
-            onTriggered: menu.chosen(item.modelData.key)
+            onTriggered: actionMenu.chosen(item.modelData.key)
 
             contentItem: Label {
                 text: item.text
@@ -55,7 +54,7 @@ Menu {
             }
         }
 
-        onObjectAdded: function(index, object) { menu.insertItem(index, object) }
-        onObjectRemoved: function(index, object) { menu.removeItem(object) }
+        onObjectAdded: function(index, object) { actionMenu.insertItem(index, object) }
+        onObjectRemoved: function(index, object) { actionMenu.removeItem(object) }
     }
 }

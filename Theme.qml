@@ -2,9 +2,9 @@ pragma Singleton
 
 import QtQuick
 
-// Omarchy design language: each mode reduces to a background, an inset, a
-// foreground and one accent. Interaction states are foreground-tinted alphas
-// shared by every control, never accent fills.
+// Omarchy design language: each mode reduces to a background, a foreground
+// and one accent. Interaction states are foreground-tinted alphas shared by
+// every control, never accent fills.
 QtObject {
     id: theme
 
@@ -22,7 +22,6 @@ QtObject {
         "red": "#a24d4d"
     })
     property string systemMonoFont: "monospace"
-    property bool adaptiveTypography: false
     property real systemFontPointSize: 9
     property int textScalePercent: 100
 
@@ -38,7 +37,6 @@ QtObject {
 
     readonly property var lightBase: ({
         "background": "#f2f2f3",
-        "inset": "#e8e8ea",
         "foreground": "#25272a",
         "bright": "#0f1012",
         "accent": "#5980a6",
@@ -46,7 +44,6 @@ QtObject {
     })
     readonly property var darkBase: ({
         "background": "#141414",
-        "inset": "#0e0e0e",
         "foreground": "#e6e6e6",
         "bright": "#ffffff",
         "accent": "#6da3d8",
@@ -63,7 +60,6 @@ QtObject {
     function paletteBase(palette) {
         return {
             "background": palette.background,
-            "inset": palette.darker_background || palette.dark_background || palette.background,
             "foreground": palette.foreground,
             "bright": palette.bright_foreground || palette.foreground,
             "accent": palette.accent,
@@ -86,7 +82,6 @@ QtObject {
     }
 
     readonly property color canvas: base.background
-    readonly property color inset: base.inset
     readonly property color text: base.foreground
     // Some palettes ship a bright_foreground dimmer than the foreground.
     readonly property color paletteBright: base.bright
@@ -123,6 +118,11 @@ QtObject {
     readonly property int toolbarHeight: rowHeight + Math.round(12 * spacingScale)
     readonly property int statusHeight: Math.max(22, Math.round(captionMetrics.height + 10 * spacingScale))
     readonly property int iconSize: Math.max(12, Math.round(bodyMetrics.height * 0.875))
+    // A choice's chevron and the status bar's icons.
+    readonly property int smallIconSize: Math.round(iconSize * 0.85)
+    // Between the edge of a field, a choice, a menu or a text button and its
+    // text.
+    readonly property int controlInset: Math.round(10 * spacingScale)
     readonly property int gutter: Math.round(8 * spacingScale)
     readonly property int rowPadding: Math.round(12 * spacingScale)
     readonly property int panePadding: Math.round(18 * spacingScale)

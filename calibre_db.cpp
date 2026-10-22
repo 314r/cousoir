@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #endif
 
+#include "calibre_date.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -305,8 +306,12 @@ FileIdentity identify(const QString &path)
     return identity;
 }
 
-bool takeSnapshot(const QString &libraryPath, const QString &snapshotPath, FileIdentity *source,
-                  QByteArray *sha256, QString *error)
+bool hasJournal(const QString &database)
+{
+    return QFileInfo::exists(database + QStringLiteral("-journal")) || QFileInfo::exists(database + QStringLiteral("-wal"));
+}
+
+bool takeSnapshot(const QString &libraryPath, const QString &snapshotPath, FileIdentity *source, QString *error)
 {
     const QString database = QDir(libraryPath).filePath(QStringLiteral("metadata.db"));
     QString reason;
@@ -320,8 +325,7 @@ bool takeSnapshot(const QString &libraryPath, const QString &snapshotPath, FileI
                 *error = QObject::tr("There is no Calibre library in %1.").arg(QDir::toNativeSeparators(libraryPath));
             return false;
         }
-        if (QFileInfo::exists(database + QStringLiteral("-journal"))
-            || QFileInfo::exists(database + QStringLiteral("-wal"))) {
+        if (hasJournal(database)) {
             reason = QObject::tr("Calibre is writing to the library. Try again in a moment.");
             continue;
         }
@@ -357,8 +361,6 @@ bool takeSnapshot(const QString &libraryPath, const QString &snapshotPath, FileI
 
         if (source)
             *source = before;
-        if (sha256)
-            *sha256 = QCryptographicHash::hash(contents, QCryptographicHash::Sha256);
         return true;
     }
     if (error)
@@ -699,7 +701,7 @@ bool loadLibrary(const QString &libraryPath, const QString &snapshotPath, const 
 {
     LibraryData loaded;
     loaded.libraryPath = QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath());
-    if (!takeSnapshot(loaded.libraryPath, snapshotPath, &loaded.source, &loaded.sourceSha256, error))
+    if (!takeSnapshot(loaded.libraryPath, snapshotPath, &loaded.source, error))
         return false;
 
     SqliteDb db;
@@ -757,12 +759,7 @@ QDateTime parseDate(const QVariant &value)
 
 QString isoFormat(const QDateTime &date)
 {
-    const QDateTime utc = date.toUTC();
-    return QStringLiteral("%1-%2-%3T%4+00:00")
-        .arg(utc.date().year(), 4, 10, QLatin1Char('0'))
-        .arg(utc.date().month(), 2, 10, QLatin1Char('0'))
-        .arg(utc.date().day(), 2, 10, QLatin1Char('0'))
-        .arg(utc.time().toString(QStringLiteral("HH:mm:ss")));
+    return CalibreDate{ date }.isoFormat();
 }
 
 } // namespace CalibreDb

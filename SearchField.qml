@@ -7,11 +7,9 @@ import Cousoir
 TextField {
     id: field
 
-    readonly property int inset: Math.round(10 * Theme.spacingScale)
-
     implicitHeight: Theme.rowHeight
-    leftPadding: inset + Theme.iconSize + Theme.gutter
-    rightPadding: inset
+    leftPadding: Theme.controlInset + Theme.iconSize + Theme.gutter
+    rightPadding: Theme.controlInset
     topPadding: 0
     bottomPadding: 0
     verticalAlignment: TextInput.AlignVCenter
@@ -26,7 +24,7 @@ TextField {
         border.color: field.activeFocus ? Theme.accent : Theme.controlBorder
 
         IconImage {
-            x: field.inset
+            x: Theme.controlInset
             anchors.verticalCenter: parent.verticalCenter
             width: Theme.iconSize
             height: Theme.iconSize

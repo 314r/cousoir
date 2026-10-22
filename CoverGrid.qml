@@ -17,7 +17,6 @@ Item {
     // Prefix of the objectNames: <name>Grid, <name>Cell<i>.
     property string name: "cover"
     property alias currentIndex: view.currentIndex
-    readonly property alias count: view.count
     readonly property int coverWidth: Math.round(120 * Theme.spacingScale)
     readonly property int coverHeight: Math.round(coverWidth * 1.5)
 
@@ -29,13 +28,6 @@ Item {
         if (view.currentIndex < 0 && view.count > 0)
             view.currentIndex = 0
         view.forceActiveFocus()
-    }
-
-    function moveCurrent(delta) {
-        if (view.count === 0)
-            return
-        view.currentIndex = Math.max(0, Math.min(view.count - 1, view.currentIndex + delta))
-        view.positionViewAtIndex(view.currentIndex, GridView.Contain)
     }
 
     function activate(index) {

@@ -5,15 +5,20 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QObject>
-#include <QProcess>
 
 #include "book.h"
 #include "book_import.h"
 #include "calibre_db.h"
+#include "calibre_job.h"
 #include "device_books.h"
 
 namespace SendJob {
 
+namespace {
+
+// The Python of the job before the device's part: the stand-in for Calibre's
+// window and device manager, then the device's part's send(job), called by
+// main(send) at its end, which writes result.json.
 const char script[] = R"py(
 import json, os, sys, traceback, types
 
@@ -189,28 +194,6 @@ def main(send):
     os._exit(1 if 'error' in result else 0)
 )py";
 
-namespace {
-
-bool writeFile(const QString &path, const QByteArray &data, QString *error)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size()) {
-        if (error)
-            *error = QObject::tr("Cannot write %1: %2").arg(path, file.errorString());
-        return false;
-    }
-    return true;
-}
-
-QString logTail(const QString &folder)
-{
-    QFile file(QDir(folder).filePath(QStringLiteral("log.txt")));
-    if (!file.open(QIODevice::ReadOnly))
-        return {};
-    const QStringList lines = QString::fromUtf8(file.readAll()).trimmed().split(u'\n');
-    return lines.mid(qMax(0, int(lines.size()) - 3)).join(u'\n').trimmed();
-}
-
 } // namespace
 
 QString program()
@@ -223,16 +206,12 @@ bool prepareLibrary(const LibraryData &data, const QList<int> &bookIds, const QS
 {
     const QDir library(QDir(folder).filePath(QStringLiteral("library")));
     QDir().mkpath(library.path());
-    FileIdentity source;
-    QByteArray sha256;
-    if (!CalibreDb::takeSnapshot(data.libraryPath, library.filePath(QStringLiteral("metadata.db")), &source, &sha256,
-                                 error))
+    if (!CalibreDb::takeSnapshot(data.libraryPath, library.filePath(QStringLiteral("metadata.db")), nullptr, error))
         return false;
     // Of each book, what Calibre reads: the file it sends and the cover.
     for (const int bookId : bookIds) {
-        const auto found = std::find_if(data.books.cbegin(), data.books.cend(),
-                                        [bookId](const Book &book) { return book.id == bookId; });
-        if (found == data.books.cend()) {
+        const Book *found = data.book(bookId);
+        if (!found) {
             if (error)
                 *error = QObject::tr("This book is no longer in the library.");
             return false;
@@ -273,8 +252,8 @@ bool writeJob(const QString &folder, QJsonObject job, const QList<int> &bookIds,
         ids.append(bookId);
     job.insert(QStringLiteral("books"), ids);
     const QDir dir(folder);
-    return writeFile(dir.filePath(QStringLiteral("send.py")), QByteArray(script) + deviceScript, error)
-        && writeFile(dir.filePath(QStringLiteral("job.json")), QJsonDocument(job).toJson(), error);
+    return CalibreJob::writeFile(dir.filePath(QStringLiteral("send.py")), QByteArray(script) + deviceScript, error)
+        && CalibreJob::writeFile(dir.filePath(QStringLiteral("job.json")), QJsonDocument(job).toJson(), error);
 }
 
 bool copyInto(const QString &source, const QString &target, QString *error)
@@ -294,30 +273,12 @@ QStringList arguments(const QString &folder)
     return { QStringLiteral("-e"), QDir(folder).filePath(QStringLiteral("send.py")), QStringLiteral("--"), folder };
 }
 
-QProcessEnvironment environment(const QString &folder, const QString &interfaceLanguage)
-{
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    const QString temporary = QDir(folder).filePath(QStringLiteral("tmp"));
-    QDir().mkpath(temporary);
-    environment.insert(QStringLiteral("TMPDIR"), temporary);
-    if (!interfaceLanguage.isEmpty())
-        environment.insert(QStringLiteral("CALIBRE_OVERRIDE_LANG"), interfaceLanguage);
-    return environment;
-}
-
-double progress(const QByteArray &line)
-{
-    const QJsonObject object = QJsonDocument::fromJson(line.trimmed()).object();
-    const QJsonValue value = object.value(QLatin1String("progress"));
-    return value.isDouble() ? qBound(0.0, value.toDouble(), 1.0) : -1;
-}
-
 Result result(const QString &folder, int exitCode)
 {
     Result outcome;
     QFile file(QDir(folder).filePath(QStringLiteral("result.json")));
     if (!file.open(QIODevice::ReadOnly)) {
-        const QString tail = logTail(folder);
+        const QString tail = CalibreJob::logTail(folder);
         outcome.error = tail.isEmpty() ? QObject::tr("Calibre stopped before the books were ready.")
                                        : QObject::tr("Calibre stopped before the books were ready: %1").arg(tail);
         return outcome;
@@ -330,7 +291,7 @@ Result result(const QString &folder, int exitCode)
             outcome.error = QObject::tr("There is not enough room on the device.");
         else
             outcome.error = QObject::tr("Calibre could not get the books ready: %1")
-                                .arg(detail.isEmpty() ? logTail(folder) : detail);
+                                .arg(detail.isEmpty() ? CalibreJob::logTail(folder) : detail);
         return outcome;
     }
     outcome.ok = true;
@@ -352,27 +313,9 @@ Result run(const QString &folder, const QString &interfaceLanguage, const std::f
         outcome.error = QObject::tr("Sending books needs Calibre, which is not installed.");
         return outcome;
     }
-    QProcess process;
-    process.setProcessEnvironment(environment(folder, interfaceLanguage));
-    process.setStandardErrorFile(QProcess::nullDevice());
-    process.start(calibre, arguments(folder));
-    if (!process.waitForStarted()) {
-        outcome.error = QObject::tr("Cannot run %1.").arg(calibre);
-        return outcome;
-    }
-    const auto readLines = [&] {
-        while (process.canReadLine()) {
-            const double fraction = SendJob::progress(process.readLine());
-            if (fraction >= 0 && progress)
-                progress(fraction);
-        }
-    };
-    while (process.state() != QProcess::NotRunning) {
-        process.waitForReadyRead(200);
-        readLines();
-    }
-    readLines();
-    return result(folder, process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1);
+    const std::optional<int> exitCode = CalibreJob::run(
+        calibre, arguments(folder), CalibreJob::environment(folder, interfaceLanguage), progress, &outcome.error);
+    return exitCode ? result(folder, *exitCode) : outcome;
 }
 
 } // namespace SendJob

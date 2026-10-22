@@ -21,13 +21,10 @@ Item {
     property var rows: []
     property string sortOption: ""
     property int minNameChars: 24
-    // A click activates a row, instead of only selecting it.
-    property bool activateOnClick: false
     // Prefix of the objectNames: <name>List, <name>Row<i>, <name><Key>Column,
     // <name>ScrollBar.
     property string name: "item"
     property alias currentIndex: list.currentIndex
-    readonly property alias count: list.count
     // The scroll bar's lane, right of the rows while it shows, so it never
     // lies over a row's highlight.
     readonly property real scrollRoom: scrollBar.size < 1.0 ? scrollBar.width : 0
@@ -56,15 +53,6 @@ Item {
         if (list.currentIndex < 0 && list.count > 0)
             list.currentIndex = 0
         list.forceActiveFocus()
-    }
-
-    // Moves the current row by `delta` within the list, for a field that
-    // keeps the focus while it steers the list.
-    function moveCurrent(delta) {
-        if (list.count === 0)
-            return
-        list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + delta))
-        list.positionViewAtIndex(list.currentIndex, ListView.Contain)
     }
 
     function columnVisible(column) {
@@ -261,11 +249,9 @@ Item {
                             return
                         list.currentIndex = row.index
                         list.forceActiveFocus(Qt.MouseFocusReason)
-                        if (table.activateOnClick)
-                            table.activate(row.index)
                     }
                     onDoubleClicked: function(mouse) {
-                        if (mouse.button === Qt.LeftButton && !table.activateOnClick)
+                        if (mouse.button === Qt.LeftButton)
                             table.activate(row.index)
                     }
                 }

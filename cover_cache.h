@@ -3,11 +3,13 @@
 #include <QHash>
 #include <QQuickAsyncImageProvider>
 #include <QString>
+#include <QThreadPool>
 
 // Book covers for QML, as image://covers/<library key>/<book id>?v=<stamp>.
-// A requested size scales the cover on a pool thread and keeps the result in
-// the library's cache folder, so the cover grid opens without decoding every
-// cover again. Covers are only ever read from the library.
+// A requested size scales the cover on a thread of the provider's own pool,
+// clear of the loads and saves, and keeps the result in the library's cache
+// folder, so the cover grid opens without decoding every cover again. Covers
+// are only ever read from the library.
 class CoverCache : public QQuickAsyncImageProvider
 {
 public:
@@ -24,4 +26,7 @@ public:
     static QString url(const QString &key, int bookId, qint64 modifiedMs);
 
     QQuickImageResponse *requestImageResponse(const QString &id, const QSize &requestedSize) override;
+
+private:
+    QThreadPool m_pool;
 };

@@ -45,14 +45,6 @@ Rectangle {
         deviceTable.focusList()
     }
 
-    function moveCurrent(delta) {
-        deviceTable.moveCurrent(delta)
-    }
-
-    function currentRow() {
-        return page.devices.rows[deviceTable.currentIndex]
-    }
-
     function activate(index) {
         const row = page.devices.rows[index]
         if (row && row.bookId > 0)

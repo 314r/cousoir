@@ -42,51 +42,6 @@ using BookOperations::Result;
 
 const QString trashFolder = QStringLiteral(".caltrash");
 
-void bind(SqliteStatement &statement, const QVariantList &values)
-{
-    for (qsizetype index = 0; index < values.size(); ++index) {
-        const QVariant &value = values.at(index);
-        const int position = int(index) + 1;
-        if (value.isNull())
-            statement.bindNull(position);
-        else if (value.typeId() == QMetaType::Int || value.typeId() == QMetaType::LongLong)
-            statement.bind(position, value.toLongLong());
-        else if (value.typeId() == QMetaType::Double)
-            statement.bind(position, value.toDouble());
-        else if (value.typeId() == QMetaType::QByteArray)
-            statement.bind(position, value.toByteArray());
-        else
-            statement.bind(position, value.toString());
-    }
-}
-
-bool run(SqliteDb &db, const QString &sql, const QVariantList &values, QString *error)
-{
-    SqliteStatement statement(db, sql);
-    bind(statement, values);
-    statement.step();
-    if (!statement.error().isEmpty()) {
-        if (error)
-            *error = statement.error();
-        return false;
-    }
-    return true;
-}
-
-QList<QVariantList> rows(SqliteDb &db, const QString &sql, const QVariantList &values = {})
-{
-    SqliteStatement statement(db, sql);
-    bind(statement, values);
-    QList<QVariantList> result;
-    while (statement.step()) {
-        QVariantList row;
-        for (int column = 0; column < statement.columnCount(); ++column)
-            row.append(statement.value(column));
-        result.append(row);
-    }
-    return result;
-}
-
 QByteArray readFile(const QString &path)
 {
     QFile file(path);
@@ -102,12 +57,12 @@ bool fail(QString *error, const QString &message)
 
 bool bookExists(SqliteDb &db, int bookId)
 {
-    return !rows(db, QStringLiteral("SELECT id FROM books WHERE id=?"), { bookId }).isEmpty();
+    return !db.rows(QStringLiteral("SELECT id FROM books WHERE id=?"), { bookId }).isEmpty();
 }
 
 QString titleOf(SqliteDb &db, int bookId, const QString &unknown)
 {
-    const QString title = rows(db, QStringLiteral("SELECT title FROM books WHERE id=?"), { bookId })
+    const QString title = db.rows(QStringLiteral("SELECT title FROM books WHERE id=?"), { bookId })
                               .value(0).value(0).toString();
     return title.isEmpty() ? unknown : title;
 }
@@ -116,16 +71,16 @@ QString titleOf(SqliteDb &db, int bookId, const QString &unknown)
 QStringList authorsOf(SqliteDb &db, int bookId)
 {
     QStringList authors;
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT authors.name FROM books_authors_link link JOIN "
-                                                           "authors ON authors.id = link.author WHERE link.book=? "
-                                                           "ORDER BY link.id"), { bookId }))
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT authors.name FROM books_authors_link link JOIN "
+                                                          "authors ON authors.id = link.author WHERE link.book=? "
+                                                          "ORDER BY link.id"), { bookId }))
         authors.append(row.at(0).toString().replace(u'|', u','));
     return authors;
 }
 
 QString pathOf(SqliteDb &db, int bookId)
 {
-    return rows(db, QStringLiteral("SELECT path FROM books WHERE id=?"), { bookId }).value(0).value(0).toString();
+    return db.rows(QStringLiteral("SELECT path FROM books WHERE id=?"), { bookId }).value(0).value(0).toString();
 }
 
 QString trashPath(const Context &context, const QString &category, int bookId)
@@ -162,14 +117,14 @@ QStringList folderEntries(const QString &folder)
 // The custom columns, which Cousoir does not write.
 bool hasCustomColumns(SqliteDb &db)
 {
-    return rows(db, QStringLiteral("SELECT count(*) FROM custom_columns")).value(0).value(0).toInt() > 0;
+    return db.rows(QStringLiteral("SELECT count(*) FROM custom_columns")).value(0).value(0).toInt() > 0;
 }
 
 // _add_default_custom_column_values(): whether a custom column gives new
 // books a value.
 bool hasCustomColumnDefaults(SqliteDb &db)
 {
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT display FROM custom_columns"))) {
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT display FROM custom_columns"))) {
         const QJsonObject display = QJsonDocument::fromJson(row.at(0).toString().toUtf8()).object();
         if (display.contains(QLatin1String("default_value")) && !display.value(QLatin1String("default_value")).isNull())
             return true;
@@ -182,7 +137,7 @@ bool hasCustomColumnDefaults(SqliteDb &db)
 QString authorSortFromAuthors(SqliteDb &db, const QStringList &authors, const CalibreText::Tweaks &tweaks)
 {
     QHash<QString, QString> sorts;
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT name, sort FROM authors")))
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT name, sort FROM authors")))
         sorts.insert(row.at(0).toString().replace(u'|', u',').toLower(), row.at(1).toString());
     QStringList result;
     for (const QString &author : authors) {
@@ -199,12 +154,12 @@ double nextSeriesIndexFor(SqliteDb &db, const QString &series, const CalibreText
 {
     QList<double> indices;
     if (!series.isEmpty()) {
-        for (const QVariantList &row : rows(db, QStringLiteral("SELECT id, name FROM series"))) {
+        for (const QVariantList &row : db.rows(QStringLiteral("SELECT id, name FROM series"))) {
             if (row.at(1).toString().toLower() != series.toLower())
                 continue;
-            for (const QVariantList &book : rows(db, QStringLiteral("SELECT books.series_index FROM books_series_link "
-                                                                    "link JOIN books ON books.id = link.book "
-                                                                    "WHERE link.series=?"), { row.at(0) }))
+            for (const QVariantList &book : db.rows(QStringLiteral("SELECT books.series_index FROM books_series_link "
+                                                                   "link JOIN books ON books.id = link.book "
+                                                                   "WHERE link.series=?"), { row.at(0) }))
                 indices.append(book.at(0).isNull() ? 1.0 : book.at(0).toDouble());
             break;
         }
@@ -214,7 +169,7 @@ double nextSeriesIndexFor(SqliteDb &db, const QString &series, const CalibreText
 
 bool queuePagesScan(SqliteDb &db, int bookId, QString *error)
 {
-    return run(db, QStringLiteral("UPDATE books_pages_link SET needs_scan=1 WHERE book=?"), { bookId }, error);
+    return db.run(QStringLiteral("UPDATE books_pages_link SET needs_scan=1 WHERE book=?"), { bookId }, error);
 }
 
 // create_book_entry() and the set_metadata() it calls: the book's row, its
@@ -244,10 +199,10 @@ bool createBookEntry(SqliteDb &db, FileTransaction &files, const ImportedMetadat
         : CalibreText::titleSort(title, mi.languages.value(0), tweaks, context.fields.interfaceLanguage);
 
     const bool inserted = forceId > 0
-        ? run(db, QStringLiteral("INSERT INTO books(id, title, series_index, author_sort) VALUES (?, ?, ?, ?)"),
-              { forceId, title, seriesIndex, authorSort }, error)
-        : run(db, QStringLiteral("INSERT INTO books(title, series_index, author_sort) VALUES (?, ?, ?)"),
-              { title, seriesIndex, authorSort }, error);
+        ? db.run(QStringLiteral("INSERT INTO books(id, title, series_index, author_sort) VALUES (?, ?, ?, ?)"),
+                 { forceId, title, seriesIndex, authorSort }, error)
+        : db.run(QStringLiteral("INSERT INTO books(title, series_index, author_sort) VALUES (?, ?, ?)"),
+                 { title, seriesIndex, authorSort }, error);
     if (!inserted)
         return false;
     *bookId = forceId > 0 ? forceId : int(db.lastInsertRowId());
@@ -300,7 +255,7 @@ bool createBookEntry(SqliteDb &db, FileTransaction &files, const ImportedMetadat
         || !BookOperations::updatePath(db, files, context.libraryPath, *bookId, unknown, error))
         return false;
     if (preserveUuid && !mi.uuid.isEmpty()
-        && !run(db, QStringLiteral("UPDATE books SET uuid=? WHERE id=?"), { mi.uuid, *bookId }, error))
+        && !db.run(QStringLiteral("UPDATE books SET uuid=? WHERE id=?"), { mi.uuid, *bookId }, error))
         return false;
     result->dirtied.insert(*bookId);
     fields->dirtied.insert(*bookId);
@@ -324,8 +279,8 @@ bool addFormatFile(SqliteDb &db, FileTransaction &files, int bookId, const QStri
     const QString title = titleOf(db, bookId, unknown);
     const QString author = authorsOf(db, bookId).value(0, unknown);
     const QString name = CalibrePaths::constructFileName(bookId, title, author, int(extension.size()), unknown);
-    const QList<QVariantList> current = rows(db, QStringLiteral("SELECT name FROM data WHERE book=? AND format=?"),
-                                             { bookId, format });
+    const QList<QVariantList> current = db.rows(QStringLiteral("SELECT name FROM data WHERE book=? AND format=?"),
+                                                { bookId, format });
     QString path = pathOf(db, bookId);
     if (path.isEmpty()) {
         if (!BookOperations::updatePath(db, files, context.libraryPath, bookId, unknown, error))
@@ -343,8 +298,8 @@ bool addFormatFile(SqliteDb &db, FileTransaction &files, int bookId, const QStri
     const qint64 size = QFileInfo(source).size();
     if (move ? !replaceWith(files, source, destination, error) : !files.copy(source, destination, error))
         return false;
-    return run(db, QStringLiteral("INSERT OR REPLACE INTO data (book,format,uncompressed_size,name) VALUES (?,?,?,?)"),
-               { bookId, format, size, name }, error)
+    return db.run(QStringLiteral("INSERT OR REPLACE INTO data (book,format,uncompressed_size,name) VALUES (?,?,?,?)"),
+                  { bookId, format, size, name }, error)
         && queuePagesScan(db, bookId, error);
 }
 
@@ -370,7 +325,7 @@ QList<ItemTable> itemTables(SqliteDb &db)
           QStringLiteral("publisher") },
         { QStringLiteral("rating"), QStringLiteral("ratings"), QStringLiteral("books_ratings_link"), QStringLiteral("rating") },
     };
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT id, label FROM custom_columns WHERE normalized"))) {
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT id, label FROM custom_columns WHERE normalized"))) {
         const QString id = row.at(0).toString();
         tables.append({ u'#' + row.at(1).toString(), QStringLiteral("custom_column_") + id,
                         QStringLiteral("books_custom_column_%1_link").arg(id), QStringLiteral("value") });
@@ -435,11 +390,11 @@ bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath
     const QString name = CalibrePaths::constructFileName(bookId, title, firstAuthor, extensionLength, unknown);
     const auto updateDatabase = [&] {
         for (const auto &format : std::as_const(formats)) {
-            if (!run(db, QStringLiteral("UPDATE data SET name=? WHERE book=? AND format=?"), { name, bookId, format.first },
-                     error))
+            if (!db.run(QStringLiteral("UPDATE data SET name=? WHERE book=? AND format=?"), { name, bookId, format.first },
+                        error))
                 return false;
         }
-        return run(db, QStringLiteral("UPDATE books SET path=? WHERE id=?"), { path, bookId }, error);
+        return db.run(QStringLiteral("UPDATE books SET path=? WHERE id=?"), { path, bookId }, error);
     };
 
     if (current.isEmpty())
@@ -547,8 +502,8 @@ bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QStr
 {
     if (!bookExists(db, bookId))
         return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
-    return run(db, QStringLiteral("INSERT OR REPLACE INTO conversion_options(book,format,data) VALUES (?,'PIPE',?)"),
-               { bookId, data }, error);
+    return db.run(QStringLiteral("INSERT OR REPLACE INTO conversion_options(book,format,data) VALUES (?,'PIPE',?)"),
+                  { bookId, data }, error);
 }
 
 bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, const Context &context, Result *result,
@@ -567,7 +522,7 @@ bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, c
         if (path.isEmpty())
             return found;
         const QString folder = QDir(context.libraryPath).filePath(path);
-        for (const QVariantList &row : rows(db, QStringLiteral("SELECT format, name FROM data WHERE book=?"), { bookId })) {
+        for (const QVariantList &row : db.rows(QStringLiteral("SELECT format, name FROM data WHERE book=?"), { bookId })) {
             const QString file = formatFile(folder, row.at(1).toString(), row.at(0).toString());
             if (!file.isEmpty())
                 found.insert(row.at(0).toString(), file);
@@ -601,8 +556,8 @@ bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &re
     const QString folder = QDir(context.libraryPath).filePath(path);
     QStringList removed;
     for (const QString &format : std::as_const(formats)) {
-        const QList<QVariantList> name = rows(db, QStringLiteral("SELECT name FROM data WHERE book=? AND format=?"),
-                                              { bookId, format });
+        const QList<QVariantList> name = db.rows(QStringLiteral("SELECT name FROM data WHERE book=? AND format=?"),
+                                                 { bookId, format });
         if (name.isEmpty() || name.first().first().toString().isEmpty() || path.isEmpty())
             continue;
         const QString file = formatFile(folder, name.first().first().toString(), format);
@@ -625,7 +580,7 @@ bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &re
         }
     }
     for (const QString &format : std::as_const(formats)) {
-        if (!run(db, QStringLiteral("DELETE FROM data WHERE book=? AND format=?"), { bookId, format }, error))
+        if (!db.run(QStringLiteral("DELETE FROM data WHERE book=? AND format=?"), { bookId, format }, error))
             return false;
     }
     result->touched.insert(bookId);
@@ -644,9 +599,9 @@ bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds
         if (!bookExists(db, bookId))
             return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
         for (qsizetype index = 0; index < tables.size(); ++index) {
-            for (const QVariantList &row : rows(db, QStringLiteral("SELECT %1 FROM %2 WHERE book=?")
-                                                        .arg(tables.at(index).linkColumn, tables.at(index).linkTable),
-                                                { bookId }))
+            for (const QVariantList &row : db.rows(QStringLiteral("SELECT %1 FROM %2 WHERE book=?")
+                                                       .arg(tables.at(index).linkColumn, tables.at(index).linkTable),
+                                                   { bookId }))
                 items[index].insert(row.at(0).toInt());
         }
         const QString path = pathOf(db, bookId);
@@ -654,20 +609,15 @@ bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds
             continue;
         // A metadata.opf up to date, so that the book can be restored.
         const QString folder = QDir(context.libraryPath).filePath(path);
-        if (context.before) {
-            for (const Book &book : context.before->books) {
-                if (book.id != bookId)
-                    continue;
-                const QString opf = QDir(folder).filePath(QStringLiteral("metadata.opf"));
-                if (!files.write(opf, Opf::metadataToOpf(*context.before, book, context.opf, readFile(opf)), error))
-                    return false;
-                break;
-            }
+        if (const Book *book = context.before ? context.before->book(bookId) : nullptr) {
+            const QString opf = QDir(folder).filePath(QStringLiteral("metadata.opf"));
+            if (!files.write(opf, Opf::metadataToOpf(*context.before, *book, context.opf, readFile(opf)), error))
+                return false;
         }
         folders.append({ bookId, folder });
     }
     for (const int bookId : bookIds) {
-        if (!run(db, QStringLiteral("DELETE FROM books WHERE id=?"), { bookId }, error))
+        if (!db.run(QStringLiteral("DELETE FROM books WHERE id=?"), { bookId }, error))
             return false;
     }
     if (!folders.isEmpty() && !ensureTrash(files, context, error))
@@ -694,9 +644,9 @@ bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds
         for (const int item : std::as_const(items.at(index))) {
             if (context.fields.notes.contains({ table.field, item }))
                 continue;
-            const bool used = !rows(db, QStringLiteral("SELECT 1 FROM %1 WHERE %2=? LIMIT 1")
-                                            .arg(table.linkTable, table.linkColumn), { item }).isEmpty();
-            if (!used && !run(db, QStringLiteral("DELETE FROM %1 WHERE id=?").arg(table.table), { item }, error))
+            const bool used = !db.rows(QStringLiteral("SELECT 1 FROM %1 WHERE %2=? LIMIT 1")
+                                           .arg(table.linkTable, table.linkColumn), { item }).isEmpty();
+            if (!used && !db.run(QStringLiteral("DELETE FROM %1 WHERE id=?").arg(table.table), { item }, error))
                 return false;
         }
     }
@@ -775,12 +725,12 @@ bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoratio
     }
     files.removeFolderIfEmpty(folder);
     for (const Format &format : std::as_const(formats)) {
-        if (!run(db, QStringLiteral("INSERT OR REPLACE INTO data (book,format,uncompressed_size,name) VALUES (?,?,?,?)"),
-                 { bookId, format.format, format.size, format.name }, error))
+        if (!db.run(QStringLiteral("INSERT OR REPLACE INTO data (book,format,uncompressed_size,name) VALUES (?,?,?,?)"),
+                    { bookId, format.format, format.size, format.name }, error))
             return false;
     }
     if (QFileInfo(QDir(destination).filePath(QStringLiteral("cover.jpg"))).isFile()
-        && !run(db, QStringLiteral("UPDATE books SET has_cover=1 WHERE id=?"), { bookId }, error))
+        && !db.run(QStringLiteral("UPDATE books SET has_cover=1 WHERE id=?"), { bookId }, error))
         return false;
     result->restored.append(bookId);
     return queuePagesScan(db, bookId, error);

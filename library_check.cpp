@@ -269,6 +269,8 @@ QList<LibraryCheck::DuplicateGroup> groupBooks(const LibraryData &data, const Au
     }
 
     QMap<qsizetype, LibraryCheck::DuplicateGroup> groups;
+    // The title of each group's first copy, folded as the groups sort by it.
+    QHash<int, QString> titles;
     QMap<qsizetype, QList<qsizetype>> members;
     for (qsizetype i = 0; i < books.size(); ++i)
         members[sets.find(i)].append(i);
@@ -293,23 +295,17 @@ QList<LibraryCheck::DuplicateGroup> groupBooks(const LibraryData &data, const Au
             group.books.append(books.at(i).id);
             group.sameTitle = group.sameTitle || byTitle.contains(i);
         }
+        titles.insert(group.books.first(), CalibreText::foldForSearch(books.at(ordered.first()).title));
     }
     for (auto it = byIsbn.cbegin(); it != byIsbn.cend(); ++it) {
         if (it.value().size() > 1)
             groups[sets.find(it.value().first())].isbns.append(it.key());
     }
     QList<LibraryCheck::DuplicateGroup> result = groups.values();
-    std::sort(result.begin(), result.end(), [&data](const LibraryCheck::DuplicateGroup &a,
-                                                    const LibraryCheck::DuplicateGroup &b) {
-        const auto title = [&data](int id) {
-            for (const Book &book : data.books) {
-                if (book.id == id)
-                    return CalibreText::foldForSearch(book.title);
-            }
-            return QString();
-        };
-        const QString first = title(a.books.first());
-        const QString second = title(b.books.first());
+    std::sort(result.begin(), result.end(), [&titles](const LibraryCheck::DuplicateGroup &a,
+                                                      const LibraryCheck::DuplicateGroup &b) {
+        const QString first = titles.value(a.books.first());
+        const QString second = titles.value(b.books.first());
         return first != second ? first < second : a.books.first() < b.books.first();
     });
     return result;
@@ -456,11 +452,6 @@ void scanFolder(const LibraryData &data, const LibraryCheck::Options &options, L
 
 namespace LibraryCheck {
 
-qsizetype Findings::count() const
-{
-    return duplicates.size() + authorVariants.size() + missing.size() + outside.size();
-}
-
 QStringList nameWords(const QString &name)
 {
     QString folded = CalibreText::foldForSearch(name);
@@ -597,16 +588,13 @@ Findings check(const LibraryData &data, const Options &options)
 bool keepOne(const LibraryData &data, int keep, const QList<int> &others, CommitEngine::Request *request,
              QString *error)
 {
-    const auto known = [&data](int id) {
-        return std::any_of(data.books.cbegin(), data.books.cend(), [id](const Book &book) { return book.id == id; });
-    };
-    if (!known(keep))
+    if (!data.book(keep))
         return fail(error, QObject::tr("This book is no longer in the library."));
     QList<int> trashed;
     for (const int other : others) {
         if (other == keep || trashed.contains(other))
             continue;
-        if (!known(other))
+        if (!data.book(other))
             return fail(error, QObject::tr("This book is no longer in the library."));
         trashed.append(other);
     }

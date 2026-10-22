@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 #include "common.h"
 #include "sqlite_db.h"
@@ -423,13 +424,15 @@ QList<QByteArray> splitLines(const QByteArray &data)
     return lines;
 }
 
+// The dcterms:modified of an OPF: the time it was written.
+const QRegularExpression opfModified(QStringLiteral(R"((<meta property="dcterms:modified"[^>]*>)[^<]*)"));
+
 // The time of the conversion, the random ids Calibre gives the anchors it
 // adds for a table of contents, and the names of an exploded AZW3's
 // stylesheets and images, which Calibre numbers in an order that depends on
 // where its process put them in memory, as it lists an element's classes.
 QByteArray masked(const QString &name, QByteArray data)
 {
-    static const QRegularExpression modified(QStringLiteral(R"((<meta property="dcterms:modified"[^>]*>)[^<]*)"));
     static const QRegularExpression id(QStringLiteral(R"(\b[0-9a-f]{32}\b)"));
     static const QRegularExpression styles(QStringLiteral(R"(styles/\d+\.css)"));
     static const QRegularExpression images(QStringLiteral(R"(images/\d+\.\w+)"));
@@ -438,7 +441,7 @@ QByteArray masked(const QString &name, QByteArray data)
     static const QRegularExpression imageId(QStringLiteral(R"(id="[^"]*")"));
     const bool isOpf = name.endsWith(QLatin1String(".opf"));
     if (isOpf)
-        data = substitute(data, modified, QStringLiteral("\\1<now>"));
+        data = substitute(data, opfModified, QStringLiteral("\\1<now>"));
     if (std::any_of(std::begin(textEndings), std::end(textEndings),
                     [&name](const char *ending) { return name.endsWith(QLatin1String(ending)); })) {
         data = substitute(data, id, QStringLiteral("<id>"));
@@ -481,6 +484,18 @@ QString entriesText(const Entries &entries)
     return u'[' + items.join(QStringLiteral(", ")) + u']';
 }
 
+// A zip's entries, each by the hash of what `mask` leaves of it. Calibre zips
+// the files in no set order but the first.
+QString zipText(const ZipEntries &zip, const std::function<QByteArray(const QString &, const QByteArray &)> &mask)
+{
+    Entries entries;
+    for (const auto &[name, data] : zip)
+        entries.append({ name, sha256(mask(name, data)) });
+    if (!entries.isEmpty())
+        std::sort(entries.begin() + 1, entries.end());
+    return entriesText(entries);
+}
+
 // A converted file without what differs from one conversion to the next:
 // an EPUB's entries, an AZW3's or MOBI's as Calibre explodes it. Nothing
 // when Calibre cannot explode it.
@@ -488,15 +503,8 @@ std::optional<QString> conversion(const QString &path)
 {
     const QByteArray raw = readFile(path).value_or(QByteArray());
     if (raw.startsWith("PK")) {
-        if (const std::optional<ZipEntries> zip = readZip(path)) {
-            Entries entries;
-            for (const auto &[name, data] : *zip)
-                entries.append({ name, sha256(masked(name, data)) });
-            // Calibre zips the files in no set order but the first.
-            if (!entries.isEmpty())
-                std::sort(entries.begin() + 1, entries.end());
-            return entriesText(entries);
-        }
+        if (const std::optional<ZipEntries> zip = readZip(path))
+            return zipText(*zip, masked);
     }
     if (raw.mid(60, 8) == "BOOKMOBI") {
         QTemporaryDir folder;
@@ -563,6 +571,9 @@ int compareLibraries(const QStringList &arguments)
             }
         } else if (!argument.startsWith(QLatin1String("--"))) {
             paths.append(argument);
+        } else {
+            err() << "Unknown option or missing value: " << argument << Qt::endl;
+            return 2;
         }
     }
     if (paths.size() != 2) {
@@ -642,7 +653,7 @@ int compareLibraries(const QStringList &arguments)
             else if (*x != *y)
                 problems.append(
                     QStringLiteral("%1 differs as a conversion:\n    Calibre: %2\n    Cousoir: %3").arg(rel, *x, *y));
-        } else if (sha256(readFile(fa[rel]).value_or(QByteArray())) != sha256(readFile(fb[rel]).value_or(QByteArray()))) {
+        } else if (readFile(fa[rel]) != readFile(fb[rel])) {
             problems.append(QStringLiteral("%1 differs").arg(rel));
         }
     }
@@ -676,22 +687,15 @@ namespace {
 
 QString content(const QString &path)
 {
-    static const QRegularExpression modified(QStringLiteral(R"((<meta property="dcterms:modified"[^>]*>)[^<]*)"));
     static const QRegularExpression metadataDate(QStringLiteral(R"((<xmp:MetadataDate>)[^<]*)"));
     static const QRegularExpression contentGuid(QStringLiteral(R"(("contentGuid":")[0-9a-f]+)"));
     QByteArray raw = readFile(path).value_or(QByteArray());
     if (raw.startsWith("PK")) {
         if (const std::optional<ZipEntries> zip = readZip(path)) {
-            Entries entries;
-            for (auto [name, data] : *zip) {
-                if (name.endsWith(QLatin1String(".opf")))
-                    data = substitute(data, modified, QStringLiteral("\\1<now>"));
-                entries.append({ name, sha256(data) });
-            }
-            // Calibre zips the files in no set order but the first.
-            if (!entries.isEmpty())
-                std::sort(entries.begin() + 1, entries.end());
-            return entriesText(entries);
+            return zipText(*zip, [](const QString &name, const QByteArray &data) {
+                return name.endsWith(QLatin1String(".opf")) ? substitute(data, opfModified, QStringLiteral("\\1<now>"))
+                                                            : data;
+            });
         }
     }
     if (raw.startsWith("%PDF"))
@@ -762,8 +766,12 @@ int compareDevices(const QStringList &arguments)
     const bool lpathsOnly = arguments.contains(QStringLiteral("--lpaths-only"));
     QStringList paths;
     for (const QString &argument : arguments) {
-        if (!argument.startsWith(QLatin1String("--")))
+        if (!argument.startsWith(QLatin1String("--"))) {
             paths.append(argument);
+        } else if (argument != QLatin1String("--lpaths-only")) {
+            err() << "Unknown option: " << argument << Qt::endl;
+            return 2;
+        }
     }
     if (paths.size() != 2) {
         err() << "Two readers to compare are needed." << Qt::endl;

@@ -12,6 +12,7 @@
 #include <zip.h>
 
 #include "sqlite_db.h"
+#include "test_support.h"
 
 // cousoir-test-tool's comparisons must find what differs, or the golden
 // tests that rely on them would pass whatever Cousoir does.
@@ -35,19 +36,6 @@ Run tool(const QStringList &arguments)
         return {};
     return { process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1,
              QString::fromUtf8(process.readAll()) };
-}
-
-QByteArray readAll(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
-
-bool writeAll(const QString &path, const QByteArray &data)
-{
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
 }
 
 bool copyFixture(const QString &to)

@@ -72,9 +72,16 @@ QString authorsToString(const QStringList &authors);
 // and spaces, rejecting any other character.
 QString checkIsbn(const QString &text, bool simple = false);
 
-// str.strip(): `text` without Python's leading and trailing whitespace,
-// Qt's and the four information separators.
+// str.isspace(): Qt's whitespace and the four information separators, the
+// whitespace of str.strip() and str.split().
+bool isSpace(QChar character);
+// str.strip(): `text` without Python's leading and trailing whitespace.
 QString strip(const QString &text);
+// str.split(): the words of `text` between runs of whitespace.
+QStringList split(const QString &text);
+// ' '.join(text.split()), as normalize_whitespace() does too: each run of
+// whitespace one space, none at either end.
+QString collapseSpaces(const QString &text);
 // Python's \s in a str pattern as a QRegularExpression class, and \S: Qt's
 // are ASCII without Unicode properties, and miss the information separators
 // with them.

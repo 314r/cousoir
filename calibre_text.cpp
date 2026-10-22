@@ -38,41 +38,6 @@ namespace {
 #include "calibre_strings.inc"
 #include "calibre_unidecode.inc"
 
-// Python's str.isspace(), which str.strip() and str.split() use: Qt's spaces
-// and the four information separators.
-bool isPythonSpace(QChar character)
-{
-    return character.isSpace() || (character.unicode() >= 0x1c && character.unicode() <= 0x1f);
-}
-
-QString pythonStrip(const QString &text)
-{
-    qsizetype start = 0;
-    qsizetype end = text.size();
-    while (start < end && isPythonSpace(text.at(start)))
-        ++start;
-    while (end > start && isPythonSpace(text.at(end - 1)))
-        --end;
-    return text.mid(start, end - start);
-}
-
-QStringList pythonSplit(const QString &text)
-{
-    QStringList tokens;
-    QString token;
-    for (const QChar character : text) {
-        if (isPythonSpace(character)) {
-            if (!token.isEmpty())
-                tokens.append(std::exchange(token, QString()));
-        } else {
-            token.append(character);
-        }
-    }
-    if (!token.isEmpty())
-        tokens.append(token);
-    return tokens;
-}
-
 // quote_pairs: an opening quote and the quotes that may close it.
 QString closingQuotes(QChar opening)
 {
@@ -142,6 +107,16 @@ QSet<QString> lowered(const QStringList &words)
     return result;
 }
 
+// The words lower-cased, each also with a dot after it, as the author name
+// prefixes and suffixes are matched.
+QSet<QString> loweredWithDots(const QStringList &words)
+{
+    QSet<QString> result = lowered(words);
+    for (const QString &word : words)
+        result.insert(word.toLower() + u'.');
+    return result;
+}
+
 // get_title_sort_pat(): the articles of the language, or of English when the
 // tweak has none for it, as one case-insensitive alternation anchored at the
 // start. Compiled patterns are kept, as Calibre does.
@@ -205,9 +180,42 @@ const QString pythonSpace = QStringLiteral("[" PYTHON_SPACES "]");
 const QString pythonNonSpace = QStringLiteral("[^" PYTHON_SPACES "]");
 #undef PYTHON_SPACES
 
+bool isSpace(QChar character)
+{
+    return character.isSpace() || (character.unicode() >= 0x1c && character.unicode() <= 0x1f);
+}
+
 QString strip(const QString &text)
 {
-    return pythonStrip(text);
+    qsizetype start = 0;
+    qsizetype end = text.size();
+    while (start < end && isSpace(text.at(start)))
+        ++start;
+    while (end > start && isSpace(text.at(end - 1)))
+        --end;
+    return text.mid(start, end - start);
+}
+
+QStringList split(const QString &text)
+{
+    QStringList tokens;
+    QString token;
+    for (const QChar character : text) {
+        if (isSpace(character)) {
+            if (!token.isEmpty())
+                tokens.append(std::exchange(token, QString()));
+        } else {
+            token.append(character);
+        }
+    }
+    if (!token.isEmpty())
+        tokens.append(token);
+    return tokens;
+}
+
+QString collapseSpaces(const QString &text)
+{
+    return split(text).join(u' ');
 }
 
 Tweaks Tweaks::defaults()
@@ -283,7 +291,7 @@ QString titleSort(const QString &title, const QString &language, const Tweaks &t
 QString titleSort(const QString &title, const QString &language, const Tweaks &tweaks,
                   const QString &interfaceLanguage, const QString &order)
 {
-    QString result = pythonStrip(title);
+    QString result = strip(title);
     if (order == QLatin1String("strictly_alphabetic"))
         return result;
     stripQuotes(result);
@@ -298,7 +306,7 @@ QString titleSort(const QString &title, const QString &language, const Tweaks &t
         result = result.mid(article.size()) + QStringLiteral(", ") + article;
         stripQuotes(result);
     }
-    return pythonStrip(result);
+    return strip(result);
 }
 
 QString authorToAuthorSort(const QString &author, const Tweaks &tweaks, const QString &method)
@@ -309,11 +317,11 @@ QString authorToAuthorSort(const QString &author, const Tweaks &tweaks, const QS
     if (how == QLatin1String("copy"))
         return author;
 
-    const QString bare = pythonStrip(removeBracketedText(author));
+    const QString bare = strip(removeBracketedText(author));
     if (how == QLatin1String("comma") && bare.contains(u','))
         return author;
 
-    QStringList tokens = pythonSplit(bare);
+    QStringList tokens = split(bare);
     if (tokens.size() < 2)
         return author;
 
@@ -327,18 +335,14 @@ QString authorToAuthorSort(const QString &author, const Tweaks &tweaks, const QS
     if (tweaks.authorUseSurnamePrefixes && tokens.size() == 2 && surnamePrefixes.contains(tokens.first().toLower()))
         return author;
 
-    QSet<QString> prefixes = lowered(tweaks.authorNamePrefixes);
-    for (const QString &prefix : lowered(tweaks.authorNamePrefixes))
-        prefixes.insert(prefix + u'.');
+    const QSet<QString> prefixes = loweredWithDots(tweaks.authorNamePrefixes);
     qsizetype first = 0;
     while (first < tokens.size() && prefixes.contains(tokens.at(first).toLower()))
         ++first;
     if (first == tokens.size())
         return author;
 
-    QSet<QString> suffixes = lowered(tweaks.authorNameSuffixes);
-    for (const QString &suffix : lowered(tweaks.authorNameSuffixes))
-        suffixes.insert(suffix + u'.');
+    const QSet<QString> suffixes = loweredWithDots(tweaks.authorNameSuffixes);
     qsizetype last = tokens.size() - 1;
     while (last >= first && suffixes.contains(tokens.at(last).toLower()))
         --last;
@@ -395,14 +399,14 @@ QStringList stringToAuthors(const QString &text)
 {
     if (text.isEmpty())
         return {};
-    static const QRegularExpression split(QStringLiteral("(?i),?") + pythonSpace + QStringLiteral("+(and|with)")
-                                          + pythonSpace + u'+');
+    static const QRegularExpression conjunctions(QStringLiteral("(?i),?") + pythonSpace + QStringLiteral("+(and|with)")
+                                                 + pythonSpace + u'+');
     QString raw = text;
     raw.replace(QStringLiteral("&&"), QString(QChar(0xffff)));
-    raw.replace(split, QStringLiteral("&"));
+    raw.replace(conjunctions, QStringLiteral("&"));
     QStringList authors;
     for (QString author : raw.split(u'&')) {
-        author = pythonStrip(author).replace(QChar(0xffff), u'&');
+        author = strip(author).replace(QChar(0xffff), u'&');
         if (!author.isEmpty())
             authors.append(author);
     }
@@ -462,7 +466,7 @@ QString fuzzyTitle(const QString &title, const Tweaks &tweaks, const QString &in
     static const QRegularExpression punctuation(QStringLiteral("[\\[\\](){}<>'\";,:#]"));
     static const QRegularExpression separators(QStringLiteral("[-._]"));
     static const QRegularExpression spaces(pythonSpace + u'+');
-    QString result = pythonStrip(title).toLower();
+    QString result = strip(title).toLower();
     result.remove(punctuation);
     // get_title_sort_pat() without a language: the tweak's, else Calibre's.
     const QString language = tweaks.defaultLanguageForTitleSort.isEmpty() ? interfaceLanguage
@@ -563,10 +567,10 @@ QString sanitizeFileName(const QString &name)
     }
     // re.sub(r'\s', ' ', one).strip()
     for (QChar &character : one) {
-        if (isPythonSpace(character))
+        if (isSpace(character))
             character = u' ';
     }
-    one = pythonStrip(one);
+    one = strip(one);
     // os.path.splitext() ignores the dots a name starts with.
     qsizetype dot = one.lastIndexOf(u'.');
     qsizetype leading = 0;

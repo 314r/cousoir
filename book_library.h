@@ -3,6 +3,7 @@
 #include <QCollator>
 #include <QFileSystemWatcher>
 #include <QFutureWatcher>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -36,7 +37,6 @@ class BookLibrary : public QObject
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY libraryChanged)
     Q_PROPERTY(QString libraryUuid READ libraryUuid NOTIFY libraryChanged)
-    Q_PROPERTY(int schemaVersion READ schemaVersion NOTIFY libraryChanged)
     Q_PROPERTY(bool schemaKnown READ schemaKnown NOTIFY libraryChanged)
     // { books, authors, series, tags, languages, publishers }.
     Q_PROPERTY(QVariantMap counts READ counts NOTIFY libraryChanged)
@@ -318,6 +318,8 @@ private:
     QFileSystemWatcher m_watcher;
     QTimer m_changeTimer;
     QCollator m_collator;
+    // Each book's title, authors, series and tags, folded for the search.
+    QHash<int, QString> m_searchTexts;
 
     QString m_section = QStringLiteral("books");
     QString m_filterKind;

@@ -89,9 +89,7 @@ QList<RawDevice> detect(QString *error)
     }
     for (int i = 0; i < count; ++i) {
         const LIBMTP_raw_device_t &device = raw[i];
-        devices.append({ device.bus_location, device.devnum, device.device_entry.vendor_id, device.device_entry.product_id,
-                         QString::fromUtf8(device.device_entry.vendor ? device.device_entry.vendor : ""),
-                         QString::fromUtf8(device.device_entry.product ? device.device_entry.product : "") });
+        devices.append({ device.bus_location, device.devnum, device.device_entry.vendor_id, device.device_entry.product_id });
     }
     std::free(raw);
     return devices;
@@ -134,7 +132,6 @@ bool Session::open(quint32 bus, quint8 number, QString *error)
     }
     m_friendlyName = take(LIBMTP_Get_Friendlyname(m_device));
     m_modelName = take(LIBMTP_Get_Modelname(m_device));
-    m_manufacturer = take(LIBMTP_Get_Manufacturername(m_device));
     m_serialNumber = take(LIBMTP_Get_Serialnumber(m_device));
     if (m_serialNumber.isEmpty())
         m_serialNumber = usbSerialNumber(bus, number);
@@ -150,11 +147,6 @@ void Session::close()
     m_device = nullptr;
 }
 
-bool Session::isOpen() const
-{
-    return m_device;
-}
-
 QString Session::friendlyName() const
 {
     return m_friendlyName;
@@ -163,11 +155,6 @@ QString Session::friendlyName() const
 QString Session::modelName() const
 {
     return m_modelName;
-}
-
-QString Session::manufacturer() const
-{
-    return m_manufacturer;
 }
 
 QString Session::serialNumber() const
@@ -203,7 +190,7 @@ QList<Object> Session::children(quint32 storage, quint32 parent, QString *error)
     LIBMTP_Clear_Errorstack(m_device);
     LIBMTP_file_t *files = LIBMTP_Get_Files_And_Folders(m_device, storage, parent);
     for (LIBMTP_file_t *file = files; file;) {
-        list.append({ file->item_id, file->parent_id, storage, QString::fromUtf8(file->filename ? file->filename : ""),
+        list.append({ file->item_id, file->parent_id, QString::fromUtf8(file->filename ? file->filename : ""),
                       file->filetype == LIBMTP_FILETYPE_FOLDER, qint64(file->filesize), qint64(file->modificationdate) });
         LIBMTP_file_t *next = file->next;
         LIBMTP_destroy_file_t(file);
@@ -264,7 +251,7 @@ bool Session::upload(quint32 storage, quint32 parent, const QString &name, const
         return false;
     }
     if (created)
-        *created = { metadata.item_id, parent, storage, name, false, file.size(), 0 };
+        *created = { metadata.item_id, parent, name, false, file.size(), 0 };
     return true;
 }
 
@@ -334,22 +321,12 @@ bool Session::open(quint32, quint8, QString *error)
 
 void Session::close() {}
 
-bool Session::isOpen() const
-{
-    return false;
-}
-
 QString Session::friendlyName() const
 {
     return {};
 }
 
 QString Session::modelName() const
-{
-    return {};
-}
-
-QString Session::manufacturer() const
 {
     return {};
 }

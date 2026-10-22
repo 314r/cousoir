@@ -8,7 +8,6 @@
 //   adapt_*() functions
 // - src/calibre/db/fields.py: author_sort_for_book()
 // - src/calibre/db/cache.py: set_field() and set_metadata()
-// - src/calibre/utils/date.py: fix_only_date()
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
@@ -19,9 +18,10 @@
 #include <QTimeZone>
 #include <QVariant>
 
-#include <cmath>
+#include <algorithm>
 
 #include "calibre_db.h"
+#include "calibre_text.h"
 #include "opf_reader.h"
 #include "sqlite_db.h"
 
@@ -30,44 +30,10 @@ namespace {
 using FieldWriters::Context;
 using FieldWriters::Result;
 
-bool isPythonSpace(QChar character)
-{
-    return character.isSpace() || (character.unicode() >= 0x1c && character.unicode() <= 0x1f);
-}
-
-QString pythonStrip(const QString &text)
-{
-    qsizetype start = 0;
-    qsizetype end = text.size();
-    while (start < end && isPythonSpace(text.at(start)))
-        ++start;
-    while (end > start && isPythonSpace(text.at(end - 1)))
-        --end;
-    return text.mid(start, end - start);
-}
-
-// ' '.join(text.split())
-QString collapseSpaces(const QString &text)
-{
-    QString result;
-    bool space = false;
-    for (const QChar character : pythonStrip(text)) {
-        if (isPythonSpace(character)) {
-            space = true;
-            continue;
-        }
-        if (space)
-            result.append(u' ');
-        space = false;
-        result.append(character);
-    }
-    return result;
-}
-
 // single_text(): stripped, its runs of spaces made one; nothing when empty.
 std::optional<QString> singleText(const QString &text)
 {
-    const QString collapsed = collapseSpaces(text);
+    const QString collapsed = CalibreText::collapseSpaces(text);
     return collapsed.isEmpty() ? std::nullopt : std::optional<QString>(collapsed);
 }
 
@@ -78,9 +44,9 @@ QStringList multipleText(const QStringList &values, QChar uiSeparator)
     const QChar replacement = uiSeparator == u';' ? u',' : u';';
     QStringList result;
     for (const QString &value : values) {
-        if (pythonStrip(value).isEmpty())
+        if (CalibreText::strip(value).isEmpty())
             continue;
-        const QString cleaned = collapseSpaces(pythonStrip(value).replace(uiSeparator, replacement));
+        const QString cleaned = CalibreText::collapseSpaces(CalibreText::strip(value).replace(uiSeparator, replacement));
         if (!cleaned.isEmpty())
             result.append(cleaned);
     }
@@ -104,52 +70,6 @@ QStringList unique(const QStringList &values, bool caseInsensitive)
             continue;
         seen.insert(key);
         result.append(value);
-    }
-    return result;
-}
-
-// Runs `sql` with `values` bound in order.
-bool run(SqliteDb &db, const QString &sql, const QVariantList &values, QString *error)
-{
-    SqliteStatement statement(db, sql);
-    for (qsizetype index = 0; index < values.size(); ++index) {
-        const QVariant &value = values.at(index);
-        const int position = int(index) + 1;
-        if (value.isNull())
-            statement.bindNull(position);
-        else if (value.typeId() == QMetaType::Int || value.typeId() == QMetaType::LongLong)
-            statement.bind(position, value.toLongLong());
-        else if (value.typeId() == QMetaType::Double)
-            statement.bind(position, value.toDouble());
-        else
-            statement.bind(position, value.toString());
-    }
-    statement.step();
-    if (!statement.error().isEmpty()) {
-        if (error)
-            *error = statement.error();
-        return false;
-    }
-    return true;
-}
-
-// The rows of `sql` with `values` bound, each as a list of its columns.
-QList<QVariantList> rows(SqliteDb &db, const QString &sql, const QVariantList &values = {})
-{
-    SqliteStatement statement(db, sql);
-    for (qsizetype index = 0; index < values.size(); ++index) {
-        const QVariant &value = values.at(index);
-        if (value.typeId() == QMetaType::Int || value.typeId() == QMetaType::LongLong)
-            statement.bind(int(index) + 1, value.toLongLong());
-        else
-            statement.bind(int(index) + 1, value.toString());
-    }
-    QList<QVariantList> result;
-    while (statement.step()) {
-        QVariantList row;
-        for (int column = 0; column < statement.columnCount(); ++column)
-            row.append(statement.value(column));
-        result.append(row);
     }
     return result;
 }
@@ -190,7 +110,7 @@ struct Items
 
 bool readItems(SqliteDb &db, const ItemTable &table, Items *items, QString *error)
 {
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT id, %1 FROM %2").arg(table.column, table.table))) {
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT id, %1 FROM %2").arg(table.column, table.table))) {
         QString value = row.at(1).toString();
         if (table.authors)
             value.replace(u'|', u',');
@@ -215,8 +135,8 @@ bool readItems(SqliteDb &db, const ItemTable &table, Items *items, QString *erro
 QList<int> booksOf(SqliteDb &db, const ItemTable &table, int itemId)
 {
     QList<int> books;
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT book FROM %1 WHERE %2=?")
-                                                .arg(table.linkTable, table.linkColumn), { itemId }))
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT book FROM %1 WHERE %2=?")
+                                               .arg(table.linkTable, table.linkColumn), { itemId }))
         books.append(row.at(0).toInt());
     return books;
 }
@@ -224,8 +144,8 @@ QList<int> booksOf(SqliteDb &db, const ItemTable &table, int itemId)
 QList<int> itemsOf(SqliteDb &db, const ItemTable &table, int bookId)
 {
     QList<int> items;
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT %1 FROM %2 WHERE book=? ORDER BY id")
-                                                .arg(table.linkColumn, table.linkTable), { bookId }))
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT %1 FROM %2 WHERE book=? ORDER BY id")
+                                               .arg(table.linkColumn, table.linkTable), { bookId }))
         items.append(row.at(0).toInt());
     return items;
 }
@@ -246,10 +166,10 @@ bool itemId(SqliteDb &db, const ItemTable &table, const QVariant &value, const C
     }
     bool ok;
     if (table.authors) {
-        ok = run(db, QStringLiteral("INSERT INTO authors(name,sort) VALUES (?,?)"),
-                 { QString(text).replace(u',', u'|'), CalibreText::authorToAuthorSort(text, context.tweaks) }, error);
+        ok = db.run(QStringLiteral("INSERT INTO authors(name,sort) VALUES (?,?)"),
+                    { QString(text).replace(u',', u'|'), CalibreText::authorToAuthorSort(text, context.tweaks) }, error);
     } else {
-        ok = run(db, QStringLiteral("INSERT INTO %1(%2) VALUES (?)").arg(table.table, table.column), { value }, error);
+        ok = db.run(QStringLiteral("INSERT INTO %1(%2) VALUES (?)").arg(table.table, table.column), { value }, error);
     }
     if (!ok)
         return false;
@@ -267,13 +187,13 @@ namespace {
 // does in Calibre, whatever it changed. Items with a note stay.
 bool removeUnused(SqliteDb &db, const ItemTable &table, const Context &context, QString *error)
 {
-    const QList<QVariantList> unused = rows(db, QStringLiteral("SELECT id FROM %1 WHERE id NOT IN (SELECT %2 FROM %3)")
-                                                    .arg(table.table, table.linkColumn, table.linkTable));
+    const QList<QVariantList> unused = db.rows(QStringLiteral("SELECT id FROM %1 WHERE id NOT IN (SELECT %2 FROM %3)")
+                                                   .arg(table.table, table.linkColumn, table.linkTable));
     for (const QVariantList &row : unused) {
         const int id = row.at(0).toInt();
         if (context.notes.contains({ table.field, id }))
             continue;
-        if (!run(db, QStringLiteral("DELETE FROM %1 WHERE id=?").arg(table.table), { id }, error))
+        if (!db.run(QStringLiteral("DELETE FROM %1 WHERE id=?").arg(table.table), { id }, error))
             return false;
     }
     return true;
@@ -283,8 +203,8 @@ bool removeUnused(SqliteDb &db, const ItemTable &table, const Context &context, 
 bool setBookColumn(SqliteDb &db, int bookId, const QString &column, const QVariant &value, Result *result,
                    QString *error, bool *changed = nullptr)
 {
-    const QList<QVariantList> current = rows(db, QStringLiteral("SELECT %1 FROM books WHERE id=?").arg(column),
-                                             { bookId });
+    const QList<QVariantList> current = db.rows(QStringLiteral("SELECT %1 FROM books WHERE id=?").arg(column),
+                                                { bookId });
     if (current.isEmpty()) {
         if (error)
             *error = QObject::tr("Book %1 is no longer in the library.").arg(bookId);
@@ -299,7 +219,7 @@ bool setBookColumn(SqliteDb &db, int bookId, const QString &column, const QVaria
     if (same)
         return true;
     result->dirtied.insert(bookId);
-    return run(db, QStringLiteral("UPDATE books SET %1=? WHERE id=?").arg(column), { value, bookId }, error);
+    return db.run(QStringLiteral("UPDATE books SET %1=? WHERE id=?").arg(column), { value, bookId }, error);
 }
 
 // author_sort_for_book(): the authors' sorts joined by " & ", in link order,
@@ -307,7 +227,7 @@ bool setBookColumn(SqliteDb &db, int bookId, const QString &column, const QVaria
 QString authorSortFor(SqliteDb &db, int bookId, const Context &context, const Result &result)
 {
     QStringList sorts;
-    for (const QVariantList &row : rows(db, QStringLiteral(
+    for (const QVariantList &row : db.rows(QStringLiteral(
              "SELECT authors.id, authors.name, authors.sort FROM books_authors_link link JOIN authors "
              "ON authors.id = link.author WHERE link.book=? ORDER BY link.id"), { bookId })) {
         const auto renamed = result.authorSorts.constFind(row.at(0).toInt());
@@ -327,8 +247,8 @@ bool changeCase(SqliteDb &db, const ItemTable &table, const QHash<int, QString> 
 {
     for (auto it = caseChanges.constBegin(); it != caseChanges.constEnd(); ++it) {
         const QString value = table.authors ? QString(it.value()).replace(u',', u'|') : it.value();
-        if (!run(db, QStringLiteral("UPDATE %1 SET %2=? WHERE id=?").arg(table.table, table.column),
-                 { value, it.key() }, error))
+        if (!db.run(QStringLiteral("UPDATE %1 SET %2=? WHERE id=?").arg(table.table, table.column),
+                    { value, it.key() }, error))
             return false;
         const QList<int> books = booksOf(db, table, it.key());
         for (const int book : books)
@@ -338,7 +258,7 @@ bool changeCase(SqliteDb &db, const ItemTable &table, const QHash<int, QString> 
         result->authorSorts.insert(it.key(), CalibreText::authorToAuthorSort(it.value(), context.tweaks));
         // A book whose author sort only differed by case follows the new one.
         for (const int book : books) {
-            const QString current = rows(db, QStringLiteral("SELECT author_sort FROM books WHERE id=?"), { book })
+            const QString current = db.rows(QStringLiteral("SELECT author_sort FROM books WHERE id=?"), { book })
                                         .value(0).value(0).toString();
             const QString renewed = authorSortFor(db, book, context, *result);
             if (current.compare(renewed, Qt::CaseInsensitive) == 0
@@ -365,11 +285,11 @@ bool setManyOne(SqliteDb &db, const ItemTable &table, int bookId, const QVariant
     const QList<int> current = itemsOf(db, table, bookId);
     if (current.value(0, 0) != item) {
         result->dirtied.insert(bookId);
-        if (!run(db, QStringLiteral("DELETE FROM %1 WHERE book=?").arg(table.linkTable), { bookId }, error))
+        if (!db.run(QStringLiteral("DELETE FROM %1 WHERE book=?").arg(table.linkTable), { bookId }, error))
             return false;
-        if (item > 0 && !run(db, QStringLiteral("INSERT INTO %1(book,%2) VALUES(?, ?)").arg(table.linkTable,
-                                                                                          table.linkColumn),
-                             { bookId, item }, error))
+        if (item > 0 && !db.run(QStringLiteral("INSERT INTO %1(book,%2) VALUES(?, ?)").arg(table.linkTable,
+                                                                                         table.linkColumn),
+                                { bookId, item }, error))
             return false;
     }
     return removeUnused(db, table, context, error);
@@ -394,11 +314,11 @@ bool setManyMany(SqliteDb &db, const ItemTable &table, int bookId, const QString
         return false;
     if (itemsOf(db, table, bookId) != ids) {
         result->dirtied.insert(bookId);
-        if (!run(db, QStringLiteral("DELETE FROM %1 WHERE book=?").arg(table.linkTable), { bookId }, error))
+        if (!db.run(QStringLiteral("DELETE FROM %1 WHERE book=?").arg(table.linkTable), { bookId }, error))
             return false;
         for (const int id : std::as_const(ids)) {
-            if (!run(db, QStringLiteral("INSERT INTO %1(book,%2) VALUES(?, ?)").arg(table.linkTable, table.linkColumn),
-                     { bookId, id }, error))
+            if (!db.run(QStringLiteral("INSERT INTO %1(book,%2) VALUES(?, ?)").arg(table.linkTable, table.linkColumn),
+                        { bookId, id }, error))
                 return false;
         }
         if (table.authors && !setBookColumn(db, bookId, QStringLiteral("author_sort"),
@@ -413,12 +333,12 @@ QPair<QString, std::optional<double>> seriesValues(const QString &value)
 {
     static const QRegularExpression pattern(QStringLiteral("^(.*)\\s+\\[([.0-9]+)\\]$"),
                                             QRegularExpression::DotMatchesEverythingOption);
-    const QRegularExpressionMatch match = pattern.match(pythonStrip(value));
+    const QRegularExpressionMatch match = pattern.match(CalibreText::strip(value));
     if (match.hasMatch()) {
         bool ok = false;
         const double index = match.captured(2).toDouble(&ok);
         if (ok)
-            return { pythonStrip(match.captured(1)), index };
+            return { CalibreText::strip(match.captured(1)), index };
     }
     return { value, std::nullopt };
 }
@@ -430,8 +350,8 @@ QList<QPair<QString, QString>> cleanIdentifiers(const QList<QPair<QString, QStri
 {
     QList<QPair<QString, QString>> result;
     for (const auto &identifier : identifiers) {
-        const QString type = pythonStrip(identifier.first.toLower()).remove(u':').remove(u',');
-        const QString value = pythonStrip(identifier.second).replace(u',', u'|');
+        const QString type = CalibreText::strip(identifier.first.toLower()).remove(u':').remove(u',');
+        const QString value = CalibreText::strip(identifier.second).replace(u',', u'|');
         if (type.isEmpty() || value.isEmpty())
             continue;
         auto existing = std::find_if(result.begin(), result.end(), [&](const auto &entry) { return entry.first == type; });
@@ -448,7 +368,7 @@ bool setIdentifiers(SqliteDb &db, int bookId, const QList<QPair<QString, QString
 {
     const QList<QPair<QString, QString>> cleaned = cleanIdentifiers(identifiers);
     QHash<QString, QString> current;
-    for (const QVariantList &row : rows(db, QStringLiteral("SELECT type, val FROM identifiers WHERE book=?"), { bookId }))
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT type, val FROM identifiers WHERE book=?"), { bookId }))
         current.insert(row.at(0).toString(), row.at(1).toString());
     QHash<QString, QString> wanted;
     for (const auto &identifier : cleaned)
@@ -456,11 +376,11 @@ bool setIdentifiers(SqliteDb &db, int bookId, const QList<QPair<QString, QString
     if (current == wanted)
         return true;
     result->dirtied.insert(bookId);
-    if (!run(db, QStringLiteral("DELETE FROM identifiers WHERE book=?"), { bookId }, error))
+    if (!db.run(QStringLiteral("DELETE FROM identifiers WHERE book=?"), { bookId }, error))
         return false;
     for (const auto &identifier : cleaned) {
-        if (!run(db, QStringLiteral("INSERT OR REPLACE INTO identifiers (book, type, val) VALUES (?, ?, ?)"),
-                 { bookId, identifier.first, identifier.second }, error))
+        if (!db.run(QStringLiteral("INSERT OR REPLACE INTO identifiers (book, type, val) VALUES (?, ?, ?)"),
+                    { bookId, identifier.first, identifier.second }, error))
             return false;
     }
     return true;
@@ -469,15 +389,15 @@ bool setIdentifiers(SqliteDb &db, int bookId, const QList<QPair<QString, QString
 // one_one_in_other() for comments.
 bool setComments(SqliteDb &db, int bookId, const std::optional<QString> &text, Result *result, QString *error)
 {
-    const QList<QVariantList> current = rows(db, QStringLiteral("SELECT text FROM comments WHERE book=?"), { bookId });
+    const QList<QVariantList> current = db.rows(QStringLiteral("SELECT text FROM comments WHERE book=?"), { bookId });
     const std::optional<QString> stored = current.isEmpty() ? std::nullopt
                                                             : std::optional<QString>(current.first().first().toString());
     if (stored == text)
         return true;
     result->dirtied.insert(bookId);
     if (!text)
-        return run(db, QStringLiteral("DELETE FROM comments WHERE book=?"), { bookId }, error);
-    return run(db, QStringLiteral("INSERT OR REPLACE INTO comments(book,text) VALUES (?,?)"), { bookId, *text }, error);
+        return db.run(QStringLiteral("DELETE FROM comments WHERE book=?"), { bookId }, error);
+    return db.run(QStringLiteral("INSERT OR REPLACE INTO comments(book,text) VALUES (?,?)"), { bookId, *text }, error);
 }
 
 QVariant nullable(const std::optional<QString> &text)
@@ -493,7 +413,7 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
 {
     const int book = edit.bookId;
     const QString unknown = CalibreText::unknownText(context.interfaceLanguage);
-    if (rows(db, QStringLiteral("SELECT id FROM books WHERE id=?"), { book }).isEmpty()) {
+    if (db.rows(QStringLiteral("SELECT id FROM books WHERE id=?"), { book }).isEmpty()) {
         if (error)
             *error = QObject::tr("Book %1 is no longer in the library.").arg(book);
         return false;
@@ -565,7 +485,7 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
         // Cleared, it is Calibre's undefined date, as its editor's clear
         // button leaves it.
         CalibreDate date = CalibreDate::fromDateTime(CalibreDb::undefinedDate());
-        if (!pythonStrip(*edit.pubdate).isEmpty()) {
+        if (!CalibreText::strip(*edit.pubdate).isEmpty()) {
             std::optional<CalibreDate> parsed = parseExactDate(*edit.pubdate);
             if (!parsed) {
                 if (const std::optional<QDateTime> only = parseOnlyDate(*edit.pubdate, context.now))
@@ -580,10 +500,10 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
         }
         // Compared with the date as Calibre holds it, without its fraction.
         const CalibreDate stored = CalibreDate::fromDateTime(CalibreDb::parseDate(
-            rows(db, QStringLiteral("SELECT pubdate FROM books WHERE id=?"), { book }).value(0).value(0)));
+            db.rows(QStringLiteral("SELECT pubdate FROM books WHERE id=?"), { book }).value(0).value(0)));
         if (!(stored == date)) {
             result->dirtied.insert(book);
-            if (!run(db, QStringLiteral("UPDATE books SET pubdate=? WHERE id=?"), { date.isoFormat(u' '), book }, error))
+            if (!db.run(QStringLiteral("UPDATE books SET pubdate=? WHERE id=?"), { date.isoFormat(u' '), book }, error))
                 return false;
         }
     }
@@ -598,8 +518,8 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
     if (edit.cover) {
         // The flag is written whatever its value: the file changes anyway.
         result->dirtied.insert(book);
-        if (!run(db, QStringLiteral("UPDATE books SET has_cover=? WHERE id=?"), { edit.cover->isEmpty() ? 0 : 1, book },
-                 error))
+        if (!db.run(QStringLiteral("UPDATE books SET has_cover=? WHERE id=?"), { edit.cover->isEmpty() ? 0 : 1, book },
+                    error))
             return false;
     }
     return true;
@@ -611,8 +531,8 @@ bool markDirtied(SqliteDb &db, const QSet<int> &books, const QDateTime &now, QSt
     QList<int> sorted(books.cbegin(), books.cend());
     std::sort(sorted.begin(), sorted.end());
     for (const int book : std::as_const(sorted)) {
-        if (!run(db, QStringLiteral("UPDATE books SET last_modified=? WHERE id=?"), { sqliteDate(now), book }, error)
-            || !run(db, QStringLiteral("INSERT OR IGNORE INTO metadata_dirtied (book) VALUES (?)"), { book }, error))
+        if (!db.run(QStringLiteral("UPDATE books SET last_modified=? WHERE id=?"), { sqliteDate(now), book }, error)
+            || !db.run(QStringLiteral("INSERT OR IGNORE INTO metadata_dirtied (book) VALUES (?)"), { book }, error))
             return false;
     }
     return true;
@@ -623,7 +543,7 @@ bool touch(SqliteDb &db, const QSet<int> &books, const QDateTime &now, QString *
     QList<int> sorted(books.cbegin(), books.cend());
     std::sort(sorted.begin(), sorted.end());
     for (const int book : std::as_const(sorted)) {
-        if (!run(db, QStringLiteral("UPDATE books SET last_modified=? WHERE id=?"), { sqliteDate(now), book }, error))
+        if (!db.run(QStringLiteral("UPDATE books SET last_modified=? WHERE id=?"), { sqliteDate(now), book }, error))
             return false;
     }
     return true;
@@ -631,15 +551,7 @@ bool touch(SqliteDb &db, const QSet<int> &books, const QDateTime &now, QString *
 
 QString sqliteDate(const QDateTime &date)
 {
-    const QDateTime utc = date.toUTC();
-    QString text = QStringLiteral("%1-%2-%3 %4")
-                       .arg(utc.date().year(), 4, 10, QLatin1Char('0'))
-                       .arg(utc.date().month(), 2, 10, QLatin1Char('0'))
-                       .arg(utc.date().day(), 2, 10, QLatin1Char('0'))
-                       .arg(utc.time().toString(QStringLiteral("HH:mm:ss")));
-    if (utc.time().msec() > 0)
-        text += QStringLiteral(".%1").arg(utc.time().msec() * 1000, 6, 10, QLatin1Char('0'));
-    return text + QStringLiteral("+00:00");
+    return CalibreDate::fromDateTime(date).isoFormat(u' ');
 }
 
 std::optional<CalibreDate> parseExactDate(const QString &text)
@@ -664,16 +576,10 @@ std::optional<QDateTime> parseOnlyDate(const QString &text, const QDateTime &now
     const int year = match.captured(1).toInt();
     const int month = match.captured(2).isEmpty() ? today.month() : match.captured(2).toInt();
     const int day = match.captured(3).isEmpty() ? 15 : match.captured(3).toInt();
-    QDate date(year, month, day);
+    const QDate date(year, month, day);
     if (!date.isValid() || year < 1)
         return std::nullopt;
-    // fix_only_date(): off the last day of a month, but for December's, and
-    // off the first.
-    if (date.addDays(1).month() > date.month())
-        date = date.addDays(-1);
-    if (date.day() == 1)
-        date = date.addDays(1);
-    return QDateTime(date, QTime(0, 0), QTimeZone::UTC);
+    return OpfReader::fixOnlyDate(QDateTime(date, QTime(0, 0), QTimeZone::UTC));
 }
 
 } // namespace FieldWriters

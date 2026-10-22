@@ -107,7 +107,16 @@ struct LibraryData
     // The age at which Calibre deletes trash entries: the library's
     // expire_old_trash_after, 14 days unless changed, never under a day.
     qint64 trashExpirySeconds = 14 * 24 * 3600;
-    // metadata.db as it was copied, and the copy's SHA-256.
+    // metadata.db as it was copied.
     FileIdentity source;
-    QByteArray sourceSha256;
+
+    // The book with that id, or nullptr.
+    const Book *book(int id) const
+    {
+        for (const Book &candidate : books) {
+            if (candidate.id == id)
+                return &candidate;
+        }
+        return nullptr;
+    }
 };

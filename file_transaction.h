@@ -49,7 +49,7 @@ public:
     bool aboutToPublish(const QByteArray &sha256, QString *error);
     // Makes the change final: kept files and empty folders go, and the
     // journal.
-    bool finish(QString *error);
+    void finish();
     // Forgets the change without undoing it, as a crash would, leaving the
     // journal for recover(). For tests.
     void abandon();
@@ -59,6 +59,12 @@ public:
     // could not be put back; `done` says what was done, empty without a
     // journal.
     static bool recover(const QString &journal, const QString &database, QString *done, QString *error);
+
+    // Writes `contents` to `path`, replacing the file there, and flushes it
+    // to the disk; outside any change.
+    static bool writeDurably(const QString &path, const QByteArray &contents, QString *error);
+    // Flushes a file, or a folder's entries, to the disk.
+    static void sync(const QString &path);
 
 private:
     struct Step
@@ -73,6 +79,9 @@ private:
     // temporary name.
     bool place(const QString &path, const std::function<bool(const QString &, QString *)> &fill, QString *error);
     static bool undo(const Step &step, QString *error);
+    // Undoes `steps` in reverse order, all of them even when one fails;
+    // `error` is the first failure's.
+    static bool undoAll(const QList<Step> &steps, QString *error);
     static void cleanUp(const QList<Step> &steps);
     static QString keptName(const QString &path);
 

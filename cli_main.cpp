@@ -152,13 +152,6 @@ int doctor(const QString &libraryPath)
         problems.append(QStringLiteral("The database structure is unknown (schema %1, fingerprint %2): "
                                        "Cousoir stays read-only").arg(data.userVersion).arg(data.schemaFingerprint));
     }
-    const auto bookOf = [&data](int id) -> const Book * {
-        for (const Book &book : data.books) {
-            if (book.id == id)
-                return &book;
-        }
-        return nullptr;
-    };
     for (const LibraryCheck::DuplicateGroup &group : findings.duplicates) {
         if (ignored.contains(LibraryCheck::key(group)))
             continue;
@@ -170,7 +163,7 @@ int doctor(const QString &libraryPath)
             reasons.append(QStringLiteral("same title and authors"));
         for (const QString &isbn : group.isbns)
             reasons.append(QStringLiteral("same ISBN %1").arg(isbn));
-        const Book *first = bookOf(group.books.first());
+        const Book *first = data.book(group.books.first());
         problems.append(QStringLiteral("Duplicate books %1 (%2): “%3” by %4")
                             .arg(ids.join(QStringLiteral(", ")), reasons.join(QStringLiteral(", ")), first->title,
                                  first->authors.join(QStringLiteral(" & "))));
@@ -316,9 +309,8 @@ bool convert(const QString &libraryPath, const CalibreConfig &config, const QLis
     static QTemporaryDir jobs;
     jobs.setAutoRemove(qEnvironmentVariableIsEmpty("COUSOIR_KEEP_JOBS"));
     for (const auto &[bookId, format] : conversions) {
-        const auto book = std::find_if(data.books.cbegin(), data.books.cend(),
-                                       [bookId](const Book &book) { return book.id == bookId; });
-        if (book == data.books.cend()) {
+        const Book *book = data.book(bookId);
+        if (!book) {
             err() << QStringLiteral("No book %1 in the library.").arg(bookId) << Qt::endl;
             return false;
         }

@@ -22,7 +22,7 @@ Button {
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
     spacing: Theme.gutter
-    horizontalPadding: iconOnly ? 0 : Math.round(10 * Theme.spacingScale)
+    horizontalPadding: iconOnly ? 0 : Theme.controlInset
     verticalPadding: 0
     implicitWidth: iconOnly
         ? Theme.rowHeight

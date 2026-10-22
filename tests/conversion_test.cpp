@@ -8,49 +8,13 @@
 #include <zip.h>
 
 #include "calibre_db.h"
+#include "calibre_job.h"
 #include "commit_engine.h"
 #include "conversion.h"
 #include "sqlite_db.h"
+#include "test_support.h"
 
 namespace {
-
-QString fixtureLibrary()
-{
-    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
-}
-
-QByteArray readAll(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
-
-bool writeAll(const QString &path, const QByteArray &data)
-{
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(data) == data.size();
-}
-
-bool copyTree(const QString &from, const QString &to)
-{
-    QDirIterator it(from, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString source = it.next();
-        const QString target = QDir(to).filePath(QDir(from).relativeFilePath(source));
-        if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !QFile::copy(source, target))
-            return false;
-    }
-    return true;
-}
-
-const Book *bookWithId(const LibraryData &data, int id)
-{
-    for (const Book &book : data.books) {
-        if (book.id == id)
-            return &book;
-    }
-    return nullptr;
-}
 
 // pickle_binary_string() of calibre/utils/__init__.py.
 QByteArray pickled(const QByteArray &raw)
@@ -122,12 +86,12 @@ private slots:
     void offersCalibresInputFormats()
     {
         QCOMPARE(Conversion::outputFormats(), QStringList({ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
-        QCOMPARE(Conversion::inputFormats(*bookWithId(m_data, 2)),
+        QCOMPARE(Conversion::inputFormats(*m_data.book(2)),
                  QStringList({ QStringLiteral("AZW3"), QStringLiteral("EPUB") }));
-        QCOMPARE(Conversion::inputFormats(*bookWithId(m_data, 5)), QStringList({ QStringLiteral("PDF") }));
+        QCOMPARE(Conversion::inputFormats(*m_data.book(5)), QStringList({ QStringLiteral("PDF") }));
         // No file at all.
-        QVERIFY(Conversion::inputFormats(*bookWithId(m_data, 6)).isEmpty());
-        Book other = *bookWithId(m_data, 2);
+        QVERIFY(Conversion::inputFormats(*m_data.book(6)).isEmpty());
+        Book other = *m_data.book(2);
         other.formats = { { QStringLiteral("ORIGINAL_EPUB"), {}, 0, {} }, { QStringLiteral("XYZ"), {}, 0, {} } };
         QVERIFY(Conversion::inputFormats(other).isEmpty());
     }
@@ -141,7 +105,7 @@ private slots:
         const QJsonObject opfs = oracle.value(QLatin1String("opfs")).toObject();
         QVERIFY(!opfs.isEmpty());
         for (auto it = opfs.constBegin(); it != opfs.constEnd(); ++it) {
-            const Book *book = bookWithId(m_data, it.key().toInt());
+            const Book *book = m_data.book(it.key().toInt());
             QVERIFY(book);
             QTemporaryDir folder;
             QString error;
@@ -155,7 +119,7 @@ private slots:
 
     void writesJobs()
     {
-        const Book book = *bookWithId(m_data, 2);
+        const Book book = *m_data.book(2);
         QTemporaryDir folder;
         QString error;
         QVERIFY2(Conversion::prepare(m_data, book, QStringLiteral("AZW3"), QStringLiteral("fr"), folder.path(), &error),
@@ -177,7 +141,7 @@ private slots:
         // The settings saved by the book's last conversion go as stored; a
         // book without cover has none; a missing file is where Calibre
         // expects it.
-        Book other = *bookWithId(m_data, 5);
+        Book other = *m_data.book(5);
         other.conversionOptions = pickled("json:{\"output_profile\": \"kobo\"}");
         other.formats.first().file.clear();
         QTemporaryDir second;
@@ -194,10 +158,10 @@ private slots:
 
     void readsOutcomes()
     {
-        QCOMPARE(Conversion::progress("{\"progress\": 0.34}\n"), 0.34);
-        QCOMPARE(Conversion::progress("{\"progress\": 1.0}"), 1.0);
-        QCOMPARE(Conversion::progress("Using calibre Qt style: True\n"), -1.0);
-        QCOMPARE(Conversion::progress("{\"other\": 1}"), -1.0);
+        QCOMPARE(CalibreJob::progress("{\"progress\": 0.34}\n"), 0.34);
+        QCOMPARE(CalibreJob::progress("{\"progress\": 1.0}"), 1.0);
+        QCOMPARE(CalibreJob::progress("Using calibre Qt style: True\n"), -1.0);
+        QCOMPARE(CalibreJob::progress("{\"other\": 1}"), -1.0);
 
         QTemporaryDir folder;
         const QString result = folder.filePath(QStringLiteral("result.json"));
@@ -256,7 +220,7 @@ private slots:
         outcome.file = converted;
         outcome.saveOriginal = true;
         outcome.options = pickled("json:{\n  \"gui_preferred_input_format\": \"azw3\"\n}");
-        const Book &book = *bookWithId(data, 2);
+        const Book &book = *data.book(2);
         const QByteArray original = readAll(book.formats.first().file);
 
         CommitEngine::Request request;
@@ -301,7 +265,7 @@ private slots:
         qputenv("CALIBRE_CONFIG_DIRECTORY", QFile::encodeName(config.path()));
         QTemporaryDir folder;
         QString error;
-        QVERIFY2(Conversion::prepare(m_data, *bookWithId(m_data, 1), QStringLiteral("KEPUB"), QStringLiteral("fr"),
+        QVERIFY2(Conversion::prepare(m_data, *m_data.book(1), QStringLiteral("KEPUB"), QStringLiteral("fr"),
                                      folder.path(), &error),
                  qPrintable(error));
         QList<double> progress;

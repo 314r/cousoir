@@ -15,16 +15,10 @@
 
 namespace {
 
-// Python's str.isspace(), which str.lstrip() and str.rstrip() use.
-bool isPythonSpace(QChar character)
-{
-    return character.isSpace() || (character.unicode() >= 0x1c && character.unicode() <= 0x1f);
-}
-
 QString leftStripped(const QString &text)
 {
     qsizetype start = 0;
-    while (start < text.size() && isPythonSpace(text.at(start)))
+    while (start < text.size() && CalibreText::isSpace(text.at(start)))
         ++start;
     return text.mid(start);
 }
@@ -32,7 +26,7 @@ QString leftStripped(const QString &text)
 QString rightStripped(const QString &text)
 {
     qsizetype end = text.size();
-    while (end > 0 && isPythonSpace(text.at(end - 1)))
+    while (end > 0 && CalibreText::isSpace(text.at(end - 1)))
         --end;
     return text.left(end);
 }

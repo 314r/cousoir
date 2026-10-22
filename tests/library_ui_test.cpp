@@ -22,6 +22,7 @@
 #include "cover_cache.h"
 #include "omarchy_theme.h"
 #include "system_appearance.h"
+#include "test_support.h"
 
 namespace {
 QString themeStateRoot;
@@ -50,18 +51,6 @@ QPoint center(QQuickItem *item)
     return item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint();
 }
 
-bool copyTree(const QString &from, const QString &to)
-{
-    QDirIterator it(from, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString source = it.next();
-        const QString target = QDir(to).filePath(QDir(from).relativeFilePath(source));
-        if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !QFile::copy(source, target))
-            return false;
-    }
-    return true;
-}
-
 class UrlRecorder : public QObject
 {
     Q_OBJECT
@@ -72,23 +61,6 @@ public:
 public slots:
     void open(const QUrl &url) { urls.append(url); }
 };
-// A folder made to look like a mounted Kobo: its version file and an empty
-// database with the tables Calibre uses.
-bool makeKobo(const QString &root)
-{
-    QDir().mkpath(QDir(root).filePath(QStringLiteral(".kobo")));
-    QFile version(QDir(root).filePath(QStringLiteral(".kobo/version")));
-    QFile schema(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"));
-    QFile database(QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite")));
-    if (!version.open(QIODevice::WriteOnly) || !schema.open(QIODevice::ReadOnly) || !database.open(QIODevice::WriteOnly))
-        return false;
-    version.write("N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390");
-    database.close();
-    SqliteDb db;
-    QString error;
-    return db.open(database.fileName(), SqliteDb::Mode::ReadWrite, &error) && db.exec(QString::fromUtf8(schema.readAll()), &error);
-}
-
 } // namespace
 
 class LibraryUiTest : public QObject
@@ -167,7 +139,7 @@ void LibraryUiTest::initTestCase()
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
                               "BooksPage", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
                               "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
-                              "SettingsWindow", "Sidebar", "SidebarItem", "StatTile", "ThinScrollBar", "TrashPage" }) {
+                              "SettingsWindow", "Sidebar", "SidebarItem", "ThemedWindow", "ThinScrollBar", "TrashPage" }) {
         qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
                         "Cousoir", 1, 0, type);
     }
@@ -930,7 +902,9 @@ void LibraryUiTest::checksLibrary()
     click("sidebar_check");
     QTRY_VERIFY(control("checkPage") && control("checkPage")->isVisible());
     QTRY_VERIFY(control("check_missing:6:"));
-    QCOMPARE(text("bookCount"), QStringLiteral("1 thing to check"));
+    // makeWritable() touched metadata.db: the library may be read and
+    // checked again meanwhile.
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("1 thing to check"));
 
     // Book 3's EPUB added again: two copies of it.
     const QString existing = QDir(m_libraryPath).filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.epub"));

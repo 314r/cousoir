@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Prints how many compilers a build can run at once: one per core, but no more
-# than the available memory holds at 1 GB each, about the most one takes. The
-# app and each test compile the library again, about 400 compilers in all, so
-# an unbounded make -j runs out of memory.
+# than the available memory holds at 1 GB each, about the most one takes. A
+# build runs about 100 compilers, so an unbounded make -j runs out of memory.
 set -euo pipefail
 
 cores=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)

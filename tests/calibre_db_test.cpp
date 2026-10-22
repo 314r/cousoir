@@ -7,19 +7,9 @@
 #include "calibre_db.h"
 #include "calibre_list.h"
 #include "sqlite_db.h"
+#include "test_support.h"
 
 namespace {
-
-QString fixtureLibrary()
-{
-    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
-}
-
-QByteArray readAll(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
 
 // Every file under `folder` with its size, time and hash: enough to see that
 // nothing in it changed.
@@ -38,18 +28,6 @@ QStringList tree(const QString &folder)
     }
     entries.sort();
     return entries;
-}
-
-bool copyTree(const QString &from, const QString &to)
-{
-    QDirIterator it(from, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString source = it.next();
-        const QString target = QDir(to).filePath(QDir(from).relativeFilePath(source));
-        if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !QFile::copy(source, target))
-            return false;
-    }
-    return true;
 }
 
 CalibreConfig frenchConfig()
@@ -121,7 +99,6 @@ void CalibreDbTest::readsBooks()
     QCOMPARE(data.books.size(), 6);
     QCOMPARE(data.userVersion, CalibreDb::SchemaVersion);
     QVERIFY(!data.uuid.isEmpty());
-    QCOMPARE(data.sourceSha256.size(), 32);
 
     const Book &ecume = data.books.at(0);
     QCOMPARE(ecume.title, QStringLiteral("L'Écume des jours"));
@@ -202,7 +179,7 @@ void CalibreDbTest::preparesConnectionLikeCalibre()
 {
     QString error;
     const QString snapshot = m_cache.filePath(QStringLiteral("functions.db"));
-    QVERIFY(CalibreDb::takeSnapshot(fixtureLibrary(), snapshot, nullptr, nullptr, &error));
+    QVERIFY(CalibreDb::takeSnapshot(fixtureLibrary(), snapshot, nullptr, &error));
     SqliteDb db;
     QVERIFY2(db.open(snapshot, SqliteDb::Mode::Immutable, &error), qPrintable(error));
     QVERIFY2(CalibreDb::prepareConnection(db, CalibreText::Tweaks::defaults(), QStringLiteral("fr"), &error),

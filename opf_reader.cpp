@@ -30,13 +30,6 @@ namespace {
 const QString opfNamespace = QStringLiteral("http://www.idpf.org/2007/opf");
 const QString calibrePrefix = QStringLiteral("https://calibre-ebook.com");
 
-// normalize_whitespace()
-QString collapse(const QString &text)
-{
-    static const QRegularExpression spaces(CalibreText::pythonSpace + u'+');
-    return CalibreText::strip(QString(text).replace(spaces, QStringLiteral(" ")));
-}
-
 QList<QDomElement> children(const QDomElement &parent)
 {
     QList<QDomElement> result;
@@ -60,19 +53,8 @@ QList<QDomElement> descendants(const QDomElement &parent)
     return result;
 }
 
-// An attribute by its local name, whatever its namespace prefix.
-QString attribute(const QDomElement &element, const QString &name)
-{
-    const QDomNamedNodeMap attributes = element.attributes();
-    for (int index = 0; index < attributes.count(); ++index) {
-        const QDomAttr attr = attributes.item(index).toAttr();
-        const QString local = attr.localName().isEmpty() ? attr.name().section(u':', -1) : attr.localName();
-        if (local == name)
-            return attr.value();
-    }
-    return {};
-}
-
+// Whether the element has an attribute of that local name, whatever its
+// namespace prefix.
 bool hasAttribute(const QDomElement &element, const QString &name)
 {
     const QDomNamedNodeMap attributes = element.attributes();
@@ -117,15 +99,10 @@ QString text(const QDomElement &element)
     return element.text();
 }
 
-QString pythonStrip(const QString &text)
-{
-    return CalibreText::strip(text);
-}
-
 std::optional<double> toNumber(const QString &text)
 {
     bool ok = false;
-    const double value = pythonStrip(text).toDouble(&ok);
+    const double value = CalibreText::strip(text).toDouble(&ok);
     return ok ? std::optional<double>(value) : std::nullopt;
 }
 
@@ -405,15 +382,8 @@ bool read(const QByteArray &opf, Package *package, QString *error)
             spineIds.append(itemref.attribute(QStringLiteral("idref")));
     }
     // first_spine_item(): the first itemref's item.
-    for (const QString &id : std::as_const(spineIds)) {
-        for (const QDomElement &item : std::as_const(manifestItems)) {
-            if (item.attribute(QStringLiteral("id")) == id) {
-                result.firstSpineItem = item.attribute(QStringLiteral("href"));
-                break;
-            }
-        }
-        break;
-    }
+    if (!spineIds.isEmpty())
+        result.firstSpineItem = manifestById.value(spineIds.first()).attribute(QStringLiteral("href"));
     const auto imageHref = [](const QDomElement &item) -> QString {
         const QString type = item.attribute(QStringLiteral("media-type"));
         if (!type.isEmpty() && !type.contains(QLatin1String("xml")) && !type.contains(QLatin1String("html")))
@@ -425,8 +395,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
     // cover-image item, else a first spine item that is an image, as in
     // manga.
     for (const QDomElement &item : std::as_const(manifestItems)) {
-        const QStringList properties = item.attribute(QStringLiteral("properties")).toLower().split(
-            QRegularExpression(CalibreText::pythonSpace + u'+'), Qt::SkipEmptyParts);
+        const QStringList properties = CalibreText::split(item.attribute(QStringLiteral("properties")).toLower());
         if (properties.contains(QLatin1String("cover-image")) && !imageHref(item).isEmpty()) {
             result.epub3RasterCover = imageHref(item);
             break;
@@ -435,13 +404,9 @@ bool read(const QByteArray &opf, Package *package, QString *error)
     if (result.epub3RasterCover.isEmpty() && !spineIds.isEmpty()) {
         static const QStringList images{ QStringLiteral("image/jpeg"), QStringLiteral("image/jpg"),
                                          QStringLiteral("image/png"), QStringLiteral("image/webp") };
-        for (const QDomElement &item : std::as_const(manifestItems)) {
-            if (item.attribute(QStringLiteral("id")) == spineIds.first()) {
-                if (images.contains(item.attribute(QStringLiteral("media-type")).toLower()))
-                    result.epub3RasterCover = item.attribute(QStringLiteral("href"));
-                break;
-            }
-        }
+        const QDomElement item = manifestById.value(spineIds.first());
+        if (images.contains(item.attribute(QStringLiteral("media-type")).toLower()))
+            result.epub3RasterCover = item.attribute(QStringLiteral("href"));
     }
 
     if (result.version >= 3) {
@@ -477,7 +442,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
         if (!title.isNull()) {
             // read_title() and read_title_sort() are simple_text():
             // whitespace normalized.
-            mi.title = pythonStrip(text(title));
+            mi.title = CalibreText::strip(text(title));
             for (const QDomElement &subtitle : metadata) {
                 if (!isDc(subtitle, QStringLiteral("title")) || text(subtitle).trimmed().isEmpty())
                     continue;
@@ -485,18 +450,19 @@ bool read(const QByteArray &opf, Package *package, QString *error)
                                          .value(QStringLiteral("title-type"));
                 if (type.contains(QLatin1String("subtitle")) || type.contains(QLatin1String("sub-title"))) {
                     if (subtitle != title)
-                        mi.title += QStringLiteral(": ") + pythonStrip(text(subtitle));
+                        mi.title += QStringLiteral(": ") + CalibreText::strip(text(subtitle));
                     break;
                 }
             }
-            mi.title = collapse(mi.title);
-            mi.titleSort = collapse(propertiesFor(title.attribute(QStringLiteral("id")), refines).value(QStringLiteral("file-as")));
+            mi.title = CalibreText::collapseSpaces(mi.title);
+            mi.titleSort = CalibreText::collapseSpaces(
+                propertiesFor(title.attribute(QStringLiteral("id")), refines).value(QStringLiteral("file-as")));
         }
         if (mi.titleSort.isEmpty()) {
             for (const QDomElement &meta : metadata) {
                 if (isOpf(meta, QStringLiteral("meta")) && meta.attribute(QStringLiteral("name")) == QLatin1String("calibre:title_sort")
                     && !meta.attribute(QStringLiteral("content")).isEmpty()) {
-                    mi.titleSort = collapse(meta.attribute(QStringLiteral("content")));
+                    mi.titleSort = CalibreText::collapseSpaces(meta.attribute(QStringLiteral("content")));
                     break;
                 }
             }
@@ -535,7 +501,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
                 int seq = 0;
                 if (properties.contains(QStringLiteral("display-seq")))
                     seq = properties.value(QStringLiteral("display-seq")).first().value.toInt();
-                return Author{ collapse(value), collapse(sort), seq };
+                return Author{ CalibreText::collapseSpaces(value), CalibreText::collapseSpaces(sort), seq };
             };
             const QString role = opfAttribute(creator, QStringLiteral("role"));
             if (properties.contains(QStringLiteral("role"))) {
@@ -575,7 +541,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
                 ? isRelatorsRole(properties, QStringLiteral("bkp"))
                 : opfAttribute(contributor, QStringLiteral("role")).toLower() == QLatin1String("bkp");
             if (producer) {
-                mi.bookProducer = collapse(text(contributor));
+                mi.bookProducer = CalibreText::collapseSpaces(text(contributor));
                 break;
             }
         }
@@ -628,7 +594,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
         mi.comments = comments.join(u'\n').trimmed();
         for (const QDomElement &publisher : metadata) {
             if (isDc(publisher, QStringLiteral("publisher")) && !text(publisher).isEmpty()) {
-                mi.publisher = collapse(text(publisher));
+                mi.publisher = CalibreText::collapseSpaces(text(publisher));
                 break;
             }
         }
@@ -636,7 +602,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
             if (!isDc(subject, QStringLiteral("subject")) || text(subject).isEmpty())
                 continue;
             for (const QString &tag : text(subject).split(u',')) {
-                const QString cleaned = collapse(tag);
+                const QString cleaned = CalibreText::collapseSpaces(tag);
                 if (!cleaned.isEmpty() && !mi.tags.contains(cleaned))
                     mi.tags.append(cleaned);
             }
@@ -649,7 +615,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
                 continue;
             const auto properties = propertiesFor(meta.attribute(QStringLiteral("id")), refines);
             if (properties.value(QStringLiteral("collection-type")) == QLatin1String("series")) {
-                mi.series = collapse(text(meta));
+                mi.series = CalibreText::collapseSpaces(text(meta));
                 mi.seriesIndex = toNumber(properties.value(QStringLiteral("group-position"))).value_or(1.0);
                 foundSeries = true;
                 break;
@@ -668,7 +634,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
             }
             for (const QDomElement &meta : metadata) {
                 if (isOpf(meta, QStringLiteral("meta")) && meta.attribute(QStringLiteral("name")) == QLatin1String("calibre:series")) {
-                    const QString series = collapse(meta.attribute(QStringLiteral("content")));
+                    const QString series = CalibreText::collapseSpaces(meta.attribute(QStringLiteral("content")));
                     if (!series.isEmpty()) {
                         mi.series = series;
                         mi.seriesIndex = index;
@@ -679,7 +645,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
         }
         // read_raster_cover()
         for (const QDomElement &item : std::as_const(manifestItems)) {
-            const QStringList properties = item.attribute(QStringLiteral("properties")).toLower().split(u' ', Qt::SkipEmptyParts);
+            const QStringList properties = CalibreText::split(item.attribute(QStringLiteral("properties")).toLower());
             if (properties.contains(QStringLiteral("cover-image")) && !imageHref(item).isEmpty()) {
                 result.rasterCover = imageHref(item);
                 break;
@@ -724,14 +690,14 @@ bool read(const QByteArray &opf, Package *package, QString *error)
                 const bool byMeta = qualified.endsWith(QLatin1String("meta"), Qt::CaseInsensitive)
                     && element.attribute(QStringLiteral("name")).compare(QStringLiteral("calibre:") + name, Qt::CaseInsensitive) == 0;
                 if (byName || byMeta)
-                    found = pythonStrip(content(element));
+                    found = CalibreText::strip(content(element));
             }
             return found;
         };
 
         for (const QDomElement &title : metadata) {
             if (nameContains(title, QStringLiteral("title")) && !content(title).trimmed().isEmpty()) {
-                mi.title = collapse(content(title));
+                mi.title = CalibreText::collapseSpaces(content(title));
                 break;
             }
         }
@@ -795,7 +761,7 @@ bool read(const QByteArray &opf, Package *package, QString *error)
         for (const QDomElement &date : metadata) {
             if (!nameContains(date, QStringLiteral("date")))
                 continue;
-            const std::optional<CalibreDate> parsed = parseIsoDate(pythonStrip(text(date)), false, nullptr);
+            const std::optional<CalibreDate> parsed = parseIsoDate(CalibreText::strip(text(date)), false, nullptr);
             if (parsed && (!mi.pubdate || *parsed < *mi.pubdate))
                 mi.pubdate = parsed;
         }

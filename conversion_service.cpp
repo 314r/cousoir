@@ -1,39 +1,12 @@
 #include "conversion_service.h"
 
-#include <QDateTime>
 #include <QDir>
-#include <QFileInfo>
 
 #include <utility>
 
-#include <signal.h>
-
 #include "book_library.h"
+#include "calibre_job.h"
 #include "conversion.h"
-
-namespace {
-
-const Book *bookIn(const LibraryData &data, int bookId)
-{
-    for (const Book &book : data.books) {
-        if (book.id == bookId)
-            return &book;
-    }
-    return nullptr;
-}
-
-// Folders a conversion left behind, a crash or a kill, a day old: younger
-// ones may be another Cousoir's on the same library.
-void removeStaleFolders(const QString &base)
-{
-    const QDateTime dayAgo = QDateTime::currentDateTime().addDays(-1);
-    for (const QFileInfo &folder : QDir(base).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-        if (folder.lastModified() < dayAgo)
-            QDir(folder.filePath()).removeRecursively();
-    }
-}
-
-} // namespace
 
 ConversionService::ConversionService(QObject *parent)
     : QObject(parent)
@@ -104,7 +77,7 @@ QStringList ConversionService::formatsFor(int bookId) const
 {
     if (!m_library || !available())
         return {};
-    const Book *book = bookIn(m_library->data(), bookId);
+    const Book *book = m_library->data().book(bookId);
     return book && !Conversion::inputFormats(*book).isEmpty() ? Conversion::outputFormats() : QStringList();
 }
 
@@ -116,7 +89,7 @@ QString ConversionService::convert(int bookId, const QString &format)
         return tr("Converting needs Calibre, which is not installed.");
     if (!m_library->writable())
         return tr("The library cannot be changed right now.");
-    const Book *book = bookIn(m_library->data(), bookId);
+    const Book *book = m_library->data().book(bookId);
     if (!book)
         return tr("This book is no longer in the library.");
     const QString upper = format.toUpper();
@@ -163,7 +136,7 @@ void ConversionService::startNext()
     if (m_process || m_jobs.isEmpty() || !m_library || m_library->saving() || m_library->loading())
         return;
     const Job job = m_jobs.first();
-    const Book *book = bookIn(m_library->data(), job.bookId);
+    const Book *book = m_library->data().book(job.bookId);
     QString error;
     if (!book)
         error = tr("“%1” is no longer in the library.").arg(job.title);
@@ -173,7 +146,7 @@ void ConversionService::startNext()
     std::shared_ptr<QTemporaryDir> folder;
     if (error.isEmpty()) {
         QDir().mkpath(base);
-        removeStaleFolders(base);
+        CalibreJob::removeStaleFolders(base);
         folder = std::make_shared<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
         if (!folder->isValid())
             error = tr("Cannot create a folder for the conversion in %1.").arg(base);
@@ -191,7 +164,7 @@ void ConversionService::startNext()
 
     m_folder = folder;
     m_process = new QProcess(this);
-    m_process->setProcessEnvironment(Conversion::environment(folder->path(), m_library->interfaceLanguage()));
+    m_process->setProcessEnvironment(CalibreJob::environment(folder->path(), m_library->interfaceLanguage()));
     m_process->setStandardErrorFile(QProcess::nullDevice());
     // A session of its own: stopping it stops Calibre's worker with it.
     m_process->setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
@@ -218,7 +191,7 @@ void ConversionService::readProgress()
         return;
     bool changed = false;
     while (m_process->canReadLine()) {
-        const double fraction = Conversion::progress(m_process->readLine());
+        const double fraction = CalibreJob::progress(m_process->readLine());
         if (fraction >= 0 && !m_jobs.isEmpty()) {
             m_jobs.first().progress = fraction;
             changed = true;
@@ -255,13 +228,7 @@ void ConversionService::stopProcess()
     if (!m_process)
         return;
     m_process->disconnect(this);
-    const pid_t pid = pid_t(m_process->processId());
-    if (pid > 0)
-        ::kill(-pid, SIGTERM);
-    if (!m_process->waitForFinished(3000) && pid > 0) {
-        ::kill(-pid, SIGKILL);
-        m_process->waitForFinished(1000);
-    }
+    CalibreJob::stopProcessGroup(m_process);
     delete m_process;
     m_process = nullptr;
 }

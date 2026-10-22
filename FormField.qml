@@ -18,7 +18,7 @@ TextField {
     }
 
     implicitHeight: Theme.rowHeight
-    leftPadding: Math.round(10 * Theme.spacingScale)
+    leftPadding: Theme.controlInset
     rightPadding: leftPadding
     topPadding: 0
     bottomPadding: 0

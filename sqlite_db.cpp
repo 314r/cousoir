@@ -48,11 +48,6 @@ void SqliteDb::close()
     }
 }
 
-bool SqliteDb::isOpen() const
-{
-    return m_db != nullptr;
-}
-
 sqlite3 *SqliteDb::handle() const
 {
     return m_db;
@@ -70,6 +65,33 @@ bool SqliteDb::exec(const QString &sql, QString *error)
     return true;
 }
 
+bool SqliteDb::run(const QString &sql, const QVariantList &values, QString *error)
+{
+    SqliteStatement statement(*this, sql);
+    statement.bind(values);
+    statement.step();
+    if (!statement.error().isEmpty()) {
+        if (error)
+            *error = statement.error();
+        return false;
+    }
+    return true;
+}
+
+QList<QVariantList> SqliteDb::rows(const QString &sql, const QVariantList &values)
+{
+    SqliteStatement statement(*this, sql);
+    statement.bind(values);
+    QList<QVariantList> result;
+    while (statement.step()) {
+        QVariantList row;
+        for (int column = 0; column < statement.columnCount(); ++column)
+            row.append(statement.value(column));
+        result.append(row);
+    }
+    return result;
+}
+
 QVariant SqliteDb::value(const QString &sql, QString *error)
 {
     SqliteStatement statement(*this, sql);
@@ -78,11 +100,6 @@ QVariant SqliteDb::value(const QString &sql, QString *error)
     if (error)
         *error = statement.error();
     return {};
-}
-
-QString SqliteDb::lastError() const
-{
-    return errorOf(m_db);
 }
 
 qint64 SqliteDb::lastInsertRowId() const
@@ -141,6 +158,24 @@ void SqliteStatement::bind(int index, const QByteArray &value)
 void SqliteStatement::bindNull(int index)
 {
     sqlite3_bind_null(m_statement, index);
+}
+
+void SqliteStatement::bind(const QVariantList &values)
+{
+    for (qsizetype index = 0; index < values.size(); ++index) {
+        const QVariant &value = values.at(index);
+        const int position = int(index) + 1;
+        if (value.isNull())
+            bindNull(position);
+        else if (value.typeId() == QMetaType::Int || value.typeId() == QMetaType::LongLong)
+            bind(position, value.toLongLong());
+        else if (value.typeId() == QMetaType::Double)
+            bind(position, value.toDouble());
+        else if (value.typeId() == QMetaType::QByteArray)
+            bind(position, value.toByteArray());
+        else
+            bind(position, value.toString());
+    }
 }
 
 bool SqliteStatement::step()

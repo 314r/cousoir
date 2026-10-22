@@ -1,12 +1,12 @@
 #include "calibre_list.h"
 
 #include <QLocale>
-#include <QVariant>
 
 #include <algorithm>
 #include <cmath>
 
 #include "calibre_db.h"
+#include "calibre_text.h"
 
 namespace {
 
@@ -152,17 +152,6 @@ void write(QByteArray &out, const PyValue &value, int depth)
     }
 }
 
-// authors_to_string(): " & " between names, a "&" inside one doubled.
-QString authorsToString(const QStringList &authors)
-{
-    QStringList escaped;
-    for (const QString &author : authors) {
-        if (!author.isEmpty())
-            escaped.append(QString(author).replace(u'&', QStringLiteral("&&")));
-    }
-    return escaped.join(QStringLiteral(" & "));
-}
-
 } // namespace
 
 namespace CalibreList {
@@ -181,7 +170,7 @@ QByteArray machineList(const LibraryData &data)
         entry.insert(QStringLiteral("id"), PyValue::number(book->id));
         if (!book->authorSort.isNull())
             entry.insert(QStringLiteral("author_sort"), PyValue::text(book->authorSort));
-        entry.insert(QStringLiteral("authors"), PyValue::text(authorsToString(book->authors)));
+        entry.insert(QStringLiteral("authors"), PyValue::text(CalibreText::authorsToString(book->authors)));
         if (!book->comments.isNull())
             entry.insert(QStringLiteral("comments"), PyValue::text(book->comments));
         if (!book->coverFile.isEmpty())

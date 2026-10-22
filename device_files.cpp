@@ -200,6 +200,10 @@ bool MtpFiles::write(const QString &path, const QString &localPath, QString *err
         return false;
     }
     const quint32 parentId = parent ? parent->id : 0;
+    // Under the name in the folder's case, read before drop() moves the
+    // entries `parent` points into.
+    const QString name = nameOf(path);
+    const QString placed = parent ? parent->path + u'/' + name : name;
     if (const Entry *existing = find(path)) {
         if (existing->folder) {
             if (error)
@@ -210,9 +214,6 @@ bool MtpFiles::write(const QString &path, const QString &localPath, QString *err
             return false;
         drop(path);
     }
-    // Under the name in the folder's case.
-    const QString name = nameOf(path);
-    const QString placed = parent ? parent->path + u'/' + name : name;
     Mtp::Object created;
     if (!m_session->upload(m_storageId, parentId, name, localPath, &created, error, progress))
         return false;
@@ -372,9 +373,4 @@ bool FolderFiles::remove(const QString &path, QString *error)
     }
     drop(path);
     return true;
-}
-
-QString FolderFiles::root() const
-{
-    return m_root;
 }

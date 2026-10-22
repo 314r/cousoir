@@ -15,13 +15,9 @@
 #include "conversion_service.h"
 #include "device_library.h"
 #include "sqlite_db.h"
+#include "test_support.h"
 
 namespace {
-
-QString fixtureLibrary()
-{
-    return QStringLiteral(COUSOIR_TEST_DATA_DIR "/library");
-}
 
 CalibreConfig frenchConfig()
 {
@@ -44,35 +40,6 @@ QStringList names(const QVariantList &rows)
     for (const QVariant &row : rows)
         result.append(row.toMap().value(QStringLiteral("name")).toString());
     return result;
-}
-
-bool copyTree(const QString &from, const QString &to)
-{
-    QDirIterator it(from, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString source = it.next();
-        const QString target = QDir(to).filePath(QDir(from).relativeFilePath(source));
-        if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !QFile::copy(source, target))
-            return false;
-    }
-    return true;
-}
-
-// A folder made to look like a mounted Kobo: its version file and an empty
-// database with the tables Calibre uses.
-bool makeKobo(const QString &root)
-{
-    QDir().mkpath(QDir(root).filePath(QStringLiteral(".kobo")));
-    QFile version(QDir(root).filePath(QStringLiteral(".kobo/version")));
-    QFile schema(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"));
-    QFile database(QDir(root).filePath(QStringLiteral(".kobo/KoboReader.sqlite")));
-    if (!version.open(QIODevice::WriteOnly) || !schema.open(QIODevice::ReadOnly) || !database.open(QIODevice::WriteOnly))
-        return false;
-    version.write("N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390");
-    database.close();
-    SqliteDb db;
-    QString error;
-    return db.open(database.fileName(), SqliteDb::Mode::ReadWrite, &error) && db.exec(QString::fromUtf8(schema.readAll()), &error);
 }
 
 // Takes the URLs QDesktopServices would open.

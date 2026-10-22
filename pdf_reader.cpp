@@ -11,7 +11,6 @@
 
 #include "pdf_reader.h"
 
-#include <QDir>
 #include <QDomDocument>
 #include <QFile>
 #include <QFileInfo>
@@ -19,7 +18,6 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
-#include <QSet>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
@@ -245,16 +243,6 @@ bool parsePacket(const QByteArray &raw, QDomDocument *document)
 } // namespace
 
 namespace PdfReader {
-
-QString pdfinfo()
-{
-    return findTool(QStringLiteral("pdfinfo")).program;
-}
-
-QString pdftoppm()
-{
-    return findTool(QStringLiteral("pdftoppm")).program;
-}
 
 std::optional<Xmp> readXmp(const QByteArray &packet, const QString &interfaceLanguage)
 {
