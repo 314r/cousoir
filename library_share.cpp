@@ -1,6 +1,7 @@
 #include "library_share.h"
 
 #include <QClipboard>
+#include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
 
@@ -124,7 +125,7 @@ void LibraryShare::updateCatalog()
     catalog.find = [library](const QString &query, const QList<BookSort::Level> &sort, QString *error) {
         return library ? library->findRows(query, sort, error) : QList<qsizetype>{};
     };
-    catalog.name = QFileInfo(m_library->libraryPath()).fileName();
+    catalog.name = QDir(m_library->libraryPath()).dirName();
     catalog.interfaceLanguage = m_library->interfaceLanguage();
     catalog.thumbnailFolder = BookLibrary::cacheFolder(m_library->libraryPath()) + QStringLiteral("/covers");
     m_server.setCatalog(catalog);

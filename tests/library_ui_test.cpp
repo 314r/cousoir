@@ -694,6 +694,10 @@ void LibraryUiTest::sharesOnTheNetwork()
         QPointF(button.constFirst()->width() / 2, button.constFirst()->height() / 2)).toPoint());
     QTRY_VERIFY(share->running());
     QCOMPARE(share->error(), QString());
+    // Never on unnoticed: the status bar says so.
+    QQuickItem *indicator = m_window->findChild<QQuickItem *>(QStringLiteral("sharingState"));
+    QVERIFY(indicator);
+    QTRY_VERIFY(indicator->isVisible());
     QTRY_VERIFY(QSettings().value(QStringLiteral("Sharing/enabled")).toBool());
 
     // The catalog of the library open.
@@ -709,6 +713,7 @@ void LibraryUiTest::sharesOnTheNetwork()
     QTest::mouseClick(settings, Qt::LeftButton, Qt::NoModifier, button.constFirst()->mapToScene(
         QPointF(button.constFirst()->width() / 2, button.constFirst()->height() / 2)).toPoint());
     QTRY_VERIFY(!share->running());
+    QTRY_VERIFY(!indicator->isVisible());
     settings->close();
     qunsetenv("COUSOIR_SHARE_LOCALHOST");
 }

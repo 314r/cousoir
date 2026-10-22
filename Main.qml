@@ -1094,6 +1094,7 @@ ThemedWindow {
         readonly property real stateWidth: Math.min((writeState.visible ? writeState.implicitWidth + Theme.gutter : 0)
             + (stopConversions.visible ? stopConversions.width + Theme.gutter : 0)
             + (stopSending.visible ? stopSending.width + Theme.gutter : 0)
+            + (sharingState.visible ? sharingState.width + Theme.gutter : 0)
             + (detailsToggle.visible ? detailsToggle.width : 0), width * 0.45)
         readonly property real sideWidth: Math.max(countWidth, stateWidth)
         // Equal sides keep the hints centered while 40 characters of them
@@ -1207,6 +1208,19 @@ ThemedWindow {
                         : qsTr("Stop the %1 sendings").arg(window.devices.jobs.length)
                     icon.source: "assets/icons/close.svg"
                     onClicked: window.devices.cancel(0)
+                }
+
+                // The library shared on the network, which a click shows in
+                // the settings: never on unnoticed.
+                StatusButton {
+                    id: sharingState
+                    objectName: "sharingState"
+
+                    visible: session.share.running
+                    text: qsTr("Shared on the network")
+                    tip: qsTr("Shared on the network, at %1").arg(session.share.urls.join(", ") || qsTr("no address"))
+                    icon.source: "assets/icons/wifi.svg"
+                    onClicked: window.openSettings("network")
                 }
 
                 StatusButton {
