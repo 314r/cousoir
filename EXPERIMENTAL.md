@@ -964,3 +964,30 @@ with Calibre's own, in English and French, plain and stemmed: the port
 gives the same terms at the same places. Cousoir now needs ICU and
 Snowball's libstemmer, both of which Calibre itself needs.
 
+### 2026-10-22 — a review of goal 19 (`exp-review9`)
+
+The CFI port and the highlights' JSON came out as Calibre's. Seven bugs,
+fixed:
+
+- Highlights never showed: the page's transparent backgrounds were
+  important, the highlights' colours not; now important, as Calibre's are
+  (seen in a screenshot of a highlight Calibre's viewer would have made).
+- Opening another book while the reader was open could show the last
+  one's page under its title, and save its positions as the new book's.
+- A key held at a chapter's end could skip a chapter: the page being left
+  still told; each message now says its page, and only the page shown is
+  heard.
+- Going somewhere within the chapter wrapped the highlights again, nested,
+  which shifted the CFIs found in them; they are wrapped once a page loads.
+- An annotation replaced kept its old words in Calibre's search index (a
+  REPLACE fires no delete trigger): deleted, then inserted, as Calibre
+  does.
+- Each highlight was a commit of the whole library: they now wait, and go
+  together a few seconds after the last, or with the position when the
+  book closes, in one change.
+- While the library could not be written, highlights were dropped: they
+  now wait with the positions and are written the next time they can be.
+
+And a PDF that cannot be read no longer polls itself forever; right to left
+books turn their pages.
+

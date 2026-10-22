@@ -640,8 +640,13 @@ bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QStri
 {
     if (!bookExists(db, bookId))
         return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    // Deleted, then inserted, as Calibre does: a REPLACE would delete the old
+    // row without its trigger, leaving its words in the search index.
     return db.run(QStringLiteral("INSERT OR IGNORE INTO annotations_dirtied (book) VALUES (?)"), { bookId }, error)
-        && db.run(QStringLiteral("INSERT OR REPLACE INTO annotations(book,format,user_type,user,timestamp,annot_id,annot_type,"
+        && db.run(QStringLiteral("DELETE FROM annotations WHERE book=? AND format=? AND user_type='local' AND user='viewer' "
+                                 "AND annot_type=? AND annot_id=?"),
+                  { bookId, annotation.format.toUpper(), annotation.type, annotation.id }, error)
+        && db.run(QStringLiteral("INSERT INTO annotations(book,format,user_type,user,timestamp,annot_id,annot_type,"
                                  "annot_data,searchable_text) VALUES (?,?,'local','viewer',?,?,?,?,?)"),
                   { bookId, annotation.format.toUpper(), annotation.timestamp, annotation.id, annotation.type,
                     QString::fromUtf8(annotation.data), annotation.searchable },

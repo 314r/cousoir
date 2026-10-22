@@ -69,6 +69,8 @@ ThemedWindow {
         show()
         raise()
         requestActivate()
+        // Another book's page may still be there: this one's loaded anew.
+        spineIndex = -1
         load(start.spineIndex || 0, start.cfi ? "cfi:" + start.cfi : "start")
         return true
     }
@@ -77,19 +79,34 @@ ThemedWindow {
         if (index < 0 || index >= bookReader.spine.length)
             return
         pending = action
+        // Within the page shown: only where to go.
         if (index === spineIndex && !view.loading) {
-            act()
+            go()
             return
         }
         spineIndex = index
         view.opacity = 0
-        view.url = bookReader.spine[index].url
+        const url = bookReader.spine[index].url
+        if (view.url.toString() === url.toString())
+            view.reload()
+        else
+            view.url = url
     }
 
-    function act() {
+    // A page loaded: the reader's script, the theme's colours and the
+    // highlights, once; then where to go.
+    function prepare() {
         const colors = { background: Theme.canvas.toString(), color: Theme.text.toString(), link: Theme.accent.toString() }
         view.runJavaScript(bookReader.script)
         view.runJavaScript("window.cousoir.setup(" + JSON.stringify(colors) + ")")
+        highlightsShown = 0
+        applyHighlights(bookReader.highlights.filter(h => h.spineIndex === spineIndex))
+        go()
+        updateAnchors()
+        view.opacity = 1
+    }
+
+    function go() {
         if (pending.startsWith("cfi:"))
             view.runJavaScript("window.cousoir.goToCfi(" + JSON.stringify(pending.slice(4)) + ")")
         else if (pending.startsWith("fragment:"))
@@ -98,12 +115,8 @@ ThemedWindow {
             view.runJavaScript("window.cousoir.goToEnd()")
         else
             view.runJavaScript("window.cousoir.goToStart()")
-        highlightsShown = 0
-        applyHighlights(bookReader.highlights.filter(h => h.spineIndex === spineIndex))
-        updateAnchors()
         hasSelection = false
         chosenHighlight = ""
-        view.opacity = 1
         view.forceActiveFocus()
     }
 
@@ -233,7 +246,7 @@ ThemedWindow {
             FlatButton {
                 objectName: "readerHighlightButton"
 
-                visible: readerWindow.hasSelection
+                visible: readerWindow.hasSelection && readerWindow.spineIndex >= 0
                 variant: "outline"
                 text: qsTr("Highlight")
                 tip: qsTr("Highlight the selection (H)")
@@ -432,7 +445,7 @@ ThemedWindow {
 
             onLoadingChanged: function(request) {
                 if (request.status === WebEngineView.LoadSucceededStatus)
-                    readerWindow.act()
+                    readerWindow.prepare()
                 else if (request.status === WebEngineView.LoadFailedStatus)
                     readerWindow.failed(qsTr("This page of the book cannot be shown: %1").arg(request.errorString))
             }
@@ -454,7 +467,7 @@ ThemedWindow {
             }
 
             onJavaScriptConsoleMessage: function(level, message) {
-                if (!message.startsWith("cousoir:"))
+                if (!message.startsWith("cousoir:") || view.loading)
                     return
                 let event
                 try {
@@ -462,6 +475,9 @@ ThemedWindow {
                 } catch (e) {
                     return
                 }
+                // From the page shown, not one being left.
+                if (bookReader.spineIndexOf(event.page_url) !== readerWindow.spineIndex)
+                    return
                 if (event.event === "position") {
                     readerWindow.position = "epubcfi(/" + 2 * (readerWindow.spineIndex + 1) + event.cfi + ")"
                     readerWindow.fileFraction = event.fraction

@@ -838,6 +838,8 @@ void LibraryUiTest::readsInCousoir()
     QCOMPARE(highlight.value(QStringLiteral("start")).toString(), QStringLiteral("/2/4/6/1:0"));
     QCOMPARE(highlight.value(QStringLiteral("end")).toString(), QStringLiteral("/2/4/6/1:22"));
     QTRY_COMPARE(reader->property("highlightsShown").toInt(), 1);
+    // Written with the position when the book closes.
+    reader->close();
     waitForSave();
     QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
     const QList<QVariantList> annotations = db.rows(
@@ -852,7 +854,6 @@ void LibraryUiTest::readsInCousoir()
     QCOMPARE(data.value(QLatin1String("spine_name")).toString(), QStringLiteral("OEBPS/text/chapter1.xhtml"));
     QCOMPARE(data.value(QLatin1String("style")).toObject().value(QLatin1String("which")).toString(), QStringLiteral("yellow"));
     QCOMPARE(annotations.first().value(4).toString(), QStringLiteral("Chapter 1, paragraph 0"));
-    reader->close();
 
     // Shown again from the library, and removed as Calibre's viewer removes one.
     QMetaObject::invokeMethod(library(), "reload");
@@ -865,13 +866,13 @@ void LibraryUiTest::readsInCousoir()
     reader->setProperty("chosenHighlight", highlight.value(QStringLiteral("uuid")));
     QMetaObject::invokeMethod(reader, "removeChosenHighlight");
     QTRY_COMPARE(bookReader->property("highlights").toList().size(), 0);
+    reader->close();
     waitForSave();
     QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
     const QJsonObject removed = QJsonDocument::fromJson(
         db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE book=%1").arg(bookId)).toString().toUtf8()).object();
     db.close();
     QVERIFY(removed.value(QLatin1String("removed")).toBool());
-    reader->close();
 #endif
 }
 

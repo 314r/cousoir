@@ -22,7 +22,10 @@
     let styleElement = null;
     let lastCfi = '';
 
+    // Each message says which page it is from: a page being left may still
+    // tell something.
     function post(message) {
+        message.page_url = location.href.split('#')[0];
         console.log('cousoir:' + JSON.stringify(message));
     }
 
@@ -314,7 +317,9 @@
             const span = document.createElementNS(XHTML, 'span');
             span.dataset.calibreRangeWrapper = String(count);
             span.dataset.annotId = uuid;
-            span.style.backgroundColor = color;
+            // Over the page's own transparent backgrounds, as Calibre's
+            // highlight_style_as_css() makes it important.
+            span.style.setProperty('background-color', color, 'important');
             node.parentNode.insertBefore(span, node);
             span.appendChild(node);
         }
@@ -375,12 +380,18 @@
         return window.innerWidth;
     }
 
+    // A right to left page: its columns go leftward, its scroll position from
+    // 0 down.
+    function rtl() {
+        return getComputedStyle(document.body || document.documentElement).direction === 'rtl';
+    }
+
     function pages() {
         return Math.max(1, Math.round(scroller().scrollWidth / pageWidth()));
     }
 
     function page() {
-        return Math.round(scroller().scrollLeft / pageWidth());
+        return Math.round(Math.abs(scroller().scrollLeft) / pageWidth());
     }
 
     function layout() {
@@ -415,7 +426,8 @@
     }
 
     function show(n) {
-        scroller().scrollLeft = Math.max(0, Math.min(n, pages() - 1)) * pageWidth();
+        const at = Math.max(0, Math.min(n, pages() - 1)) * pageWidth();
+        scroller().scrollLeft = rtl() ? -at : at;
         report();
     }
 
@@ -466,7 +478,9 @@
         }
         if (!rect)
             return 0;
-        return Math.floor((rect.left + scroller().scrollLeft) / pageWidth());
+        // Where it is with the page at its start.
+        const x = rect.left + scroller().scrollLeft;
+        return rtl() ? Math.floor((pageWidth() - 1 - x) / pageWidth()) : Math.floor(x / pageWidth());
     }
 
     function goToCfi(cfi) {

@@ -231,12 +231,10 @@ public:
     // The format Cousoir's reader reads the book in: EPUB, KEPUB, then PDF;
     // empty for none.
     Q_INVOKABLE QString readableFormat(int bookId) const;
-    // Keeps in the library where Cousoir's reader stopped in the book, as
-    // Calibre keeps its viewer's; nothing while it cannot be written.
-    void saveReadPosition(int bookId, const ReadPosition &position);
-    // Keeps a highlight made in Cousoir's reader where Calibre's viewer
-    // keeps its own; nothing while the library cannot be written.
-    void saveAnnotation(int bookId, const Annotation &annotation);
+    // Keeps in the library, in one change, where Cousoir's reader stopped in
+    // the book and the highlights made or removed there, as Calibre keeps its
+    // viewer's. False, and nothing kept, while the library cannot be written.
+    bool saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations);
     // The highlights and bookmarks of Calibre's viewer in the book's format,
     // as last read from the library.
     QList<Annotation> annotations(int bookId, const QString &format) const;

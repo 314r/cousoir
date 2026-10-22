@@ -1834,22 +1834,18 @@ QString BookLibrary::readableFormat(int bookId) const
     return {};
 }
 
-void BookLibrary::saveReadPosition(int bookId, const ReadPosition &position)
-{
-    if (!m_writable || !findBook(bookId) || position.cfi.isEmpty())
-        return;
-    CommitEngine::Request request;
-    request.readPositions.append({ bookId, position });
-    queueChange(request);
-}
-
-void BookLibrary::saveAnnotation(int bookId, const Annotation &annotation)
+bool BookLibrary::saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations)
 {
     if (!m_writable || !findBook(bookId))
-        return;
+        return false;
     CommitEngine::Request request;
-    request.annotations.append({ bookId, annotation });
-    queueChange(request);
+    if (position && !position->cfi.isEmpty())
+        request.readPositions.append({ bookId, *position });
+    for (const Annotation &annotation : annotations)
+        request.annotations.append({ bookId, annotation });
+    if (request.readPositions.isEmpty() && request.annotations.isEmpty())
+        return true;
+    return queueChange(request).isEmpty();
 }
 
 QList<Annotation> BookLibrary::annotations(int bookId, const QString &format) const

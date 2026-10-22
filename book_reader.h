@@ -3,12 +3,15 @@
 #include <QJsonObject>
 #include <QMap>
 #include <QObject>
+#include <QTimer>
 #include <QPointer>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
 #include <memory>
+
+#include "book.h"
 
 class BookLibrary;
 class EpubBook;
@@ -95,6 +98,13 @@ signals:
 
 private:
     QString positionsFile() const;
+    QJsonObject readPositions() const;
+    void writePositions(const QJsonObject &positions) const;
+    void queueAnnotation(const Annotation &annotation);
+    void keepPending() const;
+    // Writes the pending highlights to the library, with the position when
+    // `withPosition`.
+    void flush(bool withPosition);
 
     QPointer<BookLibrary> m_library;
     std::shared_ptr<EpubBook> m_book;
@@ -109,4 +119,9 @@ private:
     double m_lastFraction = 0;
     // By uuid, as Calibre's viewer keeps them.
     QMap<QString, QJsonObject> m_highlights;
+    // Those made or removed and not yet in the library, written together a
+    // while after the last, or when the book closes; kept with the
+    // positions meanwhile, should the library not be writable.
+    QList<Annotation> m_pending;
+    QTimer m_flushTimer;
 };
