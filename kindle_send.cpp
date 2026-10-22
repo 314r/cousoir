@@ -4,20 +4,37 @@
 // GPL v3:
 // - src/calibre/devices/mtp/unix/driver.py: put_file(), get_mtp_file() and
 //   delete_file_or_folder(), in the Python the job runs
-// - src/calibre/devices/mtp/driver.py: open() and books()
+// - src/calibre/devices/mtp/driver.py: open() and books(); without Calibre,
+//   prefix_for_location(), create_upload_path(), ensure_parent(),
+//   upload_books(), upload_kindle_thumbnail(), upload_apnx(),
+//   _update_drive_info() and get_pref()
+// - src/calibre/devices/mtp/defaults.py: Amazon's settings
+// - src/calibre/devices/kindle/driver.py: get_apnx_opts()
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
 #include "kindle_send.h"
 
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QSet>
+#include <QTemporaryDir>
+#include <QUuid>
 
+#include "book.h"
+#include "calibre_job.h"
+#include "device_books.h"
 #include "device_files.h"
+#include "kindle.h"
+#include "mobi_metadata.h"
+#include "native_send.h"
+#include "python_json.h"
 
 namespace {
 
@@ -200,6 +217,77 @@ def send(job):
 main(send)
 )py";
 
+// The MTP driver's settings a send follows, as get_pref() finds them in
+// mtp_devices.json: the Kindle's own, then Amazon's defaults, then the
+// global ones.
+struct MtpSettings
+{
+    QString sendTemplate = QStringLiteral("{title} - {authors}");
+    QStringList sendTo{ QStringLiteral("documents"), QStringLiteral("kindle"), QStringLiteral("books") };
+    // By extension, the folder a book goes to instead.
+    QHash<QString, QString> rules;
+};
+
+MtpSettings mtpSettings(const QString &configDirectory, const QString &serial)
+{
+    MtpSettings settings;
+    QFile file(QDir(configDirectory).filePath(QStringLiteral("mtp_devices.json")));
+    if (!file.open(QIODevice::ReadOnly))
+        return settings;
+    const QJsonObject prefs = QJsonDocument::fromJson(file.readAll()).object();
+    const QJsonObject own = prefs.value(QStringLiteral("device-") + serial).toObject();
+    const auto pref = [&](const QString &key, bool amazonHasOne) {
+        if (own.contains(key))
+            return own.value(key);
+        return amazonHasOne ? QJsonValue() : prefs.value(key);
+    };
+    if (const QJsonValue value = pref(QStringLiteral("send_template"), false); value.isString())
+        settings.sendTemplate = value.toString();
+    if (const QJsonValue value = pref(QStringLiteral("send_to"), true); value.isArray()) {
+        settings.sendTo.clear();
+        for (const QJsonValue &path : value.toArray())
+            settings.sendTo.append(path.toString());
+    }
+    for (const QJsonValue &rule : pref(QStringLiteral("rules"), false).toArray()) {
+        const QJsonArray pair = rule.toArray();
+        if (pair.size() == 2)
+            settings.rules.insert(pair.at(0).toString().toLower(), pair.at(1).toString());
+    }
+    return settings;
+}
+
+// The Kindle driver's APNX settings, KINDLE2's extra_customization in
+// device_drivers_KINDLE2.py.json: whether to send page numbers.
+bool sendsApnx(const QString &configDirectory)
+{
+    QFile file(QDir(configDirectory).filePath(QStringLiteral("device_drivers_KINDLE2.py.json")));
+    if (!file.open(QIODevice::ReadOnly))
+        return true;
+    const QJsonArray extra = QJsonDocument::fromJson(file.readAll()).object().value(QLatin1String("extra_customization")).toArray();
+    return extra.isEmpty() || extra.at(0).toBool(true);
+}
+
+// The formats MetadataUpdater writes into.
+bool isMobi(const QString &format)
+{
+    static const QStringList formats{ QStringLiteral("MOBI"), QStringLiteral("PRC"),  QStringLiteral("AZW"),
+                                      QStringLiteral("AZW3"), QStringLiteral("AZW4"), QStringLiteral("POBI") };
+    return formats.contains(format.toUpper());
+}
+
+QByteArray readFrom(DeviceFiles &files, const QString &path)
+{
+    if (!files.find(path))
+        return {};
+    QTemporaryDir folder;
+    const QString local = folder.filePath(QStringLiteral("file"));
+    QString ignored;
+    if (!folder.isValid() || !files.read(path, local, &ignored))
+        return {};
+    QFile file(local);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
 } // namespace
 
 namespace KindleSend {
@@ -255,6 +343,221 @@ bool prepare(const LibraryData &data, const QList<int> &bookIds, DeviceFiles &fi
         { QStringLiteral("staged"), staged },
     };
     return SendJob::writeJob(folder, job, bookIds, sendScript, error);
+}
+
+bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceFiles &files, const Device &device,
+                     const QStringList &formatMap, const QString &configDirectory, const QString &interfaceLanguage,
+                     const QString &folder, QString *error)
+{
+    // MAX_PATH_LEN of the MTP driver; THUMBNAIL_HEIGHT for a Kindle.
+    constexpr qsizetype maxPathLength = 230;
+    constexpr int thumbnailSize = 500;
+    const MtpSettings settings = mtpSettings(configDirectory, device.serial);
+    const MobiMetadata::Options mobiOptions = MobiMetadata::Options::load(configDirectory);
+    const bool apnxWanted = sendsApnx(configDirectory);
+    const QDir staging(QDir(folder).filePath(QStringLiteral("device")));
+    QDir().mkpath(staging.path());
+
+    // The Kindle's folders by lower case path, as the driver finds them
+    // whatever their case, and its books.
+    QHash<QString, QString> folders;
+    for (const DeviceFiles::Entry &entry : files.entries()) {
+        if (entry.folder)
+            folders.insert(entry.path.toLower(), entry.path);
+    }
+    QString listError;
+    QSet<QString> onDevice;
+    for (const DeviceBook &book : Kindle::books(files, &listError))
+        onDevice.insert(book.lpath.toLower());
+    // prefix_for_location(): the first folder of send_to the Kindle has.
+    QString prefix = QStringLiteral("Books");
+    for (const QString &candidate : settings.sendTo) {
+        if (folders.contains(QString(candidate).replace(u'\\', u'/').toLower())) {
+            prefix = folders.value(QString(candidate).replace(u'\\', u'/').toLower());
+            break;
+        }
+    }
+
+    QJsonArray operations;
+    int puts = 0;
+    // ensure_parent(): the folders of `path` the Kindle lacks, made; the
+    // path with the folders' own case.
+    const auto ensureParent = [&](const QString &path) {
+        QStringList parts = path.split(u'/');
+        const QString name = parts.takeLast();
+        QString current;
+        for (const QString &part : std::as_const(parts)) {
+            const QString wanted = current.isEmpty() ? part : current + u'/' + part;
+            const auto existing = folders.constFind(wanted.toLower());
+            if (existing != folders.cend()) {
+                current = *existing;
+                continue;
+            }
+            operations.append(QJsonObject{ { QStringLiteral("op"), QStringLiteral("mkdir") }, { QStringLiteral("path"), wanted } });
+            folders.insert(wanted.toLower(), wanted);
+            current = wanted;
+        }
+        return current.isEmpty() ? name : current + u'/' + name;
+    };
+    const auto put = [&](const QString &path, const QByteArray &bytes) -> std::optional<QString> {
+        const QString placed = ensureParent(path);
+        const QString local = QStringLiteral("device/put-%1").arg(puts++);
+        if (!CalibreJob::writeFile(QDir(folder).filePath(local), bytes, error))
+            return std::nullopt;
+        operations.append(QJsonObject{ { QStringLiteral("op"), QStringLiteral("put") },
+                                       { QStringLiteral("path"), placed },
+                                       { QStringLiteral("file"), local } });
+        return placed;
+    };
+
+    // driveinfo.calibre, as the driver writes it when it lists the books.
+    PythonJson::Value info = PythonJson::parse(readFrom(files, QStringLiteral("driveinfo.calibre")));
+    if (info.kind != PythonJson::Value::Kind::Dict)
+        info = PythonJson::Value::dict();
+    if (info.text(QStringLiteral("device_store_uuid")).isEmpty())
+        info.insert(QStringLiteral("device_store_uuid"),
+                    PythonJson::Value::from(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+    if (info.text(QStringLiteral("device_name")).isEmpty()) {
+        const QString name = !device.friendlyName.isEmpty() ? device.friendlyName
+            : !device.modelName.isEmpty()                   ? device.modelName
+                                                            : QStringLiteral("Unknown MTP device");
+        info.insert(QStringLiteral("device_name"), PythonJson::Value::from(name));
+    }
+    info.insert(QStringLiteral("location_code"), PythonJson::Value::from(QStringLiteral("main")));
+    info.insert(QStringLiteral("last_library_uuid"), PythonJson::Value::from(data.uuid));
+    info.insert(QStringLiteral("date_last_connected"),
+                PythonJson::Value::from(QDateTime::currentDateTime().toOffsetFromUtc(
+                                            QDateTime::currentDateTime().offsetFromUtc()).toString(Qt::ISODateWithMs)));
+    info.insert(QStringLiteral("mtp_prefix"), PythonJson::Value::from(QStringLiteral("mtp:::%1:::").arg(files.storageId())));
+    if (!put(QStringLiteral("driveinfo.calibre"), PythonJson::dumps(info).toUtf8()))
+        return false;
+
+    // metadata.calibre's entries of the books still there, as books() keeps
+    // them.
+    QList<QByteArray> entries;
+    for (const QByteArray &element : DeviceBooks::arrayElements(readFrom(files, QStringLiteral("metadata.calibre")))) {
+        if (onDevice.contains(PythonJson::parse(element).text(QStringLiteral("lpath")).toLower()))
+            entries.append(element);
+    }
+
+    QJsonArray sent;
+    QJsonArray unsendable;
+    for (const int bookId : bookIds) {
+        const Book *book = data.book(bookId);
+        if (!book)
+            continue;
+        QStringList formats;
+        for (const BookFormat &format : book->formats) {
+            if (!format.file.isEmpty())
+                formats.append(format.format);
+        }
+        const QString format = DeviceBooks::sendFormat(formats, formatMap);
+        if (format.isEmpty()) {
+            unsendable.append(book->title);
+            continue;
+        }
+        QString source;
+        for (const BookFormat &bookFormat : book->formats) {
+            if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
+                source = bookFormat.file;
+        }
+        QFile sourceFile(source);
+        if (!sourceFile.open(QIODevice::ReadOnly)) {
+            *error = QObject::tr("Cannot read %1.").arg(source);
+            return false;
+        }
+        QByteArray bytes = sourceFile.readAll();
+        QByteArray cover;
+        if (!book->coverFile.isEmpty()) {
+            QFile coverFile(book->coverFile);
+            if (coverFile.open(QIODevice::ReadOnly))
+                cover = coverFile.readAll();
+        }
+        if (isMobi(format)) {
+            // The library's metadata in the copy, as Calibre's send writes it.
+            MobiMetadata::Metadata metadata;
+            metadata.title = book->title;
+            metadata.authors = book->authors;
+            metadata.authorSort = book->authorSort;
+            metadata.publisher = book->publisher;
+            metadata.comments = book->comments;
+            for (const auto &[type, value] : book->identifiers) {
+                if (type == QLatin1String("isbn"))
+                    metadata.isbn = value;
+            }
+            metadata.tags = book->tags;
+            metadata.pubdate = book->pubdate;
+            metadata.uuid = book->uuid;
+            metadata.languages = book->languages;
+            metadata.cover = cover;
+            QString mobiError;
+            if (!MobiMetadata::update(&bytes, metadata, mobiOptions, &mobiError))
+                bytes = sourceFile.seek(0) ? sourceFile.readAll() : bytes;
+        }
+
+        // create_upload_path(), in the folder of a rule for the format.
+        const QString extension = u'.' + format.toLower();
+        NativeSend::UploadOptions options;
+        options.saveTemplate = settings.sendTemplate;
+        options.prefix = settings.rules.value(format.toLower(), prefix);
+        options.maxLength = maxPathLength;
+        options.useSubdirs = settings.sendTemplate.contains(u'/');
+        const QString relative = NativeSend::uploadPath(data, *book, extension, options, interfaceLanguage);
+        const std::optional<QString> placed = put(options.prefix + u'/' + relative, bytes);
+        if (!placed)
+            return false;
+        const QString lpath = *placed;
+
+        // upload_kindle_thumbnail(): the cover where the Kindle looks, a copy
+        // against Amazon's bug, and which file it is for.
+        const QString thumbnailName = MobiMetadata::thumbnailName(bytes);
+        const QImage coverImage = QImage::fromData(cover);
+        if (!thumbnailName.isEmpty() && !coverImage.isNull()) {
+            const QByteArray jpeg = NativeSend::thumbnailJpeg(coverImage, thumbnailSize, thumbnailSize, 75);
+            const QByteArray index
+                = QCryptographicHash::hash(lpath.toLower().toUtf8(), QCryptographicHash::Sha1).toHex();
+            if (!put(QStringLiteral("system/thumbnails/") + thumbnailName, jpeg)
+                || !put(QStringLiteral("amazon-cover-bug/") + thumbnailName, jpeg)
+                || !put(QStringLiteral("amazon-cover-bug/") + QString::fromLatin1(index), thumbnailName.toUtf8()))
+                return false;
+        }
+        // upload_apnx(): the page numbers, in the book's .sdr folder.
+        if (apnxWanted) {
+            QString apnxError;
+            const QString guid = QUuid::createUuid().toString(QUuid::Id128).left(8);
+            const QByteArray apnx = MobiMetadata::apnx(bytes, guid, &apnxError);
+            if (!apnx.isEmpty()) {
+                const QString name = QFileInfo(lpath).completeBaseName();
+                const QString parent = lpath.contains(u'/') ? lpath.left(lpath.lastIndexOf(u'/') + 1) : QString();
+                if (!put(parent + name + QStringLiteral(".sdr/") + name + QStringLiteral(".apnx"), apnx))
+                    return false;
+            }
+        }
+
+        // The book's entry, by its path in lower case, in place of one there.
+        const QString entryPath = lpath.toLower();
+        const QByteArray text = NativeSend::entryText(NativeSend::bookEntry(
+            data, *book, entryPath, bytes.size(),
+            coverImage.isNull() ? PythonJson::Value::null() : NativeSend::thumbnail(*book, thumbnailSize, thumbnailSize)));
+        bool replaced = false;
+        for (QByteArray &element : entries) {
+            if (PythonJson::parse(element).text(QStringLiteral("lpath")).toLower() == entryPath) {
+                element = text;
+                replaced = true;
+            }
+        }
+        if (!replaced)
+            entries.append(text);
+        sent.append(QJsonObject{ { QStringLiteral("book"), bookId }, { QStringLiteral("lpath"), lpath } });
+    }
+    if (!sent.isEmpty() && !put(QStringLiteral("metadata.calibre"), DeviceBooks::joinElements(entries)))
+        return false;
+    const QJsonObject result{
+        { QStringLiteral("sent"), sent },
+        { QStringLiteral("unsendable"), unsendable },
+        { QStringLiteral("operations"), operations },
+    };
+    return CalibreJob::writeFile(QDir(folder).filePath(QStringLiteral("result.json")), QJsonDocument(result).toJson(), error);
 }
 
 Outcome outcome(const SendJob::Result &result)

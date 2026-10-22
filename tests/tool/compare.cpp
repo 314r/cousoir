@@ -11,6 +11,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QtEndian>
 #include <QXmlStreamReader>
 
 #include <algorithm>
@@ -684,8 +685,10 @@ int compareLibraries(const QStringList &arguments)
 //   a new device or the folder a Kobo is mounted on.
 //
 // With --native, Cousoir sent without Calibre: its KEPUBs are its own, so a
-// book file only has to be a KEPUB with Kobo's spans, and metadata.calibre
-// and driveinfo.calibre leave out the cover's thumbnail bytes and Calibre's
+// book file only has to be a KEPUB with Kobo's spans; a MOBI or AZW3 has to
+// be Calibre's but for its cover images, a Kindle's cover thumbnails only
+// their size, a PDF or EPUB sent as it is nothing; metadata.calibre and
+// driveinfo.calibre leave out the cover's thumbnail bytes and Calibre's
 // version.
 //
 // Prints each difference and exits with 1 when there is one.
@@ -729,6 +732,50 @@ bool truthy(const QJsonValue &value)
     default:
         return false;
     }
+}
+
+bool isMobi(const QString &path)
+{
+    static const QStringList extensions{ QStringLiteral(".mobi"), QStringLiteral(".azw3"), QStringLiteral(".azw"),
+                                         QStringLiteral(".prc"),  QStringLiteral(".azw4"), QStringLiteral(".pobi") };
+    return std::any_of(extensions.cbegin(), extensions.cend(),
+                       [&path](const QString &extension) { return path.endsWith(extension, Qt::CaseInsensitive); });
+}
+
+// Where two MOBI files differ, record by record, but for JPEG records of
+// the same size, the cover and its thumbnail; empty when alike.
+QString mobiDifference(const QString &a, const QString &b)
+{
+    const QByteArray x = readFile(a).value_or(QByteArray());
+    const QByteArray y = readFile(b).value_or(QByteArray());
+    if (x == y)
+        return {};
+    const auto records = [](const QByteArray &book) {
+        QList<QByteArray> found;
+        if (book.size() < 78)
+            return found;
+        const int count = qFromBigEndian<quint16>(book.constData() + 76);
+        for (int i = 0; i < count && 78 + 8 * (i + 1) <= book.size(); ++i) {
+            const qsizetype start = qFromBigEndian<quint32>(book.constData() + 78 + 8 * i);
+            const qsizetype end = i + 1 < count ? qFromBigEndian<quint32>(book.constData() + 78 + 8 * (i + 1)) : book.size();
+            found.append(book.mid(start, end - start));
+        }
+        return found;
+    };
+    const QList<QByteArray> rx = records(x);
+    const QList<QByteArray> ry = records(y);
+    if (rx.size() != ry.size() || rx.isEmpty())
+        return QStringLiteral("%1 records, %2").arg(rx.size()).arg(ry.size());
+    if (x.left(78 + 8 * rx.size()) != y.left(78 + 8 * ry.size()))
+        return QStringLiteral("the record list");
+    for (qsizetype i = 0; i < rx.size(); ++i) {
+        if (rx.at(i) == ry.at(i))
+            continue;
+        if (rx.at(i).size() == ry.at(i).size() && rx.at(i).startsWith("\xff\xd8") && ry.at(i).startsWith("\xff\xd8"))
+            continue;
+        return QStringLiteral("record %1").arg(i);
+    }
+    return {};
 }
 
 std::optional<QMap<QString, QJsonObject>> deviceMetadata(const QString &path, bool native = false)
@@ -850,9 +897,19 @@ int compareDevices(const QStringList &arguments)
             else if (*da != *db)
                 problems.append(QStringLiteral("driveinfo.calibre differs:\n    Calibre: %1\n    Cousoir: %2")
                                     .arg(display(*da), display(*db)));
+        } else if (native && rel.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive)
+                   && (rel.startsWith(QLatin1String("system/thumbnails/")) || rel.startsWith(QLatin1String("amazon-cover-bug/")))) {
+            // A Kindle's cover thumbnail, of Qt's JPEG: its size.
+            if (QImage(fa[rel]).size() != QImage(fb[rel]).size())
+                problems.append(QStringLiteral("%1 is not the same size").arg(rel));
+        } else if (native && isMobi(rel)) {
+            // Calibre's metadata, but for the cover images, of Qt's JPEG.
+            if (const QString difference = mobiDifference(fa[rel], fb[rel]); !difference.isEmpty())
+                problems.append(QStringLiteral("%1 differs: %2").arg(rel, difference));
         } else if (native && !rel.endsWith(QLatin1String(".kepub.epub")) && !rel.endsWith(QLatin1String(".calibre"))
+                   && !rel.endsWith(QLatin1String(".apnx")) && !rel.startsWith(QLatin1String("amazon-cover-bug/"))
                    && !rel.startsWith(u'.')) {
-            // Cousoir puts no metadata in a file it does not convert.
+            // Cousoir puts no metadata in a PDF or EPUB it sends as it is.
             continue;
         } else if (native && rel.endsWith(QLatin1String(".kepub.epub"))) {
             const std::optional<ZipEntries> zip = readZip(fb[rel]);

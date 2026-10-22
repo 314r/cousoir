@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QHash>
 #include <QString>
 #include <QStringList>
@@ -106,6 +107,14 @@ QString seriesIndexText(double index);
 // _get_next_series_num_for_list(): the index a book added to a series takes,
 // after the indices its books have.
 double nextSeriesIndex(QList<double> indices, const Tweaks &tweaks);
+
+// lang_as_iso639_1(): the two letter code of a language, "fr" for "fra" or
+// "French"; empty for a language without one.
+QString languageAsIso6391(const QString &language);
+
+// iana2mobi() of a language without a region: the language code of a MOBI
+// header, its four bytes.
+QByteArray mobiLanguageCode(const QString &language);
 
 // calibre_langcode_to_name(): the name of an ISO 639 code in Calibre's
 // interface language, as Calibre's tables and translations have it (see

@@ -1,0 +1,79 @@
+{
+ "bare": {
+  "author_sort": "",
+  "authors": [],
+  "comments": "",
+  "isbn": "",
+  "languages": [],
+  "options": {},
+  "pubdate": "0101-01-01T00:00:00+00:00",
+  "publisher": "",
+  "tags": [],
+  "title": "Untitled",
+  "uuid": ""
+ },
+ "cover": {
+  "author_sort": "Cook, Glen",
+  "authors": [
+   "Glen Cook"
+  ],
+  "comments": "",
+  "cover": "cover.jpg",
+  "isbn": "",
+  "languages": [
+   "eng"
+  ],
+  "options": {},
+  "pubdate": "1984-05-02T00:00:00+00:00",
+  "publisher": "",
+  "tags": [],
+  "title": "The Black Company",
+  "uuid": ""
+ },
+ "full": {
+  "author_sort": "Vian, Boris & Łojek, René",
+  "authors": [
+   "Boris Vian",
+   "René Łojek"
+  ],
+  "comments": "<div><p>Un roman d’amour fou.</p></div><div class=\"user_annotations\">old</div>",
+  "isbn": "9782253140870",
+  "languages": [
+   "fra",
+   "eng"
+  ],
+  "options": {},
+  "pubdate": "1947-03-20T00:00:00+00:00",
+  "publisher": "Gallimard",
+  "tags": [
+   "Roman",
+   "Classique ★"
+  ],
+  "title": "L’Écume des jours",
+  "uuid": "94357bfe-c867-4007-956a-4c125dd8ad7e"
+ },
+ "options": {
+  "author_sort": "Cook, Glen",
+  "authors": [
+   "Glen Cook"
+  ],
+  "comments": "",
+  "isbn": "",
+  "languages": [
+   "eng"
+  ],
+  "options": {
+   "personal_doc": "Dark",
+   "prefer_author_sort": true,
+   "share_not_sync": false
+  },
+  "pubdate": "1984-05-02T12:00:00+00:00",
+  "publisher": "Tor",
+  "tags": [
+   "Fantasy",
+   "Dark"
+  ],
+  "title": "Shadows Linger",
+  "uuid": "f30e1f72-acfb-4c1c-98fd-71b2a3ffc29e"
+ }
+}

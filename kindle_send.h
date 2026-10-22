@@ -60,6 +60,19 @@ struct Outcome
     QList<Operation> operations;
 };
 
+// The send without Calibre: writes into `folder` what Calibre's job would
+// leave there for the same books: each copy with the library's metadata
+// written in, as MetadataUpdater writes it into a MOBI or AZW3, at the MTP
+// driver's send template, its cover thumbnail, kept against Amazon's bug,
+// its APNX page numbers by the fast method, then metadata.calibre and
+// driveinfo.calibre; the operations putting them on the Kindle, which
+// outcome() reads and apply() does. Calibre's settings in
+// `configDirectory` apply: the MTP driver's for this Kindle, the Kindle
+// driver's APNX, MOBI output's.
+bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceFiles &files, const Device &device,
+                     const QStringList &formatMap, const QString &configDirectory, const QString &interfaceLanguage,
+                     const QString &folder, QString *error);
+
 // What the job in `folder` came to; `exitCode` is calibre-debug's.
 Outcome outcome(const QString &folder, int exitCode);
 // The same from the job's result as SendJob read it.

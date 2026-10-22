@@ -52,3 +52,4 @@ oracle:
 	calibre-debug -e tools/oracle/template_tables_oracle.py -- .
 	calibre-debug -e tools/oracle/language_fixture.py -- tests/data/calibre-resources
 	CALIBRE_OVERRIDE_LANG=en calibre-debug -e tools/oracle/source_oracle.py -- tests/data/oracle/source.json
+	calibre-debug -e tools/oracle/mobi_oracle.py -- tests/data

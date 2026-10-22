@@ -571,8 +571,8 @@ library's, and Cousoir the books Calibre sent, by their uuid, then by their
 title and authors as Calibre does. Calibre does the work through
 calibre-debug, on copies of what it reads of the library and of the reader;
 Cousoir then puts the new files on the reader, the books first and
-`metadata.calibre` last. Without Calibre, Cousoir sends to a Kobo by itself
-(below); a Kindle needs Calibre. While Calibre is open on this computer, it handles the readers:
+`metadata.calibre` last. Without Calibre, Cousoir sends to a Kobo or a
+Kindle by itself (below). While Calibre is open on this computer, it handles the readers:
 Cousoir sends nothing and removes nothing until it is closed. There is no
 settings page: the drivers' settings are Calibre's, set in Calibre.
 
@@ -642,6 +642,21 @@ The Calibre job runs the MTP driver on a stand-in for the Kindle, its files
 as Cousoir listed them, and notes what the driver would do to them, which
 Cousoir then does over the connection it kept open from the listing on.
 
+Without Calibre, Cousoir sends to a Kindle by itself, as Calibre's MTP
+driver does with its settings: the library's metadata written into the
+AZW3 or MOBI copy as Calibre's MOBI metadata writer writes it (the EXTH
+records, the title, the cover and its thumbnail in the book where they
+fit), the file in `documents` at the driver's send template, its cover
+thumbnail in `system/thumbnails` with its copy against Amazon's bug, its
+APNX page numbers by the fast method, and the book in `metadata.calibre`
+and `driveinfo.calibre`. The golden test sends the same books both ways:
+the books are Calibre's byte for byte, but for the cover images, the
+page numbers too, and Calibre, connecting, knows the books Cousoir sent. A
+PDF goes as it is, without the library's metadata. A book without a cover
+gets no thumbnail, where Calibre puts its default cover. Page numbers are
+always counted the fast way: Calibre's other methods, and a page count
+from a column, need Calibre.
+
 The highlights, notes and bookmarks made on the Kindle show as the Kobo's
 do, read from `documents/My Clippings.txt`, which the Kindle writes in its
 own language (English, French, German, Spanish, Italian, Portuguese and
@@ -664,6 +679,9 @@ Cousoir departs from Calibre here:
 - Calibre notes each MTP device it connects to in its settings,
   `mtp_devices.json`; Cousoir does not.
 - Older Kindles that come as a disk rather than over MTP are not handled.
+- Writing metadata into a MOBI file without an EXTH header, Calibre loses
+  its text: the second rewrite reads the file at its first length. Cousoir
+  keeps it.
 
 ## Sharing on the network
 
@@ -1109,6 +1127,10 @@ The tests check the port against Calibre itself:
   pages. `qr_code_tests` compares Cousoir's QR codes, module by module,
   with libqrencode's (`tools/make_qr_fixtures.sh` made them), and reads
   them back with `zbarimg` when it is installed.
+- `mobi_metadata_tests` writes metadata into MOBI and AZW3 books, Calibre's
+  conversions and two it never makes, and compares them byte for byte with
+  what Calibre's own writer made of them (`tools/oracle/mobi_oracle.py`),
+  the cover images aside; the thumbnail names and APNX files too.
 - `metadata_web_tests` checks the Open Library source: Calibre's search
   words (`tests/data/oracle/source.json`), the search and work answers Open
   Library once gave, read; dates; Calibre's ranking; and, against a fake

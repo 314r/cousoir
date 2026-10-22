@@ -529,7 +529,7 @@ int DeviceLibrary::deviceCount() const
 
 bool DeviceLibrary::available() const
 {
-    // A Kobo needs no Calibre.
+    // Neither a Kobo nor a Kindle needs Calibre.
     return true;
 }
 
@@ -615,8 +615,6 @@ QString DeviceLibrary::send(const QVariantList &bookIds, const QString &root)
     if (!m_writable)
         return readOnlyReason();
     const Connected *connected = find(root);
-    if (connected && connected->kind == Kind::Kindle && m_program.isEmpty())
-        return tr("Sending books to a Kindle needs Calibre, which is not installed.");
     if (!connected)
         return tr("The device is no longer connected.");
     if (connected->kind == Kind::Kindle && connected->loading)
@@ -1031,7 +1029,7 @@ void DeviceLibrary::startNext()
             return;
         }
         m_jobs.first().link = std::move(prepared.second);
-        if (m_jobs.first().kind == Kind::Kobo && sendsNatively())
+        if (sendsNatively())
             finishSend(0);
         else
             startProcess(folder);
@@ -1054,10 +1052,16 @@ void DeviceLibrary::startNext()
     } else {
         // The Kindle's connection stays open until its files are there.
         watcher->setFuture(QtConcurrent::run(&m_kindlePool, [data, bookIds = job.bookIds, slot = connected->slot, formats,
-                                                             folder] {
+                                                             folder, native = sendsNatively(), config = m_configDirectory,
+                                                             language = m_library->interfaceLanguage()] {
             QString error;
             std::shared_ptr<KindleLink> link = KindleLink::open(slot, &error);
-            if (link && !KindleSend::prepare(data, bookIds, *link->files, link->device, formats, folder, &error))
+            // Without Calibre, Cousoir's own send, as Calibre's would leave it.
+            const bool prepared = link
+                && (native ? KindleSend::prepareNatively(data, bookIds, *link->files, link->device, formats, config,
+                                                         language, folder, &error)
+                           : KindleSend::prepare(data, bookIds, *link->files, link->device, formats, folder, &error));
+            if (!prepared)
                 link.reset();
             return Prepared{ error, link };
         }));
