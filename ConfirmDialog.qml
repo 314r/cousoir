@@ -28,6 +28,15 @@ Popup {
         dialog.accepted()
     }
 
+    // Enter: the button it is on, else the action.
+    function pressEnter() {
+        const item = dialog.contentItem.Window.activeFocusItem
+        if (item && item.checkable !== undefined && item.clicked !== undefined)
+            item.clicked()
+        else
+            dialog.accept()
+    }
+
     parent: Overlay.overlay
     anchors.centerIn: parent
     width: Math.min(parent ? parent.width - 2 * Theme.pagePadding : 0, Math.round(440 * Theme.spacingScale))
@@ -49,8 +58,8 @@ Popup {
     contentItem: ColumnLayout {
         spacing: Theme.gutter
 
-        Keys.onReturnPressed: dialog.accept()
-        Keys.onEnterPressed: dialog.accept()
+        Keys.onReturnPressed: dialog.pressEnter()
+        Keys.onEnterPressed: dialog.pressEnter()
 
         Label {
             objectName: "confirmTitle"

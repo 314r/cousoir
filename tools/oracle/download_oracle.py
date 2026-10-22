@@ -4,11 +4,17 @@
 #
 #   calibre-debug -e tools/oracle/download_oracle.py -- identify <metadata_download.cpp> <folder> <found.json>
 #   calibre-debug -e tools/oracle/download_oracle.py -- apply <library> <ops.json>
+#   calibre-debug -e tools/oracle/download_oracle.py -- covers <metadata_download.cpp> <folder>
 #
 # identify runs Cousoir's identify job, the Python of metadata_download.cpp,
 # in <folder> as Cousoir runs it, but for Calibre's single_identify(), which
 # returns the books of found.json, as OPF the way it does, instead of asking
 # the sources; the OPFs are kept in <folder>/opfs.json for apply.
+#
+# covers runs Cousoir's covers job in the identify job's <folder>, with
+# Calibre's single_covers() saving two covers as it does instead of asking
+# the sources, and checks that the job hands it the identify job's caches
+# and ends with its result.
 #
 # apply makes the download ops of a cousoir-cli apply file, [{"download":
 # {"book": 2, "found": <folder>, "result": 0, "fields": [...], "append":
@@ -44,6 +50,18 @@ def metadata(entry):
     return mi
 
 
+# The sources' caches single_identify() returns, as dump_caches() makes them.
+CACHES = {'Google': {'isbn_to_identifier': {'9780812521399': 'xE4_AAAA'},
+                     'identifier_to_cover': {'xE4_AAAA': 'https://books.google.com/cover.jpg'}}}
+
+
+def job_script(cpp, name):
+    with open(cpp, encoding='utf-8') as f:
+        source = f.read()
+    start = source.index(name + '[] = R"(') + len(name + '[] = R"(')
+    return source[start:source.index(')";', start)]
+
+
 def identify(cpp, folder, found_path):
     import calibre.ebooks.metadata.sources.update as update
     import calibre.ebooks.metadata.sources.worker as worker
@@ -52,10 +70,7 @@ def identify(cpp, folder, found_path):
 
     with open(found_path, encoding='utf-8') as f:
         found = json.load(f)
-    with open(cpp, encoding='utf-8') as f:
-        source = f.read()
-    start = source.index('identifyScript[] = R"(') + len('identifyScript[] = R"(')
-    script = source[start:source.index(')";', start)]
+    script = job_script(cpp, 'identifyScript')
 
     opfs = []
 
@@ -64,7 +79,7 @@ def identify(cpp, folder, found_path):
         log('Asked for', title, authors, identifiers)
         results = [metadata(entry) for entry in found]
         opfs.extend(metadata_to_opf(r) for r in results)
-        return list(opfs), [bool(entry.get('has_cover')) for entry in found], {}, log.dump()
+        return list(opfs), [bool(entry.get('has_cover')) for entry in found], CACHES, log.dump()
 
     worker.single_identify = single_identify
     update.update_sources = lambda wait_for_completion=False: True
@@ -137,8 +152,49 @@ def apply(library, ops_path):
     db.close()
 
 
+def covers(cpp, folder):
+    import calibre.ebooks.metadata.sources.worker as worker
+    from calibre.utils.logging import GUILog
+
+    script = job_script(cpp, 'coversScript')
+    with open(os.path.join(os.path.dirname(os.path.abspath(cpp)), 'tests/data/edits/large.jpg'), 'rb') as f:
+        image = f.read()
+    asked = []
+
+    def single_covers(title, authors, identifiers, caches, tdir):
+        asked.append(caches)
+        for name in ('Google,,1200,,1800,,jpeg', 'Amazon.com{0},,300,,450,,jpeg'):
+            with open(os.path.join(tdir, name + '.cover'), 'wb') as f:
+                f.write(image)
+            os.mkdir(os.path.join(tdir, name + '.cover.done'))
+        return GUILog().dump()
+
+    worker.single_covers = single_covers
+    with open(os.path.join(folder, 'job.json'), 'w', encoding='utf-8') as f:
+        json.dump({'kind': 'covers', 'title': 'Asked', 'authors': ['Someone'], 'identifiers': [['isbn', '1']],
+                   'timeout': 30}, f)
+    sys.argv = [os.path.join(folder, 'download.py'), '--', folder]
+    # Twice, as the dialog does for a book found and then another: the job
+    # finds the folder of covers emptied by Cousoir in between.
+    for _ in range(2):
+        exec(compile(script, 'download.py', 'exec'), {'__name__': '__main__'})
+        if asked[-1] != CACHES:
+            raise SystemExit(f'The covers job was given {asked[-1]!r}, not the identify job\'s caches')
+        with open(os.path.join(folder, 'result.json'), encoding='utf-8') as f:
+            if json.load(f) != {'covers': True}:
+                raise SystemExit('The covers job wrote no result')
+        names = sorted(os.listdir(os.path.join(folder, 'covers')))
+        if len(names) != 4:
+            raise SystemExit(f'The covers job saved {names}')
+        import shutil
+        shutil.rmtree(os.path.join(folder, 'covers'))
+        os.remove(os.path.join(folder, 'result.json'))
+
+
 if mode == 'identify':
     identify(*args[:3])
+elif mode == 'covers':
+    covers(*args[:2])
 elif mode == 'apply':
     apply(*args[:2])
 else:

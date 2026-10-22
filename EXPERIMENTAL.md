@@ -635,3 +635,27 @@ on None, and an error's own text is still English.
 Left for later: downloading for several books at once, as Calibre's bulk
 download does, and Calibre's per-source settings.
 
+### 2026-10-22 — a review of goal 9 (`exp-review5`)
+
+An agent reviewed the metadata download. What it found, each checked and
+fixed:
+
+- Covers asked for a second time ran in the folder of the first: their
+  covers mixed, and Calibre's `single_covers()` fails on a cover it saved
+  already, which the fake did not do. Covers asked for while others came
+  were refused, and the dialog showed the old ones as the new book's. A
+  covers job now replaces the one before, in a folder of its own; the fake
+  fails as Calibre does. Tested both ways.
+- A cover picked, then Back to the fields and Save, saved the fields alone.
+  The cover goes with them, and the footer says so. Tested.
+- A covers job that failed said nothing; it tells why now, the covers saved
+  before kept. A start failing at once could leave the spinner turning.
+- A book without a cover was given the first one found unless another was
+  picked; it keeps having none, as in Calibre's dialog.
+- The keyboard: Space ticks a field, the arrows pick a cover, and Enter on
+  a button presses it rather than saving, in the confirmation dialog too.
+  Covers coming in no longer reload the grid.
+- Smaller: entities in a plain summary, a description of spaces taken as
+  one to add to, empty author sorts, the log of a search that found
+  nothing, errors of the job's Python past its first part.
+

@@ -1423,7 +1423,11 @@ void LibraryUiTest::downloadsMetadata()
     QTRY_VERIFY(!downloads->searchingCovers());
     QTRY_VERIFY(control("downloadCover1"));
     click("downloadCover1");
-    QCOMPARE(dialog->property("cover").toInt(), 1);
+    QVERIFY(dialog->property("coverPicked").toBool());
+    // Back to the fields, the cover picked still goes with them.
+    click("downloadBack");
+    QTRY_COMPARE(dialog->property("page").toString(), QStringLiteral("fields"));
+    const QString coverBefore = library()->property("currentBook").toMap().value(QStringLiteral("cover")).toString();
     click("downloadSave");
     QTRY_VERIFY(!dialog->property("opened").toBool());
     waitForSave();
@@ -1434,6 +1438,21 @@ void LibraryUiTest::downloadsMetadata()
     QTRY_COMPARE(text("keyHints"), QStringLiteral("“The Black Company” updated from the web; Revert changes undoes it."));
     QTRY_VERIFY(control("revertChangesButton")->isVisible());
     QCOMPARE(downloads->state(), QStringLiteral("idle"));
+    QVERIFY(book().value(QStringLiteral("cover")).toString() != coverBefore);
+
+    // Space ticks the field it is on; Enter on Cancel cancels.
+    click("downloadMetadataButton");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QTRY_COMPARE(downloads->state(), QStringLiteral("found"));
+    QTRY_VERIFY(control("downloadField_title"));
+    QVERIFY(!dialog->property("ticked").toMap().value(QStringLiteral("title")).toBool());
+    control("downloadFields")->forceActiveFocus();
+    QTest::keyClick(m_window, Qt::Key_Space);
+    QTRY_VERIFY(dialog->property("ticked").toMap().value(QStringLiteral("title")).toBool());
+    control("downloadCancel")->forceActiveFocus();
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    QCOMPARE(book().value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
 
     // Closed, the download stops.
     qputenv("COUSOIR_FAKE_DELAY", "20");
