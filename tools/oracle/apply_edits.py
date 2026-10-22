@@ -5,13 +5,15 @@
 #
 # The file is cousoir-cli apply's. Edits, [{"book": 1, "set": {"title": ...}}],
 # go field by field through Cache.set_field() or set_cover(), in the order
-# Cache.set_metadata() sets them; bulk edits, [{"bulk": {"books": [1, 2],
+# Cache.set_metadata() sets them, custom columns ("#genre") last; bulk edits, [{"bulk": {"books": [1, 2],
 # "addTags": ...}}], as Calibre's bulk metadata edit applies them, after the
 # single edits. Then, in cousoir-cli's order: formats copied
 # from one book to another as Merge only formats copies them, formats to the
 # trash with remove_formats(), books with remove_books(), restorations with
 # move_book_from_trash() and move_format_from_trash(), books added as
-# calibredb add adds them, formats with add_format(). The metadata.opf files
+# calibredb add adds them, but for the files read before the library opens,
+# as Calibre's Add books reads them in a worker (see read()), formats with
+# add_format(). The metadata.opf files
 # of the books changed are then written and the books left dirtied, as
 # Cousoir leaves them for Calibre to write again.
 
@@ -31,6 +33,30 @@ base = os.path.dirname(os.path.abspath(edits_path))
 with open(edits_path, encoding='utf-8') as f:
     changes = json.load(f)
 
+
+
+def read(paths):
+    # book() of Calibre's src/calibre/db/cli/cmd_add.py, Copyright (C) Kovid
+    # Goyal, GPL v3: the first file's metadata, every file a format.
+    paths = [os.path.join(base, p) for p in (paths if isinstance(paths, list) else [paths])]
+    fmt = os.path.splitext(paths[0])[1]
+    fmt = (fmt[1:] if fmt else None) or 'unknown'
+    with open(paths[0], 'rb') as stream:
+        mi = get_metadata(stream, stream_type=fmt, use_libprs_metadata=True)
+    if not mi.title:
+        mi.title = os.path.splitext(os.path.basename(paths[0]))[0]
+    if not mi.authors:
+        mi.authors = [_('Unknown')]
+    format_map = {os.path.splitext(p)[1][1:]: p for p in paths}
+    return mi, format_map
+
+
+# The files to add, read before calibre.db.cache is imported: once it is, the
+# XPath of Calibre's XMP reader no longer finds the calibre: names, and a
+# PDF's custom columns, rating or series written by Calibre are lost to
+# calibredb add, though not to Add books, whose workers never import it.
+added = iter([read(change['add']) for change in changes if 'add' in change])
+
 legacy = open_library(library)
 cache = legacy.new_api
 # The books dirtied before, by an earlier run, Calibre would write again only
@@ -48,7 +74,7 @@ OPERATIONS = ('copyFormats', 'removeFormats', 'trash', 'restore', 'add', 'addFor
 def edit(change):
     book = change['book']
     values = change['set']
-    unknown = set(values) - set(ORDER)
+    unknown = {key for key in values if not key.startswith('#')} - set(ORDER)
     if unknown:
         raise SystemExit('Unknown fields: %s' % ', '.join(sorted(unknown)))
     for key in ORDER:
@@ -72,6 +98,9 @@ def edit(change):
             elif key == 'identifiers' and isinstance(value, str):
                 value = dict(part.strip().partition(':')[0::2] for part in value.split(',') if part.strip())
             cache.set_field(FIELDS[key], {book: value})
+    # Custom columns after, as set_metadata() sets them, by their key.
+    for key in sorted(k for k in values if k.startswith('#')):
+        cache.set_field(key, {book: values[key]})
 
 
 def bulk(args):
@@ -128,20 +157,8 @@ def bulk(args):
         legacy.bulk_modify_tags(ids, add=add_tags, remove=remove_tags)
 
 
-def add(paths):
-    # book() of Calibre's src/calibre/db/cli/cmd_add.py, Copyright (C) Kovid
-    # Goyal, GPL v3: the first file's metadata, every file a format.
-    paths = [os.path.join(base, p) for p in (paths if isinstance(paths, list) else [paths])]
-    fmt = os.path.splitext(paths[0])[1]
-    fmt = (fmt[1:] if fmt else None) or 'unknown'
-    with open(paths[0], 'rb') as stream:
-        mi = get_metadata(stream, stream_type=fmt, use_libprs_metadata=True)
-    if not mi.title:
-        mi.title = os.path.splitext(os.path.basename(paths[0]))[0]
-    if not mi.authors:
-        mi.authors = [_('Unknown')]
-    format_map = {os.path.splitext(p)[1][1:]: p for p in paths}
-    cache.add_books([(mi, format_map)], add_duplicates=True, run_hooks=False)
+def add():
+    cache.add_books([next(added)], add_duplicates=True, run_hooks=False)
 
 
 for change in changes:
@@ -171,7 +188,7 @@ for key in OPERATIONS:
             else:
                 cache.move_book_from_trash(value)
         elif key == 'add':
-            add(value)
+            add()
         elif key == 'addFormat':
             path = os.path.join(base, value['file'])
             cache.add_format(value['book'], os.path.splitext(path)[1][1:], path, replace=True, run_hooks=False)

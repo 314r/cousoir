@@ -1,0 +1,7 @@
+[
+    {"add": "../import/Custom 3.epub"},
+    {"add": "../import/Custom 2.epub"},
+    {"add": "../import/Custom.pdf"},
+    {"add": "../import/Black Company 2.epub"},
+    {"trash": [1, 3]}
+]

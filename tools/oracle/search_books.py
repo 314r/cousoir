@@ -6,7 +6,7 @@
 # Each line of the queries file is a search; a line "@vl NAME" makes the
 # virtual library NAME the search restriction of the lines after it, as the
 # Calibre window does, and "@vl" alone lifts it. Blank lines and lines
-# starting with "#" are left out. The output lists, for each search, the
+# starting with "# " are left out: "#genre:sf" is a search. The output lists, for each search, the
 # restriction, the ids found in order, or whether the search failed, or
 # Calibre did.
 
@@ -25,7 +25,7 @@ restriction = ''
 with open(queries_path, encoding='utf-8') as f:
     for line in f:
         query = line.rstrip('\n')
-        if not query.strip() or query.startswith('#'):
+        if not query.strip() or query.startswith('# '):
             continue
         if query.startswith('@vl'):
             name = query[3:].strip()

@@ -5,6 +5,7 @@
 
 #include "book.h"
 #include "calibre_config.h"
+#include "python_json.h"
 
 class SqliteDb;
 
@@ -40,6 +41,12 @@ bool isKnownSchema(int userVersion, const QString &fingerprint);
 
 // Reads the books, the items they link to and the library's id.
 bool readLibrary(SqliteDb &db, LibraryData *data, QString *error);
+// The custom columns, by id, as initialize_custom_columns() keeps them:
+// those marked for deletion and those whose tables are gone left out.
+bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *error);
+// multiple_seps of a custom column, as initialize_custom_columns() sets
+// them: an empty dict for a column of single values.
+PythonJson::Value multipleSeparators(const CustomColumn &column);
 // Finds each book's cover and format files in its folder, as calibredb list
 // does: a format whose file has another name is found by its extension.
 void findFiles(LibraryData *data);

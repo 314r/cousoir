@@ -14,6 +14,7 @@ import os
 import sys
 
 from calibre.ebooks.metadata.meta import get_metadata
+from calibre.utils.config import to_json
 from calibre.utils.date import isoformat, is_date_undefined
 from calibre.utils.imghdr import identify
 from calibre.utils.localization import _, canonicalize_lang
@@ -23,6 +24,14 @@ def date(value):
     if value is None or is_date_undefined(value):
         return None
     return isoformat(value, as_utc=True).replace('+00:00', 'Z')
+
+
+def user_metadata(mi):
+    # The custom columns' fields, what adding the book writes from them.
+    fields = {}
+    for key, fm in mi.get_all_user_metadata(False).items():
+        fields[key] = {name: fm.get(name) for name in ('datatype', 'is_multiple', '#value#', '#extra#')}
+    return json.loads(json.dumps(fields, default=to_json))
 
 
 def read(path):
@@ -61,6 +70,7 @@ def read(path):
         'rating': mi.rating,
         'book_producer': mi.book_producer or '',
         'cover': cover,
+        'user_metadata': user_metadata(mi),
     }
 
 

@@ -39,15 +39,16 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   your saved searches in the sidebar and your virtual libraries a click
   away. Or browse by author, series, tag, language and publisher.
 - ✏️ **Edit in place.** Title, authors, series, tags, rating, publisher,
-  languages, dates and identifiers save as you leave the field; the
-  description edits as text, with **bold**, *italics*, lists and links.
+  languages, dates, identifiers and your custom columns save as you leave
+  the field; the description edits as text, with **bold**, *italics*, lists
+  and links.
   Drop or paste an image to change the cover.
 - 📚 **Many books at once.** Select with Ctrl, Shift or Ctrl+A, then trash,
   convert, send, or edit them together as Calibre's bulk edit does: tags
   added and removed, a series numbered, and Undo if you change your mind.
-- ➕ **Add books by dropping them.** Files or whole folders. Their metadata is
-  read as `calibredb add` reads it, and Cousoir asks before adding a book you
-  already have.
+- ➕ **Add books by dropping them.** Files or whole folders. Their metadata,
+  custom columns included, is read as Calibre reads it, and Cousoir asks
+  before adding a book you already have.
 - 🗑️ **A trash shared with Calibre.** Books and files go to the library's own
   trash and come back with Restore, from Cousoir or from Calibre.
 - 🩺 **A check-up for your library.** The Check section finds the same book

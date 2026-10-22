@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "calibre_date.h"
+#include "python_json.h"
 
 // The metadata Calibre reads from an ebook to add it, what its Metadata
 // object holds: empty values are the ones the file did not have.
@@ -36,14 +37,31 @@ struct ImportedMetadata
     QString bookProducer;
     // An image's bytes.
     QByteArray cover;
+    // Custom columns' values, as Calibre's user metadata holds them: each
+    // column's field metadata by key ("#label"), with the value under
+    // "#value#" and a series' number under "#extra#".
+    QList<QPair<QString, PythonJson::Value>> userMetadata;
 
     void setIdentifier(const QString &type, const QString &value);
+    // set_user_metadata(): false, and nothing set, for what is no field.
+    bool setUserMetadata(const QString &key, PythonJson::Value field);
+    const PythonJson::Value *userField(const QString &key) const;
+    // smart_update()'s custom fields: the other's, multiple text merged
+    // with this one's values.
+    void updateUserMetadata(const ImportedMetadata &other);
 };
 
 // Reading OPF package files, ported from Calibre 9.16: OPF.to_book_metadata()
 // in ebooks/metadata/opf2.py for version 2 and read_metadata() in
 // ebooks/metadata/opf3.py for version 3.
 namespace OpfReader {
+
+// decode_is_multiple() of a field Calibre wrote: its separators from
+// is_multiple2, else from what is_multiple says. False when it is no field.
+bool decodeIsMultiple(PythonJson::Value *field);
+
+// A field Calibre wrote as JSON, decoded: false when it is not one.
+bool readUserField(const QString &json, PythonJson::Value *field);
 
 struct Package
 {

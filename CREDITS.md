@@ -54,14 +54,15 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | `calibre_paths.cpp` | `src/calibre/db/backend.py`: `construct_path_name()`, `construct_file_name()`, `WINDOWS_RESERVED_NAMES` |
 | `calibre_search.cpp` | `src/calibre/utils/search_query_parser.py`: `Parser`, `SearchQueryParser`'s evaluation, saved searches |
 | | `src/calibre/db/search.py`: `_matchkind()`, `_match()`, `DateSearch`, `NumericSearch`, `KeyPairSearch`, `Parser.get_matches()`, `get_user_category_matches()`, `Search._do_search()` |
-| | `src/calibre/db/fields.py`: the values each field searches, `iter_searchable_values_for_sort()` |
+| | `src/calibre/db/fields.py`: the values each field searches, custom columns' included, `iter_searchable_values_for_sort()` |
 | | `src/calibre/library/field_metadata.py`: the fields' search terms and data types |
 | `opf_reader.cpp` | `src/calibre/ebooks/metadata/opf3.py`: `read_metadata()` and the readers it calls, `parse_prefixes()`, `expand_prefix()`, `parse_identifier()`, `find_main_title()` |
 | | `src/calibre/ebooks/metadata/opf2.py`: the `OPF` class's readers, `first_spine_item()`, the EPUB 3 raster cover |
 | | `src/calibre/ebooks/metadata/utils.py`: `parse_opf_version()` |
-| | `src/calibre/ebooks/metadata/book/base.py`: `set_identifier()` |
+| | `src/calibre/ebooks/metadata/book/base.py`: `set_identifier()`, `set_user_metadata()`, `smart_update()`'s custom fields |
+| | `src/calibre/ebooks/metadata/book/json_codec.py`: `decode_is_multiple()` |
 | | `src/calibre/utils/date.py`: `fix_only_date()` |
-| `opf.cpp` | `src/calibre/ebooks/metadata/opf2.py`: `metadata_to_opf()`; `src/calibre/ebooks/metadata/__init__.py`: `fmt_sidx()` |
+| `opf.cpp` | `src/calibre/ebooks/metadata/opf2.py`: `metadata_to_opf()`, `serialize_user_metadata()`; `src/calibre/ebooks/metadata/__init__.py`: `fmt_sidx()`; `src/calibre/ebooks/metadata/book/json_codec.py`: `encode_is_multiple()`; `src/calibre/library/field_metadata.py`: `add_custom_field()` |
 | `pdf_reader.cpp` | `src/calibre/ebooks/metadata/xmp.py`: `metadata_from_xmp_packet()`, `consolidate_metadata()` and the readers they call |
 | | `src/calibre/ebooks/metadata/pdf.py`: `read_info()`, `get_metadata()` |
 | | `src/calibre/ebooks/metadata/book/base.py`: `smart_update()` |
@@ -72,14 +73,16 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | | `src/calibre/ebooks/metadata/epub.py`: `Encryption`, `get_metadata()`, `get_cover()` |
 | `library_check.cpp` | `src/calibre/library/check_library.py`: `scan_library()`, `process_book()`, `IGNORE_AT_TOP_LEVEL`, `NORMALS`; `src/calibre/db/utils.py`: `find_identical_books()` |
 | `book_operations.cpp` | `src/calibre/gui2/actions/edit_metadata.py`: `merge_books()` with `merge_only_formats`, `add_formats()` |
-| | `src/calibre/db/cache.py`: `create_book_entry()`, `set_metadata()`, `_do_add_format()`, `remove_formats()`, `remove_books()`, `move_book_from_trash()`, `move_format_from_trash()`, `author_sort_from_authors()`, `get_next_series_num_for()`, `_add_newbook_tag()` |
+| | `src/calibre/db/cache.py`: `create_book_entry()`, `set_metadata()`, `_do_add_format()`, `remove_formats()`, `remove_books()`, `move_book_from_trash()`, `move_format_from_trash()`, `author_sort_from_authors()`, `get_next_series_num_for()`, `_add_newbook_tag()`, `_add_default_custom_column_values()` |
 | | `src/calibre/db/backend.py`: `update_path()`, `add_format()`, `remove_formats()`, `remove_books()`, `move_book_to_trash()`, `list_trash_entries()`, `get_metadata_for_trash_book()`, `format_abspath()` |
 | | `src/calibre/db/tables.py`: `update_fmt()` |
-| `field_writers.cpp` | `src/calibre/db/write.py`: the field writers, `one_one_in_books()`, `many_one()`, `many_many()`, `identifiers()`, with `get_db_id()`, `change_case()`, `get_series_values()`, `clean_identifier()` and the `adapt_*()` functions |
+| | `src/calibre/db/write.py`: how the adapters take each kind of value |
+| `field_writers.cpp` | `src/calibre/db/write.py`: the field writers, `one_one_in_books()`, `one_one_in_other()`, `many_one()`, `many_many()`, `identifiers()`, `custom_series_index()`, with `get_db_id()`, `change_case()`, `get_series_values()`, `clean_identifier()`, `get_adapter()` and the `adapt_*()` functions; `Writer.set_books_for_enum()` |
 | | `src/calibre/db/fields.py`: `author_sort_for_book()` |
 | | `src/calibre/db/cache.py`: `set_field()`, `set_metadata()` |
 | `commit_engine.cpp` | `src/calibre/__init__.py`: `fit_image()`; `src/calibre/utils/img.py`: `save_cover_data_to()` |
-| `calibre_db.cpp` | `src/calibre/db/backend.py`: the SQL functions, aggregates and temporary author triggers of a connection, `format_abspath()` |
+| `calibre_db.cpp` | `src/calibre/db/backend.py`: the SQL functions, aggregates and temporary author triggers of a connection, `format_abspath()`, the custom columns `initialize_custom_columns()` keeps, with their separators |
+| | `src/calibre/db/tables.py`: how the custom columns' tables are read |
 | `book_library.cpp` | `src/calibre/db/utils.py`: `find_identical_books()`; `src/calibre/ebooks/__init__.py`: `BOOK_EXTENSIONS` |
 | `book_list_model.cpp` | `src/calibre/ebooks/metadata/__init__.py`: `fmt_sidx()`, `rating_to_stars()` |
 | `device_books.cpp` | `src/calibre/gui2/device.py`: `set_books_in_library()` |

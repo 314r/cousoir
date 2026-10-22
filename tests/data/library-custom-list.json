@@ -1,0 +1,211 @@
+[
+  {
+    "*computed": "L'\u00c9cume des jours by Boris Vian",
+    "*genre": [
+      "SF",
+      "Classique"
+    ],
+    "*myrating": 8,
+    "*note": "Une note",
+    "*pagecount": 320,
+    "*people": [
+      "Jean Dupont",
+      "Marie Curie"
+    ],
+    "*read": true,
+    "*review": "<p>Bien</p>",
+    "*saga": "Cycle",
+    "*started": "2024-03-04T23:00:00+00:00",
+    "author_sort": "Vian, Boris",
+    "authors": "Boris Vian",
+    "comments": "<div><p style=\"color:#000000\">Un roman d\u2019amour <font face=\"Arial\">fou</font>.</p><p>Paris, <em>1946</em>.</p></div>",
+    "cover": "@LIBRARY@/Boris Vian/L'Ecume des jours (1)/cover.jpg",
+    "formats": [
+      "@LIBRARY@/Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.epub"
+    ],
+    "id": 1,
+    "identifiers": {
+      "isbn": "9782253140870"
+    },
+    "isbn": "9782253140870",
+    "languages": [
+      "fra"
+    ],
+    "last_modified": "2026-10-22T10:55:50+00:00",
+    "pubdate": "1947-03-20T00:00:00+00:00",
+    "publisher": "Gallimard",
+    "rating": 8,
+    "series_index": 1.0,
+    "size": 1509,
+    "tags": [
+      "Roman",
+      "Classique"
+    ],
+    "timestamp": "2026-10-19T08:38:26+00:00",
+    "title": "L'\u00c9cume des jours",
+    "uuid": "94357bfe-c867-4007-956a-4c125dd8ad7e"
+  },
+  {
+    "*computed": "The Black Company by Glen Cook",
+    "*genre": [
+      "SF"
+    ],
+    "*half": 7,
+    "*people": [],
+    "*price": 12.5,
+    "*read": false,
+    "*saga": "Cycle",
+    "*started": "None",
+    "author_sort": "Cook, Glen",
+    "authors": "Glen Cook",
+    "cover": "@LIBRARY@/Glen Cook/The Black Company (2)/cover.jpg",
+    "formats": [
+      "@LIBRARY@/Glen Cook/The Black Company (2)/The Black Company - Glen Cook.azw3",
+      "@LIBRARY@/Glen Cook/The Black Company (2)/The Black Company - Glen Cook.epub"
+    ],
+    "id": 2,
+    "identifiers": {},
+    "isbn": "",
+    "languages": [
+      "eng"
+    ],
+    "last_modified": "2026-10-22T10:55:50+00:00",
+    "pubdate": "1984-05-02T00:00:00+00:00",
+    "publisher": "Tor",
+    "rating": 10,
+    "series": "Chronicles of the Black Company",
+    "series_index": 1.0,
+    "size": 11180,
+    "tags": [
+      "Fantasy"
+    ],
+    "timestamp": "2026-10-19T08:38:27+00:00",
+    "title": "The Black Company",
+    "uuid": "f30e1f72-acfb-4c1c-98fd-71b2a3ffc29e"
+  },
+  {
+    "*computed": "Shadows Linger by Glen Cook",
+    "*genre": [],
+    "*note": "\u00c7'a \u00e9t\u00e9 lu",
+    "*people": [],
+    "*price": 3.0,
+    "*shelf": "B",
+    "*started": "None",
+    "author_sort": "Cook, Glen",
+    "authors": "Glen Cook",
+    "cover": "@LIBRARY@/Glen Cook/Shadows Linger (3)/cover.jpg",
+    "formats": [
+      "@LIBRARY@/Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.epub"
+    ],
+    "id": 3,
+    "identifiers": {},
+    "isbn": "",
+    "languages": [
+      "eng"
+    ],
+    "last_modified": "2026-10-22T10:55:50+00:00",
+    "pubdate": "0101-01-01T00:00:00+00:00",
+    "series": "Chronicles of the Black Company",
+    "series_index": 2.0,
+    "size": 1469,
+    "tags": [
+      "Fantasy"
+    ],
+    "timestamp": "2026-10-19T08:38:28+00:00",
+    "title": "Shadows Linger",
+    "uuid": "763b41b7-9758-41f6-b670-77be2885646d"
+  },
+  {
+    "*computed": "Good Omens by Terry Pratchett & Neil Gaiman",
+    "*genre": [
+      "Humour",
+      "Fantastique",
+      "SF"
+    ],
+    "*pagecount": 0,
+    "*people": [],
+    "*started": "None",
+    "author_sort": "Pratchett, Terry & Gaiman, Neil",
+    "authors": "Terry Pratchett & Neil Gaiman",
+    "comments": "The world will end next Saturday.",
+    "cover": "@LIBRARY@/Terry Pratchett/Good Omens (4)/cover.jpg",
+    "formats": [
+      "@LIBRARY@/Terry Pratchett/Good Omens (4)/Good Omens - Terry Pratchett.epub"
+    ],
+    "id": 4,
+    "identifiers": {
+      "goodreads": "12067",
+      "isbn": "9780060853983"
+    },
+    "isbn": "9780060853983",
+    "languages": [
+      "eng"
+    ],
+    "last_modified": "2026-10-22T10:55:50+00:00",
+    "pubdate": "0101-01-01T00:00:00+00:00",
+    "publisher": "Gollancz",
+    "rating": 7,
+    "series_index": 1.0,
+    "size": 1469,
+    "tags": [
+      "Fantasy",
+      "Humour"
+    ],
+    "timestamp": "2026-10-19T08:38:29+00:00",
+    "title": "Good Omens",
+    "uuid": "b8d2ba40-ea4b-4aad-a57a-4c9cca6e1ead"
+  },
+  {
+    "*computed": "Manuel technique by Jean-Pierre Dupont",
+    "*genre": [],
+    "*people": [],
+    "*started": "1999-12-30T23:00:00+00:00",
+    "author_sort": "Dupont, Jean-Pierre",
+    "authors": "Jean-Pierre Dupont",
+    "formats": [
+      "@LIBRARY@/Jean-Pierre Dupont/Manuel technique (5)/Manuel technique - Jean-Pierre Dupont.pdf"
+    ],
+    "id": 5,
+    "identifiers": {},
+    "isbn": "",
+    "languages": [
+      "fra"
+    ],
+    "last_modified": "2026-10-22T10:55:50+00:00",
+    "pubdate": "0101-01-01T00:00:00+00:00",
+    "series_index": 1.0,
+    "size": 591,
+    "tags": [
+      "Technique"
+    ],
+    "timestamp": "2026-10-19T08:38:29+00:00",
+    "title": "Manuel technique",
+    "uuid": "e8c0dee8-4c98-45e1-a408-f0f4133c3698"
+  },
+  {
+    "*computed": "Le Petit Prince by Antoine de Saint-Exup\u00e9ry",
+    "*genre": [],
+    "*myrating": 10,
+    "*people": [],
+    "*saga": "Autre",
+    "*started": "None",
+    "author_sort": "Saint-Exup\u00e9ry, Antoine de",
+    "authors": "Antoine de Saint-Exup\u00e9ry",
+    "cover": "@LIBRARY@/Antoine de Saint-Exupery/Le Petit Prince (6)/cover.jpg",
+    "formats": [],
+    "id": 6,
+    "identifiers": {},
+    "isbn": "",
+    "languages": [
+      "fra"
+    ],
+    "last_modified": "2026-10-22T10:55:50+00:00",
+    "pubdate": "0101-01-01T00:00:00+00:00",
+    "series": "Contes",
+    "series_index": 1.5,
+    "tags": [],
+    "timestamp": "2026-10-19T08:38:30+00:00",
+    "title": "Le Petit Prince",
+    "uuid": "d5c43c81-6a3a-49df-a7e3-a2c1d03632a0"
+  }
+]

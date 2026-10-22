@@ -11,6 +11,7 @@
 #include "commit_engine.h"
 #include "field_writers.h"
 #include "file_transaction.h"
+#include "opf_reader.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -78,6 +79,7 @@ private slots:
     void recoversInterruptedChange();
     void finishesPublishedChange();
     void addsAndTrashesBooks();
+    void addsCustomValues();
     void undoesFailedOperations();
     void copiesFormatsBeforeTrash();
     void recoversInterruptedCopy();
@@ -531,6 +533,58 @@ void CommitEngineTest::addsAndTrashesBooks()
     QCOMPARE(book(7, QStringLiteral("title")), QStringLiteral("Bleak House"));
     QVERIFY(QFileInfo(folder.filePath(QStringLiteral("Bleak House - Glen Cook.epub"))).isFile());
     QVERIFY(!QFileInfo::exists(QDir(m_library).filePath(QStringLiteral(".caltrash/b/7"))));
+}
+
+void CommitEngineTest::addsCustomValues()
+{
+    // A library whose columns give new books values: a date of "now" is the
+    // time of adding; the book's own value wins, one its column cannot take
+    // is left out without failing the add.
+    QVERIFY(QDir(m_library).removeRecursively());
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library-custom"), m_library));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(QDir(m_library).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QStringLiteral(
+                             "UPDATE custom_columns SET display=json_set(display, '$.default_value', 'now') "
+                             "WHERE label='started';"
+                             "UPDATE custom_columns SET display=json_set(display, '$.default_value', 'Sans note') "
+                             "WHERE label='note';"),
+                         &error),
+                 qPrintable(error));
+    }
+    NewBook book = newBook(QStringLiteral("Bleak House"), { QStringLiteral("Glen Cook") },
+                           QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/manga.epub"));
+    const auto field = [](const char *json) {
+        PythonJson::Value value;
+        if (!OpfReader::readUserField(QString::fromUtf8(json), &value))
+            qFatal("unreadable field");
+        return value;
+    };
+    QVERIFY(book.metadata.setUserMetadata(QStringLiteral("#note"),
+                                          field(R"({"datatype": "text", "is_multiple2": {}, "#value#": "Lue"})")));
+    QVERIFY(book.metadata.setUserMetadata(QStringLiteral("#pagecount"),
+                                          field(R"({"datatype": "int", "is_multiple2": {}, "#value#": "beaucoup"})")));
+    QVERIFY(book.metadata.setUserMetadata(QStringLiteral("#myrating"),
+                                          field(R"({"datatype": "rating", "is_multiple2": {}, "#value#": 7.5})")));
+    CommitEngine::Request request;
+    request.newBooks = { book };
+    const CommitEngine::Result added = commit(request);
+    QVERIFY2(added.ok, qPrintable(added.error));
+    QCOMPARE(added.added, QList<int>{ 7 });
+    const auto custom = [this](const QString &label) {
+        const int id = value(QStringLiteral("SELECT id FROM custom_columns WHERE label='%1'").arg(label)).toInt();
+        if (value(QStringLiteral("SELECT normalized FROM custom_columns WHERE id=%1").arg(id)).toInt())
+            return value(QStringLiteral("SELECT value FROM custom_column_%1 WHERE id=(SELECT value FROM "
+                                        "books_custom_column_%1_link WHERE book=7)").arg(id));
+        return value(QStringLiteral("SELECT value FROM custom_column_%1 WHERE book=7").arg(id));
+    };
+    QCOMPARE(custom(QStringLiteral("started")).toString(), QStringLiteral("2026-10-19 09:30:15.250000+00:00"));
+    QCOMPARE(custom(QStringLiteral("note")).toString(), QStringLiteral("Lue"));
+    QVERIFY(custom(QStringLiteral("pagecount")).isNull());
+    QCOMPARE(custom(QStringLiteral("myrating")).toInt(), 7);
 }
 
 void CommitEngineTest::undoesFailedOperations()

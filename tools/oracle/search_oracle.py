@@ -163,12 +163,15 @@ with open(os.path.join(source, 'calibre_search.inc'), 'w', encoding='utf-8') as 
     for code, shifted, plain in folds:
         f.write('    { 0x%04X, %s, %s },\n' % (code, c_string(shifted), c_string(plain)))
     f.write('};\n\n')
-    f.write('// The words a date search takes, by interface language: Calibre\'s\n')
-    f.write('// translations of today, yesterday, thismonth and daysago.\n')
+    f.write('// The words a date or a true and false search takes, by interface\n')
+    f.write('// language: Calibre\'s translations of today, yesterday, thismonth,\n')
+    f.write('// daysago, No, no, Yes, yes, unchecked, checked, empty and blank.\n')
     f.write('const SearchWords searchWords[] = {\n')
-    words_by_language = {'en': ('today', 'yesterday', 'thismonth', 'daysago')}
+    words = ('today', 'yesterday', 'thismonth', 'daysago', 'No', 'no', 'Yes', 'yes', 'unchecked', 'checked', 'empty',
+             'blank')
+    words_by_language = {'en': words}
     for lang, translator in get_all_translators():
-        words_by_language[lang] = tuple(translator.gettext(w) for w in ('today', 'yesterday', 'thismonth', 'daysago'))
+        words_by_language[lang] = tuple(translator.gettext(w) for w in words)
     for lang in sorted(words_by_language):
         f.write('    { %s, %s },\n' % (c_string(lang), ', '.join(c_string(w) for w in words_by_language[lang])))
     f.write('};\n')

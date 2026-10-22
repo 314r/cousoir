@@ -47,8 +47,8 @@ has every word typed.
 
 A book opens with Enter, Space or a double click. Its page shows the cover,
 the title, authors, series and rating, and the description, beside a details
-pane with the rest of its metadata, its identifiers (some link to their page)
-and its files. Below 960 px of window width the pane hides; the status bar
+pane with the rest of its metadata, the library's custom columns, its
+identifiers (some link to their page) and its files. Below 960 px of window width the pane hides; the status bar
 toggle (Ctrl+I) shows it anyway. A file's button, or Open in reader (Ctrl+O),
 opens it with the desktop's application for that format; Open in reader picks
 EPUB, KEPUB, AZW3, MOBI or PDF, in that order. Ctrl+O also works on the
@@ -95,6 +95,9 @@ des jours". Then, as in Calibre:
 - `true` and `false`, `series:false` for a book in no series; `#` counts,
   `tags:#>3`, `formats:#=0`;
 - `identifiers:isbn:978`, `isbn:true`, `identifiers:goodreads:false`;
+- custom columns by their search term, `#genre:sf`, `#pagecount:>300`,
+  `#read:false`, `#started:2024`, `#saga_index:2`, `#myrating:>=4` in
+  stars;
 - `search:"name"` for a saved search, `vl:name` for a virtual library's
   books, the library's grouped search terms, and `@category:true` for its
   user categories.
@@ -112,7 +115,8 @@ opens with the virtual library Calibre opens the library with.
 
 Cousoir departs from Calibre's search in a few places:
 
-- Custom columns cannot be searched yet; a search on one says so.
+- A composite column, which Calibre builds from a template, cannot be
+  searched, and words alone do not look in it; a search on one says so.
 - Calibre's templates, `template:`, are not run.
 - A language is found by its code or its English name; Calibre also takes
   its name in Calibre's language, "anglais", and the names of the rarest
@@ -136,6 +140,14 @@ and is not saved. Authors are separated by `&`, tags and languages by commas;
 languages take names or codes; identifiers read `isbn:…, goodreads:…`. A date
 takes `1947-03-20`, `1947-03` or `1947`, as Calibre reads them; an empty one
 clears it.
+
+The library's custom columns follow, each by its name: text, several values
+separated by commas (`&` for names), numbers, dates and long text in a
+field, a series with its number below it, and ratings, yes or no and lists
+of fixed values as a choice. A value is saved as Calibre's writers save it:
+a number Calibre cannot read shows in red, a series written `Cycle [3]`
+takes its number, and a list of fixed values takes only those. A composite
+column, whose value Calibre computes from a template, is not shown.
 
 As in Calibre's editor, a title sort that followed the title keeps following
 it, with the book's language for its articles, and an author sort that
@@ -253,6 +265,12 @@ them, and reads what `calibredb add` reads:
   EPUB whose first page must be drawn, through Calibre itself when it is
   installed.
 
+A book added gets the values its file holds for the library's custom
+columns, those of the same name and kind, as Calibre wrote them into an
+EPUB or a PDF it saved or exported, and, where it has none, the values the
+library's columns give new books, a date of "now" being the time it is
+added. A value its column cannot take is left out, as in Calibre.
+
 When books are already in the library by title and authors, as Calibre
 compares them (lower case, without punctuation or a leading article, every
 author found, the languages alike if both have some), Cousoir asks whether to
@@ -285,10 +303,12 @@ Cousoir departs from Calibre here too:
 
 - It never empties the trash. Calibre deletes entries older than 14 days, or
   its library's own setting, when it starts.
-- It does not restore a book in a library with custom columns, whose values
-  it does not write yet, nor a book whose `metadata.opf` holds annotations;
-  and it does not add books to a library whose custom columns give new books
-  a value. Calibre does all three.
+- It does not restore a book whose `metadata.opf` holds annotations. Calibre
+  does.
+- A PDF's metadata written by Calibre, its custom columns, rating and series,
+  is read as Calibre's Add books reads it. `calibredb add` misses it: once
+  Calibre's database code is loaded, its XMP reader no longer finds Calibre's
+  own names.
 - Calibre's file type plugins do not run: an HTML file is added as HTML where
   Calibre would zip it with its images.
 - An OPF file named like the added file, beside it, is not read; Calibre
@@ -549,7 +569,8 @@ the save still takes, and leaves the same heartbeat after a change:
 The keys are the details pane's: `title`, `sort`, `authors`, `authorSort`,
 `series`, `seriesIndex`, `tags`, `rating` (0 to 10), `publisher`, `languages`,
 `identifiers`, `pubdate`, `comments`, `coverFile` (relative to the JSON file)
-and `removeCover`. The other changes, after the edits and in this order,
+and `removeCover`, and a custom column by its search term, `"#genre":
+"SF, Classique"`, with `"#saga_index"` for a series' number. The other changes, after the edits and in this order,
 the formats a book has no file for copied to it from another first:
 
 ```json
@@ -598,8 +619,8 @@ temporary folder removed at the end unless `COUSOIR_KEEP_JOBS` is set.
 library book each one is, without changing anything. For the tests, a
 reader `mtpdir:FOLDER` is a folder that stands for a Kindle over MTP.
 
-`read` prints, as JSON, the metadata adding each file would read, as
-`tools/oracle/read_oracle.py` prints Calibre's.
+`read` prints, as JSON, the metadata adding each file would read, custom
+columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 
 ## Keyboard
 
@@ -696,14 +717,16 @@ The tests check the port against Calibre itself:
   text, text saved as HTML, and a description saved from its text reading
   back as the same text.
 - `opf_tests` checks that Cousoir writes the `metadata.opf` files of the
-  fixture library exactly as Calibre wrote them.
+  fixture libraries exactly as Calibre wrote them, custom columns included,
+  and reads the custom columns of OPF files of both versions.
 - `commit_engine_tests` saves edits to copies of the fixture: folders moving,
   case changes, cleaned values, dates, covers, the refusals, a change undone
   part way, a change started again over a concurrent one, and the recovery of
   a change interrupted before or after the database was replaced; and books
   added, moved to the trash and restored, a failing change of them undone
   whole, formats copied from a book before it goes to the trash, and a file
-  copied in before a crash removed on recovery.
+  copied in before a crash removed on recovery; and the values custom
+  columns give new books.
 - `library_check_tests` checks the check: name variants and initials, the
   names it must keep apart, duplicates by title and by ISBN, missing files and
   the files outside a copy of the fixture with files planted in it, and the
@@ -711,11 +734,15 @@ The tests check the port against Calibre itself:
 - `tests/data/import` holds book files for the corners of Calibre's readers:
   EPUB package files of both versions, MOBI and AZW3 files made by
   `ebook-convert`, PDF files with an info dictionary and an XMP packet (one
-  written by Calibre), covers to draw and metadata only in a file's name.
-  `tools/make_import_fixtures.sh` builds them again.
+  written by Calibre), covers to draw, metadata only in a file's name, and an
+  EPUB of each version and a PDF exported by Calibre from a library with
+  custom columns. `tools/make_import_fixtures.sh` builds them again.
 - `tests/data/library` is a six-book library made by `calibredb`, with
   `tests/data/library-list.json`, its `calibredb list` output; `make fixtures`
-  (`tools/make_fixture_library.sh`) builds both again. `calibre_db_tests`
+  (`tools/make_fixture_library.sh`) builds both again.
+  `tests/data/library-custom` is the same with a custom column of each kind
+  Calibre has, filled in, and `tests/data/library-custom-list.json`
+  (`tools/make_custom_library.sh`). `calibre_db_tests`
   reads it, checks Cousoir's list against Calibre's byte for byte, and checks
   that reading leaves every file of the library as it was.
 - `golden_list` runs `calibredb list` and `cousoir-cli list` on separate
@@ -728,7 +755,8 @@ The tests check the port against Calibre itself:
   books or both refuse the search. With `COUSOIR_GOLDEN_REAL=1` it
   does the same with the library Calibre opens. It then applies the edits of
   `tests/data/edits/edits.json`, and apart the bulk edits of
-  `tests/data/edits/bulk.json`, with Calibre's own writers and bulk edit
+  `tests/data/edits/bulk.json` and the custom columns' edits of
+  `tests/data/edits/custom.json` on `library-custom`, with Calibre's own writers and bulk edit
   (`tools/oracle/apply_edits.py`) and with `cousoir-cli apply`, and compares
   every table and every file, `metadata.opf` files as XML and covers by their
   pixels; `calibredb check_library` must report both copies alike. Finally
@@ -743,7 +771,12 @@ The tests check the port against Calibre itself:
   by table and file by file, the trash included, with page counts and the
   time and uuid of the books added left out; and has Calibre restore what
   Cousoir moved to the trash and Cousoir what Calibre did, each ending as the
-  other. Last, it converts books of the fixture with Calibre's convert action
+  other. The same on `library-custom`, its columns giving new books values
+  (`tests/data/edits/defaults.sql`), adds the books Calibre exported with
+  custom columns and restores books with theirs
+  (`tests/data/edits/ops-custom-*.json`); the oracle reads the files to add
+  before it opens the library, as Calibre's Add books does. Composite
+  columns' values are left out of the comparison. Last, it converts books of the fixture with Calibre's convert action
   (`tools/oracle/convert_books.py`) and with `cousoir-cli apply`
   (`tests/data/edits/convert.json`), some with settings saved by earlier
   conversions, one to its own format; with `COUSOIR_GOLDEN_REAL=1`, books of

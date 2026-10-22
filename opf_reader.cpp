@@ -8,7 +8,9 @@
 // - src/calibre/ebooks/metadata/opf2.py: the OPF class's readers,
 //   first_spine_item() and the EPUB 3 raster cover
 // - src/calibre/ebooks/metadata/utils.py: parse_opf_version()
-// - src/calibre/ebooks/metadata/book/base.py: set_identifier()
+// - src/calibre/ebooks/metadata/book/base.py: set_identifier(),
+//   set_user_metadata() and smart_update()'s custom fields
+// - src/calibre/ebooks/metadata/book/json_codec.py: decode_is_multiple()
 // - src/calibre/utils/date.py: fix_only_date()
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
@@ -310,7 +312,148 @@ void ImportedMetadata::setIdentifier(const QString &type, const QString &value)
         identifiers.append({ key, cleaned });
 }
 
+bool ImportedMetadata::setUserMetadata(const QString &key, PythonJson::Value field)
+{
+    // A field without a value takes none, an empty list for multiple text;
+    // one without a type is none.
+    using PythonJson::Value;
+    if (!key.startsWith(u'#') || field.kind != Value::Kind::Dict)
+        return false;
+    if (!field.find(QStringLiteral("#value#"))) {
+        const Value *datatype = field.find(QStringLiteral("datatype"));
+        const Value *multiple = field.find(QStringLiteral("is_multiple"));
+        if (!datatype)
+            return false;
+        const bool text = datatype->kind == Value::Kind::String && datatype->string == QLatin1String("text");
+        if (text && !multiple)
+            return false;
+        field.insert(QStringLiteral("#value#"), text && PythonJson::truthy(*multiple) ? Value::from(QStringList())
+                                                                                     : Value::null());
+    }
+    for (auto &existing : userMetadata) {
+        if (existing.first == key) {
+            existing.second = field;
+            return true;
+        }
+    }
+    userMetadata.append({ key, field });
+    return true;
+}
+
+const PythonJson::Value *ImportedMetadata::userField(const QString &key) const
+{
+    for (const auto &field : userMetadata) {
+        if (field.first == key)
+            return &field.second;
+    }
+    return nullptr;
+}
+
+void ImportedMetadata::updateUserMetadata(const ImportedMetadata &other)
+{
+    using PythonJson::Value;
+    // The strings a list holds, or the characters of a string, as Python
+    // iterates them; none for anything else.
+    const auto strings = [](const Value *value) -> std::optional<QStringList> {
+        if (!value)
+            return QStringList();
+        if (value->kind == Value::Kind::String) {
+            QStringList characters;
+            for (const QChar character : value->string)
+                characters.append(character);
+            return characters;
+        }
+        if (value->kind != Value::Kind::List)
+            return std::nullopt;
+        QStringList result;
+        for (const Value &item : value->items) {
+            if (item.kind != Value::Kind::String)
+                return std::nullopt;
+            result.append(item.string);
+        }
+        return result;
+    };
+    for (const auto &[key, meta] : other.userMetadata) {
+        PythonJson::Value field = meta;
+        const Value *multiple = field.find(QStringLiteral("is_multiple"));
+        if (field.text(QStringLiteral("datatype")) == QLatin1String("text") && multiple && PythonJson::truthy(*multiple)) {
+            // Case-insensitive but case preserving merging. Values that are
+            // no strings fail Calibre's merge: the field is left as it is.
+            const Value *mine = userField(key);
+            const Value *mineValue = mine ? mine->find(QStringLiteral("#value#")) : nullptr;
+            QStringList selfTags = mineValue && mineValue->kind == Value::Kind::String
+                ? QStringList() : strings(mineValue).value_or(QStringList());
+            const std::optional<QStringList> otherTags = strings(field.find(QStringLiteral("#value#")));
+            if (!otherTags)
+                continue;
+            QStringList lowerSelf;
+            QStringList lowerOther;
+            for (const QString &tag : std::as_const(selfTags))
+                lowerSelf.append(tag.toLower());
+            for (const QString &tag : *otherTags)
+                lowerOther.append(tag.toLower());
+            for (const QString &tag : std::as_const(lowerSelf)) {
+                if (lowerOther.contains(tag))
+                    selfTags[lowerSelf.indexOf(tag)] = otherTags->at(lowerOther.indexOf(tag));
+            }
+            for (qsizetype index = 0; index < otherTags->size(); ++index) {
+                if (!lowerSelf.contains(lowerOther.at(index)))
+                    selfTags.append(otherTags->at(index));
+            }
+            field.insert(QStringLiteral("#value#"), Value::from(selfTags));
+            field.insert(QStringLiteral("#extra#"), Value::null());
+        }
+        setUserMetadata(key, field);
+    }
+}
+
 namespace OpfReader {
+
+bool decodeIsMultiple(PythonJson::Value *field)
+{
+    using PythonJson::Value;
+    if (field->kind != Value::Kind::Dict)
+        return false;
+    const Value *decoded = field->find(QStringLiteral("is_multiple2"));
+    if (decoded && PythonJson::truthy(*decoded)) {
+        const Value separators = *decoded;
+        field->insert(QStringLiteral("is_multiple"), separators);
+        field->remove(QStringLiteral("is_multiple2"));
+        return true;
+    }
+    // An old field: the character is_multiple had for the separators.
+    const Value *old = field->find(QStringLiteral("is_multiple"));
+    Value separators = old ? *old : Value::dict();
+    if (PythonJson::truthy(separators)) {
+        QString cache = QStringLiteral("|");
+        QString ui = QStringLiteral(",");
+        if (field->text(QStringLiteral("datatype")) == QLatin1String("composite")) {
+            cache = QStringLiteral(",");
+        } else {
+            const Value *display = field->find(QStringLiteral("display"));
+            if (display && display->kind != Value::Kind::Dict)
+                return false;
+            const Value *names = display ? display->find(QStringLiteral("is_names")) : nullptr;
+            if (names && PythonJson::truthy(*names))
+                ui = QStringLiteral("&");
+        }
+        separators = Value::dict();
+        separators.insert(QStringLiteral("cache_to_list"), Value::from(cache));
+        separators.insert(QStringLiteral("ui_to_list"), Value::from(ui));
+        separators.insert(QStringLiteral("list_to_ui"), Value::from(QStringLiteral(", ")));
+    } else if (separators.kind == Value::Kind::Null) {
+        separators = Value::dict();
+    }
+    field->insert(QStringLiteral("is_multiple"), separators);
+    return true;
+}
+
+bool readUserField(const QString &json, PythonJson::Value *field)
+{
+    bool ok = false;
+    *field = PythonJson::parse(json.toUtf8(), &ok);
+    return ok && decodeIsMultiple(field);
+}
 
 std::optional<CalibreDate> parseDate(const QString &text, bool assumeUtc)
 {
@@ -670,6 +813,42 @@ bool read(const QByteArray &opf, Package *package, QString *error)
                                    || type == QLatin1String("image/png")))
                 result.rasterCover = imageHref(item);
         }
+
+        // read_user_metadata(): the first calibre:user_metadata that reads
+        // as JSON, each of its fields decoded; else, when it has none, the
+        // meta elements of OPF 2.
+        const QString userProperty = calibrePrefix + QStringLiteral(":user_metadata");
+        bool userMetadataRead = false;
+        for (const QDomElement &meta : metadata) {
+            if (!isOpf(meta, QStringLiteral("meta")) || !hasAttribute(meta, QStringLiteral("property")))
+                continue;
+            const QString value = text(meta).trimmed();
+            if (value.isEmpty() || expandPrefix(meta.attribute(QStringLiteral("property")), prefixes).toLower() != userProperty)
+                continue;
+            bool ok = false;
+            PythonJson::Value fields = PythonJson::parse(value.toUtf8(), &ok);
+            if (!ok || fields.kind != PythonJson::Value::Kind::Dict)
+                continue;
+            if (!std::all_of(fields.fields.begin(), fields.fields.end(),
+                             [](auto &field) { return decodeIsMultiple(&field.second); }))
+                continue;
+            for (const auto &field : std::as_const(fields.fields))
+                mi.setUserMetadata(field.first, field.second);
+            userMetadataRead = !fields.fields.isEmpty();
+            break;
+        }
+        if (!userMetadataRead) {
+            for (const QDomElement &meta : metadata) {
+                const QString name = meta.attribute(QStringLiteral("name"));
+                if (!isOpf(meta, QStringLiteral("meta")) || !name.startsWith(QLatin1String("calibre:user_metadata:")))
+                    continue;
+                const QString key = name.section(u':', 2);
+                PythonJson::Value field;
+                if (key.startsWith(u'#') && meta.hasAttribute(QStringLiteral("content"))
+                    && readUserField(meta.attribute(QStringLiteral("content")), &field))
+                    mi.setUserMetadata(key, field);
+            }
+        }
     } else {
         // OPF 2: Calibre's OPF class, lenient about names and namespaces.
         const QList<QDomElement> metadata = descendants(metadataElement);
@@ -849,6 +1028,18 @@ bool read(const QByteArray &opf, Package *package, QString *error)
                 }
             }
             break;
+        }
+        // read_user_metadata(): the meta elements named
+        // calibre:user_metadata:#label anywhere, the last of a key winning.
+        for (const QDomElement &meta : descendants(root)) {
+            const QString name = meta.attribute(QStringLiteral("name"));
+            if (qualifiedName(meta) != QLatin1String("meta") || !name.startsWith(QLatin1String("calibre:user_metadata:"))
+                || !meta.hasAttribute(QStringLiteral("content")))
+                continue;
+            const QString key = name.section(u':', 2);
+            PythonJson::Value field;
+            if (key.startsWith(u'#') && readUserField(meta.attribute(QStringLiteral("content")), &field))
+                mi.setUserMetadata(key, field);
         }
     }
     *package = result;

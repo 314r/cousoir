@@ -1,0 +1,13 @@
+[
+  { "book": 1, "set": { "#genre": "SF, Policier, sf", "#note": "  Nouvelle   note ", "#read": false } },
+  { "book": 2, "set": { "#myrating": 6, "#half": 5, "#pagecount": "512", "#price": 9.99 } },
+  { "book": 3, "set": { "#started": "2023-11-02", "#review": "<div><p>Très bien</p></div>", "#shelf": "C" } },
+  { "book": 4, "set": { "#shelf": "D", "#saga": "Cycle [7]", "#computed": "ignored" } },
+  { "book": 5, "set": { "#saga": "Nouveau", "#people": "A. Author & B. Writer" } },
+  { "book": 1, "set": { "#saga": "Autre" } },
+  { "book": 2, "set": { "#saga_index": 4.5 } },
+  { "book": 6, "set": { "#myrating": 0, "#note": "", "#genre": [], "#started": null } },
+  { "book": 2, "set": { "#read": null, "#price": "none" } },
+  { "book": 3, "set": { "#note": "ç'A ÉTÉ LU" } },
+  { "book": 4, "set": { "#pagecount": 12, "#people": ["X & Y", "Z"] } }
+]
