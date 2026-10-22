@@ -16,8 +16,10 @@
 #include <QSet>
 
 #include <cmath>
+#include <optional>
 
 #include "calibre_template_p.h"
+#include "calibre_config.h"
 #include "calibre_db.h"
 #include "python_json.h"
 
@@ -195,6 +197,66 @@ qint64 toInt(const QString &text)
     if (!ok)
         fail(QStringLiteral("invalid literal for int() with base 10: %1").arg(repr(text)));
     return value;
+}
+
+QString intText(double value)
+{
+    if (std::isnan(value))
+        fail(QStringLiteral("cannot convert float NaN to integer"));
+    if (std::isinf(value))
+        fail(QStringLiteral("cannot convert float infinity to integer"));
+    const double whole = std::trunc(value);
+    if (std::abs(whole) < 9.2e18)
+        return QString::number(qint64(whole));
+    // Mantissa times a power of two, in decimal digits from the last.
+    int exponent = 0;
+    const double mantissa = std::frexp(std::abs(whole), &exponent);
+    quint64 bits = quint64(std::ldexp(mantissa, 53));
+    exponent -= 53;
+    QList<int> digits;
+    while (bits > 0) {
+        digits.append(int(bits % 10));
+        bits /= 10;
+    }
+    for (int i = 0; i < exponent; ++i) {
+        int carry = 0;
+        for (int &digit : digits) {
+            const int doubled = digit * 2 + carry;
+            digit = doubled % 10;
+            carry = doubled / 10;
+        }
+        if (carry)
+            digits.append(carry);
+    }
+    QString text = whole < 0 ? QStringLiteral("-") : QString();
+    for (qsizetype i = digits.size() - 1; i >= 0; --i)
+        text.append(QChar(u'0' + digits.at(i)));
+    return text;
+}
+
+qint64 toInt64(double value)
+{
+    const QString text = intText(value);
+    bool ok = false;
+    const qint64 result = text.toLongLong(&ok);
+    if (!ok)
+        fail(QStringLiteral("Python int too large to convert to C long"));
+    return result;
+}
+
+quint64 rangeLength(qint64 start, qint64 stop, qint64 step)
+{
+    if (step > 0) {
+        if (stop <= start)
+            return 0;
+        const quint64 span = quint64(stop) - quint64(start);
+        return span / quint64(step) + (span % quint64(step) != 0);
+    }
+    if (start <= stop)
+        return 0;
+    const quint64 span = quint64(start) - quint64(stop);
+    const quint64 size = quint64(-(step + 1)) + 1;
+    return span / size + (span % size != 0);
 }
 
 QString number(double value)
@@ -503,7 +565,10 @@ struct Library::Private
     QHash<QString, QString> searchTerms;
     QHash<QString, int> customs;
     QHash<int, const Book *> books;
+    QHash<int, QString> authorSorts;
     QCollator collator;
+    QCollator caseCollator;
+    mutable std::optional<IdentifierLinks::Rules> linkRules;
     mutable QMutex lock;
     mutable QHash<QPair<int, QString>, QString> composites;
     // The composites being computed, a template that reads itself told so.
@@ -532,8 +597,12 @@ Library::Library(const LibraryData &data, const QString &interfaceLanguage)
         d->customs.insert(u'#' + data.customColumns.at(index).label, index);
     for (const Book &book : data.books)
         d->books.insert(book.id, &book);
+    for (const FacetItem &author : data.authors)
+        d->authorSorts.insert(author.id, author.sort);
     d->collator = QCollator(QLocale(interfaceLanguage));
     d->collator.setCaseSensitivity(Qt::CaseInsensitive);
+    d->caseCollator = QCollator(QLocale(interfaceLanguage));
+    d->caseCollator.setCaseSensitivity(Qt::CaseSensitive);
 }
 
 const Book *Library::book(int id) const
@@ -544,6 +613,27 @@ const Book *Library::book(int id) const
 int Library::compare(const QString &a, const QString &b) const
 {
     return d->collator.compare(a, b);
+}
+
+int Library::compareCase(const QString &a, const QString &b) const
+{
+    // Upper case first: ICU's tertiary order, which puts lower case first,
+    // turned round where only case tells the texts apart.
+    const int order = d->collator.compare(a, b);
+    return order != 0 ? order : -d->caseCollator.compare(a, b);
+}
+
+QString Library::authorSort(int authorId) const
+{
+    return d->authorSorts.value(authorId);
+}
+
+const IdentifierLinks::Rules &Library::linkRules() const
+{
+    const QMutexLocker locker(&d->lock);
+    if (!d->linkRules)
+        d->linkRules = IdentifierLinks::readRules(CalibreConfig::configDirectory());
+    return *d->linkRules;
 }
 
 Library::~Library() = default;
@@ -603,7 +693,9 @@ QString Library::word(const QString &english) const
 {
     static const QStringList words{ QStringLiteral("Yes"), QStringLiteral("No"), QStringLiteral("None"),
                                     QStringLiteral("Error"), QStringLiteral("DRM"), QStringLiteral("TEMPLATE ERROR"),
-                                    QStringLiteral("%s: unknown function"), QStringLiteral("Unknown") };
+                                    QStringLiteral("%s: unknown function"), QStringLiteral("Unknown"),
+                                    QStringLiteral("No book formats found so the path can't be generated"),
+                                    QStringLiteral("No such variable {0}") };
     const qsizetype index = words.indexOf(english);
     return index < 0 ? english : QString::fromUtf8(templateLanguages[d->languageRow].words[index]);
 }

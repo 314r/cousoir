@@ -145,6 +145,26 @@ Expr one(const NodePtr &node)
     return Expr{ node };
 }
 
+// Python's limit on recursion, which ends a template that calls itself or
+// nests too deep with an error: the parser's and the interpreter's depth,
+// across the formatters of eval() and f_string(), on this thread.
+thread_local int depth = 0;
+
+class DepthGuard
+{
+public:
+    DepthGuard()
+    {
+        if (++depth > 400) {
+            --depth;
+            fail(QStringLiteral("maximum recursion depth exceeded"));
+        }
+    }
+    ~DepthGuard() { --depth; }
+    DepthGuard(const DepthGuard &) = delete;
+    DepthGuard &operator=(const DepthGuard &) = delete;
+};
+
 // --- The parser --------------------------------------------------------------
 
 class Parser
@@ -474,6 +494,7 @@ private:
 
     NodePtr expr()
     {
+        const DepthGuard guard;
         if (opIs(QStringLiteral("("))) {
             consume();
             const Expr list = expressionList();
@@ -653,8 +674,9 @@ struct Interpreter
 
     QString run(const Expr &program, const std::optional<QString> &dollar)
     {
-        if (dollar)
-            locals.insert(QStringLiteral("$"), *dollar);
+        // A composite's or a search's $ is None, a null text here: false,
+        // and empty in what it makes.
+        locals.insert(QStringLiteral("$"), dollar ? *dollar : QString());
         try {
             return list(program);
         } catch (const ReturnSignal &signal) {
@@ -686,6 +708,7 @@ struct Interpreter
 
     QString eval(const Node &node)
     {
+        const DepthGuard guard;
         switch (node.type) {
         case Node::Type::Constant:
             return node.value;
@@ -716,6 +739,8 @@ struct Interpreter
         }
         case Node::Type::Field: {
             const QString name = list(node.parts.at(0));
+            if (formatter.variables)
+                return formatter.variables(name);
             try {
                 return book->value(name);
             } catch (const TemplateError &) {
@@ -892,21 +917,25 @@ struct Interpreter
             return result;
         }
         case Node::Type::With: {
-            bool ok = false;
-            const int bookId = int(Py::toFloat(list(node.parts.at(0))));
-            const Book *other = book->library.book(bookId);
-            Q_UNUSED(ok);
+            // int() of the text; the formatter's book changes too, for
+            // lookup() and the templates it formats.
+            const qint64 bookId = Py::toInt(list(node.parts.at(0)));
+            const Book *other = bookId > 0 && bookId <= std::numeric_limits<int>::max() ? book->library.book(int(bookId)) : nullptr;
             if (!other)
                 error(QStringLiteral("Unhandled exception 'No book with id %1'").arg(bookId), node.line);
             const BookProxy *saved = book;
+            const BookProxy *savedFormatterBook = formatter.book;
             const BookProxy proxy(book->library, *other);
             book = &proxy;
+            formatter.book = &proxy;
             try {
                 const QString value = list(node.parts.at(1));
                 book = saved;
+                formatter.book = savedFormatterBook;
                 return value;
             } catch (...) {
                 book = saved;
+                formatter.book = savedFormatterBook;
                 throw;
             }
         }
@@ -961,6 +990,8 @@ struct Interpreter
         const PyValue value = attribute ? *attribute : PyValue::from(field);
         QStringList items;
         if (value.kind == PyValue::Kind::Str) {
+            if (separator.isEmpty())
+                error(QStringLiteral("Unhandled exception 'empty separator'"), node.line);
             for (const QString &item : value.string.split(separator)) {
                 if (!item.trimmed().isEmpty())
                     items.append(item.trimmed());
@@ -995,7 +1026,7 @@ struct Interpreter
     {
         const auto integer = [&](const Expr &expression, const char *what) -> qint64 {
             try {
-                return qint64(floatOrZero(list(expression)));
+                return Py::toInt64(floatOrZero(list(expression)));
             } catch (const TemplateError &) {
                 error(QStringLiteral("for: %1 must be an integer").arg(QLatin1String(what)), node.line);
             }
@@ -1006,16 +1037,15 @@ struct Interpreter
         const qint64 limit = node.hasDefault ? integer(node.parts.at(3), "limit") : 1000;
         if (step == 0)
             error(QStringLiteral("Unhandled exception 'range() arg 3 must not be zero'"), node.line);
-        const qint64 length = step > 0 ? (stop > start ? (stop - start + step - 1) / step : 0)
-                                       : (start > stop ? (start - stop - step - 1) / -step : 0);
-        if (length > limit)
+        const quint64 length = Py::rangeLength(start, stop, step);
+        if (limit < 0 || length > quint64(limit))
             error(QStringLiteral("for: the range length (%1) is larger than the limit (%2)").arg(length).arg(limit),
                   node.line);
         QString result = QString(u"");
         try {
-            for (qint64 i = 0, x = start; i < length; ++i, x += step) {
+            for (quint64 i = 0; i < length; ++i) {
                 try {
-                    locals.insert(node.name, QString::number(x));
+                    locals.insert(node.name, QString::number(qint64(quint64(start) + i * quint64(step))));
                     result = list(node.parts.at(4));
                 } catch (const LoopSignal &signal) {
                     if (signal.isBreak)
@@ -1159,9 +1189,12 @@ static QString formatField(Formatter &formatter, const BookProxy &book, QString 
     QString suffix;
     explode(fullSpec, &spec, &prefix, &suffix);
     QString display;
-    qsizetype p = spec.startsWith(u'\'') ? 0 : spec.indexOf(QStringLiteral(":'"));
-    if (p > 0)
-        p += 1;
+    qsizetype p = 0;
+    if (!spec.startsWith(u'\'')) {
+        p = spec.indexOf(QStringLiteral(":'"));
+        if (p >= 0)
+            p += 1;
+    }
     if (p >= 0 && !spec.isEmpty() && spec.endsWith(u'\'')) {
         value = formatter.evalProgram(value, spec.mid(p + 1, spec.size() - p - 2));
         const qsizetype colon = spec.left(p).indexOf(u':');
@@ -1192,7 +1225,8 @@ static QString formatField(Formatter &formatter, const BookProxy &book, QString 
             FunctionContext context{ formatter, book, locals };
             value = function.argCount == 1 ? function.evaluate(context, { value })
                                            : function.evaluate(context, QStringList{ value } + args);
-            value = Py::strip(value);
+            if (formatter.stripResults)
+                value = Py::strip(value);
         }
     }
     if (!value.isEmpty())
@@ -1227,7 +1261,15 @@ QString Formatter::doFormat(const QString &value, const QString &spec)
 
 namespace {
 
+// get_value(): a field's value by its name, a null name for a positional
+// field, which Python passes as a number.
 using ValueGetter = std::function<QString(const QString &)>;
+
+ValueGetter bookGetter(const BookProxy &proxy)
+{
+    // SafeFormat: a number is the empty text.
+    return [&proxy](const QString &name) { return name.isNull() ? QString(u"") : proxy.value(name); };
+}
 
 // string.Formatter.vformat(): the literal text, and each replacement field
 // as format_field() makes it, its spec formatted first.
@@ -1237,7 +1279,9 @@ QString vformat(Formatter &formatter, const BookProxy &book, const QString &text
         fail(QStringLiteral("Max string recursion exceeded"));
     QString result;
     qsizetype at = 0;
-    int autoIndex = 0;
+    // Python numbers empty names, unless a number was given.
+    bool numbered = false;
+    bool named = false;
     while (at < text.size()) {
         const QChar c = text.at(at);
         if (c == u'}') {
@@ -1301,16 +1345,24 @@ QString vformat(Formatter &formatter, const BookProxy &book, const QString &text
         } else if (i < field.size()) {
             spec = field.mid(i + 1);
         }
-        // get_value(): a number, or an empty name, is the empty text.
         QString value;
+        bool digits = false;
+        name.toInt(&digits);
+        digits = digits && std::all_of(name.cbegin(), name.cend(), [](QChar c) { return c.isDigit(); });
         if (name.isEmpty()) {
-            fail(QStringLiteral("Replacement index %1 out of range for positional args tuple").arg(autoIndex++));
+            if (named)
+                fail(QStringLiteral("cannot switch from manual field specification to automatic field numbering"));
+            numbered = true;
+            value = get(QString());
+        } else if (digits) {
+            if (numbered)
+                fail(QStringLiteral("cannot switch from automatic field numbering to manual field specification"));
+            named = true;
+            value = get(QString());
         } else if (name.contains(u'.') || name.contains(u'[')) {
             fail(QStringLiteral("'str' object has no attribute '%1'").arg(name.section(u'.', 1)));
         } else {
-            bool digits = false;
-            name.toInt(&digits);
-            value = digits ? QString(u"") : get(name);
+            value = get(name);
         }
         if (conversion == u'r' || conversion == u'a')
             value = Py::repr(value);
@@ -1333,8 +1385,7 @@ QString Formatter::safeFormat(const QString &templateText, const BookProxy &prox
         } else if (templateText.startsWith(QLatin1String("python:"))) {
             fail(QStringLiteral("Python templates are not run by Cousoir"));
         } else {
-            result = Internal::vformat(*this, proxy, templateText, 2,
-                                       [&proxy](const QString &name) { return proxy.value(name); });
+            result = Internal::vformat(*this, proxy, templateText, 2, bookGetter(proxy));
             static const QRegularExpression spaces(QStringLiteral("\\s+"), QRegularExpression::UseUnicodePropertiesOption);
             result.replace(spaces, QStringLiteral(" "));
         }
@@ -1367,7 +1418,7 @@ QString Formatter::safeFormat(const QString &templateText, const BookProxy &prox
 QString Formatter::vformat(const QString &templateText)
 {
     const BookProxy &proxy = *book;
-    return Internal::vformat(*this, proxy, templateText, 2, [&proxy](const QString &name) { return proxy.value(name); });
+    return Internal::vformat(*this, proxy, templateText, 2, bookGetter(proxy));
 }
 
 QString Formatter::evalFormat(const QString &templateText, const QHash<QString, QString> &variables, bool strip)
@@ -1375,13 +1426,19 @@ QString Formatter::evalFormat(const QString &templateText, const QHash<QString, 
     // EvalFormatter: the variables for fields, by lower case name.
     Formatter inner(library);
     inner.book = book;
+    inner.stripResults = strip;
     const BookProxy &proxy = *book;
-    const ValueGetter get = [&variables](const QString &name) -> QString {
+    const ValueGetter get = [this, &variables](const QString &name) -> QString {
+        // A number has no lower().
+        if (name.isNull())
+            fail(QStringLiteral("'int' object has no attribute 'lower'"));
         if (name.isEmpty())
             return QString(u"");
         const QString key = name.toLower();
-        return variables.contains(key) ? variables.value(key) : QStringLiteral("No such variable %1").arg(key);
+        return variables.contains(key) ? variables.value(key)
+                                       : library.word(QStringLiteral("No such variable {0}")).replace(QStringLiteral("{0}"), key);
     };
+    inner.variables = get;
     try {
         QString result;
         if (templateText.startsWith(QLatin1String("program:"))) {
