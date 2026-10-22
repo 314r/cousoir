@@ -36,6 +36,8 @@ public:
     QString password;
     // The app's answer to the next book sent, an ERROR when set.
     QString refuse;
+    // No answer to FREE_SPACE: the app as if its network were gone.
+    bool silent = false;
     QList<Stored> books;
     QList<QPair<int, Value>> received;
     bool closed = false;
@@ -47,6 +49,8 @@ public:
         connect(m_socket.get(), &QTcpSocket::disconnected, this, [this] { closed = true; });
         m_socket->connectToHost(QHostAddress::LocalHost, port);
     }
+
+    void disconnectNow() { m_socket->abort(); }
 
     int count(int opcode) const
     {
@@ -144,6 +148,8 @@ private:
             reply(Wireless::Ok, Value::dict());
             break;
         case Wireless::FreeSpace:
+            if (silent)
+                break;
             reply(Wireless::Ok, dict({ { QStringLiteral("free_space_on_device"), Value::from(qint64(1) << 30) } }));
             break;
         case Wireless::SetLibraryInfo:

@@ -1297,6 +1297,11 @@ void LibraryUiTest::sendsToWirelessApps()
     QCOMPARE(device.value(QStringLiteral("name")).toString(), QStringLiteral("KOReader (Kobo_Libra2)"));
     const QString root = device.value(QStringLiteral("root")).toString();
     QTRY_VERIFY(control(QStringLiteral("sidebar_device:") + root));
+    // Told which library it is.
+    const QString uuid = qobject_cast<BookLibrary *>(library())->data().uuid;
+    QVERIFY(!uuid.isEmpty());
+    QCOMPARE(app.last(Wireless::GetInitializationInfo)->text(QStringLiteral("currentLibraryUUID")), uuid);
+    QCOMPARE(app.last(Wireless::SetLibraryInfo)->text(QStringLiteral("libraryUuid")), uuid);
 
     // A book goes, with its metadata, under Calibre's name for it.
     QSignalSpy sent(devices, &DeviceLibrary::sent);

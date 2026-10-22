@@ -286,6 +286,11 @@ QString WirelessConnection::lpathOfUuid(const QString &uuid, const QString &exte
 
 void WirelessConnection::send(const QList<Wireless::Outgoing> &books, Done done)
 {
+    if (m_closed) {
+        if (done)
+            done(false, tr("The reader disconnected."));
+        return;
+    }
     enqueue([this, books, done] {
         m_operation = true;
         m_operationDone = done;
@@ -302,11 +307,16 @@ void WirelessConnection::send(const QList<Wireless::Outgoing> &books, Done done)
             }
             sendBook(shared, 0, total);
         });
-    });
+    }, done);
 }
 
 void WirelessConnection::remove(const QStringList &lpaths, Done done)
 {
+    if (m_closed) {
+        if (done)
+            done(false, tr("The reader disconnected."));
+        return;
+    }
     enqueue([this, lpaths, done] {
         m_operation = true;
         m_operationDone = done;
@@ -324,16 +334,21 @@ void WirelessConnection::remove(const QStringList &lpaths, Done done)
                     emit booksChanged();
                     syncBooklists({}, [this] { finish(true, {}); });
                 });
-    });
+    }, done);
 }
 
 void WirelessConnection::updateMetadata(const QList<Value> &books, Done done)
 {
+    if (m_closed) {
+        if (done)
+            done(false, tr("The reader disconnected."));
+        return;
+    }
     enqueue([this, books, done] {
         m_operation = true;
         m_operationDone = done;
         syncBooklists(books, [this] { finish(true, {}); });
-    });
+    }, done);
 }
 
 void WirelessConnection::eject()
@@ -350,9 +365,9 @@ void WirelessConnection::close(const QString &reason)
     fail(reason.isEmpty() ? tr("The reader was let go.") : reason);
 }
 
-void WirelessConnection::enqueue(std::function<void()> task)
+void WirelessConnection::enqueue(std::function<void()> task, Done done)
 {
-    m_queue.push_back(std::move(task));
+    m_queue.emplace_back(std::move(task), std::move(done));
     if (!m_running)
         next();
 }
@@ -369,7 +384,7 @@ void WirelessConnection::next()
     }
     m_running = true;
     m_noop.stop();
-    const std::function<void()> task = std::move(m_queue.front());
+    const std::function<void()> task = std::move(m_queue.front().first);
     m_queue.pop_front();
     task();
 }
@@ -413,6 +428,8 @@ void WirelessConnection::feed()
             return;
         }
         m_replies.append(message);
+        // The app is there: a long listing goes on as long as it answers.
+        m_timeout.start(m_settings.timeoutSeconds * 1000);
         if (m_replies.size() < m_expected)
             continue;
         m_expected = 0;
@@ -431,7 +448,8 @@ void WirelessConnection::fail(const QString &reason)
     m_closed = true;
     m_timeout.stop();
     m_noop.stop();
-    m_queue.clear();
+    // What was waiting will not be done.
+    const auto waiting = std::exchange(m_queue, {});
     m_file.reset();
     m_socket->disconnect(this);
     m_socket->abort();
@@ -441,6 +459,10 @@ void WirelessConnection::fail(const QString &reason)
         if (const Done done = std::exchange(m_operationDone, {}))
             done(false, reason);
         emit finished(false, reason);
+    }
+    for (const auto &[task, done] : waiting) {
+        if (done)
+            done(false, reason);
     }
     emit closed(reason);
 }
@@ -856,6 +878,14 @@ void WirelessConnection::forget(const QString &lpath)
     m_cacheUsed.remove(key);
 }
 
+QString WirelessConnection::cacheFile() const
+{
+    // The uuid comes from the app: a digest of it names the file, whatever
+    // the app sends.
+    const QByteArray digest = QCryptographicHash::hash(deviceUuid().toUtf8(), QCryptographicHash::Sha1).toHex();
+    return QDir(m_settings.cacheFolder).filePath(QStringLiteral("wireless_device_%1.json").arg(QString::fromLatin1(digest)));
+}
+
 void WirelessConnection::readCache()
 {
     // _read_metadata_cache(): the books this app had, by its uuid.
@@ -864,7 +894,7 @@ void WirelessConnection::readCache()
     m_known.clear();
     if (m_settings.cacheFolder.isEmpty())
         return;
-    QFile file(QDir(m_settings.cacheFolder).filePath(deviceUuid() + QStringLiteral(".json")));
+    QFile file(cacheFile());
     if (!file.open(QIODevice::ReadOnly))
         return;
     const Value cache = PythonJson::parse(file.readAll());
@@ -896,7 +926,7 @@ void WirelessConnection::writeCache()
                                                         .toString(Qt::ISODateWithMs)) } }));
     }
     QDir().mkpath(m_settings.cacheFolder);
-    QSaveFile file(QDir(m_settings.cacheFolder).filePath(deviceUuid() + QStringLiteral(".json")));
+    QSaveFile file(cacheFile());
     if (file.open(QIODevice::WriteOnly)) {
         file.write(PythonJson::dumps(cache).toUtf8());
         file.commit();

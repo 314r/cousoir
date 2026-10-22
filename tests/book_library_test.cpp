@@ -642,11 +642,14 @@ void BookLibraryTest::editsBooks()
     library->setWritable(true);
     library->setCurrentBookId(2);
     QSignalSpy saved(library.get(), &BookLibrary::saved);
+    // A save refused tells why, should it happen.
+    QSignalSpy saveFailed(library.get(), &BookLibrary::saveFailed);
     QCOMPARE(library->updateBook(2, { { QStringLiteral("title"), QStringLiteral("The White Rose") } }), QString());
     QVERIFY(library->saving());
     // Edits made meanwhile wait their turn.
     QCOMPARE(library->updateBook(2, { { QStringLiteral("tags"), QStringLiteral("Fantasy, Military") } }), QString());
     QTRY_VERIFY_WITH_TIMEOUT(!library->saving(), 15000);
+    QVERIFY2(saveFailed.isEmpty(), qPrintable(saveFailed.isEmpty() ? QString() : saveFailed.constFirst().constFirst().toString()));
     QVERIFY(saved.size() >= 1);
     QCOMPARE(title(library.get()), QStringLiteral("The White Rose"));
     QCOMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(),
