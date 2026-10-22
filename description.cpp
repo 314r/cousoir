@@ -295,4 +295,12 @@ bool losesFormatting(const QString &html)
     return false;
 }
 
+bool noteLosesFormatting(const QString &html)
+{
+    static const QRegularExpression styled(QStringLiteral(
+        "<\\s*(u|s|strike|del|ins|sup|sub|font|code|pre|blockquote|hr)\\b|\\b(style|align|color)\\s*="),
+                                           QRegularExpression::CaseInsensitiveOption);
+    return losesFormatting(html) || styled.match(html).hasMatch();
+}
+
 } // namespace Description

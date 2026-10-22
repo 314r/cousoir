@@ -423,11 +423,24 @@ QVariantMap BookLibrary::filter() const
     QString html = note.doc;
     static const QRegularExpression resource(QStringLiteral("calres://([a-z0-9]+)/([0-9a-f]+)(\\?[^\"']*)?"));
     const QString resources = QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("resources"));
+    QHash<QString, QSize> sizes;
     for (auto it = resource.globalMatch(note.doc); it.hasNext();) {
         const QRegularExpressionMatch match = it.next();
         const QString digest = match.captured(2);
-        html.replace(match.captured(0), QUrl::fromLocalFile(QDir(resources).filePath(
-                                            digest.left(2) + u'/' + match.captured(1) + u'-' + digest)).toString());
+        const QString file = QDir(resources).filePath(digest.left(2) + u'/' + match.captured(1) + u'-' + digest);
+        const QString url = QUrl::fromLocalFile(file).toString();
+        html.replace(match.captured(0), url);
+        sizes.insert(url, QImageReader(file).size());
+    }
+    html = Description::cleaned(html);
+    // Each image's own size, which the pane shrinks to its width.
+    for (auto it = sizes.cbegin(); it != sizes.cend(); ++it) {
+        if (it.value().isValid())
+            html.replace(QStringLiteral("src=\"%1\"").arg(it.key()),
+                         QStringLiteral("src=\"%1\" width=\"%2\" height=\"%3\"")
+                             .arg(it.key())
+                             .arg(it.value().width())
+                             .arg(it.value().height()));
     }
     return {
         { QStringLiteral("kind"), m_filterKind },
@@ -435,9 +448,11 @@ QVariantMap BookLibrary::filter() const
         { QStringLiteral("name"), name },
         // Notes can be kept on it: Calibre 7 opened the library.
         { QStringLiteral("notes"), !field.isEmpty() && QFileInfo::exists(QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("notes.db"))) },
-        { QStringLiteral("note"), Description::cleaned(html) },
+        { QStringLiteral("note"), html },
         { QStringLiteral("noteText"), Description::toText(note.doc) },
         { QStringLiteral("noteHasImages"), !note.resources.isEmpty() },
+        // What its text would leave out, for Calibre to change it.
+        { QStringLiteral("noteLosesFormatting"), Description::noteLosesFormatting(note.doc) },
     };
 }
 
@@ -449,10 +464,16 @@ QString BookLibrary::setFilterNote(const QString &text)
     const QVariantMap current = filter();
     if (current.value(QStringLiteral("noteHasImages")).toBool())
         return tr("This note has images: change it in Calibre.");
+    if (current.value(QStringLiteral("noteLosesFormatting")).toBool())
+        return tr("This note has formatting Cousoir cannot write: change it in Calibre.");
     CalibreNotes::Change change;
     change.field = field;
     change.item = m_filterId;
-    change.itemValue = current.value(QStringLiteral("name")).toString();
+    // The item as Calibre's id_map holds it: a language by its code.
+    for (const FacetItem &item : *facetItems(m_filterKind)) {
+        if (item.id == m_filterId)
+            change.itemValue = m_filterKind == QLatin1String("languages") ? item.sort : item.name;
+    }
     change.html = Description::toHtml(text);
     // The text a search finds: the note without its markup.
     QTextDocument document;
@@ -1959,6 +1980,12 @@ void BookLibrary::finishCommit()
 {
     CommitResult committed = m_commitWatcher.future().takeResult();
     const CommitEngine::Result &result = committed.result;
+    if (result.notesWritten && (!result.ok || !result.written)) {
+        // The notes went in, whatever came after them.
+        CalibreDb::readNotes(&m_data);
+        emit filterChanged();
+        rebuildFacetRows();
+    }
     if (!result.ok) {
         // What follows was made on what failed; the library shows what it
         // holds.
@@ -1971,11 +1998,6 @@ void BookLibrary::finishCommit()
         // Not when another library was picked meanwhile: its load, waiting
         // for this save, shows it.
         m_backedUp = m_backedUp || !result.backup.isEmpty();
-        if (result.notesWritten && !result.written) {
-            CalibreDb::readNotes(&m_data);
-            emit filterChanged();
-            rebuildFacetRows();
-        }
         if (result.written) {
             m_loaded = true;
             m_lastError.clear();

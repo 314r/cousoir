@@ -21,6 +21,7 @@
 #include <memory>
 
 #include "calibre_db.h"
+#include "calibre_fts.h"
 #include "calibre_languages.h"
 #include "book_library.h"
 #include "concurrency_guard.h"
@@ -1181,6 +1182,26 @@ void LibraryUiTest::keepsNotes()
     };
     QCOMPARE(searchable().toString(), QStringLiteral("Contes\nContes pour enfants."));
 
+    // Saved unchanged, nothing is written.
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    click("saveNoteButton");
+    QVERIFY(!library()->property("saving").toBool());
+    QTRY_VERIFY(!editor->isVisible());
+
+    // A save that fails gives the text back to finish it.
+    QFile database(notes);
+    QVERIFY(database.setPermissions(QFileDevice::ReadOwner));
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QStringLiteral("Contes cruels."));
+    click("saveNoteButton");
+    QTRY_VERIFY_WITH_TIMEOUT(editor->isVisible(), 15000);
+    QCOMPARE(text("noteEditor"), QStringLiteral("Contes cruels."));
+    QVERIFY(database.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!editor->isVisible());
+
     // Emptied, it goes, kept aside for Calibre.
     click("editNoteButton");
     QTRY_VERIFY(editor->hasActiveFocus());
@@ -1199,6 +1220,50 @@ void LibraryUiTest::keepsNotes()
     QTRY_VERIFY(text("noteText").contains(QStringLiteral("dark")));
     QVERIFY(!control("editNoteButton")->isVisible());
     QVERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("file://")));
+    // Its image, 600 pixels wide, fits the pane.
+    QVERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("width=\"600\"")));
+    const QRegularExpressionMatch shown
+        = QRegularExpression(QStringLiteral("width=\"(\\d+)\"")).match(text("noteText"));
+    QVERIFY(shown.hasMatch());
+    QVERIFY(shown.captured(1).toInt() <= control("notePane")->width());
+
+    // A note Calibre formatted beyond what text keeps is left to Calibre.
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(notes, SqliteDb::Mode::ReadWrite, &error)
+                     && CalibreFts::registerTokenizers(db.handle(), QStringLiteral("fr"), &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QStringLiteral("UPDATE notes SET doc='<p>Worlds <u>not</u> ours.</p>' "
+                                        "WHERE colname='tags' AND item=3"), &error), qPrintable(error));
+    }
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    click("sidebar_tags");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Tags"));
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 3));
+    QTRY_VERIFY(text("noteText").contains(QStringLiteral("ours")));
+    QVERIFY(filter().value(QStringLiteral("noteLosesFormatting")).toBool());
+    QVERIFY(!control("editNoteButton")->isVisible());
+
+    // A language's note is Calibre's on its code.
+    click("sidebar_languages");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Languages"));
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 2));
+    QTRY_COMPARE(text("editNoteButton"), QStringLiteral("Add a note"));
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QStringLiteral("Read in the original."));
+    click("saveNoteButton");
+    waitForSave();
+    QTRY_VERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("original")));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(notes, SqliteDb::Mode::Immutable, &error), qPrintable(error));
+        QCOMPARE(db.value(QStringLiteral("SELECT searchable_text FROM notes WHERE colname='languages' AND item=2")).toString(),
+                 QStringLiteral("eng\nRead in the original."));
+    }
 
     // A library Calibre 7 never opened has no notes to show.
     QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();

@@ -315,7 +315,9 @@ empty note removes it. A note is saved as Calibre's `Notes.set_note()` saves
 one: the HTML and its text in `notes.db`, indexed with Calibre's own full
 text tokenizer so that Calibre's search finds it, a backup of it beside, and a
 note removed kept aside in `retired`, where Calibre takes it back should the
-item come back. A note with images is left to Calibre to change. A library
+item come back. A note with images, or with formatting text cannot hold
+(underlines, colours, alignment, quotations), is left to Calibre to change;
+a language's note is Calibre's on its code. A library
 Calibre 7 never opened has no `notes.db` yet, and no notes in Cousoir either.
 
 ## Several books at once

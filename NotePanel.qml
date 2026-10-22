@@ -14,8 +14,13 @@ FocusScope {
     required property BookLibrary library
     readonly property var filter: library.filter
     readonly property bool hasNote: (filter.note || "") !== ""
-    readonly property bool editable: library.writable && filter.notes === true && filter.noteHasImages !== true
+    // What Calibre's editor made that the text would lose is left to it.
+    readonly property bool keptForCalibre: filter.noteHasImages === true || filter.noteLosesFormatting === true
+    readonly property bool editable: library.writable && filter.notes === true && !keptForCalibre
     property bool editing: false
+    // The text being saved, put back in the editor should the save fail.
+    property string draft: ""
+    property bool saving: false
     property bool unfolded: false
     readonly property real foldedHeight: 8 * Theme.rowHeight
 
@@ -28,10 +33,28 @@ FocusScope {
     }
 
     function save() {
-        const error = library.setFilterNote(noteArea.text.trim())
-        if (error)
+        const text = noteArea.text.trim()
+        if (text === (filter.noteText || "").trim()) {
+            editing = false
+            return
+        }
+        const error = library.setFilterNote(text)
+        if (error) {
             failed(error)
+            return
+        }
+        draft = text
+        saving = true
         editing = false
+    }
+
+    // The note's images no wider than the pane.
+    function fitted(html, width) {
+        return html.replace(/<img([^>]*) width="(\d+)" height="(\d+)"/g, function(tag, rest, w, h) {
+            if (Number(w) <= width)
+                return tag
+            return '<img' + rest + ' width="' + Math.floor(width) + '" height="' + Math.round(Number(h) * width / Number(w)) + '"'
+        })
     }
 
     // There is a note to read, or one to write.
@@ -42,6 +65,23 @@ FocusScope {
     onItemChanged: {
         editing = false
         unfolded = false
+        saving = false
+    }
+
+    Connections {
+        target: panel.library
+
+        function onSaved() {
+            panel.saving = false
+        }
+
+        function onSaveFailed() {
+            if (!panel.saving)
+                return
+            panel.saving = false
+            noteArea.text = panel.draft
+            panel.editing = true
+        }
     }
 
     ScrollView {
@@ -87,7 +127,7 @@ FocusScope {
                 Layout.maximumHeight: panel.unfolded ? Number.POSITIVE_INFINITY : panel.foldedHeight
                 visible: panel.hasNote && !panel.editing
                 clip: true
-                text: panel.filter.note || ""
+                text: panel.fitted(panel.filter.note || "", column.width)
                 textFormat: Text.RichText
                 wrapMode: Text.Wrap
                 onLinkActivated: function(link) { Qt.openUrlExternally(link) }
@@ -103,7 +143,7 @@ FocusScope {
                     id: noteMeasure
                     visible: false
                     width: column.width
-                    text: panel.filter.note || ""
+                    text: noteLabel.text
                     textFormat: Text.RichText
                     wrapMode: Text.Wrap
                     font: noteLabel.font
@@ -112,8 +152,9 @@ FocusScope {
 
             Label {
                 Layout.fillWidth: true
-                visible: panel.hasNote && panel.filter.noteHasImages === true && panel.library.writable
-                text: qsTr("This note has images: change it in Calibre.")
+                visible: panel.hasNote && panel.keptForCalibre && panel.library.writable
+                text: panel.filter.noteHasImages === true ? qsTr("This note has images: change it in Calibre.")
+                                                          : qsTr("This note has formatting Cousoir cannot write: change it in Calibre.")
                 color: Theme.textMuted
                 font.pointSize: Theme.fontPointSizeCaption
                 wrapMode: Text.Wrap
