@@ -1135,6 +1135,9 @@ private:
         const CustomColumn *column = nullptr;
         bool seriesIndex = false;
         DataType type = DataType::None;
+        // A composite of several values: its cache_to_list, "," or "|" for
+        // names.
+        QString splitter;
     };
 
     std::optional<Custom> customOf(const QString &key) const
@@ -1166,6 +1169,7 @@ private:
                 custom.type = sort == QLatin1String("number") ? DataType::Float
                     : sort == QLatin1String("date")         ? DataType::DateTime
                                                             : DataType::Text;
+                custom.splitter = CalibreDb::multipleSeparators(column).text(QStringLiteral("cache_to_list"));
             }
             return custom;
         }
@@ -1258,14 +1262,16 @@ private:
         return value.value;
     }
 
-    // CompositeField.iter_searchable_values(): the text split at its commas
-    // for a column of several values, the values that are not empty.
+    // CompositeField.iter_searchable_values(): the text split at its
+    // separator for a column of several values, the values that are not
+    // empty.
     static QStringList compositeValues(const Book &book, const Custom &custom)
     {
         const QString text = book.custom.value(custom.index).value.toString();
         QStringList values;
-        for (const QString &item : custom.column->multiple ? text.split(u',') : QStringList{ text }) {
-            const QString value = custom.column->multiple ? item.trimmed() : item;
+        const bool split = !custom.splitter.isEmpty();
+        for (const QString &item : split ? text.split(custom.splitter) : QStringList{ text }) {
+            const QString value = split ? item.trimmed() : item;
             if (!value.isEmpty())
                 values.append(value);
         }

@@ -80,6 +80,12 @@ public:
     // The book being formatted.
     const BookProxy *book = nullptr;
     QHash<QString, QString> globals;
+    // EvalFormatter's: its fields are variables, for program mode's field()
+    // and $name as for its templates.
+    std::function<QString(const QString &)> variables;
+    // strip_results: the results of functions in single function mode, and
+    // the template's, stripped of spaces.
+    bool stripResults = true;
 
     // safe_format(): the template's text, or empty with `error`.
     QString safeFormat(const QString &templateText, const BookProxy &book, QString *error);
@@ -116,6 +122,14 @@ namespace Py {
 double toFloat(const QString &text);
 // int(text).
 qint64 toInt(const QString &text);
+// str(int(value)) of a float: every digit of a large one; Python's
+// OverflowError or ValueError for infinity and NaN.
+QString intText(double value);
+// int(value) of a float that has to fit 64 bits: an error otherwise.
+qint64 toInt64(double value);
+// len(range(start, stop, step)), step not zero, without overflow; its
+// values are start + i * step in quint64 arithmetic, cast back.
+quint64 rangeLength(qint64 start, qint64 stop, qint64 step);
 // str(float) and str(int(x)) when x is whole, as the interpreter writes
 // numbers.
 QString number(double value);

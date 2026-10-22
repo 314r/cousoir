@@ -32,7 +32,8 @@ db add_custom_column shelf Shelf enumeration --display '{"enum_values": ["A", "B
 db add_custom_column saga Saga series
 db add_custom_column computed Computed composite --display '{"composite_template": "{title} by {authors}"}'
 db add_custom_column pagesort "Pages sorted" composite \
-    --display '{"composite_template": "{#pagecount}", "composite_sort": "number"}'
+    --display '{"composite_template": "{#pagecount}", "composite_sort": "number",
+                "composite_store_template_value_in_opf": false}'
 db add_custom_column started2 "Started as text" composite \
     --display '{"composite_template": "program: format_date($$#started, \"yyyy-MM-dd\")", "composite_sort": "date"}'
 db add_custom_column labels Labels composite --is-multiple \

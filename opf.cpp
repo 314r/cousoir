@@ -157,8 +157,12 @@ QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book 
         const CustomValue value = book.custom.value(index);
         PythonJson::Value stored;
         if (composite) {
-            // The value computed from the template, as text.
-            stored = PythonJson::Value::from(value.value.toString());
+            // The value computed from the template, as text; nothing for a
+            // column whose display says not to keep it in the OPF.
+            const PythonJson::Value *keep = display.kind == PythonJson::Value::Kind::Dict
+                ? display.find(QStringLiteral("composite_store_template_value_in_opf"))
+                : nullptr;
+            stored = PythonJson::Value::from(keep && !PythonJson::truthy(*keep) ? QString(u"") : value.value.toString());
         } else if (column.multiple) {
             stored = PythonJson::Value::from(value.value.toStringList());
         } else if (value.value.isNull()) {
