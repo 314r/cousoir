@@ -146,6 +146,8 @@ qt_add_library(cousoir_models STATIC
     cover_cache.h
     device_library.cpp
     device_library.h
+    metadata_downloader.cpp
+    metadata_downloader.h
     omarchy_theme.cpp
     omarchy_theme.h
     system_appearance.cpp

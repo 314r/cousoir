@@ -3,6 +3,7 @@
 #include <QDesktopServices>
 #include <QDirIterator>
 #include <QGuiApplication>
+#include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>
@@ -13,6 +14,7 @@
 #include "book_library.h"
 #include "calibre_db.h"
 #include "conversion_service.h"
+#include "metadata_downloader.h"
 #include "device_library.h"
 #include "sqlite_db.h"
 #include "test_support.h"
@@ -96,6 +98,7 @@ private slots:
     void addsAndRemovesFormats();
     void movesBooksToTrash();
     void convertsBooks();
+    void downloadsMetadata();
     void sendsToKobos();
     void sendsToKindles();
     void checksLibrary();
@@ -922,6 +925,108 @@ void BookLibraryTest::convertsBooks()
     QVERIFY(timer.elapsed() < 10000);
     qunsetenv("COUSOIR_FAKE_DELAY");
     QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/Shadows Linger - Glen Cook.azw3"))));
+    QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+}
+
+// A metadata download lists what Calibre's sources found, compares it with
+// the book, finds covers and saves the fields chosen and a cover as one
+// edit, which Revert undoes; Calibre is a stand-in here.
+void BookLibraryTest::downloadsMetadata()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    MetadataDownloader downloader;
+    downloader.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
+    downloader.setLibrary(library.get());
+    QVERIFY(downloader.available());
+    QVERIFY(!downloader.search(99).isEmpty());
+    library->setCurrentBookId(2);
+    QCOMPARE(downloader.search(2), QString());
+    QCOMPARE(downloader.state(), QStringLiteral("searching"));
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    QCOMPARE(downloader.bookId(), 2);
+    const QVariantList results = downloader.results();
+    QCOMPARE(results.size(), 4);
+    const QVariantMap first = results.first().toMap();
+    QCOMPARE(first.value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    QCOMPARE(first.value(QStringLiteral("published")).toString(), QStringLiteral("1984"));
+    QVERIFY(first.value(QStringLiteral("hasCover")).toBool());
+    QVERIFY(first.value(QStringLiteral("hasSummary")).toBool());
+    QVERIFY(!results.at(1).toMap().value(QStringLiteral("hasCover")).toBool());
+
+    // Each field the book found has, beside the book's; chosen when it
+    // differs.
+    QHash<QString, QVariantMap> fields;
+    for (const QVariant &row : downloader.fields(0))
+        fields.insert(row.toMap().value(QStringLiteral("key")).toString(), row.toMap());
+    QCOMPARE(fields.size(), 10);
+    QCOMPARE(fields.value(QStringLiteral("title")).value(QStringLiteral("found")).toString(), QStringLiteral("The Black Company"));
+    QVERIFY(!fields.value(QStringLiteral("title")).value(QStringLiteral("chosen")).toBool());
+    QCOMPARE(fields.value(QStringLiteral("tags")).value(QStringLiteral("current")).toString(), QStringLiteral("Fantasy"));
+    QCOMPARE(fields.value(QStringLiteral("tags")).value(QStringLiteral("found")).toString(),
+             QStringLiteral("Dark fantasy, fiction, Fantasy"));
+    QVERIFY(fields.value(QStringLiteral("tags")).value(QStringLiteral("chosen")).toBool());
+    // 4.3 stars is four, as Calibre's editor has no half stars.
+    QCOMPARE(fields.value(QStringLiteral("rating")).value(QStringLiteral("found")).toString(), QStringLiteral("★★★★"));
+    QCOMPARE(fields.value(QStringLiteral("pubdate")).value(QStringLiteral("found")).toString(), QStringLiteral("1984-05-01"));
+    QCOMPARE(fields.value(QStringLiteral("identifiers")).value(QStringLiteral("found")).toString(),
+             QStringLiteral("google:xE4_AAAA, isbn:9780812521399"));
+    QCOMPARE(fields.value(QStringLiteral("series")).value(QStringLiteral("found")).toString(),
+             QStringLiteral("The Chronicles of the Black Company, book 1"));
+    QVERIFY(downloader.fields(9).isEmpty());
+
+    // The book's own cover, then those found, the largest first.
+    downloader.searchCovers(0);
+    QVERIFY(downloader.searchingCovers());
+    QTRY_VERIFY(!downloader.searchingCovers());
+    const QVariantList covers = downloader.covers();
+    QCOMPARE(covers.size(), 3);
+    QVERIFY(covers.at(0).toMap().value(QStringLiteral("own")).toBool());
+    QCOMPARE(covers.at(1).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Google"));
+    QCOMPARE(covers.at(1).toMap().value(QStringLiteral("width")).toInt(), 1200);
+    QCOMPARE(covers.at(2).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Amazon.com"));
+
+    QCOMPARE(downloader.apply(0, { QStringLiteral("tags"), QStringLiteral("pubdate"), QStringLiteral("series") }, 1),
+             QString());
+    QCOMPARE(downloader.state(), QStringLiteral("idle"));
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(),
+                 (QStringList{ QStringLiteral("Dark fantasy"), QStringLiteral("fiction"), QStringLiteral("Fantasy") }));
+    QCOMPARE(library->currentBook().value(QStringLiteral("series")).toString(),
+             QStringLiteral("The Chronicles of the Black Company"));
+    QCOMPARE(library->currentBook().value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    const QString coverPath = copy->filePath(QStringLiteral("Glen Cook/The Black Company (2)/cover.jpg"));
+    // Scaled to Calibre's largest cover, as Calibre saves one.
+    QCOMPARE(QImageReader(coverPath).size(), QSize(1466, 2200));
+    // The job's folder goes with the download.
+    const QDir jobs(QDir(BookLibrary::cacheFolder(library->libraryPath())).filePath(QStringLiteral("downloads")));
+    QVERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+    // Revert puts the book back, cover included.
+    QVERIFY(library->canRevert());
+    library->revertCurrentBook();
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(), QStringList{ QStringLiteral("Fantasy") });
+    QVERIFY(QImageReader(coverPath).size() != QSize(1466, 2200));
+
+    // A failure tells what Calibre logged.
+    qputenv("COUSOIR_FAKE_FAIL", "1");
+    QCOMPARE(downloader.search(2), QString());
+    QTRY_COMPARE(downloader.state(), QStringLiteral("failed"));
+    QVERIFY(downloader.error().contains(QStringLiteral("Sources unreachable")));
+    qunsetenv("COUSOIR_FAKE_FAIL");
+
+    // Stopped, it is over at once.
+    qputenv("COUSOIR_FAKE_DELAY", "20");
+    QElapsedTimer timer;
+    timer.start();
+    QCOMPARE(downloader.search(3), QString());
+    QCOMPARE(downloader.state(), QStringLiteral("searching"));
+    downloader.cancel();
+    QCOMPARE(downloader.state(), QStringLiteral("idle"));
+    QVERIFY(timer.elapsed() < 10000);
+    qunsetenv("COUSOIR_FAKE_DELAY");
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 }
 

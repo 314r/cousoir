@@ -33,6 +33,7 @@
 #include "calibre_config.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
+#include "metadata_downloader.h"
 #include "cover_cache.h"
 #include "device_library.h"
 #include "omarchy_theme.h"
@@ -173,6 +174,7 @@ void registerTypes()
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
+    qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     // The interface's own types, from the resources as the UI tests have them.

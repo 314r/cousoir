@@ -174,6 +174,11 @@ public:
     // updateBook() takes it; empty for a book that is gone.
     QVariantMap downloadedChanges(int bookId, const MetadataDownload::Found &found, const QStringList &fields,
                                   bool appendComments) const;
+    // What a book found would change of `bookId`, field by field: { key,
+    // label, current, found, chosen }, as texts; chosen when the field
+    // changes and is not one of Calibre's `ignored`.
+    QVariantList downloadFields(int bookId, const MetadataDownload::Found &found, const QStringList &ignored,
+                                bool appendComments) const;
     bool writable() const;
     void setWritable(bool writable);
     bool saving() const;
