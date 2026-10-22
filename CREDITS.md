@@ -56,6 +56,9 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | | `src/calibre/db/search.py`: `_matchkind()`, `_match()`, `DateSearch`, `NumericSearch`, `KeyPairSearch`, `Parser.get_matches()`, `get_user_category_matches()`, `Search._do_search()` |
 | | `src/calibre/db/fields.py`: the values each field searches, custom columns' included, `iter_searchable_values_for_sort()` |
 | | `src/calibre/library/field_metadata.py`: the fields' search terms and data types |
+| `calibre_template.cpp`, `calibre_template_engine.cpp` | `src/calibre/utils/formatter.py`: the template language's lexer (`cached_lex_scanner()`), `_Parser`, `_Interpreter`, `TemplateFormatter` with `_do_format()` and `format_field()`; `src/calibre/ebooks/metadata/book/formatter.py`: `SafeFormat`; `src/calibre/__init__.py`: `human_readable()` |
+| `calibre_template_book.cpp` | `src/calibre/db/lazy.py`: `ProxyMetadata` and its getters; `src/calibre/ebooks/metadata/book/base.py`: `format_field_extended()`; `src/calibre/ebooks/metadata/book/__init__.py`: `ALL_METADATA_FIELDS`; `src/calibre/utils/date.py`: `format_date()`, `parse_date()` with the forms of dateutil's parser it takes; `src/calibre/ebooks/metadata/__init__.py`: `fmt_sidx()` |
+| `calibre_template_functions.cpp` | `src/calibre/utils/formatter_functions.py`: the builtin template functions; `src/calibre/utils/titlecase.py`, MIT licence, John Gruber, Stuart Colville and Kovid Goyal: `titlecase()`; `src/calibre/utils/icu.py`: `capitalize()`; `src/calibre/ebooks/metadata/__init__.py`: `rating_to_stars()` |
 | `opf_reader.cpp` | `src/calibre/ebooks/metadata/opf3.py`: `read_metadata()` and the readers it calls, `parse_prefixes()`, `expand_prefix()`, `parse_identifier()`, `find_main_title()` |
 | | `src/calibre/ebooks/metadata/opf2.py`: the `OPF` class's readers, `first_spine_item()`, the EPUB 3 raster cover |
 | | `src/calibre/ebooks/metadata/utils.py`: `parse_opf_version()` |
@@ -117,6 +120,11 @@ follows.
   [Text::Unidecode](https://metacpan.org/pod/Text::Unidecode), Copyright (C)
   2001 Sean M. Burke, by way of Russell Norris's Ruby unidecode, and, for the
   Han characters, from the Unicode Consortium's Unihan database.
+- `calibre_template.inc`: the built-in fields of Calibre's
+  `FieldMetadata`, `src/calibre/library/field_metadata.py`, and by
+  interface language the names of days and months of Calibre's locale data
+  and the few words templates print, as Calibre's translators wrote them;
+  written by `tools/oracle/template_tables_oracle.py`.
 - `calibre_strings.inc`: "Unknown" and "Cover" as Calibre's translators
   translated them; the MOBI language codes of
   `src/calibre/ebooks/mobi/langcodes.py`; and the named character references

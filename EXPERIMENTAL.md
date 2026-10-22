@@ -139,7 +139,7 @@ searches run it. Cousoir shows no composite and cannot search one.
 | 5. Custom columns | done; as table columns, later |
 | 6. Reading life from the readers | done for the Kobo; a Kindle's clippings, later |
 | 7. A command palette | done |
-| 8. Calibre's templates | next |
+| 8. Calibre's templates | done |
 
 ## Journal
 
@@ -477,3 +477,38 @@ checked and fixed:
   a tie now, read alike by both.
 - Save proposed a broken file name for a title with "#"; a reader that
   failed to load hid what it had told before.
+
+### 2026-10-22 — goal 8, Calibre's templates (`exp-templates`)
+
+- Calibre's template language is ported from `utils/formatter.py` and
+  `formatter_functions.py`: the single function mode on Python's
+  `string.Formatter`, with Python's format specs (`{series_index:05.1f}`),
+  prefixes and suffixes and old style function calls; the program mode's
+  lexer, parser and interpreter, node by node; the builtin functions; and
+  the book as `ProxyMetadata` shows it to templates, its fields formatted
+  as `format_field_extended()` formats them.
+- What templates read besides the books is taken from Calibre by
+  `tools/oracle/template_tables_oracle.py`: the built-in fields with their
+  search terms and date formats, and in each of Calibre's languages the
+  names of days and months (its locale data) and the words templates print.
+- `tools/oracle/template_oracle.py` runs 244 templates through Calibre's
+  `SafeFormat` on each book, as a composite column is computed, and
+  `cousoir-cli template` through Cousoir's: all alike on the fixture, the
+  custom library and 2000 generated books, an error counting as alike
+  whatever its message. The first run had 241 of 244: `booksize()` of a
+  book without files, `%p` in the system's language (none in French), and
+  dates Calibre's dateutil reads in words (`19 oct. 2026`), now read as
+  dateutil reads the forms dates take.
+- Composite columns are computed when the library loads, and for the books
+  a change writes the `metadata.opf` of: lists, OPF files, the details pane
+  and searches have them, as text, numbers or dates by their sort, and
+  split at commas when they hold several. The custom fixture has one of
+  each kind; the comparisons no longer leave them out.
+- `template:"TEMPLATE#@#:t:QUERY"` searches, with text, number, date and
+  yes or no comparisons; the battery has 440 searches, all alike.
+- Cost: a composite takes about 5 µs a book; loading 50 000 books with one
+  takes 0.33 s more, and a change writes only its books' composites.
+
+Left for later: the library's stored template functions, Python templates,
+and the functions that need Calibre's window (book counts, notes, extra
+files, virtual libraries).
