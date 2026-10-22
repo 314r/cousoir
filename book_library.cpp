@@ -1337,6 +1337,90 @@ void BookLibrary::openBackupFolder()
     QDesktopServices::openUrl(QUrl::fromLocalFile(backupFolder()));
 }
 
+QVariantMap BookLibrary::downloadedChanges(int bookId, const MetadataDownload::Found &found, const QStringList &fields,
+                                           bool appendComments) const
+{
+    const Book *book = findBook(bookId);
+    return book ? MetadataDownload::changes(m_data, *book, effectiveConfig(), found, fields, appendComments) : QVariantMap();
+}
+
+QVariantList BookLibrary::downloadFields(int bookId, const MetadataDownload::Found &found, const QStringList &ignored,
+                                         bool appendComments) const
+{
+    const Book *book = findBook(bookId);
+    if (!book)
+        return {};
+    const CalibreConfig config = effectiveConfig();
+    const QVariantMap current = editableValues(*book);
+    // Each field as the dialog shows it, from the values updateBook() takes.
+    const auto text = [](const QString &field, const QVariantMap &values) -> QString {
+        const QVariant value = values.value(field);
+        if (field == QLatin1String("authors"))
+            return value.toStringList().join(QStringLiteral(" & "));
+        if (field == QLatin1String("tags"))
+            return value.toStringList().join(QStringLiteral(", "));
+        if (field == QLatin1String("rating"))
+            return BookDisplay::rating(value.toInt());
+        if (field == QLatin1String("languages")) {
+            QStringList names;
+            for (const QString &code : value.toStringList())
+                names.append(CalibreText::languageName(code));
+            return names.join(QStringLiteral(", "));
+        }
+        if (field == QLatin1String("identifiers")) {
+            QStringList pairs;
+            if (value.typeId() == QMetaType::QVariantMap) {
+                const QVariantMap map = value.toMap();
+                for (auto it = map.cbegin(); it != map.cend(); ++it)
+                    pairs.append(it.key() + u':' + it.value().toString());
+            } else {
+                pairs = value.toString().split(QStringLiteral(", "), Qt::SkipEmptyParts);
+            }
+            pairs.sort();
+            return pairs.join(QStringLiteral(", "));
+        }
+        if (field == QLatin1String("pubdate")) {
+            const QDateTime date = QDateTime::fromString(value.toString(), Qt::ISODate);
+            return date.isValid() ? date.toLocalTime().date().toString(Qt::ISODate) : QString();
+        }
+        if (field == QLatin1String("series")) {
+            const QString series = value.toString();
+            return series.isEmpty() ? QString()
+                                    : tr("%1, book %2").arg(series, BookDisplay::seriesIndex(values.value(QStringLiteral("seriesIndex")).toDouble()));
+        }
+        if (field == QLatin1String("comments"))
+            return Description::toText(value.toString()).trimmed();
+        return value.toString();
+    };
+    static const QHash<QString, const char *> labels{
+        { QStringLiteral("title"), QT_TR_NOOP("Title") },         { QStringLiteral("authors"), QT_TR_NOOP("Authors") },
+        { QStringLiteral("rating"), QT_TR_NOOP("Rating") },       { QStringLiteral("publisher"), QT_TR_NOOP("Publisher") },
+        { QStringLiteral("tags"), QT_TR_NOOP("Tags") },           { QStringLiteral("identifiers"), QT_TR_NOOP("Identifiers") },
+        { QStringLiteral("pubdate"), QT_TR_NOOP("Published") },   { QStringLiteral("series"), QT_TR_NOOP("Series") },
+        { QStringLiteral("languages"), QT_TR_NOOP("Languages") }, { QStringLiteral("comments"), QT_TR_NOOP("Description") },
+    };
+    QVariantList rows;
+    for (const QString &field : MetadataDownload::fields()) {
+        const QVariantMap changes = MetadataDownload::changes(m_data, *book, config, found, { field }, appendComments);
+        if (changes.isEmpty())
+            continue;
+        QVariantMap after = current;
+        for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+            after.insert(it.key(), it.value());
+        const QString before = text(field, current);
+        const QString now = text(field, after);
+        rows.append(QVariantMap{
+            { QStringLiteral("key"), field },
+            { QStringLiteral("label"), tr(labels.value(field)) },
+            { QStringLiteral("current"), before },
+            { QStringLiteral("found"), now },
+            // Calibre's preferences may leave a field aside.
+            { QStringLiteral("chosen"), before != now && !ignored.contains(field) },
+        });
+    }
+    return rows;
+}
+
 QString BookLibrary::updateBook(int bookId, const QVariantMap &changes)
 {
     const Book *book = findBook(bookId);

@@ -1,0 +1,13 @@
+[
+    { "download": { "book": 2, "found": "found", "result": 0,
+                    "fields": ["title", "authors", "rating", "publisher", "tags", "identifiers", "pubdate", "series",
+                               "languages", "comments"] } },
+    { "download": { "book": 3, "found": "found", "result": 1, "append": true,
+                    "fields": ["title", "authors", "rating", "publisher", "tags", "identifiers", "pubdate", "series",
+                               "languages", "comments"] } },
+    { "download": { "book": 1, "found": "found", "result": 2,
+                    "fields": ["tags", "publisher", "rating", "identifiers", "languages"] } },
+    { "download": { "book": 4, "found": "found", "result": 3, "append": true,
+                    "fields": ["title", "authors", "comments", "series", "rating"] } },
+    { "download": { "book": 6, "found": "found", "result": 0, "fields": ["series", "pubdate"] } }
+]

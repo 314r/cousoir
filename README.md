@@ -56,6 +56,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   added twice, an author filed under several names, books whose files are
   gone and files the database doesn't know. Keep one copy, merge the names or
   tidy the entries in a click, or ignore what you meant.
+- 🌐 **Metadata and covers from the web.** Calibre's own sources look the
+  book up; pick the fields to take beside your values, and a cover among
+  those found. Revert undoes it.
 - 🔄 **Convert with Calibre.** KEPUB for a Kobo, AZW3 for a Kindle, using your
   Calibre conversion settings.
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
@@ -96,8 +99,9 @@ or later and a C++20 compiler; libmtp for a Kindle. [DOC.md](DOC.md) has the
 details.
 
 > **About Calibre:** Cousoir browses and edits a library on its own, but
-> Calibre itself converts books, sends them to a reader and reads the metadata
-> of formats other than EPUB, KEPUB, MOBI, AZW3 and PDF, so install it too.
+> Calibre itself converts books, sends them to a reader, downloads metadata
+> and reads the metadata of formats other than EPUB, KEPUB, MOBI, AZW3 and
+> PDF, so install it too.
 
 Cousoir installs under `~/.local` and appears in your app launcher. Set
 `PREFIX` to install it somewhere else.

@@ -33,6 +33,7 @@
 #include "calibre_config.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
+#include "metadata_downloader.h"
 #include "cover_cache.h"
 #include "device_library.h"
 #include "omarchy_theme.h"
@@ -173,6 +174,7 @@ void registerTypes()
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
+    qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     // The interface's own types, from the resources as the UI tests have them.
@@ -299,6 +301,8 @@ struct Shot
     int book = 0;
     int selected = 0;
     QStringList clicks;
+    // Milliseconds waited after each click, for what it starts.
+    int pause = 0;
     // A folder that stands for a Kobo plugged in.
     QString kobo;
     // Keys pressed, then text typed, after the clicks.
@@ -349,6 +353,8 @@ int screenshot(const QString &path, const Shot &shot)
         }
         QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
                           item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        if (shot.pause > 0)
+            QTest::qWait(shot.pause);
     }
     for (const QString &key : shot.keys) {
         drawn(window);
@@ -395,6 +401,8 @@ int main(int argc, char *argv[])
                        QStringLiteral("count") });
     parser.addOption({ QStringLiteral("click"), QStringLiteral("A control to click, by its objectName."),
                        QStringLiteral("name") });
+    parser.addOption({ QStringLiteral("pause"), QStringLiteral("Milliseconds to wait after each click."),
+                       QStringLiteral("ms") });
     parser.addOption({ QStringLiteral("kobo"), QStringLiteral("A folder standing for a Kobo plugged in."),
                        QStringLiteral("folder") });
     parser.addOption({ QStringLiteral("key"), QStringLiteral("Keys to press, Ctrl+K, after the clicks."),
@@ -421,6 +429,7 @@ int main(int argc, char *argv[])
         shot.book = parser.value(QStringLiteral("book")).toInt();
         shot.selected = parser.value(QStringLiteral("select")).toInt();
         shot.clicks = parser.values(QStringLiteral("click"));
+        shot.pause = parser.value(QStringLiteral("pause")).toInt();
         shot.kobo = parser.value(QStringLiteral("kobo"));
         shot.keys = parser.values(QStringLiteral("key"));
         shot.typed = parser.value(QStringLiteral("type"));

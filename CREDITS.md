@@ -95,6 +95,7 @@ GPL v3, as their own headers and Calibre's `COPYRIGHT` say.
 | | `src/calibre/devices/kobo/bookmark.py`, Copyright (C) Timothy Legge and Kovid Goyal: `Bookmark.get_bookmark_data()` |
 | `kindle.cpp` | `src/calibre/devices/mtp/driver.py`: `_sync_kindle_thumbnails()`, `delete_kindle_cover_thumbnail_for()`; `src/calibre/devices/mtp/filesystem_cache.py` and `src/calibre/ebooks/__init__.py`: the book extensions |
 | `kindle_send.cpp` | `src/calibre/devices/mtp/unix/driver.py`: `put_file()`, `get_mtp_file()`, `delete_file_or_folder()`; `src/calibre/devices/mtp/driver.py`: `open()`, `books()`, in the Python the job runs |
+| `metadata_download.cpp` | `src/calibre/ebooks/metadata/sources/worker.py`: `single_identify()` and `single_covers()`, which the jobs call; `src/calibre/gui2/metadata/single_download.py`: the dialog's identify and covers workers, its order of covers; `src/calibre/gui2/metadata/single.py`: `fetch_metadata()` and `update_from_mi()`; `src/calibre/library/comments.py`: `comments_to_html()`, `merge_comments()`; `src/calibre/db/cache.py`: `author_sort_from_authors()`; `src/calibre/gui2/widgets2.py`: the rating editor's whole stars |
 | `conversion.cpp` | `src/calibre/gui2/convert/single.py`: `setup_pipeline()`; `src/calibre/gui2/tools.py`: `convert_single_ebook()`; `src/calibre/ebooks/conversion/config.py`: `load_defaults()`; `src/calibre/db/legacy.py`: `original_fmt()`, in the Python the job runs |
 
 `concurrency_guard.cpp` uses the name of Calibre's single-instance socket,

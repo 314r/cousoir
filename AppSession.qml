@@ -2,7 +2,7 @@ import QtQuick
 import Cousoir
 
 // One session per window: owns the library, the guard that says whether it
-// may be written, the conversions and the devices, and pushes the system
+// may be written, the conversions, the devices and the metadata downloads, and pushes the system
 // appearance into the Theme singleton.
 QtObject {
     id: session
@@ -24,6 +24,9 @@ QtObject {
         library: session.library
     }
     readonly property DeviceLibrary devices: DeviceLibrary {
+        library: session.library
+    }
+    readonly property MetadataDownloader downloads: MetadataDownloader {
         library: session.library
     }
     readonly property ConcurrencyGuard guard: ConcurrencyGuard {

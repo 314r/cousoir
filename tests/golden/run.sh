@@ -3,9 +3,9 @@
 # each on its own copy of the fixture library and, with COUSOIR_GOLDEN_REAL=1,
 # of the library Calibre opens; `cousoir-cli read` with Calibre's readers on
 # book files; and the libraries Calibre and `cousoir-cli apply` leave after
-# the same edits, additions, removals and conversions. calibredb can rename
-# files and touches metadata.db even to list it, so neither ever runs on the
-# library itself.
+# the same edits, additions, removals, conversions and metadata downloads.
+# calibredb can rename files and touches metadata.db even to list it, so
+# neither ever runs on the library itself.
 #
 #   tests/golden/run.sh build/cousoir-cli [build/cousoir-test-tool]
 #
@@ -209,6 +209,35 @@ edits() {
 edits "$root/tests/data/edits/edits.json"
 edits "$root/tests/data/edits/bulk.json"
 edits "$root/tests/data/edits/custom.json" "$root/tests/data/library-custom"
+
+# Metadata downloads, without the web: Cousoir's identify job run on the
+# books of found.json as Calibre's sources would return them, then the books
+# found applied to copies of the fixture by Calibre's Edit metadata dialog,
+# shown offscreen, and by Cousoir.
+downloads() {
+    local dir="$work/download"
+    rm -rf "$dir" "$work/download-calibre" "$work/download-cousoir"
+    mkdir -p "$dir"
+    cp "$root/tests/data/download/download.json" "$dir/"
+    oracle "$root/tools/oracle/download_oracle.py" -- identify "$root/metadata_download.cpp" "$dir/found" \
+        "$root/tests/data/download/found.json" || return 0
+    for side in calibre cousoir; do
+        cp -a --reflink=auto "$root/tests/data/library" "$work/download-$side"
+    done
+    QT_QPA_PLATFORM=offscreen oracle "$root/tools/oracle/download_oracle.py" -- apply "$work/download-calibre" \
+        "$dir/download.json" || return 0
+    if ! "$cli" apply --force --library "$work/download-cousoir" "$dir/download.json" >/dev/null; then
+        status=1
+        return 0
+    fi
+    if "$tool" compare-libraries "$work/download-calibre" "$work/download-cousoir"; then
+        echo "downloads: Calibre's dialog and Cousoir change the books alike"
+    else
+        status=1
+    fi
+}
+
+downloads
 
 # Books and formats added, moved to the trash and restored, then one copy of
 # a book kept with the formats of another, step by step on both copies of

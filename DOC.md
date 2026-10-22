@@ -425,6 +425,43 @@ on purpose or two people who share a name; Show ignored brings them back.
 The fixes, like any change, wait for the library to be writable, and say so.
 Enter, Menu or Shift+F10 opens a finding's actions.
 
+## Downloading metadata and covers
+
+The globe of a book's toolbar, or "Download metadata and covers" in Ctrl+K,
+asks Calibre's metadata sources about the open book, by its title, authors
+and identifiers, as Calibre's Edit metadata dialog does: Calibre runs its
+own `identify()` in a process of its own, with the sources it is set to use
+and their latest versions, and the books found come back in its order. The
+one picked shows beside the book's own values, field by field; the fields
+that differ are ticked, but for those Calibre is set to leave aside
+(Preferences, Metadata download, the fields to download). Covers shows the
+covers the sources have for it, the book's own first, as they come and then
+largest first. Save takes the fields ticked, and the cover picked, as one
+change: Revert changes undoes it while the book is open. Esc closes and
+stops the download.
+
+What a field takes is what Calibre's dialog takes from a download
+(`update_from_mi()`): the title, its sort made again in the book's language;
+the authors, their sort from the library's authors or made again; the tags
+found the book lacks, before its own; the identifiers found added to the
+book's; the rating in whole stars; the day published, at midnight here;
+the series and its number; the languages; the description, after the
+book's own when Calibre is set to add it. The golden test runs Cousoir's
+identify job under Calibre on made-up results, applies them through
+Calibre's own dialog, shown offscreen, and through Cousoir: the libraries
+end alike.
+
+Downloading needs Calibre; without it the globe does not show. The tests
+never go on the web: a stand-in for Calibre answers them.
+
+Cousoir departs from Calibre here:
+
+- Each field is ticked or not for this book, where Calibre leaves aside the
+  fields its preferences name for every download.
+- The description found is kept as the source gives it; Calibre's editor
+  rewrites its HTML first.
+- The author sort comes with the authors: a sort found is left with them.
+
 ## Converting books
 
 The Convert to buttons of the Files section of a book's details, the row menu
@@ -624,6 +661,7 @@ cousoir-cli apply [--library PATH] [--force] changes.json
 cousoir-cli read FILE…
 cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
+cousoir-cli download [--library PATH] [--covers] BOOK_ID
 ```
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
@@ -696,6 +734,21 @@ temporary folder removed at the end unless `COUSOIR_KEEP_JOBS` is set.
 `template` prints, as JSON, what each template of a JSON array makes of
 each book of the library, by book id, or `{"error": message}`, as
 `tools/oracle/template_oracle.py` prints Calibre's.
+
+`download` asks Calibre's metadata sources, on the web, about a book and
+prints, as JSON, the books they found, each with the changes it would make,
+the fields Calibre is set to leave aside left out; `--covers` adds the
+covers found with the first. `apply` takes what it found back:
+
+```json
+[{ "download": { "book": 2, "found": "folder", "result": 0,
+                 "fields": ["title", "tags", "pubdate"], "append": false } }]
+```
+
+with `found` the folder of an identify job's `result.json`, relative to the
+JSON file, and the fields among `title`, `authors`, `rating`, `publisher`,
+`tags`, `identifiers`, `pubdate`, `series`, `languages` and `comments`;
+`append` adds the description found to the book's own.
 
 `device` prints, as JSON, the books on a reader, named as above, the
 library book each one is and, for a Kobo, what it knows of their reading,
@@ -858,7 +911,13 @@ The tests check the port against Calibre itself:
   lists it. It also compares `cousoir-cli read` with Calibre's readers
   (`tools/oracle/read_oracle.py`) on `tests/data/import` and the fixture's
   files, and on every file of the real library with
-  `COUSOIR_GOLDEN_REAL=1`. Then it adds, removes and restores books and
+  `COUSOIR_GOLDEN_REAL=1`. It runs Cousoir's identify job under Calibre
+  with `single_identify()` answering the books of
+  `tests/data/download/found.json`, then applies the downloads of
+  `tests/data/download/download.json` through Calibre's Edit metadata
+  dialog, shown offscreen (`tools/oracle/download_oracle.py`), and through
+  `cousoir-cli apply`, and compares the two libraries. Then it adds,
+  removes and restores books and
   formats, and keeps one copy of a book with another's formats, in four steps
   (`tests/data/edits/ops-*.json`), each compared table
   by table and file by file, the trash included, with page counts and the

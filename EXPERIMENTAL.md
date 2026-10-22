@@ -125,14 +125,14 @@ searches run it. Cousoir shows no composite and cannot search one.
 ### 9. Metadata and covers from the web, through Calibre
 
 Calibre fills a book's metadata and cover from Google, Amazon and other
-sources; Cousoir cannot. Calibre's own `fetch-ebook-metadata` does the
-fetching, as `calibre-debug` does the conversions.
+sources; Cousoir cannot. Calibre does the fetching, run by `calibre-debug`
+as for the conversions: the jobs of its own Edit metadata dialog.
 
 - A Download action on a book, run in the background: the sources' answer
   shown beside the book's own values, each field picked or left, the cover
   among the ones found; saved as an edit is, with Undo.
-- No network in the tests: a fake `fetch-ebook-metadata` answers with an
-  OPF and a cover.
+- No network in the tests: a fake `calibre-debug` answers with books and
+  covers.
 
 ### 10. The list's columns
 
@@ -185,8 +185,8 @@ Calibre 7 keeps notes on authors, series, tags and publishers in
 | 6. Reading life from the readers | done for the Kobo; a Kindle's clippings, later |
 | 7. A command palette | done |
 | 8. Calibre's templates | done |
-| 9. Metadata from the web | next |
-| 10. The list's columns | planned |
+| 9. Metadata from the web | done for one book; several at once, later |
+| 10. The list's columns | next |
 | 11. Instant saves | planned |
 | 12. Language names | planned |
 | 13. Notes | planned |
@@ -603,3 +603,35 @@ has 107 more templates (351), all alike on the three libraries:
 
 Left as it is: `program: $` alone gives the empty text where Calibre fails
 on None, and an error's own text is still English.
+
+### 2026-10-22 — goal 9, metadata and covers from the web (`exp-metadata`)
+
+- Cousoir runs the two jobs of Calibre's Edit metadata dialog,
+  `single_identify()` and `single_covers()` of `sources/worker.py`, with
+  calibre-debug in a folder of the library's cache: the sources Calibre is
+  set to use, updated as Calibre updates them, their caches handed from
+  the first job to the second as the dialog hands them. The books found are
+  read back from their OPF as the dialog reads them, so a book without a
+  language gets the interface language, as in Calibre.
+- `MetadataDownload::changes()` ports `update_from_mi()`. The golden test
+  makes it a comparison with Calibre itself: Cousoir's identify job runs
+  under Calibre with `single_identify()` answering made-up books, then
+  Calibre's real dialog, shown offscreen, applies five downloads to one
+  copy of the fixture and `cousoir-cli apply` to another; both libraries
+  end alike. The first run found two differences: the day found is stored
+  at local midnight, and the rating editor has whole stars only, 4.75
+  stars making 8, not 9.
+- The dialog: the books found, the one picked beside the book field by
+  field with the differing fields ticked, then the covers as they come,
+  the book's own first; Save is one change that Revert undoes. A globe on
+  the book's toolbar and "Download metadata and covers" in Ctrl+K open it.
+- `cousoir-cli download BOOK_ID [--covers]` asks the sources and prints
+  what they found. Run inside `unshare -rn`, a namespace without network,
+  it ran the real jobs against Calibre 9.16: every source failed at once
+  and the job ended cleanly, nothing going out.
+- Tests: a unit test and a UI test with a fake calibre-debug, which
+  answers with what Cousoir's job wrote under Calibre.
+
+Left for later: downloading for several books at once, as Calibre's bulk
+download does, and Calibre's per-source settings.
+

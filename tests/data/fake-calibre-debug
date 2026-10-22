@@ -1,8 +1,32 @@
 #!/bin/sh
-# Stands in for calibre-debug in the tests of conversions: run as Cousoir
-# runs Calibre's job, "-e convert.py -- <job folder>", it reports progress and
-# writes what the job writes, after COUSOIR_FAKE_DELAY seconds if set.
+# Stands in for calibre-debug in the tests. Run as Cousoir runs Calibre's
+# jobs, "-e <job>.py -- <job folder>": a conversion reports progress and
+# writes what the job writes; a metadata download writes the books of
+# download/identified.json, or covers made of edits/large.jpg as
+# single_covers() saves them. After COUSOIR_FAKE_DELAY seconds if set;
+# COUSOIR_FAKE_FAIL makes a download fail with its log.
 folder="$4"
+data=$(dirname "$(readlink -f "$0")")
+case "$2" in
+*/download.py)
+    [ -n "$COUSOIR_FAKE_DELAY" ] && sleep "$COUSOIR_FAKE_DELAY"
+    if [ -n "$COUSOIR_FAKE_FAIL" ]; then
+        echo "Sources unreachable" > "$folder/log.txt"
+        exit 1
+    fi
+    if grep -q '"kind": "covers"' "$folder/job.json"; then
+        mkdir -p "$folder/covers"
+        for name in "Google,,1200,,1800,,jpeg" "Amazon.com{0},,300,,450,,jpeg"; do
+            cp "$data/edits/large.jpg" "$folder/covers/$name.cover"
+            mkdir "$folder/covers/$name.cover.done"
+        done
+        printf '{"covers": true}' > "$folder/result.json"
+    else
+        cp "$data/download/identified.json" "$folder/result.json"
+    fi
+    exit 0
+    ;;
+esac
 format=$(sed -n 's/.*"format": "\([a-z0-9]*\)".*/\1/p' "$folder/job.json" | head -n 1)
 echo '{"progress": 0.5}'
 [ -n "$COUSOIR_FAKE_DELAY" ] && sleep "$COUSOIR_FAKE_DELAY"

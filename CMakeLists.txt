@@ -108,6 +108,8 @@ qt_add_library(cousoir_core STATIC
     kobo_send.h
     library_check.cpp
     library_check.h
+    metadata_download.cpp
+    metadata_download.h
     mtp.cpp
     mtp.h
     opf.cpp
@@ -144,6 +146,8 @@ qt_add_library(cousoir_models STATIC
     cover_cache.h
     device_library.cpp
     device_library.h
+    metadata_downloader.cpp
+    metadata_downloader.h
     omarchy_theme.cpp
     omarchy_theme.h
     system_appearance.cpp
@@ -180,6 +184,7 @@ set(COUSOIR_QML_FILES
     ListTable.qml
     Main.qml
     MetaRow.qml
+    MetadataDownloadDialog.qml
     SearchField.qml
     SettingsWindow.qml
     Sidebar.qml

@@ -18,6 +18,7 @@
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
+#include "metadata_downloader.h"
 #include "device_library.h"
 #include "sqlite_db.h"
 #include "cover_cache.h"
@@ -100,6 +101,7 @@ private slots:
     void asksAboutDuplicates();
     void checksLibrary();
     void convertsBooks();
+    void downloadsMetadata();
     void sendsToKobo();
     void showsReading();
     void sendsToKindle();
@@ -144,6 +146,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
+    qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
@@ -1397,6 +1400,50 @@ void LibraryUiTest::convertsBooks()
     QTRY_VERIFY(!control("conversionState")->isVisible());
     QCOMPARE(formatsOf(library()->property("currentBook").toMap()),
              (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+}
+
+// Metadata from the web, with a stand-in for Calibre: the books found, a
+// field left as it is, a cover picked, saved as one change that Revert
+// undoes.
+void LibraryUiTest::downloadsMetadata()
+{
+    auto *downloads = qobject_cast<MetadataDownloader *>(m_window->property("downloads").value<QObject *>());
+    QVERIFY(downloads);
+    downloads->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
+    openWritable(2);
+    click("downloadMetadataButton");
+    QObject *dialog = object("metadataDownloadDialog");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QTRY_COMPARE(downloads->state(), QStringLiteral("found"));
+    QTRY_VERIFY(control("downloadField_tags"));
+    QVERIFY(dialog->property("ticked").toMap().value(QStringLiteral("publisher")).toBool());
+    click("downloadField_publisher");
+    QVERIFY(!dialog->property("ticked").toMap().value(QStringLiteral("publisher")).toBool());
+    click("downloadCoversButton");
+    QTRY_VERIFY(!downloads->searchingCovers());
+    QTRY_VERIFY(control("downloadCover1"));
+    click("downloadCover1");
+    QCOMPARE(dialog->property("cover").toInt(), 1);
+    click("downloadSave");
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    waitForSave();
+    const auto book = [this] { return library()->property("currentBook").toMap(); };
+    QTRY_COMPARE(book().value(QStringLiteral("tags")).toStringList(),
+                 (QStringList{ QStringLiteral("Dark fantasy"), QStringLiteral("fiction"), QStringLiteral("Fantasy") }));
+    QCOMPARE(book().value(QStringLiteral("publisher")).toString(), QStringLiteral("Tor"));
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("“The Black Company” updated from the web; Revert changes undoes it."));
+    QTRY_VERIFY(control("revertChangesButton")->isVisible());
+    QCOMPARE(downloads->state(), QStringLiteral("idle"));
+
+    // Closed, the download stops.
+    qputenv("COUSOIR_FAKE_DELAY", "20");
+    click("downloadMetadataButton");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QCOMPARE(downloads->state(), QStringLiteral("searching"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    QCOMPARE(downloads->state(), QStringLiteral("idle"));
+    qunsetenv("COUSOIR_FAKE_DELAY");
 }
 
 // A Kobo plugged in: a book sent to it from the book's Files, then the
