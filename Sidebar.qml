@@ -22,7 +22,8 @@ Item {
         { title: qsTr("Library"), items: [
             { key: "books", title: qsTr("Books"), icon: "book" },
             { key: "trash", title: qsTr("Trash"), icon: "trash" },
-            { key: "check", title: qsTr("Check"), icon: "check" }
+            { key: "check", title: qsTr("Check"), icon: "check" },
+            { key: "highlights", title: qsTr("Highlights"), icon: "highlighter" }
         ] },
         { title: qsTr("Browse"), items: [
             { key: "authors", title: qsTr("Authors"), icon: "user" },

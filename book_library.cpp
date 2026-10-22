@@ -57,7 +57,7 @@ const QStringList &sections()
     static const QStringList names = { QStringLiteral("books"), QStringLiteral("authors"), QStringLiteral("series"),
                                        QStringLiteral("tags"), QStringLiteral("languages"),
                                        QStringLiteral("publishers"), QStringLiteral("trash"),
-                                       QStringLiteral("check") };
+                                       QStringLiteral("check"), QStringLiteral("highlights") };
     return names;
 }
 
@@ -371,6 +371,7 @@ QVariantMap BookLibrary::counts() const
         { QStringLiteral("publishers"), items("publishers") },
         // Nothing for an empty trash.
         { QStringLiteral("trash"), m_trashEntries.isEmpty() ? QVariant(QString()) : QVariant(m_trashEntries.size()) },
+        { QStringLiteral("highlights"), m_data.annotationCount ? QVariant(m_data.annotationCount) : QVariant(QString()) },
     };
 }
 

@@ -1,0 +1,244 @@
+[
+ {
+  "query": {
+   "text": "",
+   "stemming": true,
+   "type": ""
+  },
+  "results": [
+   [
+    1,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Le pianocktail",
+    "a4"
+   ],
+   [
+    4,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Les nénuphars poussaient dans la poitrine.",
+    "a3"
+   ],
+   [
+    2,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "L'amour est une chose qui ne se décrit pas.",
+    "a1"
+   ],
+   [
+    3,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Colin aimait la musique de Duke Ellington.",
+    "a2"
+   ],
+   [
+    7,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "Soldiers live. And wonder why.",
+    "b2"
+   ],
+   [
+    6,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "The Company is reading the Annals by the fire.",
+    "b1"
+   ],
+   [
+    8,
+    4,
+    "EPUB",
+    "local",
+    "viewer",
+    "Reading books about the end of the world was his favourite pastime.",
+    "c1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "",
+   "stemming": true,
+   "type": "bookmark"
+  },
+  "results": [
+   [
+    1,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Le pianocktail",
+    "a4"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "amour",
+   "stemming": true,
+   "type": ""
+  },
+  "results": [
+   [
+    2,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "\u001dL'amour\u001d est une chose qui ne se décrit pas.\n\u001f\nLe jazz, toujours.",
+    "a1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "nenuphars",
+   "stemming": false,
+   "type": ""
+  },
+  "results": [
+   [
+    4,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Les \u001dnénuphars\u001d poussaient dans la poitrine.",
+    "a3"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "reading",
+   "stemming": true,
+   "type": ""
+  },
+  "results": [
+   [
+    8,
+    4,
+    "EPUB",
+    "local",
+    "viewer",
+    "\u001dReading\u001d books about the end of the world was his favourite pastime.",
+    "c1"
+   ],
+   [
+    6,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "The Company is \u001dreading\u001d the Annals by the fire.\n\u001f\nCroaker writes everything down.",
+    "b1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "reading",
+   "stemming": false,
+   "type": ""
+  },
+  "results": [
+   [
+    8,
+    4,
+    "EPUB",
+    "local",
+    "viewer",
+    "\u001dReading\u001d books about the end of the world was his favourite pastime.",
+    "c1"
+   ],
+   [
+    6,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "The Company is \u001dreading\u001d the Annals by the fire.\n\u001f\nCroaker writes everything down.",
+    "b1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "jazz",
+   "stemming": true,
+   "type": ""
+  },
+  "results": [
+   [
+    2,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "L'amour est une chose qui ne se décrit pas.\n\u001f\nLe \u001djazz\u001d, toujours.",
+    "a1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "\"Duke Ellington\"",
+   "stemming": true,
+   "type": ""
+  },
+  "results": [
+   [
+    3,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Colin aimait la musique de \u001dDuke Ellington\u001d.",
+    "a2"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "soldier*",
+   "stemming": false,
+   "type": "highlight"
+  },
+  "results": [
+   [
+    7,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "\u001dSoldiers\u001d live. And wonder why.",
+    "b2"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "pianocktail",
+   "stemming": true,
+   "type": "highlight"
+  },
+  "results": []
+ }
+]

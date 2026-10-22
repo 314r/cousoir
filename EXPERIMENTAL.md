@@ -293,7 +293,7 @@ Calibre keeps the index Cousoir adds to.
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
 | 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
 | 20. Reader apps over the network | done; Bonjour, collections and read columns later |
-| 21. The library's highlights | planned |
+| 21. The library's highlights | done; the readers' notes and editing a note later |
 | 22. Searching the books' text | planned |
 
 ## Journal
@@ -1155,4 +1155,25 @@ The XML tree and the ZIP code of the KEPUB port moved to `xml_tree` and
 `book_zip`, shared. Sends to apps write the metadata into EPUB, AZW3 and
 MOBI copies, and the wireless golden test compares the files sent entry by
 entry; plain EPUBs sent to a Kobo get it too.
+
+### 2026-10-22 — goal 21, the library's highlights (`exp-highlights`)
+
+`AnnotationSearch` ports Calibre's `all_annotations()` and
+`search_annotations()`: the newest first, or the best first of a search of
+its full text index, stemmed or not, with snippets whose words found are
+marked; `sorted_items()`, each book's in their order by their CFIs; and
+the text and Markdown export of its "Browse annotations", chapters as
+headings. Calibre's own API saved highlights and bookmarks in a copy of the
+fixture (`tools/oracle/annotations_oracle.py`), and ten searches find what
+Calibre finds, in its order, with its snippets: Calibre's tokenizer,
+ported in `exp-fts`, makes the same index terms of the query.
+
+The Highlights section shows them by book, with their colours, notes,
+chapters and dates; its search and a filter by kind; Enter or Read opens
+the book in the reader where the highlight is (`ReaderWindow.openAt()`);
+Copy and Export give Calibre's export. The library counts them in the
+sidebar.
+
+Left: the notes the readers keep (Kobo, Kindle), which show on each book's
+page; editing a highlight's note from here.
 

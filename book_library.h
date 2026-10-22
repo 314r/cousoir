@@ -152,7 +152,8 @@ public:
     bool schemaKnown() const;
     QVariantMap counts() const;
     // "books", "authors", "series", "tags", "languages", "publishers",
-    // "trash", "check", or "search:<name>" for a saved search's books.
+    // "trash", "check", "highlights", or "search:<name>" for a saved
+    // search's books.
     // Another section clears the filter and the search; the check runs
     // again.
     QString section() const;

@@ -80,6 +80,10 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   table of contents, and PDFs. Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
   and shows the other's highlights.
+- 🔎 **All your highlights in one place.** Every highlight and bookmark
+  from Cousoir's reader and Calibre's viewer, by book, searched as
+  Calibre searches them, opened in the reader where they are, exported
+  as Markdown.
 - 🖍️ **Your reading, back from the Kobo and the Kindle.** How far you got in
   each book on a Kobo, and your highlights and notes, by chapter on a Kobo
   and from "My Clippings" on a Kindle, copied or saved as Markdown, still

@@ -23,9 +23,11 @@ ThemedWindow {
     // A saved search's books.
     readonly property bool searchSection: section.startsWith("search:")
     readonly property bool facetShown: section !== "books" && section !== "trash" && section !== "check"
+        && section !== "highlights"
         && !deviceSection && !searchSection && !session.filterOpen && !session.bookOpen
     readonly property bool trashShown: section === "trash" && !session.bookOpen
     readonly property bool checkShown: section === "check" && !session.bookOpen
+    readonly property bool highlightsShown: section === "highlights" && !session.bookOpen
     readonly property bool deviceShown: deviceSection && !session.bookOpen
     readonly property bool booksShown: !facetShown && !trashShown && !checkShown && !deviceShown && !session.bookOpen
     // Several books selected in the list, which the pane beside it edits.
@@ -122,6 +124,8 @@ ThemedWindow {
             devicePage.focusList()
         else if (checkShown)
             checkPage.focusList()
+        else if (highlightsShown)
+            highlightsPage.focusList()
         else
             booksPage.focusList()
     }
@@ -145,6 +149,11 @@ ThemedWindow {
     function focusSearch() {
         if (session.bookOpen)
             closeBook()
+        // The highlights have a search of their own.
+        if (highlightsShown) {
+            highlightsPage.focusSearch()
+            return
+        }
         searchField.forceActiveFocus(Qt.ShortcutFocusReason)
         searchField.selectAll()
     }
@@ -171,6 +180,8 @@ ThemedWindow {
             return 4
         if (checkShown)
             return 5
+        if (highlightsShown)
+            return 6
         return facetShown ? 1 : 0
     }
 
@@ -402,6 +413,20 @@ ThemedWindow {
             showNotice(qsTr("The reader cannot be opened."))
     }
 
+    // The book read in Cousoir's reader where a highlight is.
+    function readAt(bookId, spineIndex, cfi) {
+        if (!library.readerAvailable || library.readableFormat(bookId) !== "EPUB") {
+            openBook(bookId)
+            return
+        }
+        if (!readerLoader.item)
+            readerLoader.setSource("ReaderWindow.qml", { library: window.library })
+        if (readerLoader.item)
+            readerLoader.item.openAt(bookId, spineIndex, cfi)
+        else
+            showNotice(qsTr("The reader cannot be opened."))
+    }
+
     function toggleGrid() {
         layoutSettings.gridMode = !layoutSettings.gridMode
     }
@@ -560,6 +585,8 @@ ThemedWindow {
             return (book.formats || []).map(format => format.format).join(" · ")
         if (section === "trash")
             return plural(library.trashEntries.length, qsTr("%1 item"), qsTr("%1 items"))
+        if (section === "highlights")
+            return plural(highlightsPage.browser.count, qsTr("%1 highlight"), qsTr("%1 highlights"))
         if (section === "check")
             return library.checking ? qsTr("Checking…")
                 : plural(library.check.count || 0, qsTr("%1 thing to check"), qsTr("%1 things to check"))
@@ -1583,7 +1610,7 @@ ThemedWindow {
                             window.library.virtualLibraries.map(name => ({ value: name, label: name })))
 
                         visible: window.library.virtualLibraries.length > 0 && !session.bookOpen
-                            && !window.deviceShown && !window.checkShown && !window.trashShown
+                            && !window.deviceShown && !window.checkShown && !window.trashShown && !window.highlightsShown
                         // The longest name, its arrow and paddings.
                         Layout.preferredWidth: Math.round(Math.min(24, choices.reduce(
                             (longest, choice) => Math.max(longest, choice.label.length), 0)) * Theme.charWidth)
@@ -1607,7 +1634,7 @@ ThemedWindow {
                                 booksPage.activate(0)
                         }
 
-                        visible: !session.bookOpen && !window.deviceShown && !window.checkShown
+                        visible: !session.bookOpen && !window.deviceShown && !window.checkShown && !window.highlightsShown
                         Layout.fillWidth: true
                         Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
@@ -1734,6 +1761,16 @@ ThemedWindow {
                         guard: window.guard
                         onBookRequested: function(bookId) { window.openBook(bookId) }
                         onFailed: function(message) { window.showNotice(message) }
+                    }
+
+                    HighlightsPage {
+                        id: highlightsPage
+                        objectName: "highlightsPage"
+                        library: window.library
+                        onReadRequested: function(bookId, spineIndex, cfi) { window.readAt(bookId, spineIndex, cfi) }
+                        onBookRequested: function(bookId) { window.openBook(bookId) }
+                        onFailed: function(message) { window.showNotice(message) }
+                        onNoticed: function(message) { window.showNotice(message, false) }
                     }
                 }
 

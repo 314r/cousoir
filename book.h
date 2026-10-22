@@ -201,6 +201,9 @@ struct LibraryData
     // The notes on items, by Calibre's field ("authors", "publisher",
     // "#genre") then by item id.
     QHash<QString, QHash<int, ItemNote>> notes;
+    // How many highlights and bookmarks the library keeps, the removed
+    // aside.
+    int annotationCount = 0;
     // The preferences a search reads, by key, as JSON: saved searches,
     // virtual libraries, grouped search terms and user categories; and the
     // columns and sort Calibre's list last had.

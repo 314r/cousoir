@@ -75,6 +75,15 @@ ThemedWindow {
         return true
     }
 
+    // Reads the book where a highlight is: `cfi` within its spine item.
+    function openAt(bookId, index, cfi) {
+        if (!openBook(bookId))
+            return false
+        if (index >= 0 && cfi)
+            load(index, "cfi:" + cfi)
+        return true
+    }
+
     function load(index, action) {
         if (index < 0 || index >= bookReader.spine.length)
             return
