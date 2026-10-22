@@ -793,6 +793,23 @@ shown, and no vertical or right-to-left page order. The position and the
 highlights are written while the library can be written; when Calibre
 writes to it, they wait in Cousoir for the next time.
 
+## Highlights
+
+Highlights, under Library in the sidebar, lists every highlight and
+bookmark the library keeps, those made in Cousoir's reader and in
+Calibre's E-book viewer, as Calibre's "Browse annotations" lists them: by
+book, the books by their titles' sort, each one's in their order in the
+book, with the highlight's colour, its note, its chapter and when it was
+made. Its search, which Ctrl+F reaches, is Calibre's: SQLite's full text
+query language on Calibre's index of them, words found by their stems
+unless Word stems is off ("read" finds "reading"), quoted phrases, `*`
+for a prefix, the words found in bold in a snippet, the best first. The
+kind shows highlights, bookmarks or both. Enter, a double click or Read
+opens the book in Cousoir's reader where the highlight is. Copy puts the
+highlights shown on the clipboard as Markdown; Export saves them as
+Markdown or plain text, as Calibre's export writes them: each book's
+title, its highlights under their chapters, each with its date and note.
+
 ## Sharing on the network
 
 Settings, Network, Share the library serves the library open to the other
@@ -1278,6 +1295,12 @@ The tests check the port against Calibre itself:
   search, change and bring back the notes `cousoir-cli apply` wrote
   (`tools/oracle/notes_check.py`). The UI tests read a series' note, write
   it, empty it, and read an author's note with an image.
+- `annotation_search_tests` searches the highlights and bookmarks Calibre's
+  own API saved in a copy of the fixture's database (`tests/data/annotations`,
+  `tools/oracle/annotations_oracle.py`): all of them and ten searches,
+  stemmed or not, phrases, prefixes, by kind, must find what Calibre's
+  browser finds, in its order, with its snippets; and the export is
+  Calibre's. The UI tests browse, search and filter them and open one.
 - `epub_metadata_tests` writes the library's metadata into nine EPUB
   packages, EPUB 3 and EPUB 2, one as Calibre's conversions write it, one
   as Project Gutenberg does, with three sets of metadata each, and

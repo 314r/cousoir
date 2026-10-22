@@ -113,6 +113,7 @@ private slots:
     void editsDescription();
     void keepsNotes();
     void sendsToWirelessApps();
+    void browsesHighlights();
     void editsCustomColumns();
     void changesCovers();
     void movesBooksToTrashAndBack();
@@ -1341,6 +1342,56 @@ void LibraryUiTest::sendsToWirelessApps()
     QTRY_VERIFY(devices->devices().isEmpty());
     devices->setWireless(false, 0, QString());
     QVERIFY(!devices->wirelessListening());
+}
+
+void LibraryUiTest::browsesHighlights()
+{
+    // The library with the highlights and bookmarks Calibre saved
+    // (tools/oracle/annotations_oracle.py).
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY(QFile::remove(database));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/annotations/metadata.db"), database));
+    QFile(database).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("highlights")).toInt(), 7);
+
+    // By book, the books by their titles' sort.
+    click("sidebar_highlights");
+    QQuickItem *page = control("highlightsPage");
+    QTRY_VERIFY(page && page->isVisible());
+    auto *browser = page->property("browser").value<HighlightBrowser *>();
+    QVERIFY(browser);
+    QTRY_COMPARE(browser->count(), 7);
+    QCOMPARE(browser->rows().size(), 10);
+    QCOMPARE(browser->rows().constFirst().toMap().value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    QCOMPARE(text("bookCount"), QStringLiteral("7 highlights"));
+
+    // A search of Calibre's index, the words found in bold; Ctrl+F goes to
+    // it.
+    QTest::keyClick(m_window, Qt::Key_F, Qt::ControlModifier);
+    QTRY_VERIFY(control("highlightSearch")->hasActiveFocus());
+    typeText(QStringLiteral("amour"));
+    QTRY_COMPARE(browser->count(), 1);
+    QVERIFY(browser->rows().value(1).toMap().value(QStringLiteral("html")).toString().startsWith(QStringLiteral("<b>L'amour</b> est")));
+    QVERIFY(browser->exportText(true).startsWith(QStringLiteral("# L'Écume des jours\n\n## Chapitre II")));
+
+    // Enter asks the reader for the book, where the highlight is.
+    QSignalSpy read(page, SIGNAL(readRequested(int,int,QString)));
+    browser->setQuery(QString());
+    browser->setType(QStringLiteral("highlight"));
+    QTRY_COMPARE(browser->count(), 6);
+    QMetaObject::invokeMethod(page, "focusList");
+    QTRY_VERIFY(control("highlightList")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(read.size(), 1);
+    QCOMPARE(read.constFirst().at(0).toInt(), 2);
+    QCOMPARE(read.constFirst().at(1).toInt(), 2);
+    QCOMPARE(read.constFirst().at(2).toString(), QStringLiteral("/4/2/4/1:0"));
+
+    browser->setType(QStringLiteral("bookmark"));
+    QTRY_COMPARE(browser->count(), 1);
 }
 
 void LibraryUiTest::editsCustomColumns()

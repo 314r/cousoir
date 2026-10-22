@@ -244,6 +244,7 @@ set(COUSOIR_QML_FILES
     FlatButton.qml
     FormField.qml
     HeadingLabel.qml
+    HighlightsPage.qml
     LibraryFolderDialog.qml
     LibrarySettingsPage.qml
     ListTable.qml
@@ -281,6 +282,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/external.svg
     assets/icons/folder.svg
     assets/icons/globe.svg
+    assets/icons/highlighter.svg
     assets/icons/grid.svg
     assets/icons/image.svg
     assets/icons/info.svg
