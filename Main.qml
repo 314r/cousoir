@@ -470,6 +470,8 @@ ThemedWindow {
             return qsTr("Saving…")
         if (session.bookOpen && bookPage.confirmingRevert)
             return qsTr("Enter revert · Esc keep")
+        if (session.bookOpen && bookPage.editingDescription)
+            return qsTr("Ctrl+Enter save · Esc cancel")
         if (session.bookOpen && bookPage.editing)
             return qsTr("Enter save · Esc revert · Tab next field")
         if (session.bookOpen && library.writable && devices.devices.length > 0)

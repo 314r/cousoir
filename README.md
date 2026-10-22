@@ -39,8 +39,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   your saved searches in the sidebar and your virtual libraries a click
   away. Or browse by author, series, tag, language and publisher.
 - ✏️ **Edit in place.** Title, authors, series, tags, rating, publisher,
-  languages, dates and identifiers save as you leave the field. Drop or paste
-  an image to change the cover.
+  languages, dates and identifiers save as you leave the field; the
+  description edits as text, with **bold**, *italics*, lists and links.
+  Drop or paste an image to change the cover.
 - 📚 **Many books at once.** Select with Ctrl, Shift or Ctrl+A, then trash,
   convert, send, or edit them together as Calibre's bulk edit does: tags
   added and removed, a series numbered, and Undo if you change your mind.

@@ -88,6 +88,7 @@ private slots:
     void revertsBookChanges();
     void refusesInvalidValues();
     void changesRating();
+    void editsDescription();
     void changesCovers();
     void movesBooksToTrashAndBack();
     void editsManyBooks();
@@ -799,6 +800,50 @@ void LibraryUiTest::changesRating()
     QTest::keyClick(m_window, Qt::Key_Return);
     waitForSave();
     QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("rating")).toString(), QStringLiteral("★★★★½"));
+}
+
+void LibraryUiTest::editsDescription()
+{
+    openWritable(1);
+    QCOMPARE(library()->property("currentBook").toMap().value(QStringLiteral("descriptionText")).toString(),
+             QStringLiteral("Un roman d’amour fou.\n\nParis, *1946*."));
+    click("editDescriptionButton");
+    QQuickItem *editor = control("descriptionEditor");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QCOMPARE(text("descriptionEditor"), QStringLiteral("Un roman d’amour fou.\n\nParis, *1946*."));
+    QCOMPARE(text("keyHints"), QStringLiteral("Ctrl+Enter save · Esc cancel"));
+
+    // Esc puts it back and keeps the book open.
+    typeText(QStringLiteral(" ajout"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!control("descriptionEditor")->isVisible());
+    QCOMPARE(library()->property("currentBookId").toInt(), 1);
+    QVERIFY(!library()->property("saving").toBool());
+
+    // Ctrl+Enter saves, in paragraphs, with the marks as HTML.
+    click("editDescriptionButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    editor->setProperty("text", QStringLiteral("Un roman **fou**.\nParis, 1946.\n\n- jazz\n- amour"));
+    QTest::keyClick(m_window, Qt::Key_Return, Qt::ControlModifier);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString(),
+                 QStringLiteral("<div><p>Un roman <strong>fou</strong>.<br>Paris, 1946.</p>"
+                                "<ul><li>jazz</li><li>amour</li></ul></div>"));
+    QVERIFY(library()->property("canRevert").toBool());
+
+    // Saving it unchanged writes nothing; closing the book saves an edit.
+    click("editDescriptionButton");
+    click("saveDescriptionButton");
+    QVERIFY(!library()->property("saving").toBool());
+    click("editDescriptionButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QString());
+    click("rootCrumb");
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+    library()->setProperty("currentBookId", 1);
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString(), QString());
 }
 
 void LibraryUiTest::changesCovers()
