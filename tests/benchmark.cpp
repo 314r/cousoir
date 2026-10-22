@@ -286,6 +286,7 @@ struct Shot
     QString search;
     QString virtualLibrary;
     int book = 0;
+    int selected = 0;
 };
 
 int screenshot(const QString &path, const Shot &shot)
@@ -305,6 +306,13 @@ int screenshot(const QString &path, const Shot &shot)
         library->setProperty("searchText", shot.search);
     if (shot.book > 0)
         library->setProperty("currentBookId", shot.book);
+    // A few rows selected, for the pane that edits them together.
+    if (shot.selected > 1) {
+        QObject *books = library->property("books").value<QObject *>();
+        for (int row = 0; row < shot.selected; ++row)
+            QMetaObject::invokeMethod(books, "select", Q_ARG(int, row), Q_ARG(QString, row ? QStringLiteral("toggle")
+                                                                                          : QStringLiteral("only")));
+    }
     // The covers load on their own threads.
     QTest::qWait(300);
     drawn(window);
@@ -337,6 +345,8 @@ int main(int argc, char *argv[])
     parser.addOption({ QStringLiteral("search"), QStringLiteral("The search typed."), QStringLiteral("text") });
     parser.addOption({ QStringLiteral("vl"), QStringLiteral("The virtual library."), QStringLiteral("name") });
     parser.addOption({ QStringLiteral("book"), QStringLiteral("The book open."), QStringLiteral("id") });
+    parser.addOption({ QStringLiteral("select"), QStringLiteral("How many of the first books to select."),
+                       QStringLiteral("count") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -356,6 +366,7 @@ int main(int argc, char *argv[])
         shot.search = parser.value(QStringLiteral("search"));
         shot.virtualLibrary = parser.value(QStringLiteral("vl"));
         shot.book = parser.value(QStringLiteral("book")).toInt();
+        shot.selected = parser.value(QStringLiteral("select")).toInt();
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);

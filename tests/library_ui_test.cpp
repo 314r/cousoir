@@ -90,6 +90,7 @@ private slots:
     void changesRating();
     void changesCovers();
     void movesBooksToTrashAndBack();
+    void editsManyBooks();
     void addsAndRemovesFiles();
     void asksAboutDuplicates();
     void checksLibrary();
@@ -140,7 +141,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
-                              "BooksPage", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
+                              "BooksPage", "BulkEditPane", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
                               "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
                               "SettingsWindow", "Sidebar", "SidebarItem", "ThemedWindow", "ThinScrollBar", "TrashPage" }) {
         qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
@@ -904,6 +905,90 @@ void LibraryUiTest::movesBooksToTrashAndBack()
     waitForSave();
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
     QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("trash")).toInt(), 1);
+}
+
+void LibraryUiTest::editsManyBooks()
+{
+    makeWritable();
+    QQuickItem *list = control("bookList");
+    QObject *books = library()->property("books").value<QObject *>();
+    // By title: The Black Company (2), L'Écume des jours (1), Good Omens (4),
+    // Manuel technique (5), Le Petit Prince (6), Shadows Linger (3).
+    click("bookRow0");
+    QTest::keyClick(m_window, Qt::Key_Down, Qt::ShiftModifier);
+    QTest::keyClick(m_window, Qt::Key_Down, Qt::ShiftModifier);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 3);
+    QCOMPARE(list->property("currentIndex").toInt(), 2);
+    QCOMPARE(text("bookCount"), QStringLiteral("3 selected · 6 books"));
+
+    // The pane beside the list edits them together.
+    QTRY_VERIFY(control("bulkPane") && control("bulkPane")->isVisible());
+    QCOMPARE(text("bulkTitle"), QStringLiteral("3 books"));
+    click("bulk_addTags");
+    typeText(QStringLiteral("Lu"));
+    click("bulk_publisher");
+    typeText(QStringLiteral("Folio"));
+    click("bulkApplyButton");
+    waitForSave();
+    const auto book = [this](int id) {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("id")).toInt() == id)
+                return row.toMap();
+        }
+        return QVariantMap();
+    };
+    QTRY_VERIFY(library()->property("bulkUndoCount").toInt() == 3);
+    // The tags as saved, in their order.
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    const auto tagsOf = [database](int id) {
+        SqliteDb db;
+        QString error;
+        QStringList tags;
+        if (!db.open(database, SqliteDb::Mode::ReadWrite, &error))
+            return tags;
+        for (const QVariantList &row : db.rows(QStringLiteral("SELECT name FROM tags JOIN books_tags_link l ON l.tag=tags.id "
+                                                              "WHERE l.book=? ORDER BY l.id"), { id }))
+            tags.append(row.value(0).toString());
+        return tags;
+    };
+    QCOMPARE(tagsOf(2), (QStringList{ QStringLiteral("Fantasy"), QStringLiteral("Lu") }));
+    QCOMPARE(tagsOf(1), (QStringList{ QStringLiteral("Roman"), QStringLiteral("Classique"), QStringLiteral("Lu") }));
+    QCOMPARE(tagsOf(5), QStringList{ QStringLiteral("Technique") });
+    QCOMPARE(book(4).value(QStringLiteral("id")).toInt(), 4);
+    // The selection stays through the save.
+    QCOMPARE(books->property("selectedCount").toInt(), 3);
+
+    // Undo puts them back.
+    click("bulkUndoButton");
+    waitForSave();
+    QTRY_COMPARE(tagsOf(2), QStringList{ QStringLiteral("Fantasy") });
+    QCOMPARE(tagsOf(4), (QStringList{ QStringLiteral("Fantasy"), QStringLiteral("Humour") }));
+    QCOMPARE(library()->property("bulkUndoCount").toInt(), 0);
+
+    // Ctrl takes a book out, or adds one; Ctrl+A takes them all, Esc goes
+    // back to one.
+    QTest::mouseClick(m_window, Qt::LeftButton, Qt::ControlModifier, center(control("bookRow1")));
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 2);
+    QTest::mouseClick(m_window, Qt::LeftButton, Qt::ControlModifier, center(control("bookRow5")));
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 3);
+    QCOMPARE(books->property("selectedIds").toList(),
+             (QVariantList{ 2, 4, 3 }));
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 6);
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 1);
+    QVERIFY(!control("bulkPane")->isVisible());
+
+    // Delete asks about all of them.
+    QTest::keyClick(m_window, Qt::Key_Home);
+    QTest::keyClick(m_window, Qt::Key_End, Qt::ShiftModifier);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 6);
+    QTest::keyClick(m_window, Qt::Key_Delete);
+    QTRY_VERIFY(object("trashDialog")->property("opened").toBool());
+    QCOMPARE(object("trashDialog")->property("title").toString(), QStringLiteral("Move 6 books to the trash?"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!object("trashDialog")->property("opened").toBool());
+    QCOMPARE(bookRows().size(), 6);
 }
 
 void LibraryUiTest::addsAndRemovesFiles()

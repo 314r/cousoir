@@ -77,7 +77,8 @@ void BookListModel::setRows(const QList<Book> &books, QList<qsizetype> order, co
     endResetModel();
     if (count() != before)
         emit countChanged();
-    if (m_selected.size() != selected)
+    // Their order may have changed too.
+    if (!m_selected.isEmpty() || selected > 0)
         emit selectionChanged();
 }
 

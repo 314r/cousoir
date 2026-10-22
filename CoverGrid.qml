@@ -7,9 +7,10 @@ import QtQuick.Window
 
 import Cousoir
 
-// Books as covers, with ListTable's rows, current index and signals so the
-// book list can switch between the two. A cell is a cover with a hairline
-// edge and the title under it; the current one is tinted.
+// Books as covers, with ListTable's rows, current index, selection and
+// signals so the book list can switch between the two. A cell is a cover
+// with a hairline edge and the title under it; the current and selected
+// ones are tinted.
 Item {
     id: grid
 
@@ -17,12 +18,15 @@ Item {
     // Prefix of the objectNames: <name>Grid, <name>Cell<i>.
     property string name: "cover"
     property alias currentIndex: view.currentIndex
+    property int selectionCount: 0
     readonly property int coverWidth: Math.round(120 * Theme.spacingScale)
     readonly property int coverHeight: Math.round(coverWidth * 1.5)
 
     signal activated(int index)
     // A right click on a cell, or Menu or Shift+F10 on the current one.
     signal menuRequested(int index, Item cell, real x, real y)
+    signal selectRequested(int index, string mode)
+    signal selectAllRequested()
 
     function focusList() {
         if (view.currentIndex < 0 && view.count > 0)
@@ -33,6 +37,14 @@ Item {
     function activate(index) {
         if (index >= 0 && index < view.count)
             grid.activated(index)
+    }
+
+    function moveTo(index, mode) {
+        if (index < 0 || index >= view.count)
+            return
+        view.currentIndex = index
+        view.positionViewAtIndex(index, GridView.Contain)
+        grid.selectRequested(index, mode)
     }
 
     function requestMenu() {
@@ -73,6 +85,33 @@ Item {
                 || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
                 grid.requestMenu()
                 event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_A && (event.modifiers & Qt.ControlModifier)) {
+                grid.selectAllRequested()
+                event.accepted = true
+                return
+            }
+            const page = columns * Math.max(1, Math.floor(height / cellHeight))
+            const moves = {}
+            moves[Qt.Key_Left] = currentIndex - 1
+            moves[Qt.Key_Right] = currentIndex + 1
+            moves[Qt.Key_Up] = currentIndex - columns
+            moves[Qt.Key_Down] = currentIndex + columns
+            moves[Qt.Key_PageUp] = currentIndex - page
+            moves[Qt.Key_PageDown] = currentIndex + page
+            moves[Qt.Key_Home] = 0
+            moves[Qt.Key_End] = count - 1
+            const target = moves[event.key]
+            // Up and Down stay in the grid: from the first or last row they
+            // do not move.
+            if (target !== undefined && count > 0 && (target >= 0 && target < count
+                    || (event.key !== Qt.Key_Up && event.key !== Qt.Key_Down))) {
+                grid.moveTo(Math.max(0, Math.min(count - 1, target)),
+                            (event.modifiers & Qt.ShiftModifier) ? "range" : "only")
+                event.accepted = true
+            } else if (target !== undefined) {
+                event.accepted = true
             }
         }
 
@@ -81,7 +120,8 @@ Item {
 
             required property int index
             required property var modelData
-            readonly property bool selected: GridView.isCurrentItem
+            readonly property bool current: GridView.isCurrentItem
+            readonly property bool selected: current || modelData.selected === true
 
             objectName: grid.name + "Cell" + index
             width: view.cellWidth
@@ -94,7 +134,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: Math.round(Theme.gutter / 2)
                 color: cell.selected ? Theme.selected : cellMouse.containsMouse ? Theme.hover : "transparent"
-                border.width: cell.selected && view.activeFocus ? 1 : 0
+                border.width: cell.current && view.activeFocus ? 1 : 0
                 border.color: Theme.accent
             }
 
@@ -165,6 +205,8 @@ Item {
                         return
                     view.currentIndex = cell.index
                     view.forceActiveFocus(Qt.MouseFocusReason)
+                    if (cell.modelData.selected !== true)
+                        grid.selectRequested(cell.index, "only")
                     grid.menuRequested(cell.index, cell, mouse.x, mouse.y)
                 }
                 onClicked: function(mouse) {
@@ -172,6 +214,8 @@ Item {
                         return
                     view.currentIndex = cell.index
                     view.forceActiveFocus(Qt.MouseFocusReason)
+                    grid.selectRequested(cell.index, (mouse.modifiers & Qt.ControlModifier) ? "toggle"
+                        : (mouse.modifiers & Qt.ShiftModifier) ? "range" : "only")
                 }
                 onDoubleClicked: function(mouse) {
                     if (mouse.button === Qt.LeftButton)

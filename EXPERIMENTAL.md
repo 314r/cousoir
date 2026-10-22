@@ -123,8 +123,8 @@ letters. Keyboard-first, as the rest of Cousoir.
 | 0. Sandbox and baseline | done |
 | 1. A large library stays instant | done (see the journal); memory left for later |
 | 2. Search like Calibre | done; follow-ups below |
-| 3. Many books at once | next |
-| 4. Editing the description | planned |
+| 3. Many books at once | done |
+| 4. Editing the description | next |
 | 5. Custom columns | planned |
 | 6. Reading life from the readers | planned |
 | 7. A command palette | planned |
@@ -246,3 +246,29 @@ tables, for language names in Calibre's language and the rare languages,
 which would make `canonicalizeLanguage()` exact too; folds per interface
 language, as Swedish tells "a" from "å" and Spanish "n" from "ñ";
 `template:`.
+
+### 2026-10-22 — goal 3, many books at once (`exp-bulk`)
+
+- `BulkEdit` ports the part of Calibre's bulk metadata edit
+  (`MyBlockingBusy.do_all()`) that sets fields: authors, rating, publisher,
+  series with its three numberings, publication date, languages, tags added
+  and removed by `bulk_modify_tags()` with `cleanup_tags()`. A bulk edit
+  goes to the commit as such and is worked out there, on the database as the
+  changes before it in the transaction left it: worked out in the window, two
+  bulk edits in a row would each start from the library before both, and the
+  second would undo the first.
+- The golden test makes the eight bulk edits of `tests/data/edits/bulk.json`
+  with Calibre's functions and with `cousoir-cli apply`: identical tables
+  and files, case changes, renamed series and moved folders included. Only
+  the order of `metadata_dirtied`, the queue of books Calibre writes again,
+  differed: Calibre queues them as each `set_field()` reaches them. The
+  comparison now looks at the books queued.
+- The selection lives in `BookListModel`, by book id: a sort keeps it, a
+  search drops what it hides, a select-all of 50 000 rows is one signal. The
+  table and the covers take Ctrl and Shift clicks, Shift with the moving
+  keys, Ctrl+A, and now Page Up, Page Down, Home and End (missing before,
+  noted in goal 1). The current book stays current through a sort.
+- Del, Ctrl+D, Ctrl+Shift+K and Ctrl+Shift+A and the row menu act on the
+  selection; the pane beside the list edits it, with Undo.
+- Found on the way: a binding on a function call does not follow the
+  selection; `selectedIds` became a property.

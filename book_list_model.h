@@ -35,6 +35,8 @@ class BookListModel : public QAbstractListModel
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int selectedCount READ selectedCount NOTIFY selectionChanged)
+    // The ids of the books selected, in the list's order.
+    Q_PROPERTY(QVariantList selectedIds READ selectedIds NOTIFY selectionChanged)
 
 public:
     explicit BookListModel(QObject *parent = nullptr);
@@ -61,8 +63,7 @@ public:
     Q_INVOKABLE void select(int row, const QString &mode = QStringLiteral("only"));
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE bool isSelected(int row) const;
-    // The ids of the books selected, in the list's order.
-    Q_INVOKABLE QVariantList selectedIds() const;
+    QVariantList selectedIds() const;
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;

@@ -147,6 +147,7 @@ set(COUSOIR_QML_FILES
     BookDetailsPane.qml
     BookPage.qml
     BooksPage.qml
+    BulkEditPane.qml
     CheckPage.qml
     ChoiceBox.qml
     ConfirmDialog.qml
