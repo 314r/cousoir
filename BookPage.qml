@@ -54,8 +54,8 @@ Rectangle {
     // What the readers connected know of the book's reading.
     readonly property var reading: page.devices && page.devices.rows !== undefined && page.book.id
         ? page.devices.reading(page.book.id) : []
-    // The copy whose notes the save dialog writes: { root, lpath }.
-    property var savingNotes: ({})
+    // The notes the save dialog writes, as Markdown.
+    property string savingNotes: ""
 
     color: Theme.canvas
 
@@ -430,7 +430,7 @@ Rectangle {
                                 text: qsTr("Copy")
                                 tip: qsTr("Copy the highlights and notes as Markdown")
                                 onClicked: {
-                                    page.devices.copyNotes(copy.modelData.root, copy.modelData.lpath)
+                                    page.devices.copyNotes(copy.modelData.markdown)
                                     page.noticed(qsTr("Highlights and notes copied as Markdown"))
                                 }
                             }
@@ -442,7 +442,7 @@ Rectangle {
                                 text: qsTr("Save…")
                                 tip: qsTr("Save the highlights and notes as a Markdown file")
                                 onClicked: {
-                                    page.savingNotes = { root: copy.modelData.root, lpath: copy.modelData.lpath }
+                                    page.savingNotes = copy.modelData.markdown
                                     notesDialog.selectedFile = notesDialog.currentFolder + "/"
                                         + (page.book.title || "notes").replace(/[\\/:*?"<>|]/g, "_") + ".md"
                                     notesDialog.open()
@@ -454,7 +454,8 @@ Rectangle {
                             objectName: "readingState"
 
                             Layout.fillWidth: true
-                            text: [copy.modelData.state,
+                            text: [copy.modelData.connected ? "" : qsTr("Seen %1").arg(copy.modelData.seen),
+                                   copy.modelData.state,
                                    copy.modelData.lastRead ? qsTr("last read %1").arg(copy.modelData.lastRead) : "",
                                    copy.modelData.timeSpent,
                                    copy.modelData.notes.length > 0
@@ -596,7 +597,7 @@ Rectangle {
         nameFilters: [qsTr("Markdown (*.md)")]
         currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
         onAccepted: {
-            const error = page.devices.saveNotes(page.savingNotes.root, page.savingNotes.lpath, selectedFile)
+            const error = page.devices.saveNotes(page.savingNotes, selectedFile)
             if (error)
                 page.failed(error)
             else

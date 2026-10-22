@@ -110,6 +110,8 @@ qt_add_library(cousoir_core STATIC
     pdf_reader.h
     python_json.cpp
     python_json.h
+    reading_log.cpp
+    reading_log.h
     send_job.cpp
     send_job.h
     sqlite_db.cpp

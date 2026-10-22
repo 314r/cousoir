@@ -12,6 +12,7 @@
 #include "calibre_job.h"
 #include "kobo.h"
 #include "kobo_send.h"
+#include "reading_log.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -256,6 +257,42 @@ private slots:
         QVERIFY(notes);
         QCOMPARE(notes->status, 1);
         QVERIFY(!notes->percent);
+    }
+
+    // What readers told, kept per library book: written and read back, a
+    // reader's entries replaced as a whole when it tells again.
+    void keepsReadingLog()
+    {
+        QTemporaryDir folder;
+        const QString file = folder.filePath(QStringLiteral("reading/log.json"));
+        ReadingLog::Entry entry{ QStringLiteral("N418"), QStringLiteral("Kobo Clara"), QStringLiteral("a.kepub.epub"),
+                                 QStringLiteral("KEPUB"), QDateTime(QDate(2026, 10, 20), QTime(8, 0), QTimeZone::UTC),
+                                 {} };
+        entry.reading.status = 1;
+        entry.reading.percent = 43;
+        entry.reading.notes.append(ReaderNote{ QStringLiteral("Annotation"), QStringLiteral("Chloé"),
+                                               QStringLiteral("Le nénuphar"), 1, QStringLiteral("Un"), 60, 1001,
+                                               QStringLiteral("2026-10-18T20:15:00.000") });
+        ReadingLog::Entry other = entry;
+        other.device = QStringLiteral("N999");
+        ReadingLog::Log log;
+        ReadingLog::replaceDevice(&log, entry.device, { { QStringLiteral("uuid-1"), { entry } } });
+        ReadingLog::replaceDevice(&log, other.device, { { QStringLiteral("uuid-1"), { other } } });
+        QVERIFY(ReadingLog::write(file, log));
+        log = ReadingLog::read(file);
+        QCOMPARE(log.value(QStringLiteral("uuid-1")).size(), 2);
+        const ReadingLog::Entry read = log.value(QStringLiteral("uuid-1")).first();
+        QCOMPARE(read.deviceName, QStringLiteral("Kobo Clara"));
+        QCOMPARE(read.seen, entry.seen);
+        QCOMPARE(read.reading.percent, std::optional<int>(43));
+        QCOMPARE(read.reading.notes.first().annotation, QStringLiteral("Le nénuphar"));
+        QCOMPARE(read.reading.notes.first().location, 1001);
+        // The first reader no longer has the book.
+        ReadingLog::replaceDevice(&log, entry.device, {});
+        QCOMPARE(log.value(QStringLiteral("uuid-1")).size(), 1);
+        QCOMPARE(log.value(QStringLiteral("uuid-1")).first().device, QStringLiteral("N999"));
+        ReadingLog::replaceDevice(&log, other.device, {});
+        QVERIFY(log.isEmpty());
     }
 
     void listsBooks()

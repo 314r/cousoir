@@ -10,5 +10,7 @@ namespace CousoirPaths {
 QString cacheFolder(const QString &libraryPath);
 // The copies of metadata.db taken before changing it.
 QString backupFolder(const QString &libraryPath);
+// What the readers last told of the reading of the library's books.
+QString readingFile(const QString &libraryPath);
 
 } // namespace CousoirPaths

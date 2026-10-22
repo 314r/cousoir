@@ -1381,8 +1381,8 @@ void LibraryUiTest::sendsToKobo()
 }
 
 // A Kobo that has read a book of the library: how far, and its highlights
-// and notes, on the book's page and the Kobo's, copied as Markdown; gone
-// once the Kobo is unplugged.
+// and notes, on the book's page and the Kobo's, copied as Markdown; as last
+// seen once the Kobo is unplugged.
 void LibraryUiTest::showsReading()
 {
     auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
@@ -1437,11 +1437,15 @@ void LibraryUiTest::showsReading()
     QCOMPARE(ecume.value(QStringLiteral("reading")).toString(), QStringLiteral("43 %"));
     QCOMPARE(ecume.value(QStringLiteral("notes")).toInt(), 6);
 
+    // Unplugged, the book's page tells what the Kobo told when last seen.
     volumes.clear();
     QTRY_VERIFY(!control(entry) || !control(entry)->isVisible());
     library()->setProperty("currentBookId", 1);
     QTRY_VERIFY(control("bookPage") && control("bookPage")->isVisible());
-    QVERIFY(!control("readingState") || !control("readingState")->isVisible());
+    QTRY_VERIFY(control("readingState") && control("readingState")->isVisible());
+    QVERIFY2(text("readingState").startsWith(QStringLiteral("Seen %1  ·  43 % read")
+                                                 .arg(QDate::currentDate().toString(Qt::ISODate))),
+             qPrintable(text("readingState")));
     devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
 }
 
