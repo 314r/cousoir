@@ -65,6 +65,9 @@ qt_add_library(cousoir_core STATIC
     calibre_lock.h
     calibre_paths.cpp
     calibre_paths.h
+    calibre_search.cpp
+    calibre_search.h
+    calibre_search.inc
     calibre_strings.inc
     calibre_text.cpp
     calibre_text.h
@@ -306,6 +309,7 @@ if(BUILD_TESTING)
         tests/tool/library.cpp
         tests/tool/main.cpp
         tests/tool/readers.cpp
+        tests/tool/search.cpp
     )
     target_link_libraries(cousoir-test-tool PRIVATE cousoir_core)
     cousoir_configure_test_executable(cousoir-test-tool)
@@ -324,7 +328,7 @@ if(BUILD_TESTING)
         )
     endfunction()
 
-    foreach(name IN ITEMS calibre_text calibre_paths calibre_db opf commit_engine concurrency_guard conversion kobo
+    foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db opf commit_engine concurrency_guard conversion kobo
                           kindle library_check test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)

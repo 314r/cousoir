@@ -43,6 +43,8 @@ Rectangle {
     readonly property int currentIndex: view.currentIndex
     // The row whose menu is open.
     property int menuIndex: -1
+    // A virtual library or a saved search narrows the books listed.
+    readonly property bool narrowed: library.virtualLibrary !== "" || library.section.startsWith("search:")
 
     signal bookActivated(int bookId)
     // Move to Trash, chosen in a row's menu.
@@ -124,6 +126,10 @@ Rectangle {
 
     // What stands in place of the books when there are none to show.
     function emptyTitle() {
+        if (page.library.loaded && page.library.searchError)
+            return qsTr("Calibre's search cannot read “%1”").arg(page.library.searchText)
+        if (page.library.loaded && page.library.scopeCount === 0 && page.narrowed)
+            return qsTr("No books here")
         if (page.library.loaded)
             return page.library.scopeCount === 0 ? qsTr("No books yet")
                                                  : qsTr("No book matches “%1”").arg(page.library.searchText)
@@ -133,6 +139,11 @@ Rectangle {
     }
 
     function emptyMessage() {
+        if (page.library.loaded && page.library.searchError)
+            return page.library.searchError
+        if (page.library.loaded && page.library.scopeCount === 0 && page.narrowed)
+            return page.library.virtualLibrary
+                ? qsTr("The virtual library “%1” has none of them.").arg(page.library.virtualLibrary) : ""
         if (page.library.loaded)
             return page.library.scopeCount === 0 ? qsTr("Add books with Ctrl+N, or drop their files here.")
                                                  : qsTr("Esc clears the search.")

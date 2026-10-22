@@ -11,11 +11,14 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <optional>
+
 #include "book.h"
 #include "book_edit.h"
 #include "book_list_model.h"
 #include "book_operations.h"
 #include "calibre_config.h"
+#include "calibre_search.h"
 #include "commit_engine.h"
 #include "library_check.h"
 
@@ -40,8 +43,9 @@ class BookLibrary : public QObject
     Q_PROPERTY(QString lastError READ lastError NOTIFY libraryChanged)
     Q_PROPERTY(QString libraryUuid READ libraryUuid NOTIFY libraryChanged)
     Q_PROPERTY(bool schemaKnown READ schemaKnown NOTIFY libraryChanged)
-    // { books, authors, series, tags, languages, publishers }.
-    Q_PROPERTY(QVariantMap counts READ counts NOTIFY libraryChanged)
+    // { books, authors, series, tags, languages, publishers, trash }, within
+    // the virtual library.
+    Q_PROPERTY(QVariantMap counts READ counts NOTIFY countsChanged)
     Q_PROPERTY(QString section READ section WRITE setSection NOTIFY sectionChanged)
     // The section's item the book list is narrowed to: { kind, id, name },
     // or empty.
@@ -54,7 +58,19 @@ class BookLibrary : public QObject
     // The items of a browse section: { id, name, count }.
     Q_PROPERTY(QVariantList facetRows READ facetRows NOTIFY facetRowsChanged)
     Q_PROPERTY(int facetCount READ facetCount NOTIFY facetRowsChanged)
+    // Calibre's search language; searchError says why the search cannot
+    // run, and nothing is listed then.
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
+    Q_PROPERTY(QString searchError READ searchError NOTIFY searchErrorChanged)
+    // The virtual libraries Calibre keeps in the library, by name, and the
+    // one every section is narrowed to, empty for none. The choice is kept
+    // per library; until one is made, Calibre's choice for the library's
+    // start.
+    Q_PROPERTY(QStringList virtualLibraries READ virtualLibraries NOTIFY libraryChanged)
+    Q_PROPERTY(QString virtualLibrary READ virtualLibrary WRITE setVirtualLibrary NOTIFY virtualLibraryChanged)
+    // The saved searches of the library, { name, query, count }, by name;
+    // the section "search:<name>" lists a saved search's books.
+    Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
     Q_PROPERTY(QString sortOption READ sortOption WRITE setSortOption NOTIFY sortOptionChanged)
     Q_PROPERTY(QString facetSortOption READ facetSortOption WRITE setFacetSortOption NOTIFY facetSortOptionChanged)
     Q_PROPERTY(int currentBookId READ currentBookId WRITE setCurrentBookId NOTIFY currentBookChanged)
@@ -114,8 +130,9 @@ public:
     bool schemaKnown() const;
     QVariantMap counts() const;
     // "books", "authors", "series", "tags", "languages", "publishers",
-    // "trash" or "check". Another section clears the filter and the search;
-    // the check runs again.
+    // "trash", "check", or "search:<name>" for a saved search's books.
+    // Another section clears the filter and the search; the check runs
+    // again.
     QString section() const;
     void setSection(const QString &section);
     QVariantMap filter() const;
@@ -125,6 +142,11 @@ public:
     int facetCount() const;
     QString searchText() const;
     void setSearchText(const QString &searchText);
+    QString searchError() const;
+    QStringList virtualLibraries() const;
+    QString virtualLibrary() const;
+    void setVirtualLibrary(const QString &name);
+    QVariantList savedSearches() const;
     // "title", "authors", "series", "added" or "rating", with "Desc" for the
     // reverse order.
     QString sortOption() const;
@@ -234,7 +256,11 @@ signals:
     void filterChanged();
     void rowsChanged();
     void facetRowsChanged();
+    void countsChanged();
     void searchTextChanged();
+    void searchErrorChanged();
+    void virtualLibraryChanged();
+    void savedSearchesChanged();
     void sortOptionChanged();
     void facetSortOptionChanged();
     void currentBookChanged();
@@ -266,11 +292,11 @@ signals:
 
 private:
     // What the book list needs of each book, by its place in the library's
-    // books: its words folded for the search, and its sort keys. Made with
-    // each load, on the worker thread.
+    // books: what a search compares, and its sort keys. Made with each load,
+    // on the worker thread.
     struct BookIndex
     {
-        QList<QString> searchTexts;
+        CalibreSearch::Index search;
         std::vector<QCollatorSortKey> titleKeys;
         std::vector<QCollatorSortKey> authorKeys;
         // The sort of the book's series, empty for none.
@@ -318,7 +344,19 @@ private:
     void startCommit();
     void finishCommit();
     void applyData(LibraryData data, BookIndex index);
-    static BookIndex indexBooks(const LibraryData &data);
+    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config);
+    // The rows of the virtual library, or all, and the saved searches'
+    // counts in it, after a load or another choice.
+    void applyVirtualLibrary();
+    void rebuildSavedSearches();
+    // The rows the search text finds within the virtual library, searched
+    // again only when the text or the books change.
+    const QBitArray &searchRows();
+    // The rows of a saved search, within the virtual library.
+    QBitArray savedSearchRows(const QString &name);
+    // The items of a browse section, counted within the virtual library:
+    // those without a book there are left out.
+    QList<FacetItem> visibleItems(const QString &kind) const;
     // The library's books in the sort order, without its direction.
     const QList<qsizetype> &sortedBooks();
     // What the current book's fields hold, as updateBook() takes them.
@@ -347,6 +385,17 @@ private:
     QTimer m_changeTimer;
     QCollator m_collator;
     BookIndex m_index;
+    QString m_virtualLibrary;
+    // The library the choice of virtual library was read for.
+    QString m_virtualLibraryOf;
+    QBitArray m_restriction;
+    // searchRows(), the text it is for, and why it could not run.
+    QBitArray m_searchRows;
+    std::optional<QString> m_searchedText;
+    QString m_searchError;
+    // The rows of the saved search the section lists.
+    QBitArray m_sectionRows;
+    QVariantList m_savedSearches;
     // sortedBooks(), and the sort it is for; empty until asked.
     QList<qsizetype> m_sorted;
     QString m_sortedBy;

@@ -81,4 +81,8 @@ int makePdf(const QStringList &arguments);
 // large.cpp
 int makeLibrary(const QStringList &arguments);
 
+// search.cpp
+int searchBooks(const QStringList &arguments);
+int compareSearches(const QStringList &arguments);
+
 } // namespace Tool

@@ -38,6 +38,8 @@ const Command commands[] = {
     { "make-import-epubs", Tool::makeImportEpubs, 2, 2, "FOLDER COVER.jpg" },
     { "make-pdf", Tool::makePdf, 2, 4, "OUT.pdf TEXT [INFO.json [PACKET.xml]]" },
     { "make-library", Tool::makeLibrary, 2, 3, "FOLDER BOOKS [SEED]" },
+    { "search-books", Tool::searchBooks, 3, 3, "LIBRARY QUERIES.txt OUT.json" },
+    { "compare-searches", Tool::compareSearches, 2, 2, "CALIBRE.json COUSOIR.json" },
 };
 
 } // namespace

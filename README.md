@@ -34,8 +34,10 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   database.
 - 🖼️ **A table or a wall of covers.** Sort by title, author, series, date added or rating, in Calibre's own order:
   *Le Petit Prince* files under "Petit Prince, Le".
-- 🔍 **Find anything.** Search titles, authors, series and tags, with or
-  without accents, or browse by author, series, tag, language and publisher.
+- 🔍 **Search like Calibre.** Calibre's own search language, `tag:sf
+  rating:>=4 not author:vian`, finding exactly the books Calibre finds, with
+  your saved searches in the sidebar and your virtual libraries a click
+  away. Or browse by author, series, tag, language and publisher.
 - ✏️ **Edit in place.** Title, authors, series, tags, rating, publisher,
   languages, dates and identifiers save as you leave the field. Drop or paste
   an image to change the cover.
@@ -60,9 +62,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   mode.
 - ⌨️ **Keyboard-first.** Every action has a shortcut, and the status bar shows
   the ones that matter right now.
-- 🧰 **A command line, too.** `cousoir-cli` lists a library exactly as
-  `calibredb list` does, checks its health, and applies changes from a JSON
-  file.
+- 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
+  exactly as `calibredb list` and `calibredb search` do, checks its health,
+  and applies changes from a JSON file.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 

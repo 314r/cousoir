@@ -7,6 +7,12 @@
 //   tools/sandbox.sh build/cousoir-benchmark [--ui] build/sandbox/libs/50k
 //
 // The edit is saved into the library: give it a copy.
+//
+// With --screenshot, it draws the window instead, in a section, with a
+// search, a virtual library or a book open, and saves the picture; the
+// library is only read.
+//
+//   tools/sandbox.sh build/cousoir-benchmark --screenshot shot.png --search tag:sf LIBRARY
 
 #include <QCommandLineParser>
 #include <QDir>
@@ -150,10 +156,8 @@ void drawn(QQuickWindow *window)
     window->grabWindow();
 }
 
-int benchmarkUi(const QString &path)
+void registerTypes()
 {
-    qputenv("COUSOIR_LIBRARY_PATH", QFile::encodeName(path));
-    qputenv("CALIBRE_OVERRIDE_LANG", "fr");
     qmlRegisterType<IsolatedTheme>("Cousoir", 1, 0, "OmarchyTheme");
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
@@ -171,23 +175,40 @@ int benchmarkUi(const QString &path)
                             qPrintable(type));
     }
 
-    QElapsedTimer timer;
-    timer.start();
-    QQmlApplicationEngine engine;
+}
+
+// The window on the library at `path`, once the library is loaded; null
+// when it cannot load.
+QQuickWindow *openWindow(QQmlApplicationEngine &engine, const QString &path, QSize size)
+{
+    qputenv("COUSOIR_LIBRARY_PATH", QFile::encodeName(path));
+    qputenv("CALIBRE_OVERRIDE_LANG", "fr");
     engine.addImageProvider(QStringLiteral("covers"), new CoverCache);
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/Main.qml")));
     auto *window = engine.rootObjects().isEmpty() ? nullptr
                                                   : qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
     if (!window) {
         out() << "cannot load the interface" << Qt::endl;
-        return 1;
+        return nullptr;
     }
-    window->resize(1240, 820);
+    window->resize(size);
     QObject *library = window->property("library").value<QObject *>();
     if (!QTest::qWaitFor([library] { return library->property("loaded").toBool(); }, 60000)) {
         out() << "the library did not load" << Qt::endl;
-        return 1;
+        return nullptr;
     }
+    return window;
+}
+
+int benchmarkUi(const QString &path)
+{
+    QElapsedTimer timer;
+    timer.start();
+    QQmlApplicationEngine engine;
+    QQuickWindow *window = openWindow(engine, path, QSize(1240, 820));
+    if (!window)
+        return 1;
+    QObject *library = window->property("library").value<QObject *>();
     drawn(window);
     report(QStringLiteral("ui: first frame with the books"), timer.nsecsElapsed());
 
@@ -256,6 +277,45 @@ int benchmarkUi(const QString &path)
     return 0;
 }
 
+struct Shot
+{
+    QString file;
+    QSize size{ 1240, 820 };
+    QString theme;
+    QString section;
+    QString search;
+    QString virtualLibrary;
+    int book = 0;
+};
+
+int screenshot(const QString &path, const Shot &shot)
+{
+    if (!shot.theme.isEmpty())
+        QSettings().setValue(QStringLiteral("Appearance/colorMode"), shot.theme);
+    QQmlApplicationEngine engine;
+    QQuickWindow *window = openWindow(engine, path, shot.size);
+    if (!window)
+        return 1;
+    QObject *library = window->property("library").value<QObject *>();
+    if (!shot.virtualLibrary.isEmpty())
+        library->setProperty("virtualLibrary", shot.virtualLibrary);
+    if (!shot.section.isEmpty())
+        window->setProperty("section", shot.section);
+    if (!shot.search.isEmpty())
+        library->setProperty("searchText", shot.search);
+    if (shot.book > 0)
+        library->setProperty("currentBookId", shot.book);
+    // The covers load on their own threads.
+    QTest::qWait(300);
+    drawn(window);
+    QTest::qWait(300);
+    if (!window->grabWindow().save(shot.file)) {
+        out() << "cannot write " << shot.file << Qt::endl;
+        return 1;
+    }
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -269,6 +329,14 @@ int main(int argc, char *argv[])
     QCommandLineParser parser;
     parser.addPositionalArgument(QStringLiteral("library"), QStringLiteral("The library to measure; edited."));
     parser.addOption({ QStringLiteral("ui"), QStringLiteral("Measure the whole window too.") });
+    parser.addOption({ QStringLiteral("screenshot"), QStringLiteral("Draw the window to a PNG file instead."),
+                       QStringLiteral("file") });
+    parser.addOption({ QStringLiteral("size"), QStringLiteral("The window's size, 1240x820."), QStringLiteral("WxH") });
+    parser.addOption({ QStringLiteral("theme"), QStringLiteral("light or dark."), QStringLiteral("theme") });
+    parser.addOption({ QStringLiteral("section"), QStringLiteral("The section shown."), QStringLiteral("key") });
+    parser.addOption({ QStringLiteral("search"), QStringLiteral("The search typed."), QStringLiteral("text") });
+    parser.addOption({ QStringLiteral("vl"), QStringLiteral("The virtual library."), QStringLiteral("name") });
+    parser.addOption({ QStringLiteral("book"), QStringLiteral("The book open."), QStringLiteral("id") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -276,6 +344,20 @@ int main(int argc, char *argv[])
 
     QTemporaryDir state;
     themeStateRoot = state.path();
+    registerTypes();
+    if (parser.isSet(QStringLiteral("screenshot"))) {
+        Shot shot;
+        shot.file = parser.value(QStringLiteral("screenshot"));
+        const QStringList size = parser.value(QStringLiteral("size")).split(u'x');
+        if (size.size() == 2)
+            shot.size = QSize(size.at(0).toInt(), size.at(1).toInt());
+        shot.theme = parser.value(QStringLiteral("theme"));
+        shot.section = parser.value(QStringLiteral("section"));
+        shot.search = parser.value(QStringLiteral("search"));
+        shot.virtualLibrary = parser.value(QStringLiteral("vl"));
+        shot.book = parser.value(QStringLiteral("book")).toInt();
+        return screenshot(path, shot);
+    }
     int status = benchmarkModel(path);
     if (status == 0 && parser.isSet(QStringLiteral("ui")))
         status = benchmarkUi(path);

@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QHash>
 #include <QList>
 #include <QPair>
 #include <QString>
@@ -52,6 +53,9 @@ struct Book
     QString path;
     QString uuid;
     bool hasCover = false;
+    // Its page count, as Calibre counted it; 0 until it does, -1 without a
+    // row in books_pages_link.
+    int pages = -1;
     // HTML.
     QString comments;
     // Sorted by format, like Calibre.
@@ -109,6 +113,11 @@ struct LibraryData
     qint64 trashExpirySeconds = 14 * 24 * 3600;
     // metadata.db as it was copied.
     FileIdentity source;
+    // The labels of the custom columns, "genre" for #genre.
+    QStringList customColumns;
+    // The preferences a search reads, by key, as JSON: saved searches,
+    // virtual libraries, grouped search terms and user categories.
+    QHash<QString, QString> preferences;
 
     // The book with that id, or nullptr.
     const Book *book(int id) const

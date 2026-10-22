@@ -20,8 +20,10 @@ ThemedWindow {
     // open over it.
     property string section: "books"
     readonly property bool deviceSection: section.startsWith("device:")
+    // A saved search's books.
+    readonly property bool searchSection: section.startsWith("search:")
     readonly property bool facetShown: section !== "books" && section !== "trash" && section !== "check"
-        && !deviceSection && !session.filterOpen && !session.bookOpen
+        && !deviceSection && !searchSection && !session.filterOpen && !session.bookOpen
     readonly property bool trashShown: section === "trash" && !session.bookOpen
     readonly property bool checkShown: section === "check" && !session.bookOpen
     readonly property bool deviceShown: deviceSection && !session.bookOpen
@@ -967,8 +969,12 @@ ThemedWindow {
             currentKey: window.section
             // The check's count follows the check, not the library's load.
             counts: window.library.loaded
-                ? Object.assign({}, window.library.counts, { check: window.library.check.count || "" }) : ({})
+                ? window.library.savedSearches.reduce((all, search) => {
+                    all["search:" + search.name] = search.count
+                    return all
+                }, Object.assign({}, window.library.counts, { check: window.library.check.count || "" })) : ({})
             devices: window.devices.devices
+            savedSearches: window.library.loaded ? window.library.savedSearches : []
             onActivated: function(key) {
                 window.section = key
             }
@@ -1200,6 +1206,26 @@ ThemedWindow {
                         onClicked: window.toggleGrid()
                     }
 
+                    // Calibre's virtual libraries: one narrows every section,
+                    // as in Calibre.
+                    ChoiceBox {
+                        objectName: "virtualLibraryBox"
+
+                        readonly property var choices: [{ value: "", label: qsTr("All books") }].concat(
+                            window.library.virtualLibraries.map(name => ({ value: name, label: name })))
+
+                        visible: window.library.virtualLibraries.length > 0 && !session.bookOpen
+                            && !window.deviceShown && !window.checkShown && !window.trashShown
+                        Layout.preferredWidth: Math.round(Math.min(24, Math.max(12, choices.reduce(
+                            (longest, choice) => Math.max(longest, choice.label.length), 0) + 4)) * Theme.charWidth)
+                        Accessible.name: qsTr("Virtual library")
+                        model: choices
+                        currentIndex: Math.max(0, choices.findIndex(choice => choice.value === window.library.virtualLibrary))
+                        onActivated: function(index) {
+                            window.library.virtualLibrary = choices[index].value
+                        }
+                    }
+
                     SearchField {
                         id: searchField
                         objectName: "searchField"
@@ -1217,7 +1243,7 @@ ThemedWindow {
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
                         Layout.minimumWidth: Math.round(120 * Theme.spacingScale)
                         placeholderText: window.facetShown ? qsTr("Search %1").arg(sidebar.current.title.toLowerCase())
-                            : qsTr("Search title, author, series or tag")
+                            : qsTr("Search, as in Calibre")
                         text: window.library.searchText
 
                         onTextEdited: window.library.searchText = text

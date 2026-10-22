@@ -122,8 +122,8 @@ letters. Keyboard-first, as the rest of Cousoir.
 |---|---|
 | 0. Sandbox and baseline | done |
 | 1. A large library stays instant | done (see the journal); memory left for later |
-| 2. Search like Calibre | next |
-| 3. Many books at once | planned |
+| 2. Search like Calibre | done; follow-ups below |
+| 3. Many books at once | next |
 | 4. Editing the description | planned |
 | 5. Custom columns | planned |
 | 6. Reading life from the readers | planned |
@@ -201,3 +201,48 @@ Left for later: a save reads the whole library again (readLibrary 240 ms,
 findFiles 210 ms, the index 100 ms at 50 000 books), on the worker thread;
 and a save holds two copies of the books and of the database at once, 700
 MB at 50 000 books.
+
+### 2026-10-22 — goal 2, search like Calibre (`exp-search`)
+
+Calibre's binary build has no Python sources to read: the files ported
+from were fetched from Calibre's repository at v9.16.0.
+
+- `calibre_search.cpp` ports the parser of `search_query_parser.py` (its
+  tokens, quirks included: a quoted "or" is an operator, `title:foo "bar"`
+  searches "bar") and the matches of `db/search.py` for every built-in
+  field, with the candidate-set evaluation of `and`, `or` and `not`.
+- Matching text is where a port could not follow code: Calibre asks ICU's
+  collators. `tools/oracle/search_oracle.py` asks them instead, character
+  by character, what each folds to, and writes `calibre_search.inc` (4723
+  folds and the date words of 40 languages). A match may not start or end
+  inside a character folded to several ("s" is not in "ß", "ss" is), as
+  ICU's cannot. On 68 445 query and text pairs in many scripts the folds
+  agree with Calibre's two matchers, after three rounds: queries of
+  punctuation only match everything; expansions keep their boundaries;
+  katakana fold to the hiragana's own fold.
+- The golden test runs 328 searches through `cache.search()` and Cousoir's,
+  on the fixture and on 2000 generated books with saved searches, virtual
+  libraries, grouped terms and user categories: all alike. 208 of them find
+  some books but not all. Calibre itself crashes on `series_sort:true`
+  (`KeyError`), which the comparison leaves out.
+- The window: the search box speaks Calibre's language, and says why when
+  Calibre's search could not read the text; the virtual libraries are in a
+  box beside it, narrowing every section and count, remembered per library,
+  Calibre's start choice by default; the saved searches are a sidebar group
+  with their counts. `cousoir-cli search` answers as `calibredb search`.
+- Cost at 50 000 books: 23 ms a letter in the model, 39 to 56 ms with the
+  frame, all fields searched, descriptions included; loading takes 240 ms
+  more on the worker thread to fold the texts, and 50 MB more.
+- Found on the way: a UI test clicked a header in the frame it reappeared,
+  before it was laid out, and failed one run in six once the list became a
+  model; and the search error did not change from one failing text to
+  another, as it was notified only with the rows.
+- `cousoir-benchmark --screenshot` draws the window to a file, in a
+  section, with a search, a virtual library or a book open: to look at
+  what was made.
+
+Follow-ups for the search: custom columns (goal 5); Calibre's ISO 639
+tables, for language names in Calibre's language and the rare languages,
+which would make `canonicalizeLanguage()` exact too; folds per interface
+language, as Swedish tells "a" from "å" and Spanish "n" from "ñ";
+`template:`.
