@@ -236,7 +236,8 @@ Popup {
             }
 
             Label {
-                text: qsTr("from Calibre's sources")
+                text: dialog.downloader.source === "openlibrary" ? qsTr("from Open Library")
+                                                                  : qsTr("from Calibre's sources")
                 color: Theme.textFaint
                 font.pointSize: Theme.fontPointSizeCaption
             }
@@ -270,6 +271,7 @@ Popup {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 text: dialog.downloader.state === "failed" ? dialog.downloader.error
+                    : dialog.downloader.source === "openlibrary" ? qsTr("Asking Open Library about the book…")
                     : qsTr("Asking Calibre's sources about the book…")
                 color: dialog.downloader.state === "failed" ? Theme.danger : Theme.text
             }

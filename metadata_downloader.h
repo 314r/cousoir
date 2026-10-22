@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "metadata_download.h"
+#include "open_library.h"
 
 class BookLibrary;
 class QProcess;
@@ -16,7 +17,8 @@ class QTemporaryDir;
 
 // A book's metadata and cover downloaded from the web, as Calibre's Edit
 // metadata dialog downloads them: search() asks Calibre's sources for the
-// book in a process of its own, which lists the books they found;
+// book in a process of its own, or Open Library when Calibre is not
+// installed, which lists the books they found;
 // fields() compares one with the book; searchCovers() downloads the covers
 // for it; apply() saves the fields chosen and a cover as an edit of the
 // book, which Revert undoes while the book is open. One book at a time.
@@ -24,8 +26,10 @@ class MetadataDownloader : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
-    // Calibre is there to download.
+    // Something can download: Calibre's sources, else Open Library.
     Q_PROPERTY(bool available READ available NOTIFY availableChanged)
+    // Who is asked: "calibre" or "openlibrary".
+    Q_PROPERTY(QString source READ source NOTIFY availableChanged)
     // "idle", "searching", "found" or "failed".
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(int bookId READ bookId NOTIFY stateChanged)
@@ -49,6 +53,7 @@ public:
     BookLibrary *library() const;
     void setLibrary(BookLibrary *library);
     bool available() const;
+    QString source() const;
     QString state() const;
     int bookId() const;
     QString error() const;
@@ -77,6 +82,9 @@ public:
     // For the tests: a program run in place of calibre-debug; empty to find
     // Calibre again.
     void setProgram(const QString &program);
+    // Open Library even with Calibre installed, as without it; at `site`.
+    void setNative(bool native);
+    void setSite(const OpenLibrary::Site &site);
 
 signals:
     void libraryChanged();
@@ -86,6 +94,8 @@ signals:
 
 private:
     void start(bool covers);
+    bool native() const;
+    bool makeFolder(QString *error);
     void finishJob();
     void readCovers();
     void stopProcess();
@@ -95,6 +105,8 @@ private:
 
     QPointer<BookLibrary> m_library;
     QString m_program;
+    bool m_native = false;
+    OpenLibrary::Client *m_web;
     QString m_state = QStringLiteral("idle");
     QString m_error;
     int m_bookId = 0;
