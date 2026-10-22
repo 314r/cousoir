@@ -1,0 +1,17 @@
+{
+ "minimal-full": "OEBPS/cover.jpg",
+ "minimal-plain": "OEBPS/cover.jpg",
+ "minimal-sparse": null,
+ "namedcover-full": "cover.jpeg",
+ "namedcover-plain": "cover.jpeg",
+ "namedcover-sparse": "cover.jpeg",
+ "prefixed-full": "OEBPS/cover.jpg",
+ "prefixed-plain": "OEBPS/cover.jpg",
+ "prefixed-sparse": null,
+ "refined-full": "images/Cover.PNG",
+ "refined-plain": "images/Cover.PNG",
+ "refined-sparse": "images/Cover.PNG",
+ "spinecover-full": "Images/cover.jpg",
+ "spinecover-plain": "Images/cover.jpg",
+ "spinecover-sparse": "Images/cover.jpg"
+}

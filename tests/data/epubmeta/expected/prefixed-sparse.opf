@@ -1,0 +1,23 @@
+<opf:package xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0" unique-identifier="BookId">
+  <opf:metadata>
+    <dc:title>Prefixed</dc:title>
+    <dc:creator id="id">Unknown</dc:creator>
+    <dc:identifier>calibre:6</dc:identifier>
+    <dc:identifier>uuid:c2a91d0e-0000-4000-8000-000000000006</dc:identifier>
+    <dc:identifier id="BookId">urn:uuid:12345678-1234-1234-1234-123456789012</dc:identifier>
+    <dc:language>de</dc:language>
+    <!-- a comment in the metadata -->
+    <opf:meta property="calibre:user_metadata">{"#genre": {"datatype": "text", "#value#": ["Kept"], "is_multiple": "|", "is_multiple2": {"cache_to_list": "|", "ui_to_list": ",", "list_to_ui": ", "}, "name": "Genre"}}</opf:meta>
+    <opf:meta refines="#id" property="role" scheme="marc:relators">aut</opf:meta>
+    <opf:meta refines="#id" property="file-as">Unknown</opf:meta>
+  </opf:metadata>
+  <opf:manifest>
+    <!-- a comment in the manifest -->
+    <opf:item id="b" href="b.xhtml" media-type="application/xhtml+xml"/>
+    <opf:item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>
+  </opf:manifest>
+  <opf:spine>
+    <opf:itemref idref="a"/>
+    <opf:itemref idref="b"/>
+  </opf:spine>
+</opf:package>
