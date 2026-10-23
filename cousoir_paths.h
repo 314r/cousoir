@@ -12,5 +12,10 @@ QString cacheFolder(const QString &libraryPath);
 QString backupFolder(const QString &libraryPath);
 // What the readers last told of the reading of the library's books.
 QString readingFile(const QString &libraryPath);
+// The highlights each Kobo met last had, one file each, whatever the
+// library.
+QString koboFolder();
+// The key the files of a library go by.
+QString libraryKey(const QString &libraryPath);
 
 } // namespace CousoirPaths

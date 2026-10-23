@@ -34,7 +34,9 @@
 #include "kindle.h"
 #include "kindle_send.h"
 #include "kobo.h"
+#include "kobo_highlights.h"
 #include "kobo_send.h"
+#include "sqlite_db.h"
 #include "library_check.h"
 #include "metadata_download.h"
 #include "mtp.h"
@@ -573,6 +575,52 @@ int device(const QString &libraryPath, const QString &spec)
     return 0;
 }
 
+// The highlights and notes of a Kobo, by the folder it is mounted on, or of
+// a Kobo's database file: each book, the library's book it is, and each
+// highlight as the Kobo keeps it. Neither is written.
+int koboHighlights(const QString &libraryPath, const QString &spec)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 1;
+    const bool folder = QFileInfo(spec).isDir();
+    const QString database = folder ? QDir(spec).filePath(QStringLiteral(".kobo/KoboReader.sqlite")) : spec;
+    SqliteDb db;
+    QTemporaryDir copy;
+    QString error;
+    if (!QFileInfo(database).isFile()) {
+        err() << QStringLiteral("No Kobo database at %1.").arg(database) << Qt::endl;
+        return 1;
+    }
+    if (!Kobo::openDatabase(database, &db, &copy, &error)) {
+        err() << error << Qt::endl;
+        return 1;
+    }
+    QList<KoboHighlights::Book> books = KoboHighlights::read(db, &error);
+    if (!error.isEmpty()) {
+        err() << error << Qt::endl;
+        return 1;
+    }
+    KoboHighlights::Identity identity = KoboHighlights::identify(database);
+    if (folder) {
+        const Kobo::Device kobo = Kobo::describe(spec, {});
+        KoboHighlights::attach(&books, Kobo::books(kobo, &error));
+        identity.name = kobo.name;
+    }
+    const QList<int> ids = KoboHighlights::match(books, data);
+    QJsonArray list = KoboHighlights::toJson(books);
+    for (qsizetype i = 0; i < list.size(); ++i) {
+        QJsonObject book = list.at(i).toObject();
+        book.insert(QStringLiteral("book"), ids.at(i));
+        list[i] = book;
+    }
+    out() << QJsonDocument(QJsonObject{ { QStringLiteral("serial"), identity.serial },
+                                         { QStringLiteral("name"), identity.name },
+                                         { QStringLiteral("books"), list } })
+                 .toJson();
+    return 0;
+}
+
 // What each template of a JSON array makes of each book, as
 // tools/oracle/template_oracle.py prints Calibre's: by book id, the text or
 // {"error": message}.
@@ -1077,7 +1125,10 @@ int main(int argc, char *argv[])
         "          book of the id given, and what it would change; --covers adds the\n"
         "          covers found. Without Calibre, Open Library is asked.\n"
         "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
-        "          kepubify BOOK.epub BOOK.kepub\n\n"
+        "          kepubify BOOK.epub BOOK.kepub\n"
+        "  kobo-highlights  Print the highlights and notes of a Kobo, by the folder it\n"
+        "          is mounted on, or of a KoboReader.sqlite file, with the library's\n"
+        "          book each is.\n\n"
         "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
         "Goyal and the Calibre contributors, https://calibre-ebook.com. GPL v3."));
     parser.addHelpOption();
@@ -1097,7 +1148,8 @@ int main(int argc, char *argv[])
     const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
     parser.addOption(coversOption);
     parser.addPositionalArgument(QStringLiteral("command"),
-                                 QStringLiteral("list, search, doctor, apply, read, device, template, download or kepubify"));
+                                 QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify or "
+                                                "kobo-highlights"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1128,7 +1180,8 @@ int main(int argc, char *argv[])
         return 0;
     }
     const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device")
-        || arguments.value(0) == QLatin1String("template") || arguments.value(0) == QLatin1String("download");
+        || arguments.value(0) == QLatin1String("template") || arguments.value(0) == QLatin1String("download")
+        || arguments.value(0) == QLatin1String("kobo-highlights");
     if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != takesOne)
         parser.showHelp(2);
     const QString libraryPath = parser.isSet(libraryOption) ? parser.value(libraryOption)
@@ -1149,6 +1202,8 @@ int main(int argc, char *argv[])
         return templates(libraryPath, arguments.at(1));
     if (arguments.first() == QLatin1String("download"))
         return download(libraryPath, arguments.at(1), parser.isSet(coversOption));
+    if (arguments.first() == QLatin1String("kobo-highlights"))
+        return koboHighlights(libraryPath, arguments.at(1));
     err() << QStringLiteral("Unknown command “%1”.").arg(arguments.first()) << Qt::endl;
     return 2;
 }

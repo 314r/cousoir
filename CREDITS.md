@@ -193,6 +193,14 @@ the colors of `Theme.qml`, is derived from bjarneo's
 [omadji](https://github.com/bjarneo/omadji), Copyright (c) 2026 bjarneo, MIT
 license. They keep their MIT notice, in [`LICENSES/MIT.txt`](LICENSES/MIT.txt).
 
+How a Kobo's highlights are put in chapters and written out as Markdown,
+Obsidian's Markdown or plain text comes from
+[kbextract2](https://github.com/314r/kbextract2), Copyright (c) 2026 314r,
+MIT license: `kobo_highlights.cpp`'s chapters, from its
+`internal/kobo/reader.go` and `paths.go`; `highlight_formats.cpp`, from
+`internal/kobo/format.go` and `text.go`; and the fixture
+`tests/data/kobo-kbextract.sql`, its `testdata/fixture.sql`.
+
 The look follows [Omarchy](https://omarchy.org)'s style, and the Omarchy theme
 reads the colors of the current Omarchy theme.
 
