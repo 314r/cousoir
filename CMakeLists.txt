@@ -160,6 +160,8 @@ qt_add_library(cousoir_core STATIC
     sqlite_db.h
     annotation_search.cpp
     annotation_search.h
+    xml_tree.cpp
+    xml_tree.h
 )
 target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # Kobo's script, which a KEPUB carries.
