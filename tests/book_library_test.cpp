@@ -13,6 +13,7 @@
 #include "calibre_languages.h"
 #include "book_library.h"
 #include "calibre_db.h"
+#include "calibre_lock.h"
 #include "conversion_service.h"
 #include "metadata_downloader.h"
 #include "device_library.h"
@@ -104,6 +105,7 @@ private slots:
     void sendsToKindles();
     void readsKindleClippings();
     void syncsKoboHighlights();
+    void tellsWhetherChangesWentIn();
     void checksLibrary();
     void mergesAuthorVariants();
     void keepsOneCopy();
@@ -1638,6 +1640,43 @@ void BookLibraryTest::syncsKoboHighlights()
     QCOMPARE(rows(), QStringList());
     // The Kobo kept for later tests no more.
     QVERIFY(QDir(CousoirPaths::koboFolder()).removeRecursively());
+}
+
+
+// Whoever queues a change hears whether it went in, a failed one too: the
+// reader keeps its highlights until they are in.
+void BookLibraryTest::tellsWhetherChangesWentIn()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QSignalSpy finished(library.get(), &BookLibrary::changeFinished);
+    const auto position = [](const QString &cfi) {
+        return ReadPosition{ QStringLiteral("EPUB"), QStringLiteral("local"), QStringLiteral("cousoir"), cfi,
+                             double(QDateTime::currentSecsSinceEpoch()), 0.1 };
+    };
+    QCOMPARE(library->saveReading(1, std::nullopt, {}), 0);
+    const int saved = library->saveReading(1, position(QStringLiteral("epubcfi(/4/2/2/1:0)")), {});
+    QVERIFY(saved > 0);
+    QVERIFY(finished.wait(15000));
+    QCOMPARE(finished.first().at(0).toInt(), saved);
+    QVERIFY(finished.first().at(1).toBool());
+
+    // Calibre opened meanwhile: told so.
+    CalibreLock calibre;
+    QVERIFY(calibre.acquire());
+    finished.clear();
+    const int refused = library->saveReading(1, position(QStringLiteral("epubcfi(/4/2/4/1:0)")), {});
+    QVERIFY(refused > saved);
+    QVERIFY(finished.wait(15000));
+    QCOMPARE(finished.first().at(0).toInt(), refused);
+    QVERIFY(!finished.first().at(1).toBool());
+    QVERIFY(!finished.first().at(2).toString().isEmpty());
+
+    // Not writable: nothing queued.
+    library->setWritable(false);
+    QCOMPARE(library->saveReading(1, position(QStringLiteral("epubcfi(/4/2/6/1:0)")), {}), -1);
 }
 
 

@@ -232,10 +232,11 @@ public:
     Q_INVOKABLE QString readableFormat(int bookId) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in
     // the book and the highlights made or removed there, as Calibre keeps its
-    // viewer's. False, and nothing kept, while the library cannot be written.
-    bool saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations);
+    // viewer's. The change's id, which changeFinished() tells; 0 for nothing
+    // to keep; -1, and nothing kept, while the library cannot be written.
+    int saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations);
     // The highlights and bookmarks of Calibre's viewer in the book's format,
-    // as last read from the library.
+    // and the Kobos', as last read from the library.
     QList<Annotation> annotations(int bookId, const QString &format) const;
     // Merges readers' highlights into the library's annotations of their
     // users, in one change, or takes all of a user's out. The change's id,

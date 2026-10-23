@@ -1875,18 +1875,18 @@ QString BookLibrary::readableFormat(int bookId) const
     return {};
 }
 
-bool BookLibrary::saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations)
+int BookLibrary::saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations)
 {
     if (!m_writable || !findBook(bookId))
-        return false;
+        return -1;
     CommitEngine::Request request;
     if (position && !position->cfi.isEmpty())
         request.readPositions.append({ bookId, *position });
     for (const Annotation &annotation : annotations)
         request.annotations.append({ bookId, annotation });
     if (request.readPositions.isEmpty() && request.annotations.isEmpty())
-        return true;
-    return queueChange(request).isEmpty();
+        return 0;
+    return queueChange(request).isEmpty() ? m_lastChangeId : -1;
 }
 
 QList<Annotation> BookLibrary::annotations(int bookId, const QString &format) const
@@ -1899,11 +1899,13 @@ QList<Annotation> BookLibrary::annotations(int bookId, const QString &format) co
         || !db.open(cacheFolder(m_libraryPath) + QStringLiteral("/snapshot.db"), SqliteDb::Mode::Immutable, &error))
         return found;
     for (const QVariantList &row :
-         db.rows(QStringLiteral("SELECT annot_type, annot_id, timestamp, annot_data, searchable_text FROM annotations "
-                                "WHERE book=? AND format=? AND user_type='local' AND user='viewer'"),
+         db.rows(QStringLiteral("SELECT annot_type, annot_id, timestamp, annot_data, searchable_text, user_type, user "
+                                "FROM annotations WHERE book=? AND format=? "
+                                "AND ((user_type='local' AND user='viewer') OR user_type='kobo')"),
                  { bookId, format.toUpper() })) {
         found.append({ format.toUpper(), row.value(0).toString(), row.value(1).toString(), row.value(2).toDouble(),
-                       row.value(3).toString().toUtf8(), row.value(4).toString() });
+                       row.value(3).toString().toUtf8(), row.value(4).toString(), row.value(5).toString(),
+                       row.value(6).toString() });
     }
     return found;
 }

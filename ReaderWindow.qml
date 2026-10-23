@@ -378,6 +378,16 @@ ThemedWindow {
                             color: Theme.textMuted
                             font.italic: true
                         }
+
+                        // A Kobo's, made on it.
+                        Label {
+                            Layout.fillWidth: true
+                            visible: mark.modelData.sourceName !== ""
+                            text: mark.modelData.sourceName
+                            color: Theme.textFaint
+                            font.pointSize: Theme.fontPointSizeCaption
+                            elide: Text.ElideRight
+                        }
                     }
                     background: Rectangle {
                         color: mark.hovered ? Theme.hover : "transparent"

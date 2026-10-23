@@ -102,6 +102,7 @@ private slots:
     void readsInCousoir();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
+    void readsKoboHighlights();
     void readsPdfs();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
@@ -1023,6 +1024,81 @@ void LibraryUiTest::placesKoboHighlightsAsTheReader()
                                   20000);
     }
     reader->close();
+#endif
+}
+
+// A Kobo's highlights, once in the library, show in the reader as the
+// Kobo's; removed there, they stay removed when the Kobo syncs again.
+void LibraryUiTest::readsKoboHighlights()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    const int bookId = library()->property("currentBookId").toInt();
+    reader->close();
+    QTemporaryDir kobo;
+    QString error;
+    QVERIFY(makeKobo(kobo.path(), &error));
+    const QString database = QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
+    {
+        SqliteDb db;
+        QVERIFY(db.open(database, SqliteDb::Mode::ReadWrite, &error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-highlights.sql"))), &error),
+                 qPrintable(error));
+    }
+    QQuickItem *page = control("highlightsPage");
+    QVERIFY(page);
+    auto *sync = page->property("sync").value<HighlightSync *>();
+    QSignalSpy synced(sync, &HighlightSync::synced);
+    QCOMPARE(sync->importDatabase(QUrl::fromLocalFile(database)), QString());
+    QVERIFY(synced.wait(15000));
+    waitForSave();
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("counts").toMap().value(QStringLiteral("highlights")).toInt() >= 8, 15000);
+
+    library()->setProperty("currentBookId", bookId);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 8);
+    QVariantMap first;
+    for (const QVariant &highlight : bookReader->property("highlights").toList()) {
+        if (highlight.toMap().value(QStringLiteral("uuid")).toString() == QLatin1String("v1"))
+            first = highlight.toMap();
+    }
+    QCOMPARE(first.value(QStringLiteral("source")).toString(), QStringLiteral("kobo:N418000000000"));
+    QCOMPARE(first.value(QStringLiteral("start")).toString(), QStringLiteral("/2/4/6/1:24"));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("highlightsShown").toInt() == 5,
+                             20000);
+
+    // Removed in the reader, as the Kobo's.
+    reader->setProperty("chosenHighlight", QStringLiteral("v1"));
+    QMetaObject::invokeMethod(reader, "removeChosenHighlight");
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 7);
+    reader->close();
+    waitForSave();
+    const auto removed = [this] {
+        SqliteDb db;
+        QString error;
+        if (!db.open(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error))
+            return false;
+        return QJsonDocument::fromJson(db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE annot_id='v1' "
+                                                                "AND user_type='kobo' AND user='N418000000000'"))
+                                           .toString()
+                                           .toUtf8())
+            .object()
+            .value(QLatin1String("removed"))
+            .toBool();
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(removed(), 15000);
+    // The Kobo synced again: still removed.
+    QCOMPARE(sync->importDatabase(QUrl::fromLocalFile(database)), QString());
+    QTRY_VERIFY_WITH_TIMEOUT(!sync->busy(), 15000);
+    waitForSave();
+    QVERIFY(removed());
 #endif
 }
 
