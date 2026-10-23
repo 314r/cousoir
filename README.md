@@ -61,8 +61,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 🌐 **Metadata and covers from the web.** Calibre's own sources look the
   book up, or Open Library when Calibre isn't installed; pick the fields to
   take beside your values, and a cover among those found. Revert undoes it.
-- 🔄 **Convert with Calibre.** KEPUB for a Kobo, AZW3 for a Kindle, using your
-  Calibre conversion settings.
+- 🔄 **Convert for your reader.** KEPUB for a Kobo, AZW3 for a Kindle, with
+  Calibre and your conversion settings. Without Calibre, Cousoir makes the
+  KEPUB of an EPUB itself.
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
   exactly where Calibre puts them, and each app recognises the books the other
   sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and writes a
@@ -89,7 +90,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   tag, section or action by a few letters.
 - 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
   exactly as `calibredb list` and `calibredb search` do, checks its health,
-  and applies changes from a JSON file.
+  applies changes from a JSON file, and makes KEPUBs.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -155,6 +156,7 @@ Cousoir installs under `~/.local` and appears in your app launcher. Set
 | Ctrl+click, Shift+click, Ctrl+A | Select several books, to act on or edit together |
 | Del | Move the selected books to the trash, or remove a book from the reader |
 | Ctrl+O | Open the book in your ebook reader |
+| Ctrl+Shift+O | Read the book in Cousoir |
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |
@@ -181,8 +183,9 @@ library and keeps working exactly as before.
 - **Checked against Calibre itself.** The tests run Calibre and Cousoir side
   by side on the same libraries and compare every table, every file and every
   cover. `cousoir-cli list` matches `calibredb list` byte for byte.
-- **Calibre does the heavy lifting.** Conversions and transfers to readers run
-  Calibre's own converters and device drivers, with your settings.
+- **Calibre does the heavy lifting.** When Calibre is installed, conversions,
+  transfers to readers and metadata downloads run Calibre's own converters,
+  device drivers and sources, with your settings.
 - **Never in each other's way.** While Calibre is open, Cousoir only reads;
   while Cousoir saves, Calibre can't start.
 
@@ -243,9 +246,14 @@ Python to C++:
   books, formats and the trash;
 - 📖 **the metadata readers** for OPF 2 and 3, EPUB, MOBI, PDF and XMP, and
   the `metadata.opf` writer;
-- 📲 **how books on a Kobo or a Kindle are found** and matched with the
-  library, from Calibre's device drivers. The Kobo driver is the work of
-  Timothy Legge, Kovid Goyal and David Forrester.
+- 🔍 **the search language, the template language and the sort order**, so
+  that a search, a composite column or a sorted list come out as in Calibre;
+- 🖍️ **the reading positions and highlights** of Calibre's viewer, and the
+  notes Calibre keeps on authors, series, tags and publishers;
+- 📲 **how books are sent to a Kobo or a Kindle**, found there and matched
+  with the library, from Calibre's device drivers, and how a KEPUB is made,
+  from its kepubify. The Kobo driver is the work of Timothy Legge, Kovid
+  Goyal and David Forrester.
 
 And when Cousoir converts a book or sends it to a reader, Calibre itself does
 the work. [CREDITS.md](CREDITS.md) lists every piece of Calibre in Cousoir,
@@ -258,12 +266,14 @@ If Cousoir is useful to you, please
 > Calibre project. Please report Cousoir's bugs here, not to Calibre.
 
 Thanks also to Hiroshi Miura and John Schember for Unihandecode, and to Sean
-M. Burke for Text::Unidecode, which it grew from; to
+M. Burke for Text::Unidecode, which it grew from; to Grant Drake, whose Find
+Duplicates plugin gave the Check section its idea; to
 [kbextract](https://github.com/314r/kbextract) and JolieBulle, where Cousoir's
 structure, theming and Settings window come from; to bjarneo's
 [omadji](https://github.com/bjarneo/omadji), where its Omarchy theming comes
 from; to [Omarchy](https://omarchy.org) for the look; to [Lucide](https://lucide.dev)
-for a few icons; and to Qt, SQLite, libzip, libmtp and poppler.
+for a few icons; and to Qt, SQLite, libzip, ICU, Snowball, xxHash, libmtp and
+poppler.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 

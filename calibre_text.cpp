@@ -5,7 +5,7 @@
 // - src/calibre/ebooks/metadata/__init__.py: title_sort(),
 //   get_title_sort_pat(), quote_pairs, author_to_author_sort(),
 //   remove_bracketed_text(), string_to_authors(), authors_to_string(),
-//   check_isbn() and check_doi()
+//   check_isbn(), check_doi() and fmt_sidx()
 // - resources/default_tweaks.py: the title sort articles and the author sort
 //   word lists
 // - src/calibre/__init__.py: sanitize_file_name()

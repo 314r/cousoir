@@ -1245,3 +1245,18 @@ across files:
   title; the command line's help left out `kepubify` and Kindles.
 - Not changed, noted: a date search takes ISO and numeric dates only, where
   Calibre's `parse_date()` reads "apr 2015" too.
+
+### 2026-10-23 — README and CREDITS brought up to date (`exp-credits`)
+
+- CREDITS: `fmt_sidx()` now credited to `calibre_text.cpp`, where the
+  cleanup moved it, and `format_abspath()` only to `calibre_db.cpp`; the
+  bulk edit's port (`book_edit.cpp`), never listed, has its row; a few
+  functions the files' headers name were missing from their rows. Calibre
+  at run time also downloads metadata and names languages. The headers of
+  `opf.cpp`, `book_list_model.cpp` and `calibre_text.cpp` follow the move.
+- README: converting to KEPUB and the native sends work without Calibre,
+  Calibre's converters, drivers and sources run when it is installed;
+  Ctrl+Shift+O, reading in Cousoir, is in the shortcuts (and DOC.md's);
+  Built on Calibre names the search, template and sort ports, the viewer's
+  positions and highlights, the notes, kepubify and the sends; ICU,
+  Snowball, xxHash and Grant Drake's Find Duplicates are thanked.

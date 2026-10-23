@@ -2,7 +2,7 @@
 //
 // Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
 // GPL v3:
-// - src/calibre/ebooks/metadata/__init__.py: fmt_sidx() and rating_to_stars()
+// - src/calibre/ebooks/metadata/__init__.py: rating_to_stars()
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
