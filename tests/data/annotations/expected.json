@@ -43,6 +43,15 @@
     "a2"
    ],
    [
+    8,
+    2,
+    "EPUB",
+    "kobo",
+    "N418000000000",
+    "The Annals are the memory of the Company.",
+    "k1"
+   ],
+   [
     7,
     2,
     "EPUB",
@@ -61,7 +70,7 @@
     "b1"
    ],
    [
-    8,
+    9,
     4,
     "EPUB",
     "local",
@@ -133,7 +142,7 @@
   },
   "results": [
    [
-    8,
+    9,
     4,
     "EPUB",
     "local",
@@ -160,7 +169,7 @@
   },
   "results": [
    [
-    8,
+    9,
     4,
     "EPUB",
     "local",
@@ -240,5 +249,138 @@
    "type": "highlight"
   },
   "results": []
+ },
+ {
+  "query": {
+   "text": "",
+   "stemming": true,
+   "type": "",
+   "user": [
+    "kobo",
+    "N418000000000"
+   ]
+  },
+  "results": [
+   [
+    8,
+    2,
+    "EPUB",
+    "kobo",
+    "N418000000000",
+    "The Annals are the memory of the Company.",
+    "k1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "",
+   "stemming": true,
+   "type": "highlight",
+   "user": [
+    "local",
+    "viewer"
+   ]
+  },
+  "results": [
+   [
+    4,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Les nénuphars poussaient dans la poitrine.",
+    "a3"
+   ],
+   [
+    2,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "L'amour est une chose qui ne se décrit pas.",
+    "a1"
+   ],
+   [
+    3,
+    1,
+    "EPUB",
+    "local",
+    "viewer",
+    "Colin aimait la musique de Duke Ellington.",
+    "a2"
+   ],
+   [
+    7,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "Soldiers live. And wonder why.",
+    "b2"
+   ],
+   [
+    6,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "The Company is reading the Annals by the fire.",
+    "b1"
+   ],
+   [
+    9,
+    4,
+    "EPUB",
+    "local",
+    "viewer",
+    "Reading books about the end of the world was his favourite pastime.",
+    "c1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "annals",
+   "stemming": true,
+   "type": "",
+   "user": [
+    "kobo",
+    "N418000000000"
+   ]
+  },
+  "results": [
+   [
+    8,
+    2,
+    "EPUB",
+    "kobo",
+    "N418000000000",
+    "The \u001dAnnals\u001d are the memory of the Company.\n\u001f\nRead on the Kobo.",
+    "k1"
+   ]
+  ]
+ },
+ {
+  "query": {
+   "text": "annals",
+   "stemming": true,
+   "type": "",
+   "user": [
+    "local",
+    "viewer"
+   ]
+  },
+  "results": [
+   [
+    6,
+    2,
+    "EPUB",
+    "local",
+    "viewer",
+    "The Company is reading the \u001dAnnals\u001d by the fire.\n\u001f\nCroaker writes everything down.",
+    "b1"
+   ]
+  ]
  }
 ]

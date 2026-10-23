@@ -1636,6 +1636,8 @@ void BookLibraryTest::syncsKoboHighlights()
     QTRY_VERIFY_WITH_TIMEOUT(!devices.loading(), 15000);
     QTest::qWait(300);
     QCOMPARE(rows(), QStringList());
+    // The Kobo kept for later tests no more.
+    QVERIFY(QDir(CousoirPaths::koboFolder()).removeRecursively());
 }
 
 
