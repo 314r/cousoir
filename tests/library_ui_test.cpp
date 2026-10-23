@@ -28,6 +28,7 @@
 #include "epub_book.h"
 #include "epub_cfi.h"
 #include "highlight_browser.h"
+#include "highlight_sync.h"
 #include "kobo_highlights.h"
 #include "kobo_placement.h"
 #ifdef COUSOIR_READER
@@ -174,6 +175,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+    qmlRegisterType<HighlightSync>("Cousoir", 1, 0, "HighlightSync");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif

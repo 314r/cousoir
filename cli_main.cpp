@@ -36,6 +36,7 @@
 #include "kobo.h"
 #include "kobo_highlights.h"
 #include "kobo_placement.h"
+#include "kobo_sync.h"
 #include "kobo_send.h"
 #include "sqlite_db.h"
 #include "library_check.h"
@@ -576,15 +577,11 @@ int device(const QString &libraryPath, const QString &spec)
     return 0;
 }
 
-// The highlights and notes of a Kobo, by the folder it is mounted on, or of
-// a Kobo's database file: each book, the library's book it is, and each
-// highlight as the Kobo keeps it and where it is in the library's copy.
-// Neither is written.
-int koboHighlights(const QString &libraryPath, const QString &spec)
+// A Kobo's highlights and notes, by the folder it is mounted on, all of
+// them, or of a Kobo's database file, which may be old: whose they are, its
+// serial number, else a name.
+bool readKobo(const QString &spec, KoboHighlights::Snapshot *snapshot)
 {
-    LibraryData data;
-    if (!load(libraryPath, &data))
-        return 1;
     const bool folder = QFileInfo(spec).isDir();
     const QString database = folder ? QDir(spec).filePath(QStringLiteral(".kobo/KoboReader.sqlite")) : spec;
     SqliteDb db;
@@ -592,23 +589,41 @@ int koboHighlights(const QString &libraryPath, const QString &spec)
     QString error;
     if (!QFileInfo(database).isFile()) {
         err() << QStringLiteral("No Kobo database at %1.").arg(database) << Qt::endl;
-        return 1;
+        return false;
     }
     if (!Kobo::openDatabase(database, &db, &copy, &error)) {
         err() << error << Qt::endl;
-        return 1;
+        return false;
     }
-    QList<KoboHighlights::Book> books = KoboHighlights::read(db, &error);
+    snapshot->books = KoboHighlights::read(db, &error);
     if (!error.isEmpty()) {
         err() << error << Qt::endl;
-        return 1;
+        return false;
     }
-    KoboHighlights::Identity identity = KoboHighlights::identify(database);
+    const KoboHighlights::Identity identity = KoboHighlights::identify(database);
+    snapshot->name = identity.name;
+    snapshot->source = folder ? QStringLiteral("usb") : QStringLiteral("file");
+    snapshot->seen = QDateTime::currentDateTimeUtc();
     if (folder) {
         const Kobo::Device kobo = Kobo::describe(spec, {});
-        KoboHighlights::attach(&books, Kobo::books(kobo, &error));
-        identity.name = kobo.name;
+        KoboHighlights::attach(&snapshot->books, Kobo::books(kobo, &error));
+        snapshot->name = kobo.name;
     }
+    snapshot->device = identity.serial.isEmpty() ? snapshot->name : identity.serial;
+    return true;
+}
+
+// The highlights and notes of a Kobo, by the folder it is mounted on, or of
+// a Kobo's database file: each book, the library's book it is, and each
+// highlight as the Kobo keeps it and where it is in the library's copy.
+// Neither is written.
+int koboHighlights(const QString &libraryPath, const QString &spec)
+{
+    LibraryData data;
+    KoboHighlights::Snapshot snapshot;
+    if (!load(libraryPath, &data) || !readKobo(spec, &snapshot))
+        return 1;
+    const QList<KoboHighlights::Book> &books = snapshot.books;
     const QList<int> ids = KoboHighlights::match(books, data);
     QJsonArray list = KoboHighlights::toJson(books);
     QHash<QString, int> counts;
@@ -659,8 +674,8 @@ int koboHighlights(const QString &libraryPath, const QString &spec)
     for (const QString &key : { QStringLiteral("spans"), QStringLiteral("text"), QStringLiteral("book"), QStringLiteral("none"),
                                 QStringLiteral("not_in_library") })
         summary.insert(key, counts.value(key));
-    out() << QJsonDocument(QJsonObject{ { QStringLiteral("serial"), identity.serial },
-                                         { QStringLiteral("name"), identity.name },
+    out() << QJsonDocument(QJsonObject{ { QStringLiteral("device"), snapshot.device },
+                                         { QStringLiteral("name"), snapshot.name },
                                          { QStringLiteral("summary"), summary },
                                          { QStringLiteral("books"), list } })
                  .toJson();
@@ -886,6 +901,11 @@ int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine
 //                                               removes it
 //   { "send": { "books": [1, 2], "device": "/run/media/…/KOBOeReader" } }
 //   { "removeFromDevice": { "device": …, "lpaths": ["Vian, Boris/…"] } }
+//   { "syncHighlights": { "device": "/run/media/…/KOBOeReader" } }   a
+//                                               Kobo's highlights merged
+//                                               into the library's, as its
+//                                               own user's; a database file
+//                                               adds and updates only
 // A device is a Kobo's folder, "mtp" or "mtp:SERIAL" for a Kindle, or
 // "mtpdir:FOLDER" for a folder that stands for one.
 // Files are relative to the JSON file. Edits apply first, then the other
@@ -921,6 +941,17 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             continue;
         }
         libraryChanges = true;
+        if (op.contains(QLatin1String("syncHighlights"))) {
+            KoboSync::Input input;
+            if (!readKobo(deviceSpec(base, op.value(QLatin1String("syncHighlights")).toObject().value(QLatin1String("device")).toString()),
+                          &input.snapshot)
+                || !load(libraryPath, &input.data))
+                return 1;
+            // The library's own database read as it is, nothing kept aside.
+            input.snapshotDb = QDir(libraryPath).filePath(QStringLiteral("metadata.db"));
+            request.deviceAnnotations += KoboSync::plan(input).changes;
+            continue;
+        }
         if (op.contains(QLatin1String("copyFormats"))) {
             const QJsonObject copy = op.value(QLatin1String("copyFormats")).toObject();
             request.formatCopies.append({ copy.value(QLatin1String("from")).toInt(), copy.value(QLatin1String("to")).toInt() });

@@ -4,12 +4,14 @@
 #include <QCryptographicHash>
 #include <QDirIterator>
 #include <QImage>
+#include <QJsonDocument>
 #include <QTemporaryDir>
 
 #include "calibre_db.h"
 #include "calibre_lock.h"
 #include "commit_engine.h"
 #include "field_writers.h"
+#include "highlight_json.h"
 #include "file_transaction.h"
 #include "opf_reader.h"
 #include "python_json.h"
@@ -86,6 +88,7 @@ private slots:
     void undoesFailedOperations();
     void copiesFormatsBeforeTrash();
     void recoversInterruptedCopy();
+    void mergesReaderHighlights();
 
 private:
     CommitEngine::Result commit(const QList<BookEdit> &edits);
@@ -702,6 +705,111 @@ void CommitEngineTest::recoversInterruptedCopy()
     QString error;
     QVERIFY2(CommitEngine::recover(m_library, m_cache, &done, &error), qPrintable(error));
     QCOMPARE(tree(m_library), before);
+}
+
+namespace {
+
+// A Kobo's highlight of book 1, or its removal.
+Annotation koboHighlight(const QString &id, double timestamp, const QString &text, bool removed = false)
+{
+    const QString iso = HighlightJson::isoTimestamp(QDateTime::fromSecsSinceEpoch(qint64(timestamp), QTimeZone::UTC));
+    const QJsonObject data = removed ? HighlightJson::removed(id, iso)
+                                     : HighlightJson::highlight(id, iso, text, QStringLiteral("/2/4/2/1:0"),
+                                                                QStringLiteral("/2/4/2/1:4"), QStringLiteral("yellow"),
+                                                                QStringLiteral("text/part1.xhtml"), 1, {});
+    return { QStringLiteral("EPUB"), QStringLiteral("highlight"), id, timestamp, QJsonDocument(data).toJson(QJsonDocument::Compact),
+             removed ? QString() : HighlightJson::searchableText(data), QStringLiteral("kobo"), QStringLiteral("N418000000000") };
+}
+
+DeviceAnnotations koboSet(const QList<Annotation> &annotations, const std::optional<QStringList> &present = std::nullopt)
+{
+    return { 1, QStringLiteral("EPUB"), QStringLiteral("kobo"), QStringLiteral("N418000000000"), annotations, present };
+}
+
+} // namespace
+
+// A Kobo's highlights merged into the library's of its own user, beside the
+// viewer's: new ones in, changes since in, removals as removals, and what
+// the library changed or removed since kept.
+void CommitEngineTest::mergesReaderHighlights()
+{
+    const auto rows = [this] {
+        SqliteDb db;
+        QString error;
+        QStringList found;
+        if (!db.open(QDir(m_library).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::Immutable, &error))
+            return QStringList{ error };
+        for (const QVariantList &row : db.rows(QStringLiteral("SELECT user_type, annot_id, timestamp, annot_data FROM annotations "
+                                                              "WHERE book=1 ORDER BY user_type, annot_id"))) {
+            const QJsonObject data = QJsonDocument::fromJson(row.value(3).toString().toUtf8()).object();
+            found.append(QStringLiteral("%1 %2 %3 %4")
+                             .arg(row.value(0).toString(), row.value(1).toString())
+                             .arg(row.value(2).toDouble())
+                             .arg(data.value(QLatin1String("removed")).toBool() ? QStringLiteral("removed")
+                                                                                 : data.value(QLatin1String("highlighted_text")).toString()));
+        }
+        return found;
+    };
+    CommitEngine::Request first;
+    Annotation viewer = koboHighlight(QStringLiteral("v"), 50, QStringLiteral("mine"));
+    viewer.userType = QStringLiteral("local");
+    viewer.user = QStringLiteral("viewer");
+    first.annotations = { { 1, viewer } };
+    // A highlight removed before it ever came stays out.
+    first.deviceAnnotations = { koboSet({ koboHighlight(QStringLiteral("a1"), 100, QStringLiteral("harbour lights")),
+                                          koboHighlight(QStringLiteral("a2"), 100, QStringLiteral("second")),
+                                          koboHighlight(QStringLiteral("a3"), 100, {}, true),
+                                          koboHighlight(QStringLiteral("a4"), 100, QStringLiteral("fourth")) }) };
+    CommitEngine::Result result = commit(first);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    QCOMPARE(rows(), (QStringList{ QStringLiteral("kobo a1 100 harbour lights"), QStringLiteral("kobo a2 100 second"),
+                                   QStringLiteral("kobo a4 100 fourth"), QStringLiteral("local v 50 mine") }));
+    // Found by Calibre's search, its book's metadata.opf to write again.
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM annotations_fts WHERE annotations_fts MATCH 'harbour'")).toInt(), 1);
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM annotations_dirtied WHERE book=1")).toInt(), 1);
+
+    // The same again: nothing written, the library as it was.
+    const QStringList before = tree(m_library);
+    CommitEngine::Request again;
+    again.deviceAnnotations = first.deviceAnnotations;
+    result = commit(again);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    QCOMPARE(tree(m_library), before);
+
+    // Changed on the Kobo since, removed there, and gone from all it has.
+    CommitEngine::Request changes;
+    changes.deviceAnnotations = { koboSet({ koboHighlight(QStringLiteral("a1"), 200, QStringLiteral("harbour lights, changed")),
+                                            koboHighlight(QStringLiteral("a2"), 200, {}, true) },
+                                          QStringList{ QStringLiteral("a1") }) };
+    result = commit(changes);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    const double now = double(m_now.toSecsSinceEpoch()) + 0.25;
+    QCOMPARE(rows(), (QStringList{ QStringLiteral("kobo a1 200 harbour lights, changed"), QStringLiteral("kobo a2 200 removed"),
+                                   QStringLiteral("kobo a4 %1 removed").arg(now), QStringLiteral("local v 50 mine") }));
+
+    // Removed in the library, and changed there since: kept so.
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY(db.open(QDir(m_library).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error));
+        CalibreDb::prepareConnection(db, CalibreText::Tweaks::defaults(), QStringLiteral("fr"), &error);
+        QVERIFY2(db.run(QStringLiteral("UPDATE annotations SET timestamp=500 WHERE annot_id='a1'"), {}, &error), qPrintable(error));
+    }
+    CommitEngine::Request stale;
+    stale.deviceAnnotations = { koboSet({ koboHighlight(QStringLiteral("a1"), 300, QStringLiteral("older words")),
+                                          koboHighlight(QStringLiteral("a2"), 300, QStringLiteral("second, back")) }) };
+    result = commit(stale);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    QCOMPARE(rows(), (QStringList{ QStringLiteral("kobo a1 500 harbour lights, changed"), QStringLiteral("kobo a2 200 removed"),
+                                   QStringLiteral("kobo a4 %1 removed").arg(now), QStringLiteral("local v 50 mine") }));
+
+    // All the Kobo's taken out; the viewer's stay.
+    CommitEngine::Request removal;
+    removal.removedAnnotationUsers = { { QStringLiteral("kobo"), QStringLiteral("N418000000000") } };
+    result = commit(removal);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    QCOMPARE(rows(), QStringList{ QStringLiteral("local v 50 mine") });
+    QCOMPARE(value(QStringLiteral("SELECT count(*) FROM annotations_fts WHERE annotations_fts MATCH 'harbour'")).toInt(), 0);
 }
 
 QTEST_GUILESS_MAIN(CommitEngineTest)

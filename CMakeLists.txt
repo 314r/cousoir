@@ -170,6 +170,8 @@ qt_add_library(cousoir_core STATIC
     kobo_highlights.h
     kobo_placement.cpp
     kobo_placement.h
+    kobo_sync.cpp
+    kobo_sync.h
     xml_tree.cpp
     xml_tree.h
 )
@@ -200,6 +202,8 @@ qt_add_library(cousoir_models STATIC
     device_library.h
     highlight_browser.cpp
     highlight_browser.h
+    highlight_sync.cpp
+    highlight_sync.h
     metadata_downloader.cpp
     metadata_downloader.h
     omarchy_theme.cpp

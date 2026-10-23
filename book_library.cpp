@@ -319,7 +319,7 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_findings = {};
     m_checkedAt = {};
     // The changes waiting are the other library's, as was its backup.
-    m_pending.clear();
+    dropPending(tr("Another library is open."));
     m_importedBooks.clear();
     m_importedDuplicates.clear();
     m_backedUp = false;
@@ -1852,6 +1852,7 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
         m_pending.last().edits.append(edit);
     } else {
         CommitEngine::Request request;
+        request.id = ++m_lastChangeId;
         request.edits.append(edit);
         m_pending.append(request);
     }
@@ -1912,9 +1913,31 @@ QString BookLibrary::queueChange(const CommitEngine::Request &change)
     if (!m_writable)
         return tr("The library cannot be changed right now.");
     m_pending.append(change);
+    m_pending.last().id = ++m_lastChangeId;
     emit savingChanged();
     startCommit();
     return {};
+}
+
+int BookLibrary::saveDeviceAnnotations(const QList<DeviceAnnotations> &changes)
+{
+    CommitEngine::Request request;
+    request.deviceAnnotations = changes;
+    return queueChange(request).isEmpty() ? m_lastChangeId : -1;
+}
+
+int BookLibrary::removeAnnotationUser(const QString &userType, const QString &user)
+{
+    CommitEngine::Request request;
+    request.removedAnnotationUsers.append({ userType, user });
+    return queueChange(request).isEmpty() ? m_lastChangeId : -1;
+}
+
+void BookLibrary::dropPending(const QString &error)
+{
+    const QList<CommitEngine::Request> dropped = std::exchange(m_pending, {});
+    for (const CommitEngine::Request &request : dropped)
+        emit changeFinished(request.id, false, error);
 }
 
 void BookLibrary::startCommit()
@@ -1923,7 +1946,7 @@ void BookLibrary::startCommit()
     if (m_commitWatcher.isRunning() || m_loadWatcher.isRunning() || m_pending.isEmpty())
         return;
     if (!m_writable) {
-        m_pending.clear();
+        dropPending(tr("The library cannot be changed right now."));
         emit savingChanged();
         emit saveFailed(tr("The library cannot be changed right now."));
         return;
@@ -1939,7 +1962,7 @@ void BookLibrary::startCommit()
     request.producerId = QStringLiteral("cousoir");
     const QStringList sortFields = this->sortFields();
     m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
-        CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits };
+        CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits, request.id };
         if (committed.result.ok && committed.result.written)
             committed.index = indexBooks(committed.result.data, request.config, sortFields);
         return committed;
@@ -1965,7 +1988,8 @@ void BookLibrary::finishCommit()
     if (!result.ok) {
         // What follows was made on what failed; the library shows what it
         // holds.
-        m_pending.clear();
+        emit changeFinished(committed.id, false, result.error);
+        dropPending(result.error);
         m_bulkUndo.clear();
         emit bulkUndoChanged();
         emit saveFailed(result.error);
@@ -1984,6 +2008,7 @@ void BookLibrary::finishCommit()
             emit publishedKeyChanged();
         }
         emit saved();
+        emit changeFinished(committed.id, true, {});
         if (!result.added.isEmpty()) {
             QVariantList added;
             for (const int id : result.added)

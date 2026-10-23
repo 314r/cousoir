@@ -27,6 +27,8 @@ namespace CommitEngine {
 
 struct Request
 {
+    // Which change it is, for whoever queued it.
+    int id = 0;
     QString libraryPath;
     // Cousoir's folder for the library in the user's cache: the copy being
     // edited, the journal, the snapshot the library is read from.
@@ -55,6 +57,10 @@ struct Request
     // And where a reader stopped in books, and highlights made there.
     QList<QPair<int, ReadPosition>> readPositions;
     QList<QPair<int, Annotation>> annotations;
+    // Then a reader's highlights merged into the library's of its user, and
+    // the users whose annotations all go.
+    QList<DeviceAnnotations> deviceAnnotations;
+    QList<QPair<QString, QString>> removedAnnotationUsers;
     // Notes on items, written first, in the library's notes.db.
     QList<CalibreNotes::Change> notes;
     // The software writing the metadata.opf files: name and version, and the
@@ -68,12 +74,13 @@ struct Request
     std::function<void()> beforePublish;
 
     // Whether it does more than edit books: any of the changes after the
-    // edits.
-    bool hasOperations() const
+    // edits; with `merges`, a reader's highlights too, which may change
+    // nothing.
+    bool hasOperations(bool merges = true) const
     {
         return !formatCopies.isEmpty() || !formatRemovals.isEmpty() || !trash.isEmpty() || !restorations.isEmpty()
             || !newBooks.isEmpty() || !newFormats.isEmpty() || !conversionOptions.isEmpty() || !readPositions.isEmpty()
-            || !annotations.isEmpty();
+            || !annotations.isEmpty() || (merges && (!deviceAnnotations.isEmpty() || !removedAnnotationUsers.isEmpty()));
     }
 };
 

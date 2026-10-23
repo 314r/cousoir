@@ -563,6 +563,48 @@ JSON
 
 notes
 
+# A Kobo's highlights of The Voyage, synced into a copy of the library by
+# cousoir-cli: Calibre lists, searches and changes them, and a second sync
+# leaves what it changed.
+kobo_highlights() {
+    local library="$work/highlights-library" kobo="$work/highlights-kobo"
+    rm -rf "$library" "$kobo"
+    cp -a --reflink=auto "$root/tests/data/library" "$library"
+    mkdir -p "$kobo/.kobo"
+    printf 'N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390' > "$kobo/.kobo/version"
+    "$tool" run-sql "$kobo/.kobo/KoboReader.sqlite" "$root/tests/data/kobo.sql"
+    "$tool" run-sql "$kobo/.kobo/KoboReader.sqlite" "$root/tests/data/kobo-highlights.sql"
+    cp "$root/tests/data/reader/voyage.epub" "$work/voyage.epub"
+    printf '[{"add": "voyage.epub"}]' > "$work/highlights-add.json"
+    printf '[{"syncHighlights": {"device": "highlights-kobo"}}]' > "$work/highlights-sync.json"
+    if ! "$cli" apply --force --library "$library" "$work/highlights-add.json" > "$work/highlights.log" 2>&1 \
+        || ! "$cli" apply --force --library "$library" "$work/highlights-sync.json" >> "$work/highlights.log" 2>&1; then
+        echo "highlights: cousoir-cli apply failed:"
+        tail -5 "$work/highlights.log"
+        status=1
+        return 0
+    fi
+    if ! oracle "$root/tools/oracle/kobo_highlights_check.py" -- "$library" synced > "$work/highlights-check.txt"; then
+        echo "highlights: Calibre and Cousoir's Kobo highlights differ:"
+        cat "$work/highlights-check.txt"
+        return 0
+    fi
+    if ! "$cli" apply --force --library "$library" "$work/highlights-sync.json" >> "$work/highlights.log" 2>&1; then
+        echo "highlights: cousoir-cli apply failed the second time:"
+        tail -5 "$work/highlights.log"
+        status=1
+        return 0
+    fi
+    if oracle "$root/tools/oracle/kobo_highlights_check.py" -- "$library" again > "$work/highlights-check.txt"; then
+        echo "highlights: Calibre reads, searches and changes the Kobo's highlights Cousoir put in, which keeps its changes"
+    else
+        echo "highlights: a second sync undid Calibre's changes:"
+        cat "$work/highlights-check.txt"
+        status=1
+    fi
+}
+kobo_highlights
+
 # What a Kobo knows of the reading of its books, read by Calibre's Kobo
 # Bookmark (tools/oracle/kobo_reading.py) and by `cousoir-cli device`, on a
 # fake Kobo whose database has books read, finished and bought, with

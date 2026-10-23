@@ -123,9 +123,22 @@ bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QStr
 // save_last_read_position_to_cursor() of Calibre's backend: a reader's
 // position in the book, in place of the one it had.
 bool setReadPosition(SqliteDb &db, int bookId, const ReadPosition &position, QString *error);
-// save_annotations_for_book() of Calibre's backend, for one annotation of
-// its viewer: in place of the one of the same id.
+// save_annotations_for_book() of Calibre's backend, for one annotation: in
+// place of the one of the same id, format and user.
 bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QString *error);
+
+// What merging a reader's highlights of a book into `rows`, the library's of
+// its user, writes, as Calibre's merge_annotations_for_book() merges by id,
+// the newest winning: one new; one changed on the reader since; one removed
+// there, or gone from all it says it has, removed. A highlight removed in
+// the library stays removed, and one changed in it since stays as it is.
+QList<Annotation> mergeSteps(const QList<Annotation> &rows, const DeviceAnnotations &set, double now);
+// Reads the library's rows of the reader's user and writes what merging
+// takes; `changed` counts the rows written.
+bool mergeDeviceAnnotations(SqliteDb &db, const DeviceAnnotations &set, double now, int *changed, QString *error);
+// The annotations of a user, all deleted, as a reader's highlights are taken
+// out of the library; `changed` counts them.
+bool removeAnnotationUser(SqliteDb &db, const QString &userType, const QString &user, int *changed, QString *error);
 
 // update_path() of backend.py for one book: its folder and files follow its
 // title and first author, in the database and on disk.

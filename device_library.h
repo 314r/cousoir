@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "kobo.h"
+#include "kobo_highlights.h"
 #include "reading_log.h"
 
 class BookLibrary;
@@ -158,6 +159,8 @@ signals:
     void sent(const QStringList &titles, const QString &deviceName);
     void ejected(const QString &deviceName);
     void failed(const QString &message);
+    // A Kobo read: all its highlights and notes, and its books'.
+    void koboHighlightsRead(const KoboHighlights::Snapshot &snapshot);
 
 private:
     enum class Kind { Kobo, Kindle };

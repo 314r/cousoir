@@ -9,6 +9,8 @@
 #include <QStringList>
 #include <QVariant>
 
+#include <optional>
+
 // One file of a book, from Calibre's data table.
 struct BookFormat
 {
@@ -143,8 +145,9 @@ struct ReadPosition
     double fraction = 0;
 };
 
-// A highlight or bookmark of Calibre's viewer, a row of its annotations
-// table: user type "local", user "viewer".
+// A highlight or bookmark, a row of Calibre's annotations table: its
+// viewer's, user type "local", user "viewer", or a reader's, whose user it
+// is.
 struct Annotation
 {
     QString format;
@@ -157,6 +160,23 @@ struct Annotation
     QByteArray data;
     // The text a search finds it by.
     QString searchable;
+    QString userType = QStringLiteral("local");
+    QString user = QStringLiteral("viewer");
+};
+
+// What a reader has of a book's highlights now, to merge into the library's
+// annotations of its user: those it has, placed, and those it removed as
+// Calibre keeps a highlight removed.
+struct DeviceAnnotations
+{
+    int bookId = 0;
+    QString format;
+    QString userType;
+    QString user;
+    QList<Annotation> annotations;
+    // When it says all it has: the ids of its highlights; the library's
+    // others of its user for the book are removed.
+    std::optional<QStringList> present;
 };
 
 // A note of Calibre 7 on an item, an author, series, tag or publisher, as
