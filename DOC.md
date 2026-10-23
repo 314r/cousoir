@@ -951,6 +951,7 @@ columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 | Ctrl+D | Send the book, or the selected one, to the reader plugged in |
 | Del | Move the selected books to the trash, or remove a book from the reader |
 | Ctrl+O | Open the book, or the selected one, in the reader |
+| Ctrl+Shift+O | Read the book, or the selected one, in Cousoir |
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |

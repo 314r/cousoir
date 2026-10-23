@@ -4,7 +4,6 @@
 // GPL v3:
 // - src/calibre/ebooks/metadata/opf2.py: metadata_to_opf(),
 //   serialize_user_metadata()
-// - src/calibre/ebooks/metadata/__init__.py: fmt_sidx()
 // - src/calibre/ebooks/metadata/book/json_codec.py: encode_is_multiple()
 // - src/calibre/library/field_metadata.py: add_custom_field()
 //
