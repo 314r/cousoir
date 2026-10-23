@@ -4,6 +4,7 @@
 #include <QDirIterator>
 #include <QTemporaryDir>
 
+#include "calibre_languages.h"
 #include "calibre_db.h"
 #include "calibre_list.h"
 #include "sqlite_db.h"
@@ -30,13 +31,6 @@ QStringList tree(const QString &folder)
     return entries;
 }
 
-CalibreConfig frenchConfig()
-{
-    CalibreConfig config;
-    config.interfaceLanguage = QStringLiteral("fr");
-    return config;
-}
-
 } // namespace
 
 class CalibreDbTest : public QObject
@@ -44,6 +38,7 @@ class CalibreDbTest : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void listsLikeCalibredb();
     void readsBooks();
     void readsBrowseItems();
@@ -71,6 +66,13 @@ bool CalibreDbTest::load(LibraryData *data, const QString &library)
     if (!ok)
         qWarning() << error;
     return ok;
+}
+
+void CalibreDbTest::initTestCase()
+{
+    // Calibre's names of languages from a part of its resources, whatever
+    // Calibre is installed.
+    CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
 }
 
 void CalibreDbTest::listsLikeCalibredb()
@@ -159,7 +161,7 @@ void CalibreDbTest::readsBrowseItems()
     QCOMPARE(data.languages.size(), 2);
     for (const FacetItem &language : data.languages) {
         if (language.sort == QLatin1String("fra")) {
-            QCOMPARE(language.name, QStringLiteral("French"));
+            QCOMPARE(language.name, QStringLiteral("Français"));
             QCOMPARE(language.count, 3);
         }
     }

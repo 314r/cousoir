@@ -1,0 +1,109 @@
+{
+    "books": [
+        {
+            "title": "The Black Company",
+            "authors": [
+                "Glen Cook"
+            ],
+            "author_sort": "",
+            "publisher": "Tor Fantasy",
+            "pubdate": "1984-05-01",
+            "series": "The Chronicles of the Black Company",
+            "series_index": 1.0,
+            "tags": [
+                "Fantasy",
+                "Dark fantasy",
+                "fiction"
+            ],
+            "rating": 4.3,
+            "comments": "<p>Mercenaries in a <b>dark</b> war.</p>",
+            "languages": [
+                "eng"
+            ],
+            "identifiers": [
+                [
+                    "google",
+                    "xE4_AAAA"
+                ],
+                [
+                    "isbn",
+                    "9780812521399"
+                ]
+            ],
+            "has_cover": true
+        },
+        {
+            "title": "Shadows Linger: A Novel of the Black Company",
+            "authors": [
+                "Glen Cook",
+                "Anne Other Writer"
+            ],
+            "author_sort": "",
+            "publisher": "",
+            "pubdate": null,
+            "series": "",
+            "series_index": null,
+            "tags": [],
+            "rating": null,
+            "comments": "Plain text & summary.\nWith a line.\n\nSecond paragraph.",
+            "languages": [
+                "fra"
+            ],
+            "identifiers": [],
+            "has_cover": false
+        },
+        {
+            "title": "L'\u00c9cume des jours",
+            "authors": [
+                "Boris Vian"
+            ],
+            "author_sort": "",
+            "publisher": "Le Livre de Poche",
+            "pubdate": null,
+            "series": "",
+            "series_index": null,
+            "tags": [
+                "roman",
+                "Litt\u00e9rature fran\u00e7aise"
+            ],
+            "rating": 5.0,
+            "comments": "",
+            "languages": [
+                "fra"
+            ],
+            "identifiers": [
+                [
+                    "amazon_fr",
+                    "2253140872"
+                ],
+                [
+                    "isbn",
+                    "9782253140870"
+                ]
+            ],
+            "has_cover": true
+        },
+        {
+            "title": "Good Omens: The Nice and Accurate Prophecies of Agnes Nutter, Witch",
+            "authors": [
+                "Terry Pratchett",
+                "Neil Gaiman"
+            ],
+            "author_sort": "",
+            "publisher": "",
+            "pubdate": null,
+            "series": "",
+            "series_index": null,
+            "tags": [],
+            "rating": 4.75,
+            "comments": "<div><p>Armageddon, <i>again</i>.</p></div>",
+            "languages": [
+                "fra"
+            ],
+            "identifiers": [],
+            "has_cover": false
+        }
+    ],
+    "ignore_fields": [],
+    "append_comments": false
+}

@@ -9,6 +9,7 @@
 #include "kobo.h"
 #include "send_job.h"
 
+struct Book;
 struct LibraryData;
 
 // Sending books to a Kobo as Calibre 9.16's "Send to device" does: the
@@ -44,6 +45,30 @@ struct Outcome
     // sends covers itself.
     bool clearCovers = true;
 };
+
+// What Cousoir follows of Calibre's KoboTouch settings when it sends without
+// Calibre: device_drivers_KOBOTOUCH.py.json, else Calibre's defaults.
+struct DriverSettings
+{
+    QString saveTemplate = QStringLiteral("{author_sort}/{title} - {authors}");
+    bool kepubify = true;
+    bool useSubdirs = true;
+};
+DriverSettings driverSettings(const QString &configDirectory);
+
+// The send without Calibre: writes into `folder` what Calibre's job would
+// leave there, the books as KoboTouch puts them, an EPUB as a KEPUB with the
+// library's metadata and cover, at the driver's save template, and
+// metadata.calibre and driveinfo.calibre with them, then its result, which
+// outcome() reads and apply() puts on the Kobo.
+bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, const Kobo::Device &device,
+                     const QStringList &formatMap, const QString &configDirectory, const QString &interfaceLanguage,
+                     const QString &folder, QString *error);
+
+// KoboTouch's create_upload_path(): where a book goes on a Kobo mounted at
+// `root`, relative to it, `extension` its file's, ".epub" or ".pdf".
+QString uploadPath(const LibraryData &data, const Book &book, const QString &root, const QString &extension, bool kepub,
+                   const DriverSettings &settings, const QString &interfaceLanguage);
 
 // What the job in `folder` came to; `exitCode` is calibre-debug's.
 Outcome outcome(const QString &folder, int exitCode);

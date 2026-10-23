@@ -20,12 +20,18 @@ ThemedWindow {
     // open over it.
     property string section: "books"
     readonly property bool deviceSection: section.startsWith("device:")
+    // A saved search's books.
+    readonly property bool searchSection: section.startsWith("search:")
     readonly property bool facetShown: section !== "books" && section !== "trash" && section !== "check"
-        && !deviceSection && !session.filterOpen && !session.bookOpen
+        && section !== "highlights"
+        && !deviceSection && !searchSection && !session.filterOpen && !session.bookOpen
     readonly property bool trashShown: section === "trash" && !session.bookOpen
     readonly property bool checkShown: section === "check" && !session.bookOpen
+    readonly property bool highlightsShown: section === "highlights" && !session.bookOpen
     readonly property bool deviceShown: deviceSection && !session.bookOpen
     readonly property bool booksShown: !facetShown && !trashShown && !checkShown && !deviceShown && !session.bookOpen
+    // Several books selected in the list, which the pane beside it edits.
+    readonly property bool editingMany: booksShown && library.books.selectedCount > 1
     // A message to show in place of the key hints for a while: an error,
     // unless noticeIsError says otherwise.
     property string notice: ""
@@ -44,7 +50,6 @@ ThemedWindow {
         : qsTr("Cousoir")
 
     function applyOmarchyTheme() {
-        Theme.omarchyDark = omarchyTheme.dark
         Theme.omarchyPalette = omarchyTheme.palette
         Theme.omarchyAvailable = omarchyTheme.available
     }
@@ -118,6 +123,8 @@ ThemedWindow {
             devicePage.focusList()
         else if (checkShown)
             checkPage.focusList()
+        else if (highlightsShown)
+            highlightsPage.focusList()
         else
             booksPage.focusList()
     }
@@ -141,6 +148,11 @@ ThemedWindow {
     function focusSearch() {
         if (session.bookOpen)
             closeBook()
+        // The highlights have a search of their own.
+        if (highlightsShown) {
+            highlightsPage.focusSearch()
+            return
+        }
         searchField.forceActiveFocus(Qt.ShortcutFocusReason)
         searchField.selectAll()
     }
@@ -154,6 +166,8 @@ ThemedWindow {
             checkPage.focusList()
         else if (deviceShown)
             devicePage.focusList()
+        else if (highlightsShown)
+            highlightsPage.focusList()
         else
             booksPage.focusList()
     }
@@ -167,6 +181,8 @@ ThemedWindow {
             return 4
         if (checkShown)
             return 5
+        if (highlightsShown)
+            return 6
         return facetShown ? 1 : 0
     }
 
@@ -190,6 +206,26 @@ ThemedWindow {
         startConversion(bookId, format)
     }
 
+    // Several books converted to `format`, after asking; one book as
+    // convertBook() converts it.
+    function convertBooks(bookIds, format) {
+        if (bookIds.length === 1) {
+            convertBook(bookIds[0], format)
+            return
+        }
+        if (bookIds.length === 0 || !library.writable)
+            return
+        const having = bookIds.filter(id => conversions.formatsFor(id).length > 0
+                                       && (bookRow(id)?.formats || "").split(", ").includes(format)).length
+        convertManyDialog.bookIds = bookIds
+        convertManyDialog.format = format
+        convertManyDialog.title = qsTr("Convert %1 books to %2?").arg(bookIds.length).arg(format)
+        convertManyDialog.message = having > 0
+            ? qsTr("%1 of them have a %2 file already, which the new one replaces.").arg(having).arg(format)
+            : qsTr("Calibre converts them one after the other, each with its own settings.")
+        convertManyDialog.ask()
+    }
+
     // An older notice gives way to the conversion's progress.
     function startConversion(bookId, format) {
         const error = conversions.convert(bookId, format)
@@ -205,7 +241,10 @@ ThemedWindow {
 
     // The open book, or the row of a book listed, by id.
     function bookRow(bookId) {
-        return bookId === book.id ? book : library.rows.find(row => row.id === bookId)
+        if (bookId === book.id)
+            return book
+        const index = library.books.indexOf(bookId)
+        return index >= 0 ? library.books.get(index) : undefined
     }
 
     // Sends the book to the reader on `root`, the first one connected by
@@ -217,10 +256,10 @@ ThemedWindow {
         if (!bookId || !device)
             return
         const format = devices.convertFormat(target)
-        if (devices.sendFormat(bookId, target) === "" && format && library.writable && conversions.available
+        if (devices.sendFormat(bookId, target) === "" && format && library.writable
             && conversions.formatsFor(bookId).length > 0) {
             const row = bookRow(bookId)
-            convertAndSendDialog.bookId = bookId
+            convertAndSendDialog.bookIds = [bookId]
             convertAndSendDialog.root = target
             convertAndSendDialog.format = format
             convertAndSendDialog.title = qsTr("Convert “%1” to %2 for %3?").arg(row ? row.title : "").arg(format)
@@ -235,6 +274,41 @@ ThemedWindow {
             showNotice(error)
         else
             notice = ""
+    }
+
+    // Sends several books to the reader on `root`, the first one connected
+    // by default: those it reads now, and the others once converted, after
+    // asking.
+    function sendBooks(bookIds, root) {
+        if (bookIds.length === 1) {
+            sendBook(bookIds[0], root)
+            return
+        }
+        const target = root || (devices.devices.length > 0 ? devices.devices[0].root : "")
+        const device = devices.devices.find(device => device.root === target)
+        if (bookIds.length === 0 || !device)
+            return
+        const format = devices.convertFormat(target)
+        const sendable = bookIds.filter(id => devices.sendFormat(id, target) !== "")
+        const convertible = bookIds.filter(id => devices.sendFormat(id, target) === "" && format && library.writable
+                                               && conversions.formatsFor(id).length > 0)
+        if (sendable.length > 0) {
+            const error = devices.send(sendable, target)
+            if (error)
+                showNotice(error)
+            else
+                notice = ""
+        }
+        if (convertible.length > 0) {
+            convertAndSendDialog.bookIds = convertible
+            convertAndSendDialog.root = target
+            convertAndSendDialog.format = format
+            convertAndSendDialog.title = qsTr("Convert %1 books to %2 for %3?").arg(convertible.length).arg(format)
+                .arg(device.name)
+            convertAndSendDialog.message = qsTr("%1 reads none of their formats. Calibre converts them first, then they are sent.")
+                .arg(device.name)
+            convertAndSendDialog.ask()
+        }
     }
 
     // Sends the books converted for a reader once their files are in the
@@ -255,20 +329,20 @@ ThemedWindow {
         pendingSends = waiting
     }
 
-    // Asks before removing a book from the Kobo the device page shows.
+    // Asks before removing a book from the reader the device page shows.
     function removeFromDevice(lpath, title) {
         removeFromDeviceDialog.lpath = lpath
         removeFromDeviceDialog.title = qsTr("Remove “%1” from %2?").arg(title).arg(devices.current.name)
         removeFromDeviceDialog.ask()
     }
 
-    function ejectDevice() {
-        const error = devices.eject(devices.currentRoot)
+    function ejectDevice(root) {
+        const error = devices.eject(root)
         if (error)
             showNotice(error)
     }
 
-    // Reads the library again, or the Kobo the device page shows.
+    // Reads the library again, or the reader the device page shows.
     function reload() {
         if (deviceShown)
             devices.refresh()
@@ -282,14 +356,32 @@ ThemedWindow {
             showNotice(error)
     }
 
-    // Asks before moving a book to the trash.
-    function trashBook(bookId) {
-        const row = bookRow(bookId)
-        if (!row || !library.writable)
+    // Asks before moving books to the trash.
+    function trashBooks(bookIds) {
+        if (bookIds.length === 0 || !library.writable)
             return
-        trashDialog.bookId = bookId
-        trashDialog.title = qsTr("Move “%1” to the trash?").arg(row.title)
+        const row = bookRow(bookIds[0])
+        if (bookIds.length === 1 && !row)
+            return
+        trashDialog.bookIds = bookIds
+        trashDialog.title = bookIds.length === 1 ? qsTr("Move “%1” to the trash?").arg(row.title)
+                                                 : qsTr("Move %1 books to the trash?").arg(bookIds.length)
+        trashDialog.message = bookIds.length === 1
+            ? qsTr("Its files go to the library's trash, where Cousoir and Calibre can restore it.")
+            : qsTr("Their files go to the library's trash, where Cousoir and Calibre can restore them.")
         trashDialog.ask()
+    }
+
+    function trashBook(bookId) {
+        trashBooks(bookId ? [bookId] : [])
+    }
+
+    // The books an action of the keyboard acts on: the open book, or those
+    // selected in the list, or its current one.
+    function targetIds() {
+        if (session.bookOpen)
+            return book.id ? [book.id] : []
+        return booksShown ? booksPage.targetIds() : []
     }
 
     // Opens the open book, or the current row's, in the desktop's reader.
@@ -302,8 +394,156 @@ ThemedWindow {
             showNotice(error)
     }
 
+    // Reads the open book, or the current row's, in Cousoir's own reader:
+    // its EPUB, else its PDF.
+    function readBook() {
+        const bookId = currentBookId()
+        if (!bookId || !library.readerAvailable)
+            return
+        const format = library.readableFormat(bookId)
+        if (!format) {
+            showNotice(qsTr("This book has no EPUB or PDF to read."))
+            return
+        }
+        const loader = format === "PDF" ? pdfReaderLoader : readerLoader
+        if (!loader.item)
+            loader.setSource(format === "PDF" ? "PdfReaderWindow.qml" : "ReaderWindow.qml", { library: window.library })
+        if (loader.item)
+            loader.item.openBook(bookId)
+        else
+            showNotice(qsTr("The reader cannot be opened."))
+    }
+
+    // The book read in Cousoir's reader where a highlight is.
+    function readAt(bookId, spineIndex, cfi) {
+        if (!library.readerAvailable || library.readableFormat(bookId) !== "EPUB") {
+            openBook(bookId)
+            return
+        }
+        if (!readerLoader.item)
+            readerLoader.setSource("ReaderWindow.qml", { library: window.library })
+        if (readerLoader.item)
+            readerLoader.item.openAt(bookId, spineIndex, cfi)
+        else
+            showNotice(qsTr("The reader cannot be opened."))
+    }
+
     function toggleGrid() {
         layoutSettings.gridMode = !layoutSettings.gridMode
+    }
+
+    // What the command palette offers besides the library's books and
+    // items: the sidebar's sections, the virtual libraries, and the actions
+    // that can be done now, with their shortcut.
+    function paletteCommands() {
+        const commands = sidebar.items.map(item => ({
+            kind: "section", key: item.key, title: item.title, detail: "", icon: item.icon
+        }))
+        const targets = targetIds()
+        const books = targets.length
+        const add = (key, title, detail, icon, enabled) => {
+            if (enabled)
+                commands.push({ kind: "action", key: key, title: title, detail: detail || "", icon: icon || "search" })
+        }
+        add("add", qsTr("Add books…"), "Ctrl+N", "plus", library.writable && !library.importing)
+        add("read", qsTr("Read in Cousoir"), "Ctrl+Shift+O", "book", currentBookId() > 0 && library.readerAvailable)
+        add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
+        add("download", qsTr("Download metadata and covers"), "", "globe",
+            session.bookOpen && library.writable)
+        add("kepub", books > 1 ? qsTr("Convert %1 books to KEPUB").arg(books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
+            "refresh", books > 0 && library.writable)
+        add("azw3", books > 1 ? qsTr("Convert %1 books to AZW3").arg(books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
+            "refresh", books > 0 && library.writable && conversions.calibre)
+        for (const device of devices.devices) {
+            add("send:" + device.root, books > 1 ? qsTr("Send %1 books to %2").arg(books).arg(device.name)
+                                                 : qsTr("Send to %1").arg(device.name),
+                device === devices.devices[0] ? "Ctrl+D" : "", "ereader",
+                books > 0 && devices.writable)
+            add("eject:" + device.root, qsTr("Eject %1").arg(device.name), "", "eject", device.ejectable === true)
+        }
+        add("trash", books > 1 ? qsTr("Move %1 books to the trash").arg(books) : qsTr("Move to the trash"), "Del",
+            "trash", books > 0 && library.writable)
+        add("grid", layoutSettings.gridMode ? qsTr("Show the list") : qsTr("Show the covers"), "Ctrl+G",
+            layoutSettings.gridMode ? "list" : "grid", booksShown)
+        add("details", detailsVisible ? qsTr("Hide the details") : qsTr("Show the details"), "Ctrl+I", "panel-right",
+            session.bookOpen || editingMany)
+        add("search", qsTr("Search the books"), "Ctrl+F", "search", true)
+        if (library.virtualLibrary)
+            add("vl:", qsTr("Virtual library: none"), "", "layers", true)
+        for (const name of library.virtualLibraries)
+            add("vl:" + name, qsTr("Virtual library: %1").arg(name), "", "layers", name !== library.virtualLibrary)
+        add("reload", qsTr("Reload the library"), "Ctrl+R", "refresh", true)
+        add("settings", qsTr("Settings"), "", "settings", true)
+        for (const mode of availableThemeModes()) {
+            const titles = { system: qsTr("System theme"), light: qsTr("Light theme"), dark: qsTr("Dark theme"),
+                             omarchy: qsTr("Omarchy theme") }
+            add("theme:" + mode, titles[mode], "", "theme-" + mode, true)
+        }
+        add("backups", qsTr("Show the backups of the library"), "", "folder", library.loaded)
+        return commands
+    }
+
+    function runPaletteHit(hit) {
+        // A description being edited is saved first; the book open closes
+        // for anything but an action on it.
+        bookPage.finishEditing()
+        if (hit.kind !== "action" && session.bookOpen)
+            closeBook()
+        if (hit.kind === "book") {
+            openBook(hit.id)
+        } else if (hit.kind === "section") {
+            // The section shown goes back to its own list.
+            if (section === hit.key && session.filterOpen)
+                library.clearFilter()
+            section = hit.key
+            focusCurrentList()
+        } else if (hit.kind !== "action") {
+            // An author, series, tag or publisher: its books.
+            section = hit.kind
+            library.openFacetItem(hit.id)
+            booksPage.focusList()
+        } else if (hit.key === "add") {
+            addBooksDialog.open()
+        } else if (hit.key === "read") {
+            readBook()
+        } else if (hit.key === "reader") {
+            openInReader()
+        } else if (hit.key === "download") {
+            downloadMetadata()
+        } else if (hit.key === "kepub" || hit.key === "azw3") {
+            convertBooks(targetIds(), hit.key.toUpperCase())
+        } else if (hit.key.startsWith("send:")) {
+            sendBooks(targetIds(), hit.key.slice(5))
+        } else if (hit.key.startsWith("eject:")) {
+            ejectDevice(hit.key.slice(6))
+        } else if (hit.key === "trash") {
+            trashBooks(targetIds())
+        } else if (hit.key === "grid") {
+            toggleGrid()
+        } else if (hit.key === "details") {
+            toggleDetails()
+        } else if (hit.key === "search") {
+            focusSearch()
+        } else if (hit.key.startsWith("vl:")) {
+            library.virtualLibrary = hit.key.slice(3)
+        } else if (hit.key === "reload") {
+            reload()
+        } else if (hit.key === "settings") {
+            openSettings("")
+        } else if (hit.key.startsWith("theme:")) {
+            setThemeMode(hit.key.slice(6))
+        } else if (hit.key === "backups") {
+            library.openBackupFolder()
+        }
+    }
+
+    // Calibre's sources, or Open Library, asked about the open book, out of
+    // any field first.
+    function downloadMetadata() {
+        if (!session.bookOpen)
+            return
+        bookPage.finishEditing()
+        downloadDialog.start(window.book.id, window.book.title || "")
     }
 
     function showNotice(message, isError = true) {
@@ -344,6 +584,8 @@ ThemedWindow {
             return (book.formats || []).map(format => format.format).join(" · ")
         if (section === "trash")
             return plural(library.trashEntries.length, qsTr("%1 item"), qsTr("%1 items"))
+        if (section === "highlights")
+            return plural(highlightsPage.browser.count, qsTr("%1 highlight"), qsTr("%1 highlights"))
         if (section === "check")
             return library.checking ? qsTr("Checking…")
                 : plural(library.check.count || 0, qsTr("%1 thing to check"), qsTr("%1 things to check"))
@@ -358,11 +600,12 @@ ThemedWindow {
             const total = library.facetCount
             return shown !== total ? nouns[2].arg(shown).arg(total) : plural(total, nouns[0], nouns[1])
         }
-        const shown = library.rows.length
+        const shown = library.books.count
         const total = library.scopeCount
+        const selected = library.books.selectedCount > 1 ? qsTr("%1 selected · ").arg(library.books.selectedCount) : ""
         if (shown !== total)
-            return qsTr("%1 of %2 books").arg(shown).arg(total)
-        return plural(total, qsTr("%1 book"), qsTr("%1 books"))
+            return selected + qsTr("%1 of %2 books").arg(shown).arg(total)
+        return selected + plural(total, qsTr("%1 book"), qsTr("%1 books"))
     }
 
     function hintText() {
@@ -389,6 +632,8 @@ ThemedWindow {
             return qsTr("Saving…")
         if (session.bookOpen && bookPage.confirmingRevert)
             return qsTr("Enter revert · Esc keep")
+        if (session.bookOpen && bookPage.editingDescription)
+            return qsTr("Ctrl+Enter save · Esc cancel")
         if (session.bookOpen && bookPage.editing)
             return qsTr("Enter save · Esc revert · Tab next field")
         if (session.bookOpen && library.writable && devices.devices.length > 0)
@@ -407,10 +652,13 @@ ThemedWindow {
                 : devices.writable ? qsTr("↑↓ move · Enter show in library · Del remove from %1").arg(devices.current.name)
                 : qsTr("↑↓ move · Enter show in library")
         if (facetShown)
-            return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search")
-                                                : qsTr("Ctrl+F search · F5 reload")
-        if (library.rows.length === 0)
-            return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · F5 reload")
+            return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search · Ctrl+K find")
+                                                : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
+        if (library.books.count === 0)
+            return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
+        if (editingMany)
+            return qsTr("Esc one book · Shift+↑↓ more · Ctrl+A all") + (library.writable ? qsTr(" · Del trash") : "")
+                + (devices.devices.length > 0 ? qsTr(" · Ctrl+D send") : "")
         const back = session.filterOpen ? qsTr("Esc back · ") : ""
         const trash = library.writable ? qsTr(" · Del trash") : ""
         return back + qsTr("↑↓ move · Enter open · Ctrl+O read · Ctrl+G %1").arg(layoutSettings.gridMode ? qsTr("list")
@@ -436,6 +684,7 @@ ThemedWindow {
     readonly property BookLibrary library: session.library
     readonly property ConcurrencyGuard guard: session.guard
     readonly property ConversionService conversions: session.conversions
+    readonly property MetadataDownloader downloads: session.downloads
     readonly property DeviceLibrary devices: session.devices
 
     Timer {
@@ -483,16 +732,25 @@ ThemedWindow {
             window.showNotice(message)
         }
 
-        function onSortOptionChanged() {
-            layoutSettings.sortOption = window.library.sortOption
-        }
-
         function onSavingChanged() {
             window.sendConverted()
         }
 
         function onLibraryChanged() {
             window.sendConverted()
+        }
+
+        // The library goes back to its books when the saved search shown is
+        // gone; the sidebar follows it.
+        function onSectionChanged() {
+            if (!window.deviceSection && window.section !== window.library.section)
+                window.section = window.library.section
+        }
+
+        function onVirtualLibraryChanged() {
+            if (window.library.virtualLibraryError)
+                window.showNotice(qsTr("Cousoir cannot narrow the books to “%1”, so all show: %2")
+                                  .arg(window.library.virtualLibrary).arg(window.library.virtualLibraryError))
         }
     }
 
@@ -559,7 +817,6 @@ ThemedWindow {
         category: "Layout"
         property bool showDetails: true
         property bool gridMode: false
-        property string sortOption: "title"
     }
 
     Settings {
@@ -614,11 +871,14 @@ ThemedWindow {
 
     Shortcut {
         sequences: ["Esc", "Alt+Left", StandardKey.Back]
-        enabled: session.bookOpen || session.filterOpen
-        // The revert question keeps the changes instead.
+        enabled: session.bookOpen || session.filterOpen || (window.booksShown && booksPage.selectedCount > 1)
+        // The revert question keeps the changes instead; several books
+        // selected go back to the current one first.
         onActivated: {
             if (bookPage.confirmingRevert)
                 bookPage.confirmingRevert = false
+            else if (window.booksShown && booksPage.selectedCount > 1)
+                booksPage.collapseSelection()
             else
                 window.goBack()
         }
@@ -642,13 +902,47 @@ ThemedWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+K"
+        enabled: window.library.loaded
+        onActivated: {
+            commandPalette.commands = window.paletteCommands()
+            commandPalette.show()
+        }
+    }
+
+    MetadataDownloadDialog {
+        id: downloadDialog
+
+        downloader: window.downloads
+        onFailed: function(message) { window.showNotice(message) }
+        onSaved: function(title) {
+            window.showNotice(qsTr("“%1” updated from the web; Revert changes undoes it.").arg(title), false)
+        }
+        onClosed: {
+            if (session.bookOpen)
+                bookPage.forceActiveFocus()
+        }
+    }
+
+    CommandPalette {
+        id: commandPalette
+
+        library: window.library
+        onChosen: function(hit) { window.runPaletteHit(hit) }
+        onClosed: {
+            if (!session.bookOpen && !searchField.activeFocus)
+                window.focusCurrentList()
+        }
+    }
+
+    Shortcut {
         sequences: [StandardKey.Refresh, "Ctrl+R"]
         onActivated: window.reload()
     }
 
     Shortcut {
         sequence: "Ctrl+I"
-        enabled: session.bookOpen
+        enabled: session.bookOpen || window.editingMany
         onActivated: window.toggleDetails()
     }
 
@@ -656,6 +950,40 @@ ThemedWindow {
         sequence: "Ctrl+O"
         enabled: session.bookOpen || window.booksShown
         onActivated: window.openInReader()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+O"
+        enabled: (session.bookOpen || window.booksShown) && library.readerAvailable
+        onActivated: window.readBook()
+    }
+
+    // Cousoir's reader, made the first time a book is read; built only with
+    // Qt WebEngine.
+    Loader {
+        id: readerLoader
+    }
+
+    Loader {
+        id: pdfReaderLoader
+    }
+
+    Connections {
+        target: readerLoader.item
+        ignoreUnknownSignals: true
+
+        function onFailed(message) {
+            window.showNotice(message)
+        }
+    }
+
+    Connections {
+        target: pdfReaderLoader.item
+        ignoreUnknownSignals: true
+
+        function onFailed(message) {
+            window.showNotice(message)
+        }
     }
 
     Shortcut {
@@ -672,27 +1000,27 @@ ThemedWindow {
 
     Shortcut {
         sequence: "Ctrl+Shift+K"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
-        onActivated: window.convertBook(window.currentBookId(), "KEPUB")
+        enabled: (session.bookOpen || window.booksShown) && window.library.writable
+        onActivated: window.convertBooks(window.targetIds(), "KEPUB")
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+A"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
-        onActivated: window.convertBook(window.currentBookId(), "AZW3")
+        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.calibre
+        onActivated: window.convertBooks(window.targetIds(), "AZW3")
     }
 
     Shortcut {
         sequence: "Ctrl+D"
         enabled: (session.bookOpen || window.booksShown) && window.devices.devices.length > 0
-            && window.devices.available && window.devices.writable
-        onActivated: window.sendBook(window.currentBookId(), "")
+            && window.devices.writable
+        onActivated: window.sendBooks(window.targetIds(), "")
     }
 
     Shortcut {
         sequences: [StandardKey.Delete]
         enabled: window.booksShown && window.library.writable
-        onActivated: window.trashBook(booksPage.currentBookId())
+        onActivated: window.trashBooks(window.targetIds())
     }
 
     FileDialog {
@@ -716,16 +1044,15 @@ ThemedWindow {
         id: trashDialog
         objectName: "trashDialog"
 
-        property int bookId: 0
+        property var bookIds: []
 
-        message: qsTr("Its files go to the library's trash, where Cousoir and Calibre can restore it.")
         acceptText: qsTr("Move to Trash")
         acceptVariant: "danger"
         onAccepted: {
-            const error = window.library.moveToTrash([bookId])
+            const error = window.library.moveToTrash(bookIds)
             if (error)
                 window.showNotice(error)
-            else if (session.bookOpen && window.book.id === bookId)
+            else if (session.bookOpen && bookIds.includes(window.book.id))
                 window.closeBook()
         }
     }
@@ -745,14 +1072,29 @@ ThemedWindow {
         id: convertAndSendDialog
         objectName: "convertAndSendDialog"
 
-        property int bookId: 0
+        property var bookIds: []
         property string root
         property string format
 
         acceptText: qsTr("Convert and send")
         onAccepted: {
-            window.pendingSends = window.pendingSends.concat([{ bookId: bookId, root: root }])
-            window.startConversion(bookId, format)
+            window.pendingSends = window.pendingSends.concat(bookIds.map(bookId => ({ bookId: bookId, root: root })))
+            for (const bookId of bookIds)
+                window.startConversion(bookId, format)
+        }
+    }
+
+    ConfirmDialog {
+        id: convertManyDialog
+        objectName: "convertManyDialog"
+
+        property var bookIds: []
+        property string format
+
+        acceptText: qsTr("Convert")
+        onAccepted: {
+            for (const bookId of bookIds)
+                window.startConversion(bookId, format)
         }
     }
 
@@ -786,7 +1128,6 @@ ThemedWindow {
         applyOmarchyTheme()
         applyThemeMode()
         setTextScalePercent(appearanceSettings.textScalePercent)
-        library.sortOption = layoutSettings.sortOption
         booksPage.focusList()
     }
 
@@ -938,7 +1279,7 @@ ThemedWindow {
                     id: detailsToggle
                     objectName: "detailsToggle"
 
-                    visible: session.bookOpen
+                    visible: session.bookOpen || window.editingMany
                     selected: window.detailsVisible
                     text: window.detailsVisible ? qsTr("Hide details") : qsTr("Show details")
                     tip: qsTr("Details (Ctrl+I)")
@@ -964,8 +1305,12 @@ ThemedWindow {
             currentKey: window.section
             // The check's count follows the check, not the library's load.
             counts: window.library.loaded
-                ? Object.assign({}, window.library.counts, { check: window.library.check.count || "" }) : ({})
+                ? window.library.savedSearches.reduce((all, search) => {
+                    all["search:" + search.name] = search.count
+                    return all
+                }, Object.assign({}, window.library.counts, { check: window.library.check.count || "" })) : ({})
             devices: window.devices.devices
+            savedSearches: window.library.loaded ? window.library.savedSearches : []
             onActivated: function(key) {
                 window.section = key
             }
@@ -1002,7 +1347,6 @@ ThemedWindow {
                     spacing: Theme.gutter
 
                     FlatButton {
-                        id: backButton
                         objectName: "backButton"
 
                         iconOnly: true
@@ -1139,6 +1483,16 @@ ThemedWindow {
                     }
 
                     FlatButton {
+                        objectName: "downloadMetadataButton"
+
+                        visible: session.bookOpen && !bookPage.confirmingRevert && window.library.writable
+                        iconOnly: true
+                        text: qsTr("Download metadata and covers")
+                        icon.source: "assets/icons/globe.svg"
+                        onClicked: window.downloadMetadata()
+                    }
+
+                    FlatButton {
                         objectName: "trashBookButton"
 
                         visible: session.bookOpen && !bookPage.confirmingRevert && window.library.writable
@@ -1146,6 +1500,19 @@ ThemedWindow {
                         text: qsTr("Move to Trash")
                         icon.source: "assets/icons/trash.svg"
                         onClicked: window.trashBook(window.book.id)
+                    }
+
+                    FlatButton {
+                        objectName: "readButton"
+
+                        visible: session.bookOpen && !bookPage.confirmingRevert && library.readerAvailable
+                        enabled: (window.book.formats || []).some(format => !format.missing
+                                                                   && ["EPUB", "KEPUB", "PDF"].includes(format.format))
+                        variant: "outline"
+                        text: qsTr("Read")
+                        tip: qsTr("Read in Cousoir (Ctrl+Shift+O)")
+                        icon.source: "assets/icons/book.svg"
+                        onClicked: window.readBook()
                     }
 
                     FlatButton {
@@ -1171,7 +1538,7 @@ ThemedWindow {
                         text: qsTr("Eject")
                         tip: qsTr("Eject %1 so it can be unplugged").arg(window.devices.current.name || "")
                         icon.source: "assets/icons/eject.svg"
-                        onClicked: window.ejectDevice()
+                        onClicked: window.ejectDevice(window.devices.currentRoot)
                     }
 
                     FlatButton {
@@ -1197,6 +1564,28 @@ ThemedWindow {
                         onClicked: window.toggleGrid()
                     }
 
+                    // Calibre's virtual libraries: one narrows every section,
+                    // as in Calibre.
+                    ChoiceBox {
+                        objectName: "virtualLibraryBox"
+
+                        readonly property var choices: [{ value: "", label: qsTr("All books") }].concat(
+                            window.library.virtualLibraries.map(name => ({ value: name, label: name })))
+
+                        visible: window.library.virtualLibraries.length > 0 && !session.bookOpen
+                            && !window.deviceShown && !window.checkShown && !window.trashShown && !window.highlightsShown
+                        // The longest name, its arrow and paddings.
+                        Layout.preferredWidth: Math.round(Math.min(24, choices.reduce(
+                            (longest, choice) => Math.max(longest, choice.label.length), 0)) * Theme.charWidth)
+                            + leftPadding + rightPadding
+                        Accessible.name: qsTr("Virtual library")
+                        model: choices
+                        currentIndex: Math.max(0, choices.findIndex(choice => choice.value === window.library.virtualLibrary))
+                        onActivated: function(index) {
+                            window.library.virtualLibrary = choices[index].value
+                        }
+                    }
+
                     SearchField {
                         id: searchField
                         objectName: "searchField"
@@ -1208,13 +1597,13 @@ ThemedWindow {
                                 booksPage.activate(0)
                         }
 
-                        visible: !session.bookOpen && !window.deviceShown && !window.checkShown
+                        visible: !session.bookOpen && !window.deviceShown && !window.checkShown && !window.highlightsShown
                         Layout.fillWidth: true
                         Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
                         Layout.minimumWidth: Math.round(120 * Theme.spacingScale)
                         placeholderText: window.facetShown ? qsTr("Search %1").arg(sidebar.current.title.toLowerCase())
-                            : qsTr("Search title, author, series or tag")
+                            : qsTr("Search, as in Calibre")
                         text: window.library.searchText
 
                         onTextEdited: window.library.searchText = text
@@ -1248,7 +1637,6 @@ ThemedWindow {
                     }
 
                     FlatButton {
-                        id: settingsButton
                         objectName: "settingsButton"
 
                         visible: !session.bookOpen
@@ -1265,8 +1653,6 @@ ThemedWindow {
                 Layout.fillHeight: true
 
                 StackLayout {
-                    id: pages
-
                     anchors.fill: parent
                     currentIndex: window.pageIndex()
 
@@ -1280,9 +1666,10 @@ ThemedWindow {
                         onBookActivated: function(bookId) {
                             window.openBook(bookId)
                         }
-                        onTrashRequested: function(bookId) { window.trashBook(bookId) }
-                        onConvertRequested: function(bookId, format) { window.convertBook(bookId, format) }
-                        onSendRequested: function(bookId, root) { window.sendBook(bookId, root) }
+                        paneShown: window.detailsVisible
+                        onTrashRequested: function(bookIds) { window.trashBooks(bookIds) }
+                        onConvertRequested: function(bookIds, format) { window.convertBooks(bookIds, format) }
+                        onSendRequested: function(bookIds, root) { window.sendBooks(bookIds, root) }
                         onReloadRequested: session.reload()
                         onLibraryFolderRequested: libraryFolderDialog.open()
                         onFailed: function(message) { window.showNotice(message) }
@@ -1307,6 +1694,7 @@ ThemedWindow {
                         book: window.book
                         detailsVisible: window.detailsVisible
                         onFailed: function(message) { window.showNotice(message) }
+                        onNoticed: function(message) { window.showNotice(message, false) }
                         onConvertRequested: function(format) { window.convertBook(window.book.id, format) }
                         onSendRequested: function(root) { window.sendBook(window.book.id, root) }
                     }
@@ -1333,6 +1721,16 @@ ThemedWindow {
                         guard: window.guard
                         onBookRequested: function(bookId) { window.openBook(bookId) }
                         onFailed: function(message) { window.showNotice(message) }
+                    }
+
+                    HighlightsPage {
+                        id: highlightsPage
+                        objectName: "highlightsPage"
+                        library: window.library
+                        onReadRequested: function(bookId, spineIndex, cfi) { window.readAt(bookId, spineIndex, cfi) }
+                        onBookRequested: function(bookId) { window.openBook(bookId) }
+                        onFailed: function(message) { window.showNotice(message) }
+                        onNoticed: function(message) { window.showNotice(message, false) }
                     }
                 }
 

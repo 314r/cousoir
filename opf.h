@@ -13,6 +13,11 @@
 // for a conversion.
 namespace Opf {
 
+// serialize_user_metadata(): each custom column, by key, as its field
+// metadata with the book's value, in json.dumps()'s spelling; a composite's
+// as its template made it.
+QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book &book);
+
 struct Settings
 {
     // Calibre's interface language: the language of a book without one and
@@ -39,9 +44,10 @@ struct ExactDates
     CalibreDate timestamp;
 };
 
-// `book` of `data` as an OPF. The calibre: metadata Cousoir does not keep,
-// custom columns, annotations and user categories, comes from `previous`,
-// the file it replaces: it cannot have changed, as Cousoir never writes it.
+// `book` of `data` as an OPF, its composite columns as `data` computed
+// them. The calibre: metadata Cousoir does not keep, annotations and user
+// categories, comes from `previous`, the file it replaces: it cannot have
+// changed, as Cousoir never writes it.
 QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settings &settings,
                          const QByteArray &previous = {}, const ExactDates *exact = nullptr);
 

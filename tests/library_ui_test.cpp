@@ -2,8 +2,10 @@
 
 #include <QClipboard>
 #include <QDesktopServices>
-#include <QDirIterator>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -14,10 +16,18 @@
 
 #include <memory>
 
+#include "calibre_db.h"
+#include "calibre_fts.h"
+#include "calibre_languages.h"
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
+#include "metadata_downloader.h"
 #include "device_library.h"
+#include "highlight_browser.h"
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
 #include "sqlite_db.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
@@ -76,24 +86,36 @@ private slots:
     void showsBookDetails();
     void switchesToCovers();
     void browsesByAuthor();
+    void searchesAsCalibre();
+    void findsWithPalette();
     void opensInReader();
     void showsWriteState();
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
+    void readsInCousoir();
+    void readsPdfs();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
     void welcomesWithoutLibrary();
     void editsDetailsInPlace();
     void revertsBookChanges();
+    void keepsWhatIsTyped();
     void refusesInvalidValues();
     void changesRating();
+    void editsDescription();
+    void keepsNotes();
+    void browsesHighlights();
+    void editsCustomColumns();
     void changesCovers();
     void movesBooksToTrashAndBack();
+    void editsManyBooks();
     void addsAndRemovesFiles();
     void asksAboutDuplicates();
     void checksLibrary();
     void convertsBooks();
+    void downloadsMetadata();
     void sendsToKobo();
+    void showsReading();
     void sendsToKindle();
     void keepsLongNamesShort();
 
@@ -104,6 +126,8 @@ private:
     // A popup or another object that is no item.
     QObject *object(const char *name) const { return m_window->findChild<QObject *>(QString::fromLatin1(name)); }
     QObject *library() const;
+    // The rows the book list shows, as maps.
+    QVariantList bookRows() const;
     QObject *guard() const;
     QString text(const char *name) const;
     void typeText(const QString &text);
@@ -130,14 +154,22 @@ private:
 void LibraryUiTest::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
+    // Calibre's names of languages from a part of its resources, whatever
+    // Calibre is installed.
+    CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
     qmlRegisterType<IsolatedTheme>("Cousoir", 1, 0, "OmarchyTheme");
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
+    qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
+    qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+#ifdef COUSOIR_READER
+    qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
+#endif
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
-                              "BooksPage", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
+                              "BooksPage", "BulkEditPane", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
                               "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
                               "SettingsWindow", "Sidebar", "SidebarItem", "ThemedWindow", "ThinScrollBar", "TrashPage" }) {
         qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
@@ -201,6 +233,15 @@ QQuickItem *LibraryUiTest::control(const QString &name) const
 QObject *LibraryUiTest::library() const
 {
     return m_window->property("library").value<QObject *>();
+}
+
+QVariantList LibraryUiTest::bookRows() const
+{
+    auto *books = library()->property("books").value<BookListModel *>();
+    QVariantList rows;
+    for (int row = 0; books && row < books->count(); ++row)
+        rows.append(books->get(row));
+    return rows;
 }
 
 QObject *LibraryUiTest::guard() const
@@ -303,17 +344,39 @@ void LibraryUiTest::listsSearchesAndSortsBooks()
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTRY_COMPARE(list->property("count").toInt(), 6);
 
-    // A header click sorts, a second one reverses.
-    QQuickItem *added = control("bookAddedColumn");
-    QVERIFY(added);
-    QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(added));
-    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("added"));
-    QTest::mouseClick(m_window, Qt::LeftButton, Qt::NoModifier, center(added));
-    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("addedDesc"));
-    QCOMPARE(library()->property("rows").toList().first().toMap().value(QStringLiteral("title")).toString(),
+    // A header click sorts, a second one reverses. The header shows again
+    // with the books: once it is laid out.
+    click("bookTimestampColumn");
+    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("timestamp"));
+    click("bookTimestampColumn");
+    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("timestampDesc"));
+    QCOMPARE(bookRows().first().toMap().value(QStringLiteral("title")).toString(),
              QStringLiteral("Le Petit Prince"));
-    // The order is remembered.
-    QTRY_COMPARE(QSettings().value(QStringLiteral("Layout/sortOption")).toString(), QStringLiteral("addedDesc"));
+    // The order is remembered for the library, the sorts before it too.
+    const QString uuid = library()->property("libraryUuid").toString();
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Library/sortHistory/%1").arg(uuid)).toString(),
+                 QStringLiteral(R"([["timestamp",false],["title",true]])"));
+
+    // A right click on a header shows its menu: a column hidden, another
+    // shown beside it.
+    QQuickItem *authors = control("bookAuthorsColumn");
+    QVERIFY(authors);
+    QTest::mouseClick(m_window, Qt::RightButton, Qt::NoModifier, authors->mapToScene(QPointF(4, 4)).toPoint());
+    QTRY_VERIFY(object("columnMenu")->property("opened").toBool());
+    clickVisible("columnMenu_hide");
+    QTRY_COMPARE(library()->property("columns").toStringList(),
+                 (QStringList{ QStringLiteral("title"), QStringLiteral("series"), QStringLiteral("formats"),
+                               QStringLiteral("timestamp"), QStringLiteral("rating") }));
+    QTRY_VERIFY(!control("bookAuthorsColumn"));
+    QQuickItem *series = control("bookSeriesColumn");
+    QVERIFY(series);
+    QTest::mouseClick(m_window, Qt::RightButton, Qt::NoModifier, series->mapToScene(QPointF(4, 4)).toPoint());
+    QTRY_VERIFY(object("columnMenu")->property("opened").toBool());
+    clickVisible("columnMenu_show:tags");
+    QTRY_COMPARE(library()->property("columns").toStringList(),
+                 (QStringList{ QStringLiteral("title"), QStringLiteral("series"), QStringLiteral("tags"),
+                               QStringLiteral("formats"), QStringLiteral("timestamp"), QStringLiteral("rating") }));
+    QTRY_VERIFY(control("bookTagsColumn") && control("bookTagsColumn")->isVisible());
 }
 
 void LibraryUiTest::opensAndClosesBook()
@@ -375,7 +438,7 @@ void LibraryUiTest::showsBookDetails()
     QTest::keyClick(m_window, Qt::Key_I, Qt::ControlModifier);
     QTRY_VERIFY(!pane->isVisible());
     QVERIFY(control("factsLine")->isVisible());
-    QCOMPARE(text("factsLine"), QStringLiteral("Mar 1947  ·  French  ·  EPUB"));
+    QCOMPARE(text("factsLine"), QStringLiteral("Mar 1947  ·  Français  ·  EPUB"));
     QTest::keyClick(m_window, Qt::Key_I, Qt::ControlModifier);
     QTRY_VERIFY(pane->isVisible());
 
@@ -454,6 +517,62 @@ void LibraryUiTest::browsesByAuthor()
     click("sidebar_books");
     QTRY_COMPARE(text("bookCount"), QStringLiteral("6 books"));
     QVERIFY(library()->property("searchText").toString().isEmpty());
+}
+
+void LibraryUiTest::searchesAsCalibre()
+{
+    // The library's saved searches and virtual libraries, as Calibre keeps
+    // them; the library reloads when its database changes.
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QStringLiteral(R"SQL(
+            INSERT OR REPLACE INTO preferences(key, val) VALUES ('saved_searches', '{"Cook": "author:cook", "Rated": "rating:>=4"}');
+            INSERT OR REPLACE INTO preferences(key, val) VALUES ('virtual_libraries', '{"Fantasy": "tags:fantasy"}');
+        )SQL"), &error), qPrintable(error));
+    }
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY(control("sidebar_search:Cook"));
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
+
+    // A saved search is a section of its own, with its count.
+    click("sidebar_search:Cook");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Cook"));
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("2 books"));
+    QCOMPARE(m_window->title(), QStringLiteral("Cook — Cousoir"));
+
+    // Calibre's search language, and what it cannot read.
+    click("sidebar_books");
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("6 books"));
+    QTest::keyClick(m_window, Qt::Key_F, Qt::ControlModifier);
+    QTRY_VERIFY(control("searchField")->hasActiveFocus());
+    typeText(QStringLiteral("rating:>3 not author:vian"));
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("1 of 6 books"));
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    typeText(QStringLiteral("(vian"));
+    QTRY_COMPARE(text("emptyTitle"), QStringLiteral("Calibre's search cannot read “(vian”"));
+    QCOMPARE(text("emptyMessage"), QStringLiteral("missing )"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("6 books"));
+
+    // A virtual library narrows every section and their counts.
+    QQuickItem *box = control("virtualLibraryBox");
+    QTRY_VERIFY(box && box->isVisible());
+    click("virtualLibraryBox");
+    QTRY_VERIFY(box->property("popup").value<QObject *>()->property("visible").toBool());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(library()->property("virtualLibrary").toString(), QStringLiteral("Fantasy"));
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("3 books"));
+    QCOMPARE(library()->property("counts").toMap().value(QStringLiteral("authors")).toInt(), 3);
+    click("sidebar_search:Cook");
+    QTRY_COMPARE(text("bookCount"), QStringLiteral("2 books"));
+    // The choice stays with the library.
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Library/virtualLibrary/%1")
+                                       .arg(library()->property("libraryUuid").toString())).toString(),
+                 QStringLiteral("Fantasy"));
 }
 
 void LibraryUiTest::opensInReader()
@@ -558,6 +677,175 @@ void LibraryUiTest::creditsCalibreInSettings()
     settings->close();
 }
 
+// A book read in Cousoir's reader: its pages turned, where reading stopped
+// kept, and the book opened again there.
+void LibraryUiTest::readsInCousoir()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub")) }));
+    QCOMPARE(error, QString());
+    waitForSave();
+    int bookId = 0;
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("The Voyage"))
+                bookId = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return bookId > 0;
+    }(), 15000);
+    library()->setProperty("currentBookId", bookId);
+    QVERIFY(library()->property("readerAvailable").toBool());
+
+    const auto openReader = [this] {
+        QMetaObject::invokeMethod(m_window, "readBook");
+        return m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    };
+    QQuickWindow *reader = openReader();
+    QVERIFY(reader);
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty(), 20000);
+    // The cover, then the first chapter's pages.
+    QCOMPARE(reader->property("spineIndex").toInt(), 0);
+    for (int i = 0; i < 3; ++i) {
+        const QString before = reader->property("position").toString();
+        QTest::keyClick(reader, Qt::Key_Right);
+        QTRY_VERIFY_WITH_TIMEOUT(reader->property("position").toString() != before, 10000);
+    }
+    QCOMPARE(reader->property("spineIndex").toInt(), 1);
+    QCOMPARE(reader->property("page").toInt(), 2);
+    const QString position = reader->property("position").toString();
+    QVERIFY2(position.startsWith(QLatin1String("epubcfi(/4/2/4/")), qPrintable(position));
+    QVERIFY(reader->property("bookFraction").toDouble() > 0);
+
+    // Kept when the book is closed, and read from there again.
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    reader = openReader();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QTRY_COMPARE(reader->property("spineIndex").toInt(), 1);
+    QTRY_COMPARE(reader->property("page").toInt(), 2);
+    QCOMPARE(reader->property("position").toString(), position);
+
+    // The table of contents: a section of the second chapter.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 2), Q_ARG(QVariant, QStringLiteral("fragment:s2")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() > 0, 20000);
+    const QString section = reader->property("position").toString();
+    reader->close();
+
+    // Kept in the library too, as Calibre keeps its viewer's.
+    waitForSave();
+    SqliteDb db;
+    QString dbError;
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QStringList rows;
+    for (const QVariantList &row :
+         db.rows(QStringLiteral("SELECT format, user, device, cfi FROM last_read_positions WHERE book=?"), { bookId })) {
+        QStringList columns;
+        for (const QVariant &column : row)
+            columns.append(column.toString());
+        rows.append(columns.join(u'|'));
+    }
+    QCOMPARE(rows, QStringList{ QStringLiteral("EPUB|local|cousoir|") + section });
+
+    // Calibre's viewer read on since: where the book opens now.
+    const QString calibreCfi = QStringLiteral("epubcfi(/8/2/4/2[top]/1:0)");
+    QVERIFY(db.run(QStringLiteral("INSERT INTO last_read_positions(book,format,user,device,cfi,epoch,pos_frac) "
+                                  "VALUES (?,'EPUB','local','calibre-desktop-viewer',?,?,0.8)"),
+                   { bookId, calibreCfi, double(QDateTime::currentSecsSinceEpoch() + 60) }, &dbError));
+    db.close();
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    reader = openReader();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QTRY_COMPARE(reader->property("spineIndex").toInt(), 3);
+
+    // A highlight of the first paragraph's start, kept as Calibre's viewer
+    // keeps its own.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    // The chapter loaded: a position in it told.
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/"))
+                                 && reader->property("page").toInt() == 0,
+                             20000);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = document.querySelector('p'); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 22);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
+    QMetaObject::invokeMethod(reader, "highlightSelection");
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
+    const QVariantMap highlight = bookReader->property("highlights").toList().first().toMap();
+    QCOMPARE(highlight.value(QStringLiteral("text")).toString(), QStringLiteral("Chapter 1, paragraph 0"));
+    // body, then its third element: h1, h2, p.
+    QCOMPARE(highlight.value(QStringLiteral("start")).toString(), QStringLiteral("/2/4/6/1:0"));
+    QCOMPARE(highlight.value(QStringLiteral("end")).toString(), QStringLiteral("/2/4/6/1:22"));
+    QTRY_COMPARE(reader->property("highlightsShown").toInt(), 1);
+    // Written with the position when the book closes.
+    reader->close();
+    waitForSave();
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    const QList<QVariantList> annotations = db.rows(
+        QStringLiteral("SELECT user_type, user, annot_type, annot_data, searchable_text FROM annotations WHERE book=?"),
+        { bookId });
+    db.close();
+    QCOMPARE(annotations.size(), 1);
+    QCOMPARE(annotations.first().value(0).toString(), QStringLiteral("local"));
+    QCOMPARE(annotations.first().value(1).toString(), QStringLiteral("viewer"));
+    QCOMPARE(annotations.first().value(2).toString(), QStringLiteral("highlight"));
+    const QJsonObject data = QJsonDocument::fromJson(annotations.first().value(3).toString().toUtf8()).object();
+    QCOMPARE(data.value(QLatin1String("spine_name")).toString(), QStringLiteral("OEBPS/text/chapter1.xhtml"));
+    QCOMPARE(data.value(QLatin1String("style")).toObject().value(QLatin1String("which")).toString(), QStringLiteral("yellow"));
+    QCOMPARE(annotations.first().value(4).toString(), QStringLiteral("Chapter 1, paragraph 0"));
+
+    // Shown again from the library, and removed as Calibre's viewer removes one.
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    reader = openReader();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("highlightsShown").toInt() == 1,
+                             20000);
+    reader->setProperty("chosenHighlight", highlight.value(QStringLiteral("uuid")));
+    QMetaObject::invokeMethod(reader, "removeChosenHighlight");
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 0);
+    reader->close();
+    waitForSave();
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    const QJsonObject removed = QJsonDocument::fromJson(
+        db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE book=%1").arg(bookId)).toString().toUtf8()).object();
+    db.close();
+    QVERIFY(removed.value(QLatin1String("removed")).toBool());
+#endif
+}
+
+// A book with only a PDF read in Cousoir's PDF reader.
+void LibraryUiTest::readsPdfs()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    library()->setProperty("currentBookId", 5);
+    QString format;
+    QMetaObject::invokeMethod(library(), "readableFormat", Q_RETURN_ARG(QString, format), Q_ARG(int, 5));
+    QCOMPARE(format, QStringLiteral("PDF"));
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QQuickWindow *reader = m_window->findChild<QQuickWindow *>(QStringLiteral("pdfReaderWindow"));
+    QVERIFY(reader);
+    QTRY_VERIFY(reader->isVisible());
+    QTRY_COMPARE(reader->property("pages").toInt(), 1);
+    QCOMPARE(reader->title(), QStringLiteral("Manuel technique"));
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+#endif
+}
+
 void LibraryUiTest::usesOmarchyColorsByDefault()
 {
     const auto settingsWindow = [this] {
@@ -657,10 +945,31 @@ void LibraryUiTest::editsDetailsInPlace()
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
-    const QVariantList rows = library()->property("rows").toList();
+    const QVariantList rows = bookRows();
     QVERIFY(std::any_of(rows.cbegin(), rows.cend(), [](const QVariant &row) {
         return row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("Mood Indigo");
     }));
+}
+
+void LibraryUiTest::keepsWhatIsTyped()
+{
+    openWritable(2);
+    // Typing in the title sort while a change of the title, which it
+    // follows, is saved.
+    retype("field_sort", QStringLiteral("Mon tri"));
+    const QVariantMap title{ { QStringLiteral("title"), QStringLiteral("The White Rose") } };
+    QCOMPARE(QMetaObject::invokeMethod(library(), "updateBook", Q_ARG(int, 2), Q_ARG(QVariantMap, title)), true);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("sort")).toString(),
+                 QStringLiteral("White Rose, The"));
+    QCOMPARE(text("field_sort"), QStringLiteral("Mon tri"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("sort")).toString(),
+                 QStringLiteral("Mon tri"));
+    // The field shows what was saved, its focus kept.
+    QTRY_COMPARE(text("field_sort"), QStringLiteral("Mon tri"));
+    QVERIFY(control("field_sort")->hasActiveFocus());
 }
 
 void LibraryUiTest::revertsBookChanges()
@@ -733,6 +1042,418 @@ void LibraryUiTest::changesRating()
     QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("rating")).toString(), QStringLiteral("★★★★½"));
 }
 
+void LibraryUiTest::editsDescription()
+{
+    openWritable(1);
+    QCOMPARE(library()->property("currentBook").toMap().value(QStringLiteral("descriptionText")).toString(),
+             QStringLiteral("Un roman d’amour fou.\n\nParis, *1946*."));
+    click("editDescriptionButton");
+    QQuickItem *editor = control("descriptionEditor");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QCOMPARE(text("descriptionEditor"), QStringLiteral("Un roman d’amour fou.\n\nParis, *1946*."));
+    QCOMPARE(text("keyHints"), QStringLiteral("Ctrl+Enter save · Esc cancel"));
+
+    // Esc puts it back and keeps the book open.
+    typeText(QStringLiteral(" ajout"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!control("descriptionEditor")->isVisible());
+    QCOMPARE(library()->property("currentBookId").toInt(), 1);
+    QVERIFY(!library()->property("saving").toBool());
+
+    // Ctrl+Enter saves, in paragraphs, with the marks as HTML.
+    click("editDescriptionButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    editor->setProperty("text", QStringLiteral("Un roman **fou**.\nParis, 1946.\n\n- jazz\n- amour"));
+    QTest::keyClick(m_window, Qt::Key_Return, Qt::ControlModifier);
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString(),
+                 QStringLiteral("<div><p>Un roman <strong>fou</strong>.<br>Paris, 1946.</p>"
+                                "<ul><li>jazz</li><li>amour</li></ul></div>"));
+    QVERIFY(library()->property("canRevert").toBool());
+
+    // Saving it unchanged writes nothing; closing the book saves an edit.
+    click("editDescriptionButton");
+    click("saveDescriptionButton");
+    QVERIFY(!library()->property("saving").toBool());
+    click("editDescriptionButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QString());
+    click("rootCrumb");
+    waitForSave();
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+    library()->setProperty("currentBookId", 1);
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString(), QString());
+}
+
+void LibraryUiTest::keepsNotes()
+{
+    // The notes Calibre 7 keeps, on an author with an image and a series.
+    QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/notes/.calnotes"), CalibreDb::notesFolder(m_libraryPath)));
+    makeWritable();
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    const auto filter = [this] { return library()->property("filter").toMap(); };
+
+    // Marked in their section, shown beside their books.
+    click("sidebar_series");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Series"));
+    const QVariantList series = library()->property("facetRows").toList();
+    QCOMPARE(std::count_if(series.cbegin(), series.cend(), [](const QVariant &row) {
+                 return row.toMap().value(QStringLiteral("hasNote")).toBool();
+             }), 1);
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 2));
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Contes"));
+    QTRY_VERIFY(control("notePane")->isVisible());
+    QVERIFY(text("noteText").contains(QStringLiteral("Tales for children")));
+
+    // Written as text, saved as Calibre saves a note.
+    click("editNoteButton");
+    QQuickItem *editor = control("noteEditor");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    QCOMPARE(text("noteEditor"), QStringLiteral("Tales for children, *and others*."));
+    editor->setProperty("text", QStringLiteral("Contes **pour** enfants."));
+    QTest::keyClick(m_window, Qt::Key_Return, Qt::ControlModifier);
+    waitForSave();
+    QTRY_VERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("<strong>pour</strong>")));
+    QVERIFY(!editor->isVisible());
+    const QString notes = QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("notes.db"));
+    const auto searchable = [&notes] {
+        SqliteDb db;
+        QString error;
+        return db.open(notes, SqliteDb::Mode::Immutable, &error)
+            ? db.value(QStringLiteral("SELECT searchable_text FROM notes WHERE colname='series' AND item=2"))
+            : QVariant();
+    };
+    QCOMPARE(searchable().toString(), QStringLiteral("Contes\nContes pour enfants."));
+
+    // Saved unchanged, nothing is written.
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    click("saveNoteButton");
+    QVERIFY(!library()->property("saving").toBool());
+    QTRY_VERIFY(!editor->isVisible());
+
+    // A save that fails gives the text back to finish it.
+    QFile database(notes);
+    QVERIFY(database.setPermissions(QFileDevice::ReadOwner));
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QStringLiteral("Contes cruels."));
+    click("saveNoteButton");
+    QTRY_VERIFY_WITH_TIMEOUT(editor->isVisible(), 15000);
+    QCOMPARE(text("noteEditor"), QStringLiteral("Contes cruels."));
+    QVERIFY(database.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!editor->isVisible());
+
+    // Emptied, it goes, kept aside for Calibre.
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QString());
+    click("saveNoteButton");
+    waitForSave();
+    QTRY_VERIFY(filter().value(QStringLiteral("note")).toString().isEmpty());
+    QVERIFY(!searchable().isValid());
+    QCOMPARE(text("editNoteButton"), QStringLiteral("Add a note"));
+
+    // A note with images is read, and left to Calibre to change.
+    click("sidebar_authors");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Authors"));
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 2));
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Glen Cook"));
+    QTRY_VERIFY(text("noteText").contains(QStringLiteral("dark")));
+    QVERIFY(!control("editNoteButton")->isVisible());
+    QVERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("file://")));
+    // Its image, 600 pixels wide, fits the pane.
+    QVERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("width=\"600\"")));
+    const QRegularExpressionMatch shown
+        = QRegularExpression(QStringLiteral("width=\"(\\d+)\"")).match(text("noteText"));
+    QVERIFY(shown.hasMatch());
+    QVERIFY(shown.captured(1).toInt() <= control("notePane")->width());
+
+    // A note Calibre formatted beyond what text keeps is left to Calibre.
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(notes, SqliteDb::Mode::ReadWrite, &error)
+                     && CalibreFts::registerTokenizers(db.handle(), QStringLiteral("fr"), &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QStringLiteral("UPDATE notes SET doc='<p>Worlds <u>not</u> ours.</p>' "
+                                        "WHERE colname='tags' AND item=3"), &error), qPrintable(error));
+    }
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    click("sidebar_tags");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Tags"));
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 3));
+    QTRY_VERIFY(text("noteText").contains(QStringLiteral("ours")));
+    QVERIFY(filter().value(QStringLiteral("noteLosesFormatting")).toBool());
+    QVERIFY(!control("editNoteButton")->isVisible());
+
+    // A language's note is Calibre's on its code.
+    click("sidebar_languages");
+    QTRY_COMPARE(text("pageTitle"), QStringLiteral("Languages"));
+    QMetaObject::invokeMethod(library(), "openFacetItem", Q_ARG(int, 2));
+    QTRY_COMPARE(text("editNoteButton"), QStringLiteral("Add a note"));
+    click("editNoteButton");
+    QTRY_VERIFY(editor->hasActiveFocus());
+    editor->setProperty("text", QStringLiteral("Read in the original."));
+    click("saveNoteButton");
+    waitForSave();
+    QTRY_VERIFY(filter().value(QStringLiteral("note")).toString().contains(QStringLiteral("original")));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(notes, SqliteDb::Mode::Immutable, &error), qPrintable(error));
+        QCOMPARE(db.value(QStringLiteral("SELECT searchable_text FROM notes WHERE colname='languages' AND item=2")).toString(),
+                 QStringLiteral("eng\nRead in the original."));
+    }
+
+    // A library Calibre 7 never opened has no notes to show.
+    QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY(!control("notePane")->isVisible());
+}
+
+void LibraryUiTest::browsesHighlights()
+{
+    // The library with the highlights and bookmarks Calibre saved
+    // (tools/oracle/annotations_oracle.py).
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY(QFile::remove(database));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/annotations/metadata.db"), database));
+    QFile(database).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("highlights")).toInt(), 7);
+
+    // By book, the books by their titles' sort.
+    click("sidebar_highlights");
+    QQuickItem *page = control("highlightsPage");
+    QTRY_VERIFY(page && page->isVisible());
+    auto *browser = page->property("browser").value<HighlightBrowser *>();
+    QVERIFY(browser);
+    QTRY_COMPARE(browser->count(), 7);
+    QCOMPARE(browser->rows().size(), 10);
+    QCOMPARE(browser->rows().constFirst().toMap().value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    QCOMPARE(text("bookCount"), QStringLiteral("7 highlights"));
+
+    // A search of Calibre's index, the words found in bold; Ctrl+F goes to
+    // it.
+    QTest::keyClick(m_window, Qt::Key_F, Qt::ControlModifier);
+    QTRY_VERIFY(control("highlightSearch")->hasActiveFocus());
+    typeText(QStringLiteral("amour"));
+    QTRY_COMPARE(browser->count(), 1);
+    QVERIFY(browser->rows().value(1).toMap().value(QStringLiteral("html")).toString().startsWith(QStringLiteral("<b>L'amour</b> est")));
+    QVERIFY(browser->exportText(true).startsWith(QStringLiteral("# L'Écume des jours\n\n## Chapitre II")));
+
+    // Enter asks the reader for the book, where the highlight is.
+    QSignalSpy read(page, SIGNAL(readRequested(int,int,QString)));
+    browser->setQuery(QString());
+    browser->setType(QStringLiteral("highlight"));
+    QTRY_COMPARE(browser->count(), 6);
+    QMetaObject::invokeMethod(page, "focusList");
+    QTRY_VERIFY(control("highlightList")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(read.size(), 1);
+    QCOMPARE(read.constFirst().at(0).toInt(), 2);
+    QCOMPARE(read.constFirst().at(1).toInt(), 2);
+    QCOMPARE(read.constFirst().at(2).toString(), QStringLiteral("/4/2/4/1:0"));
+
+    browser->setType(QStringLiteral("bookmark"));
+    QTRY_COMPARE(browser->count(), 1);
+}
+
+void LibraryUiTest::editsCustomColumns()
+{
+    // The library with a custom column of each kind.
+    m_libraryPath = m_libraryDir->filePath(QStringLiteral("custom"));
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library-custom"), m_libraryPath));
+    library()->setProperty("libraryPath", m_libraryPath);
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool()
+                                 && library()->property("libraryPath").toString() == m_libraryPath, 10000);
+    // Tall enough for every field without scrolling.
+    m_window->resize(1240, 1400);
+    openWritable(1);
+    const auto custom = [this](const QString &key) {
+        for (const QVariant &field : library()->property("currentBook").toMap().value(QStringLiteral("custom")).toList()) {
+            if (field.toMap().value(QStringLiteral("key")).toString() == key)
+                return field.toMap();
+        }
+        return QVariantMap();
+    };
+    QCOMPARE(custom(QStringLiteral("#genre")).value(QStringLiteral("text")).toString(), QStringLiteral("SF, Classique"));
+    QCOMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(), QStringLiteral("Bien"));
+    // A composite shows as its template makes it, and cannot be edited.
+    QCOMPARE(custom(QStringLiteral("#computed")).value(QStringLiteral("text")).toString(),
+             QStringLiteral("L'Écume des jours by Boris Vian"));
+    QVERIFY(!custom(QStringLiteral("#computed")).value(QStringLiteral("editable")).toBool());
+    QCOMPARE(control("field_#computed")->property("value").toString(), QStringLiteral("L'Écume des jours by Boris Vian"));
+
+    // A save keeps the other fields as they are, focus and typing with them.
+    const QPointer<QQuickItem> price = control("field_#price");
+    retype("field_#note", QStringLiteral("Autre note"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#note")).value(QStringLiteral("text")).toString(), QStringLiteral("Autre note"));
+    QVERIFY(price && price == control("field_#price"));
+
+    // A change the template reads computes it again.
+    retype("field_title", QStringLiteral("L'Arrache-coeur"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#computed")).value(QStringLiteral("text")).toString(),
+                 QStringLiteral("L'Arrache-coeur by Boris Vian"));
+
+    // A number takes digits only.
+    retype("field_#pagecount", QStringLiteral("abc"));
+    QVERIFY(control("field_#pagecount")->property("invalid").toBool());
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    retype("field_#price", QStringLiteral("9,5"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#price")).value(QStringLiteral("text")).toString(), QStringLiteral("9.5"));
+
+    // Long text in HTML edits as the description does.
+    retype("field_#review", QStringLiteral("**Tres** bien"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(),
+                 QStringLiteral("**Tres** bien"));
+
+    // Yes or no, and a list of values, choose.
+    click("field_#read");
+    QTRY_VERIFY(control("field_#read")->property("popup").value<QObject *>()->property("visible").toBool());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#read")).value(QStringLiteral("text")).toString(), QStringLiteral("No"));
+    click("field_#shelf");
+    QTRY_VERIFY(control("field_#shelf")->property("popup").value<QObject *>()->property("visible").toBool());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#shelf")).value(QStringLiteral("text")).toString(), QStringLiteral("A"));
+
+    // Revert puts them all back.
+    click("revertChangesButton");
+    QTRY_VERIFY(control("confirmRevertButton") && control("confirmRevertButton")->isVisible());
+    click("confirmRevertButton");
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#note")).value(QStringLiteral("text")).toString(), QStringLiteral("Une note"));
+    QCOMPARE(custom(QStringLiteral("#read")).value(QStringLiteral("text")).toString(), QStringLiteral("Yes"));
+    QCOMPARE(custom(QStringLiteral("#shelf")).value(QStringLiteral("text")).toString(), QString());
+    QCOMPARE(custom(QStringLiteral("#review")).value(QStringLiteral("editText")).toString(), QStringLiteral("Bien"));
+    QCOMPARE(custom(QStringLiteral("#price")).value(QStringLiteral("text")).toString(), QString());
+
+    const auto update = [this](const QVariantMap &changes) {
+        QString error;
+        QMetaObject::invokeMethod(library(), "updateBook", Q_RETURN_ARG(QString, error), Q_ARG(int, 1),
+                                  Q_ARG(QVariantMap, changes));
+        return error;
+    };
+    // A rating of half a star more than a whole-star column takes shows as
+    // it is; a long text holding a table is Calibre's to edit.
+    QCOMPARE(update({ { QStringLiteral("#myrating"), 7 },
+                      { QStringLiteral("#review"), QStringLiteral("<table><tr><td>Bien</td></tr></table>") } }),
+             QString());
+    waitForSave();
+    QTRY_COMPARE(control("field_#myrating")->property("currentText").toString(), QStringLiteral("★★★½"));
+    QVERIFY(!control("field_#review")->isEnabled());
+    QVERIFY(control("formattingKept_#review")->isVisible());
+
+    // A date cleared, then set and reverted: cleared again.
+    retype("field_#started", QString());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QString());
+    QMetaObject::invokeMethod(m_window, "closeBook");
+    QTRY_VERIFY(control("booksPage")->isVisible());
+    openWritable(1);
+    retype("field_#started", QStringLiteral("2020-01-01"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QStringLiteral("2020-01-01"));
+    click("revertChangesButton");
+    QTRY_VERIFY(control("confirmRevertButton") && control("confirmRevertButton")->isVisible());
+    click("confirmRevertButton");
+    waitForSave();
+    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QString());
+}
+
+// Ctrl+K: a book, an author's books and a section, each a few letters and
+// Enter away; Esc closes it.
+void LibraryUiTest::findsWithPalette()
+{
+    QObject *palette = object("commandPalette");
+    QVERIFY(palette);
+    // The first hit for what is typed; none when the palette does not open.
+    const auto find = [&](const QString &typed) -> QVariantMap {
+        QTest::keySequence(m_window, QKeySequence(QStringLiteral("Ctrl+K")));
+        if (!QTest::qWaitFor([&] { return palette->property("opened").toBool()
+                                          && control("paletteField")->hasActiveFocus(); }))
+            return {};
+        typeText(typed);
+        if (!QTest::qWaitFor([&] { return !palette->property("hits").toList().isEmpty(); }))
+            return {};
+        return palette->property("hits").toList().value(0).toMap();
+    };
+
+    QCOMPARE(find(QStringLiteral("omens")).value(QStringLiteral("title")).toString(), QStringLiteral("Good Omens"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(!palette->property("opened").toBool());
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 4);
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+
+    QCOMPARE(find(QStringLiteral("pratch")).value(QStringLiteral("kind")).toString(), QStringLiteral("authors"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(library()->property("section").toString(), QStringLiteral("authors"));
+    QTRY_COMPARE(library()->property("filter").toMap().value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Terry Pratchett"));
+    QCOMPARE(bookRows().size(), 1);
+
+    QCOMPARE(find(QStringLiteral("trash")).value(QStringLiteral("kind")).toString(), QStringLiteral("section"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(control("trashPage")->isVisible());
+
+    // From a book whose description is being edited: the text is saved,
+    // the book closes, and the author's books show.
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    openWritable(1);
+    click("editDescriptionButton");
+    QTRY_VERIFY(control("descriptionEditor")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_End, Qt::ControlModifier);
+    typeText(QStringLiteral(" Saved"));
+    QCOMPARE(find(QStringLiteral("pratch")).value(QStringLiteral("kind")).toString(), QStringLiteral("authors"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
+    QTRY_COMPARE(library()->property("filter").toMap().value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Terry Pratchett"));
+    waitForSave();
+    QTRY_VERIFY(library()->property("books").value<BookListModel *>() && bookRows().size() == 1);
+    // The section shown, picked again, goes back to its list.
+    QCOMPARE(find(QStringLiteral("authors")).value(QStringLiteral("key")).toString(), QStringLiteral("authors"));
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(library()->property("filter").toMap().isEmpty());
+    QTRY_VERIFY(control("facetPage")->isVisible());
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(library()->property("currentBook").toMap().value(QStringLiteral("description")).toString()
+                    .contains(QStringLiteral("Saved")));
+    QMetaObject::invokeMethod(m_window, "closeBook");
+
+    QTest::keySequence(m_window, QKeySequence(QStringLiteral("Ctrl+K")));
+    QTRY_VERIFY(palette->property("opened").toBool());
+    QTRY_VERIFY(control("paletteField")->hasActiveFocus());
+    typeText(QStringLiteral("xyzzy"));
+    QTRY_VERIFY(control("paletteEmpty")->isVisible());
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!palette->property("opened").toBool());
+}
+
 void LibraryUiTest::changesCovers()
 {
     openWritable(5);
@@ -767,6 +1488,9 @@ void LibraryUiTest::changesCovers()
 
 int main(int argc, char **argv)
 {
+#ifdef COUSOIR_READER
+    BookReader::initialize();
+#endif
     QGuiApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
     QTemporaryDir settingsDir;
@@ -782,26 +1506,13 @@ int main(int argc, char **argv)
     return QTest::qExec(&test, argc, argv);
 }
 
-
-namespace {
-
-QStringList formatsOf(const QVariantMap &book)
-{
-    QStringList formats;
-    for (const QVariant &format : book.value(QStringLiteral("formats")).toList())
-        formats.append(format.toMap().value(QStringLiteral("format")).toString());
-    return formats;
-}
-
-} // namespace
-
 void LibraryUiTest::movesBooksToTrashAndBack()
 {
     makeWritable();
     // Del on the list asks before moving the current book.
     QMetaObject::invokeMethod(m_window, "focusCurrentList");
     QTRY_VERIFY(m_window->activeFocusItem());
-    const QVariantList rows = library()->property("rows").toList();
+    const QVariantList rows = bookRows();
     QVERIFY(!rows.isEmpty());
     const QVariantMap first = rows.first().toMap();
     QVERIFY(text("keyHints").endsWith(QStringLiteral("Del trash")));
@@ -812,7 +1523,7 @@ void LibraryUiTest::movesBooksToTrashAndBack()
              QStringLiteral("Move “%1” to the trash?").arg(first.value(QStringLiteral("title")).toString()));
     clickVisible("confirmAccept");
     waitForSave();
-    QTRY_COMPARE(library()->property("rows").toList().size(), rows.size() - 1);
+    QTRY_COMPARE(bookRows().size(), rows.size() - 1);
 
     // The Trash section lists it, and Restore puts it back.
     click("sidebar_trash");
@@ -837,6 +1548,98 @@ void LibraryUiTest::movesBooksToTrashAndBack()
     waitForSave();
     QTRY_COMPARE(library()->property("currentBookId").toInt(), 0);
     QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("trash")).toInt(), 1);
+}
+
+void LibraryUiTest::editsManyBooks()
+{
+    makeWritable();
+    QQuickItem *list = control("bookList");
+    QObject *books = library()->property("books").value<QObject *>();
+    // By title: The Black Company (2), L'Écume des jours (1), Good Omens (4),
+    // Manuel technique (5), Le Petit Prince (6), Shadows Linger (3).
+    click("bookRow0");
+    QTest::keyClick(m_window, Qt::Key_Down, Qt::ShiftModifier);
+    QTest::keyClick(m_window, Qt::Key_Down, Qt::ShiftModifier);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 3);
+    QCOMPARE(list->property("currentIndex").toInt(), 2);
+    QCOMPARE(text("bookCount"), QStringLiteral("3 selected · 6 books"));
+
+    // The pane beside the list edits them together.
+    QTRY_VERIFY(control("bulkPane") && control("bulkPane")->isVisible());
+    QCOMPARE(text("bulkTitle"), QStringLiteral("3 books"));
+    click("bulk_addTags");
+    typeText(QStringLiteral("Lu"));
+    click("bulk_publisher");
+    typeText(QStringLiteral("Folio"));
+    click("bulkApplyButton");
+    waitForSave();
+    const auto book = [this](int id) {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("id")).toInt() == id)
+                return row.toMap();
+        }
+        return QVariantMap();
+    };
+    QTRY_VERIFY(library()->property("bulkUndoCount").toInt() == 3);
+    // The tags as saved, in their order.
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    const auto tagsOf = [database](int id) {
+        SqliteDb db;
+        QString error;
+        QStringList tags;
+        if (!db.open(database, SqliteDb::Mode::ReadWrite, &error))
+            return tags;
+        for (const QVariantList &row : db.rows(QStringLiteral("SELECT name FROM tags JOIN books_tags_link l ON l.tag=tags.id "
+                                                              "WHERE l.book=? ORDER BY l.id"), { id }))
+            tags.append(row.value(0).toString());
+        return tags;
+    };
+    QCOMPARE(tagsOf(2), (QStringList{ QStringLiteral("Fantasy"), QStringLiteral("Lu") }));
+    QCOMPARE(tagsOf(1), (QStringList{ QStringLiteral("Roman"), QStringLiteral("Classique"), QStringLiteral("Lu") }));
+    QCOMPARE(tagsOf(5), QStringList{ QStringLiteral("Technique") });
+    QCOMPARE(book(4).value(QStringLiteral("id")).toInt(), 4);
+    // The selection stays through the save.
+    QCOMPARE(books->property("selectedCount").toInt(), 3);
+
+    // Undo puts them back.
+    click("bulkUndoButton");
+    waitForSave();
+    QTRY_COMPARE(tagsOf(2), QStringList{ QStringLiteral("Fantasy") });
+    QCOMPARE(tagsOf(4), (QStringList{ QStringLiteral("Fantasy"), QStringLiteral("Humour") }));
+    QCOMPARE(library()->property("bulkUndoCount").toInt(), 0);
+
+    // Ctrl takes a book out, or adds one; Ctrl+A takes them all, Esc goes
+    // back to one.
+    QTest::mouseClick(m_window, Qt::LeftButton, Qt::ControlModifier, center(control("bookRow1")));
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 2);
+    // The current book, taken out, is not what Del acts on.
+    QCOMPARE(list->property("currentIndex").toInt(), 1);
+    QTest::keyClick(m_window, Qt::Key_Delete);
+    QTRY_VERIFY(object("trashDialog")->property("opened").toBool());
+    QCOMPARE(object("trashDialog")->property("title").toString(), QStringLiteral("Move 2 books to the trash?"));
+    QCOMPARE(object("trashDialog")->property("bookIds").toList(), (QVariantList{ 2, 4 }));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!object("trashDialog")->property("opened").toBool());
+    QTest::mouseClick(m_window, Qt::LeftButton, Qt::ControlModifier, center(control("bookRow5")));
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 3);
+    QCOMPARE(books->property("selectedIds").toList(),
+             (QVariantList{ 2, 4, 3 }));
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 6);
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 1);
+    QVERIFY(!control("bulkPane")->isVisible());
+
+    // Delete asks about all of them.
+    QTest::keyClick(m_window, Qt::Key_Home);
+    QTest::keyClick(m_window, Qt::Key_End, Qt::ShiftModifier);
+    QTRY_COMPARE(books->property("selectedCount").toInt(), 6);
+    QTest::keyClick(m_window, Qt::Key_Delete);
+    QTRY_VERIFY(object("trashDialog")->property("opened").toBool());
+    QCOMPARE(object("trashDialog")->property("title").toString(), QStringLiteral("Move 6 books to the trash?"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!object("trashDialog")->property("opened").toBool());
+    QCOMPARE(bookRows().size(), 6);
 }
 
 void LibraryUiTest::addsAndRemovesFiles()
@@ -981,6 +1784,69 @@ void LibraryUiTest::convertsBooks()
              (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
 }
 
+// Metadata from the web, with a stand-in for Calibre: the books found, a
+// field left as it is, a cover picked, saved as one change that Revert
+// undoes.
+void LibraryUiTest::downloadsMetadata()
+{
+    auto *downloads = qobject_cast<MetadataDownloader *>(m_window->property("downloads").value<QObject *>());
+    QVERIFY(downloads);
+    downloads->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
+    openWritable(2);
+    click("downloadMetadataButton");
+    QObject *dialog = object("metadataDownloadDialog");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QTRY_COMPARE(downloads->state(), QStringLiteral("found"));
+    QTRY_VERIFY(control("downloadField_tags"));
+    QVERIFY(dialog->property("ticked").toMap().value(QStringLiteral("publisher")).toBool());
+    click("downloadField_publisher");
+    QVERIFY(!dialog->property("ticked").toMap().value(QStringLiteral("publisher")).toBool());
+    click("downloadCoversButton");
+    QTRY_VERIFY(!downloads->searchingCovers());
+    QTRY_VERIFY(control("downloadCover1"));
+    click("downloadCover1");
+    QVERIFY(dialog->property("coverPicked").toBool());
+    // Back to the fields, the cover picked still goes with them.
+    click("downloadBack");
+    QTRY_COMPARE(dialog->property("page").toString(), QStringLiteral("fields"));
+    const QString coverBefore = library()->property("currentBook").toMap().value(QStringLiteral("cover")).toString();
+    click("downloadSave");
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    waitForSave();
+    const auto book = [this] { return library()->property("currentBook").toMap(); };
+    QTRY_COMPARE(book().value(QStringLiteral("tags")).toStringList(),
+                 (QStringList{ QStringLiteral("Dark fantasy"), QStringLiteral("fiction"), QStringLiteral("Fantasy") }));
+    QCOMPARE(book().value(QStringLiteral("publisher")).toString(), QStringLiteral("Tor"));
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("“The Black Company” updated from the web; Revert changes undoes it."));
+    QTRY_VERIFY(control("revertChangesButton")->isVisible());
+    QCOMPARE(downloads->state(), QStringLiteral("idle"));
+    QVERIFY(book().value(QStringLiteral("cover")).toString() != coverBefore);
+
+    // Space ticks the field it is on; Enter on Cancel cancels.
+    click("downloadMetadataButton");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QTRY_COMPARE(downloads->state(), QStringLiteral("found"));
+    QTRY_VERIFY(control("downloadField_title"));
+    QVERIFY(!dialog->property("ticked").toMap().value(QStringLiteral("title")).toBool());
+    control("downloadFields")->forceActiveFocus();
+    QTest::keyClick(m_window, Qt::Key_Space);
+    QTRY_VERIFY(dialog->property("ticked").toMap().value(QStringLiteral("title")).toBool());
+    control("downloadCancel")->forceActiveFocus();
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    QCOMPARE(book().value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+
+    // Closed, the download stops.
+    qputenv("COUSOIR_FAKE_DELAY", "20");
+    click("downloadMetadataButton");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QCOMPARE(downloads->state(), QStringLiteral("searching"));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    QCOMPARE(downloads->state(), QStringLiteral("idle"));
+    qunsetenv("COUSOIR_FAKE_DELAY");
+}
+
 // A Kobo plugged in: a book sent to it from the book's Files, then the
 // Kobo's page with the book, which opens the library's, the book removed
 // after asking, and the Kobo ejected, which takes its page with it.
@@ -1040,6 +1906,75 @@ void LibraryUiTest::sendsToKobo()
     QTRY_COMPARE(text("keyHints"), QStringLiteral("Kobo eReader can be unplugged."));
     QTRY_COMPARE(text("pageTitle"), QStringLiteral("Books"));
     QVERIFY(!control(entry) || !control(entry)->isVisible());
+    devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
+}
+
+// A Kobo that has read a book of the library: how far, and its highlights
+// and notes, on the book's page and the Kobo's, copied as Markdown; as last
+// seen once the Kobo is unplugged.
+void LibraryUiTest::showsReading()
+{
+    auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
+    QVERIFY(devices);
+    QTemporaryDir kobo;
+    QVERIFY(makeKobo(kobo.path()));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite")),
+                         SqliteDb::Mode::ReadWrite, &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-reading.sql"))), &error),
+                 qPrintable(error));
+    }
+    QVERIFY(writeAll(QDir(kobo.path()).filePath(QStringLiteral("Vian, Boris/Ecume.kepub.epub")), "kepub"));
+    QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
+    devices->setVolumeProvider([&volumes] { return volumes; }, 20);
+    const QString entry = QStringLiteral("sidebar_device:") + QDir::cleanPath(kobo.path());
+    QTRY_VERIFY(control(entry) && control(entry)->isVisible());
+
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(control("readingState") && control("readingState")->isVisible());
+    QVERIFY2(text("readingState").startsWith(QStringLiteral("43 % read  ·  last read 2026-10-2")),
+             qPrintable(text("readingState")));
+    QVERIFY(text("readingState").endsWith(QStringLiteral("1 h 30 min  ·  6 notes")));
+    QStringList annotations;
+    for (QQuickItem *item : visualDescendants(m_window->contentItem(), QStringLiteral("noteAnnotation"))) {
+        if (item->isVisible())
+            annotations.append(item->property("text").toString());
+    }
+    annotations.sort();
+    QCOMPARE(annotations, QStringList({ QStringLiteral("Le nénuphar, déjà ?"), QStringLiteral("Seulement une note") }));
+    QMetaObject::invokeMethod(control("copyNotesButton"), "clicked");
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("Highlights and notes copied as Markdown"));
+    QVERIFY2(QGuiApplication::clipboard()->text().startsWith(
+                 QStringLiteral("# L'Écume des jours\n\nBoris Vian\n\n> perdu\n\n## Un\n\n> le pianocktail")),
+             qPrintable(QGuiApplication::clipboard()->text()));
+
+    // The Kobo's page: how far each book is read and how many notes it has.
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(control("booksPage") && control("booksPage")->isVisible());
+    QTRY_VERIFY(control(entry)->isVisible());
+    click(entry.toLatin1().constData());
+    QTRY_VERIFY(control("devicePage")->isVisible());
+    QTRY_VERIFY(control("deviceRow0"));
+    QVariantMap ecume;
+    for (const QVariant &row : devices->rows()) {
+        if (row.toMap().value(QStringLiteral("bookId")).toInt() == 1)
+            ecume = row.toMap();
+    }
+    QCOMPARE(ecume.value(QStringLiteral("reading")).toString(), QStringLiteral("43 %"));
+    QCOMPARE(ecume.value(QStringLiteral("notes")).toInt(), 6);
+
+    // Unplugged, the book's page tells what the Kobo told when last seen.
+    volumes.clear();
+    QTRY_VERIFY(!control(entry) || !control(entry)->isVisible());
+    library()->setProperty("currentBookId", 1);
+    QTRY_VERIFY(control("bookPage") && control("bookPage")->isVisible());
+    QTRY_VERIFY(control("readingState") && control("readingState")->isVisible());
+    QVERIFY2(text("readingState").startsWith(QStringLiteral("Seen %1  ·  43 % read")
+                                                 .arg(QDate::currentDate().toString(Qt::ISODate))),
+             qPrintable(text("readingState")));
     devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
 }
 

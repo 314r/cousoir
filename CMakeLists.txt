@@ -16,6 +16,13 @@ include(CTest)
 
 find_package(Qt6 6.9 REQUIRED COMPONENTS Core Concurrent Gui Network Qml Quick QuickControls2 Svg Xml)
 find_package(SQLite3 REQUIRED)
+# ICU and Snowball's libstemmer, for Calibre's full text tokenizer.
+find_package(ICU REQUIRED COMPONENTS uc i18n)
+find_path(STEMMER_INCLUDE_DIR libstemmer.h REQUIRED)
+find_library(STEMMER_LIBRARY stemmer REQUIRED)
+# xxHash, for the names Calibre gives the notes it keeps aside.
+find_path(XXHASH_INCLUDE_DIR xxhash.h REQUIRED)
+find_library(XXHASH_LIBRARY xxhash REQUIRED)
 find_package(libzip REQUIRED)
 # UDisks2, to eject a Kobo.
 if(UNIX AND NOT APPLE)
@@ -23,6 +30,8 @@ if(UNIX AND NOT APPLE)
     set(COUSOIR_DBUS Qt6::DBus)
 endif()
 # libmtp, to reach a Kindle Paperwhite; without it, Cousoir sees no MTP device.
+# Qt WebEngine, to read books in Cousoir; without it, there is no reader.
+find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick)
 find_package(PkgConfig)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIBMTP IMPORTED_TARGET libmtp)
@@ -52,20 +61,38 @@ qt_add_library(cousoir_core STATIC
     book_import.h
     book_operations.cpp
     book_operations.h
+    book_sort.cpp
+    book_sort.h
     calibre_config.cpp
     calibre_config.h
     calibre_date.h
     calibre_db.cpp
+    calibre_fts.cpp
+    calibre_fts.h
+    calibre_notes.cpp
+    calibre_notes.h
     calibre_db.h
     calibre_job.cpp
     calibre_job.h
+    calibre_languages.cpp
+    calibre_languages.h
     calibre_list.cpp
     calibre_list.h
     calibre_lock.cpp
     calibre_lock.h
     calibre_paths.cpp
     calibre_paths.h
+    calibre_search.cpp
+    calibre_search.h
+    calibre_search.inc
     calibre_strings.inc
+    calibre_template.cpp
+    calibre_template.h
+    calibre_template.inc
+    calibre_template_book.cpp
+    calibre_template_engine.cpp
+    calibre_template_functions.cpp
+    calibre_template_p.h
     calibre_text.cpp
     calibre_text.h
     calibre_unidecode.inc
@@ -77,6 +104,8 @@ qt_add_library(cousoir_core STATIC
     conversion.h
     cousoir_paths.cpp
     cousoir_paths.h
+    description.cpp
+    description.h
     device_books.cpp
     device_books.h
     device_files.cpp
@@ -85,8 +114,16 @@ qt_add_library(cousoir_core STATIC
     field_writers.h
     file_transaction.cpp
     file_transaction.h
+    identifier_links.cpp
+    identifier_links.h
+    epub_book.cpp
+    epub_book.h
+    kepub.cpp
+    kepub.h
     kindle.cpp
     kindle.h
+    kindle_clippings.cpp
+    kindle_clippings.h
     kindle_send.cpp
     kindle_send.h
     kobo.cpp
@@ -95,40 +132,75 @@ qt_add_library(cousoir_core STATIC
     kobo_send.h
     library_check.cpp
     library_check.h
+    metadata_download.cpp
+    metadata_download.h
+    mobi_metadata.cpp
+    mobi_metadata.h
     mtp.cpp
     mtp.h
+    native_send.cpp
+    native_send.h
+    open_library.cpp
+    open_library.h
     opf.cpp
     opf.h
     opf_reader.cpp
     opf_reader.h
+    palette.cpp
+    palette.h
     pdf_reader.cpp
     pdf_reader.h
+    python_json.cpp
+    python_json.h
+    reading_log.cpp
+    reading_log.h
     send_job.cpp
     send_job.h
     sqlite_db.cpp
     sqlite_db.h
+    annotation_search.cpp
+    annotation_search.h
 )
 target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# Kobo's script, which a KEPUB carries.
+qt_add_resources(cousoir_core "core_resources"
+    PREFIX "/cousoir"
+    BASE assets
+    FILES assets/kobo/kobo.js
+)
 target_link_libraries(cousoir_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP}
+    PRIVATE ICU::uc ICU::i18n ${STEMMER_LIBRARY} ${XXHASH_LIBRARY}
 )
+target_include_directories(cousoir_core PRIVATE ${STEMMER_INCLUDE_DIR} ${XXHASH_INCLUDE_DIR})
 
 # The models QML uses on top of it, and the system's theme and appearance.
 qt_add_library(cousoir_models STATIC
     book_library.cpp
     book_library.h
+    book_list_model.cpp
+    book_list_model.h
     conversion_service.cpp
     conversion_service.h
     cover_cache.cpp
     cover_cache.h
     device_library.cpp
     device_library.h
+    highlight_browser.cpp
+    highlight_browser.h
+    metadata_downloader.cpp
+    metadata_downloader.h
     omarchy_theme.cpp
     omarchy_theme.h
     system_appearance.cpp
     system_appearance.h
 )
 target_link_libraries(cousoir_models PUBLIC cousoir_core Qt6::Concurrent Qt6::Quick ${COUSOIR_DBUS})
+if(TARGET Qt6::WebEngineQuick)
+    target_sources(cousoir_models PRIVATE book_reader.cpp book_reader.h)
+    target_link_libraries(cousoir_models PUBLIC Qt6::WebEngineQuick)
+    target_compile_definitions(cousoir_models PUBLIC COUSOIR_READER)
+endif()
 
 qt_add_executable(cousoir main.cpp)
 
@@ -142,8 +214,10 @@ set(COUSOIR_QML_FILES
     BookDetailsPane.qml
     BookPage.qml
     BooksPage.qml
+    BulkEditPane.qml
     CheckPage.qml
     ChoiceBox.qml
+    CommandPalette.qml
     ConfirmDialog.qml
     CoverGrid.qml
     DevicePage.qml
@@ -152,11 +226,14 @@ set(COUSOIR_QML_FILES
     FlatButton.qml
     FormField.qml
     HeadingLabel.qml
+    HighlightsPage.qml
     LibraryFolderDialog.qml
     LibrarySettingsPage.qml
     ListTable.qml
     Main.qml
     MetaRow.qml
+    MetadataDownloadDialog.qml
+    NotePanel.qml
     SearchField.qml
     SettingsWindow.qml
     Sidebar.qml
@@ -166,6 +243,13 @@ set(COUSOIR_QML_FILES
     ThinScrollBar.qml
     TrashPage.qml
 )
+if(TARGET Qt6::WebEngineQuick)
+    list(APPEND COUSOIR_QML_FILES ReaderWindow.qml)
+endif()
+# Qt Pdf, to read PDFs in the reader.
+if(TARGET Qt6::WebEngineQuick AND TARGET Qt6::PdfQuick)
+    list(APPEND COUSOIR_QML_FILES PdfReaderWindow.qml)
+endif()
 
 set(COUSOIR_ICON_FILES
     assets/icons/arrow-left.svg
@@ -179,6 +263,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/external.svg
     assets/icons/folder.svg
     assets/icons/globe.svg
+    assets/icons/highlighter.svg
     assets/icons/grid.svg
     assets/icons/image.svg
     assets/icons/info.svg
@@ -191,7 +276,6 @@ set(COUSOIR_ICON_FILES
     assets/icons/search.svg
     assets/icons/settings-appearance.svg
     assets/icons/settings.svg
-    assets/icons/star.svg
     assets/icons/tag.svg
     assets/icons/theme-dark.svg
     assets/icons/theme-light.svg
@@ -200,6 +284,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/trash.svg
     assets/icons/user.svg
     assets/icons/hicolor/cousoir-256.png
+    assets/reader/reader.js
 )
 
 qt_add_qml_module(cousoir
@@ -300,9 +385,12 @@ if(BUILD_TESTING)
         tests/tool/common.h
         tests/tool/compare.cpp
         tests/tool/fixtures.cpp
+        tests/tool/large.cpp
         tests/tool/library.cpp
         tests/tool/main.cpp
         tests/tool/readers.cpp
+        tests/tool/search.cpp
+        tests/tool/sort.cpp
     )
     target_link_libraries(cousoir-test-tool PRIVATE cousoir_core)
     cousoir_configure_test_executable(cousoir-test-tool)
@@ -321,13 +409,16 @@ if(BUILD_TESTING)
         )
     endfunction()
 
-    foreach(name IN ITEMS calibre_text calibre_paths calibre_db opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check test_tool)
+    foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
+                          kindle library_check metadata_web mobi_metadata epub_book calibre_fts calibre_notes annotation_search test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)
         cousoir_add_logged_test(${name}_tests ${name}_tests)
     endforeach()
+
+    # A description is read with QTextDocument, which wants a GUI application.
+    set_tests_properties(description_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
     qt_add_executable(book_library_tests tests/book_library_test.cpp)
     target_link_libraries(book_library_tests PRIVATE cousoir_models Qt6::Test)
@@ -349,9 +440,23 @@ if(BUILD_TESTING)
     foreach(scale IN ITEMS 1 2)
         cousoir_add_logged_test(library_ui_tests_scale_${scale} library_ui_tests)
         set_tests_properties(library_ui_tests_scale_${scale} PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale}"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale};QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu"
         )
     endforeach()
+
+    # Measures loading, searching, sorting and saving on a library, and the
+    # window with --ui; run by hand on a large library, not by ctest.
+    qt_add_executable(cousoir-benchmark tests/benchmark.cpp)
+    target_link_libraries(cousoir-benchmark PRIVATE
+        cousoir_models Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
+    )
+    cousoir_configure_test_executable(cousoir-benchmark)
+    qt_add_resources(cousoir-benchmark "benchmark_ui"
+        PREFIX "/qt/qml/Cousoir"
+        FILES
+            ${COUSOIR_QML_FILES}
+            ${COUSOIR_ICON_FILES}
+    )
 
     # Compares cousoir-cli list with calibredb's own output on copies of the
     # libraries; skipped without Calibre.

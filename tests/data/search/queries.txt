@@ -1,0 +1,477 @@
+# The searches the golden test runs through Calibre's search and Cousoir's,
+# on the fixture, the fixture with custom columns and made-up libraries;
+# "@vl NAME" restricts the lines after it to a virtual library, as the
+# Calibre window does. A line starting with "# " is a comment.
+
+# Words, anywhere.
+ecume
+Écume
+L'Écume
+l’écume
+"l'écume des"
+ÉCUME
+montagne
+Montagne mer
+"la mer"
+mer montagne
+glen black
+black company
+company black
+cook
+pratchett gaiman
+science-fiction
+sciencefiction
+science fiction
+"science fiction"
+roman
+prix
+dune
+zzz
+x
+é
+-
+'
+...
+.
+"
+""
+"   "
+
+# Operators.
+vian or cook
+vian OR cook
+vian Or cook
+montagne or mer
+montagne and mer
+montagne AND mer
+montagne and not mer
+not montagne
+NOT montagne
+not not montagne
+not (montagne or mer)
+(montagne or mer) and rating:>3
+((montagne))
+(montagne) (mer)
+montagne (mer or dune)
+or montagne
+montagne or
+and montagne
+montagne and
+(montagne
+montagne)
+()
+(
+)
+not
+"or"
+"and"
+"not"
+
+# Locations.
+title:montagne
+title:Montagne
+title:"la montagne"
+title:=Montagne
+title:"=La Montagne"
+title:"=la montagne dans la mer"
+title:~^la\s
+title:~mer$
+title:~(?i)^THE
+title:~[
+title:^montagne
+title:^écume
+title:\=montagne
+title:true
+title:false
+title:
+title:"
+title:""
+title:"foo" "bar"
+title:foo "bar"
+"title:montagne"
+mer:montagne
+nowhere:foo
+Title:montagne
+TITLE:montagne
+author:vian
+authors:vian
+author:"le guin"
+author:=ursula
+author:"=Ursula Le Guin"
+author:"=Glen Cook"
+author:true
+author:false
+authors:#>1
+authors:#=2
+authors:#<2
+authors:#>=1
+authors:#!=1
+authors:#abc
+author:~^j\.
+author:~^[a-c]
+author:.vian
+author:..vian
+tag:fiction
+tags:=fiction
+tags:=.fiction
+tags:"=.fiction"
+tags:"=..fiction"
+tags:..fiction
+tags:=Fiction.Fantasy
+tags:.non-fiction
+tags:#>3
+tags:#=0
+tags:#<=1
+tags:false
+tags:true
+tag:"science-fiction"
+tag:sciencefiction
+tag:prix
+tags:"=prix hugo"
+tags:"=Prix Hugo"
+tags:^prix
+series:chroniques
+series:true
+series:false
+series:=dune
+series:"=chronicles of the black company"
+series:black
+series_index:>3
+series_index:1
+series_index:<=2
+series_index:2.5
+series_index:true
+series_index:false
+series_index:abc
+series_sort:chroniques
+series_sort:"cycle de"
+series_sort:black
+series_sort:"black company, the"
+series_sort:true
+publisher:gallimard
+publisher:"=Gallimard Noir"
+publisher:true
+publisher:false
+rating:5
+rating:>3
+rating:<2
+rating:>=4
+rating:true
+rating:false
+rating:!=3
+rating:0
+rating:3.5
+rating:abc
+rating:>3k
+languages:fra
+languages:fr
+languages:french
+languages:eng
+languages:#>0
+languages:#=0
+languages:false
+languages:true
+language:jpn
+languages:=fra
+languages:en
+languages:english
+languages:~^f
+formats:epub
+formats:=EPUB
+formats:pdf
+formats:#>1
+formats:#=0
+formats:false
+formats:true
+format:kepub
+formats:azw
+formats:=azw
+identifiers:isbn:
+identifiers:isbn:978
+identifiers:goodreads:true
+identifiers:goodreads:false
+identifiers:=goodreads:
+identifiers:true
+identifiers:false
+identifiers:=isbn:true
+identifiers::978
+identifiers:978
+isbn:978
+isbn:true
+isbn:false
+identifier:goodreads
+identifiers:#>1
+identifiers:~^isbn:~^97[89]
+comments:roman
+comments:"un roman"
+comments:false
+comments:true
+comments:~voyage\s+inoubliable
+comments:=xyz
+comments:div
+comments:"<p>"
+author_sort:asimov
+author_sort:"le guin"
+author_sort:,
+title_sort:montagne
+title_sort:"montagne, la"
+title_sort:"black company, the"
+uuid:true
+uuid:00
+uuid:-
+cover:true
+cover:false
+cover:1
+cover:0
+cover:yes
+size:>1m
+size:<500k
+size:>2000000
+size:true
+size:false
+size:<1.5m
+id:<10
+id:>1990
+id:=5
+id:!=1
+id:5
+id:abc
+id:true
+pages:0
+pages:false
+pages:true
+pages:>0
+ondevice:true
+ondevice:false
+marked:true
+marked:false
+in_tag_browser:true
+
+# Dates.
+date:2020
+date:>2024
+date:<2017-06
+date:2018-03
+date:>=2019-01-15
+date:2019-01-15
+date:!=2020
+date:<=2016
+pubdate:1900
+pubdate:<1900
+pubdate:>2000
+pubdate:false
+pubdate:true
+pubdate:2015-03
+pubdate:1947
+pubdate:1947-03
+pubdate:<=1947-03-20
+last_modified:>2017
+last_modified:true
+date:today
+date:thismonth
+date:<thismonth
+date:yesterday
+date:<100daysago
+date:>3000daysago
+date:>_today
+date:aujourd’hui
+date:ce mois
+date:false
+date:1
+date:x
+date:2020-13
+
+# Numbers and words in every field.
+1
+2
+5
+0
+3.5
+"0"
+true
+false
+TRUE
+2020
+978
+epub
+pdf
+pages
+
+# Saved searches, virtual libraries, groups and categories.
+search:"Mes favoris"
+search:"mes favoris"
+search:"=Mes favoris"
+search:cook
+search:Imbriquée
+search:boucle
+search:missing
+search:"Récents" and not cook
+vl:Français
+vl:Fantasy
+vl:"Fantasy"
+vl:Vide
+vl:missing
+vl:Récursive
+not vl:Français
+people:cook
+people:gallimard
+people:false
+words:montagne
+@people:cook
+@Favoris:true
+@favoris:true
+@favoris:false
+@favoris:.true
+@favoris:x
+@Favoris.Sous:true
+
+# Custom columns: of several values, text, yes or no, ratings, numbers,
+# dates, long text, a fixed list, a series and its numbers.
+#genre:sf
+#genre:=SF
+#genre:fantas
+#genre:true
+#genre:false
+#genre:#>1
+#genre:#=0
+#genre:#abc
+#people:curie
+#people:=jean dupont
+#note:note
+#note:"=une note"
+#note:ca
+#note:true
+#note:false
+#read:true
+#read:false
+#read:yes
+#read:no
+#read:checked
+#read:unchecked
+#read:empty
+#read:blank
+#read:oui
+#read:non
+#read:maybe
+#myrating:4
+#myrating:>3
+#myrating:5
+#myrating:true
+#myrating:false
+#myrating:3.5
+#half:3.5
+#half:>3
+#half:3
+#half:true
+#half:false
+#pagecount:320
+#pagecount:0
+#pagecount:>100
+#pagecount:true
+#pagecount:false
+#pagecount:abc
+#price:12.5
+#price:>5
+#price:3
+#price:true
+#started:2024
+#started:2024-03
+#started:<2000
+#started:true
+#started:false
+#review:bien
+#review:true
+#review:false
+#shelf:b
+#shelf:=B
+#shelf:true
+#shelf:false
+#saga:cycle
+#saga:=Cycle
+#saga:autre
+#saga:true
+#saga:false
+#saga_index:3.5
+#saga_index:>1
+#saga_index:true
+#saga_index:false
+# Composite columns: text, a number, a date, values between commas; words
+# alone look in them as text.
+#computed:vian
+#computed:"=Good Omens by Terry Pratchett & Neil Gaiman"
+#computed:~^le
+#computed:true
+#computed:false
+#pagesort:320
+#pagesort:>100
+#pagesort:0
+#pagesort:true
+#pagesort:false
+#started2:2024
+#started2:<2000
+#started2:true
+#started2:false
+#labels:sf
+#labels:=SF
+#labels:fantasy
+#labels:#>2
+#labels:true
+#labels:false
+by terry
+# Templates: their text compared as text, a number, a date, yes or no.
+template:"{title}#@#:t:omens"
+template:"{title} {authors}#@#:t:=Good Omens Terry Pratchett & Neil Gaiman"
+template:"{tags:uppercase()}#@#:t:~^ROMAN"
+template:"program: $#pagecount#@#:n:>100"
+template:"program: $#pagecount#@#:n:0"
+template:"program: format_date($$#started, 'yyyy-MM-dd')#@#:d:2024"
+template:"program: format_date($$#started, 'yyyy-MM-dd')#@#:d:<2000"
+template:"{series}#@#:b:yes"
+template:"{series}#@#:b:false"
+template:"{series}#@#:B:true"
+template:"{title}"
+template:"{title}#@#:x:a"
+template:"program: nosuchfunction()#@#:t:x"
+template:"{title}#@#:n:>1"
+#nothing:x
+#genre:sf and not #read:yes
+bien
+cycle
+12.5
+320
+curie
+"une note"
+3.5
+
+# Other scripts.
+достоевский
+Достоевский
+фёдор
+федор
+村上
+τολστοι
+Τολστόι
+мураками
+
+@vl Français
+montagne
+not montagne
+true
+vl:Fantasy
+search:cook
+@vl Fantasy
+cook
+not cook
+people:false
+@vl Vide
+montagne
+@vl
+montagne
+#sorts:"=Gaiman, Neil"
+#sorts:"=Gaiman"
+#sorts:gaiman
+#sorts:"=Pratchett, Terry"
+#sorts:true
+#sorts:false
+languages:français
+languages:anglais

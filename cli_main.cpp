@@ -17,21 +17,28 @@
 
 #include <cstdio>
 #include <memory>
+#include <optional>
 
 #include "book_edit.h"
 #include "book_import.h"
 #include "calibre_db.h"
+#include "calibre_job.h"
 #include "calibre_list.h"
+#include "calibre_search.h"
+#include "calibre_template.h"
 #include "commit_engine.h"
 #include "concurrency_guard.h"
 #include "conversion.h"
 #include "device_files.h"
+#include "kepub.h"
 #include "kindle.h"
 #include "kindle_send.h"
 #include "kobo.h"
 #include "kobo_send.h"
 #include "library_check.h"
+#include "metadata_download.h"
 #include "mtp.h"
+#include "open_library.h"
 #include "cousoir_paths.h"
 
 namespace {
@@ -70,6 +77,37 @@ int list(const QString &libraryPath)
         return 2;
     const QByteArray json = CalibreList::machineList(data);
     std::fwrite(json.constData(), 1, size_t(json.size()), stdout);
+    return 0;
+}
+
+// calibredb search: the ids of the books found, by Calibre's search
+// language, comma-separated and in order; at most `limit` of them unless
+// it is negative.
+int search(const QString &libraryPath, const QString &query, int limit)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 2;
+    const CalibreConfig config = CalibreConfig::load();
+    const CalibreSearch::Index index(data, CalibreSearch::Preferences::fromRows(data.preferences), config.tweaks,
+                                     config.interfaceLanguage);
+    const CalibreSearch::Result result = CalibreSearch::search(index, query);
+    if (!result.ok()) {
+        err() << QStringLiteral("Failed to parse search query: (%1) with error: %2").arg(query, result.error)
+              << Qt::endl;
+        return 1;
+    }
+    QStringList ids;
+    for (qsizetype row = 0; row < result.rows.size() && (limit < 0 || ids.size() < limit); ++row) {
+        if (result.rows.testBit(row))
+            ids.append(QString::number(data.books.at(row).id));
+    }
+    if (ids.isEmpty()) {
+        err() << QStringLiteral("No books matching the search expression: %1").arg(query) << Qt::endl;
+        return 1;
+    }
+    out() << ids.join(u',');
+    out().flush();
     return 0;
 }
 
@@ -409,16 +447,23 @@ bool send(const QString &libraryPath, const CalibreConfig &config, const QString
     }
     QList<SendJob::Sent> sent;
     QStringList unsendable;
+    // Cousoir alone without Calibre, or when asked to.
+    const bool native = SendJob::program().isEmpty() || !qEnvironmentVariableIsEmpty("COUSOIR_NATIVE_SEND");
     if (reader.isKindle()) {
         // What Calibre does as it connects.
         Kindle::restoreThumbnails(*reader.files, &error);
-        if (!KindleSend::prepare(data, bookIds, *reader.files, reader.kindle,
-                                 Kindle::formatMap(CalibreConfig::configDirectory(), reader.kindle.serial), job.path(),
-                                 &error)) {
+        const QStringList formats = Kindle::formatMap(CalibreConfig::configDirectory(), reader.kindle.serial);
+        const bool prepared = native ? KindleSend::prepareNatively(data, bookIds, *reader.files, reader.kindle, formats,
+                                                                   CalibreConfig::configDirectory(),
+                                                                   config.interfaceLanguage, job.path(), &error)
+                                     : KindleSend::prepare(data, bookIds, *reader.files, reader.kindle, formats,
+                                                           job.path(), &error);
+        if (!prepared) {
             err() << error << Qt::endl;
             return false;
         }
-        const KindleSend::Outcome outcome = KindleSend::run(job.path(), config.interfaceLanguage);
+        const KindleSend::Outcome outcome = native ? KindleSend::outcome(job.path(), 0)
+                                                   : KindleSend::run(job.path(), config.interfaceLanguage);
         if (!outcome.ok || !KindleSend::apply(job.path(), outcome, *reader.files, &error)) {
             err() << (outcome.ok ? error : outcome.error) << Qt::endl;
             return false;
@@ -426,12 +471,17 @@ bool send(const QString &libraryPath, const CalibreConfig &config, const QString
         sent = outcome.sent;
         unsendable = outcome.unsendable;
     } else {
-        if (!KoboSend::prepare(data, bookIds, reader.kobo, Kobo::formatMap(CalibreConfig::configDirectory()),
-                               job.path(), &error)) {
+        const QStringList formats = Kobo::formatMap(CalibreConfig::configDirectory());
+        const bool prepared = native ? KoboSend::prepareNatively(data, bookIds, reader.kobo, formats,
+                                                                 CalibreConfig::configDirectory(),
+                                                                 config.interfaceLanguage, job.path(), &error)
+                                     : KoboSend::prepare(data, bookIds, reader.kobo, formats, job.path(), &error);
+        if (!prepared) {
             err() << error << Qt::endl;
             return false;
         }
-        const KoboSend::Outcome outcome = KoboSend::run(job.path(), config.interfaceLanguage);
+        const KoboSend::Outcome outcome = native ? KoboSend::outcome(job.path(), 0)
+                                                 : KoboSend::run(job.path(), config.interfaceLanguage);
         if (!outcome.ok || !KoboSend::apply(job.path(), outcome, reader.kobo, &error)) {
             err() << (outcome.ok ? error : outcome.error) << Qt::endl;
             return false;
@@ -481,8 +531,32 @@ int device(const QString &libraryPath, const QString &spec)
     DeviceBooks::match(&books, data);
     QJsonArray list;
     for (const DeviceBook &book : std::as_const(books)) {
+        // What the reader knows of the book's reading, as
+        // tools/oracle/kobo_reading.py prints Calibre's.
+        QJsonArray notes;
+        for (const ReaderNote &note : book.reading.notes) {
+            notes.append(QJsonObject{
+                { QStringLiteral("location"), note.location },
+                { QStringLiteral("type"), note.type },
+                { QStringLiteral("text"), note.text },
+                { QStringLiteral("annotation"), note.annotation },
+                { QStringLiteral("chapter"), note.chapter },
+                { QStringLiteral("chapter_title"), note.chapterTitle },
+                { QStringLiteral("chapter_progress"), note.chapterProgress },
+                { QStringLiteral("created"), note.created },
+            });
+        }
+        const QJsonObject reading{
+            { QStringLiteral("status"), book.reading.status },
+            { QStringLiteral("percent_read"), book.reading.percent ? QJsonValue(*book.reading.percent) : QJsonValue() },
+            { QStringLiteral("last_read"), book.reading.lastRead.isEmpty() ? QJsonValue() : QJsonValue(book.reading.lastRead) },
+            { QStringLiteral("seconds_spent"), book.reading.secondsSpent },
+            { QStringLiteral("notes"), notes },
+        };
         list.append(QJsonObject{
             { QStringLiteral("lpath"), book.lpath },
+            { QStringLiteral("content_id"), book.contentId },
+            { QStringLiteral("reading"), reading },
             { QStringLiteral("title"), book.title },
             { QStringLiteral("authors"), QJsonArray::fromStringList(book.authors) },
             { QStringLiteral("format"), book.format },
@@ -496,6 +570,159 @@ int device(const QString &libraryPath, const QString &spec)
     out() << QJsonDocument(QJsonObject{ { QStringLiteral("name"), reader.name },
                                          { QStringLiteral("books"), list } })
                  .toJson();
+    return 0;
+}
+
+// What each template of a JSON array makes of each book, as
+// tools/oracle/template_oracle.py prints Calibre's: by book id, the text or
+// {"error": message}.
+int templates(const QString &libraryPath, const QString &file)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 1;
+    QFile in(file);
+    if (!in.open(QIODevice::ReadOnly)) {
+        err() << QStringLiteral("Cannot read %1.").arg(file) << Qt::endl;
+        return 1;
+    }
+    const QJsonArray list = QJsonDocument::fromJson(in.readAll()).array();
+    const CalibreTemplate::Library library(data, CalibreConfig::load().interfaceLanguage);
+    QList<const Book *> books;
+    for (const Book &book : data.books)
+        books.append(&book);
+    std::sort(books.begin(), books.end(), [](const Book *a, const Book *b) { return a->id < b->id; });
+    QJsonArray results;
+    for (const QJsonValue &value : list) {
+        const QString text = value.toString();
+        QJsonObject row;
+        for (const Book *book : std::as_const(books)) {
+            QString error;
+            const QString result = CalibreTemplate::evaluate(text, library, *book, &error);
+            row.insert(QString::number(book->id), error.isNull() ? QJsonValue(result)
+                                                                 : QJsonValue(QJsonObject{ { QStringLiteral("error"), error } }));
+        }
+        results.append(QJsonObject{ { QStringLiteral("template"), text }, { QStringLiteral("books"), row } });
+    }
+    out() << QJsonDocument(results).toJson();
+    return 0;
+}
+
+QJsonArray pairs(const QList<QPair<QString, QString>> &list)
+{
+    QJsonArray array;
+    for (const auto &[first, second] : list)
+        array.append(QJsonArray{ first, second });
+    return array;
+}
+
+// What Calibre's sources find for a book, as the download of Calibre's Edit
+// metadata dialog does, and what each book found would change, the fields
+// Calibre is set to leave aside left aside; with `covers`, the covers found
+// with the first. Calibre's sources are web sites.
+int download(const QString &libraryPath, const QString &id, bool covers)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 1;
+    const Book *book = data.book(id.toInt());
+    if (!book) {
+        err() << QStringLiteral("No book has the id %1.").arg(id) << Qt::endl;
+        return 1;
+    }
+    const QString program = MetadataDownload::program();
+    // Open Library without Calibre, as the application asks it.
+    const bool native = program.isEmpty() || qEnvironmentVariableIsSet("COUSOIR_NATIVE_DOWNLOAD");
+    const CalibreConfig config = CalibreConfig::load();
+    QTemporaryDir folder;
+    MetadataDownload::Query query{ book->title, book->authors, book->identifiers };
+    QString error;
+    const auto run = [&](bool (*prepare)(const QString &, const MetadataDownload::Query &, QString *)) {
+        return prepare(folder.path(), query, &error)
+            && CalibreJob::run(program, MetadataDownload::arguments(folder.path()),
+                               CalibreJob::environment(folder.path(), config.interfaceLanguage), [](double) {}, &error);
+    };
+    OpenLibrary::Client client;
+    MetadataDownload::Identified identified;
+    if (native) {
+        const OpenLibrary::Preferences preferences = OpenLibrary::Preferences::load(CalibreConfig::configDirectory());
+        identified.ignoredFields = preferences.ignoredFields;
+        identified.appendComments = preferences.appendComments;
+        QEventLoop loop;
+        QObject::connect(&client, &OpenLibrary::Client::identified, &loop,
+                         [&](const QList<MetadataDownload::Found> &books, const QString &failure) {
+                             identified.books = books;
+                             error = failure;
+                             loop.quit();
+                         });
+        client.identify(query, book->languages.value(0), config.interfaceLanguage, preferences);
+        loop.exec();
+        if (!error.isEmpty()) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+    } else if (!run(MetadataDownload::prepareIdentify)
+               || !MetadataDownload::readIdentified(folder.path(), &identified, &error)) {
+        err() << error << Qt::endl;
+        return 1;
+    }
+    QStringList fields = MetadataDownload::fields();
+    fields.removeIf([&identified](const QString &field) { return identified.ignoredFields.contains(field); });
+    QJsonArray books;
+    for (const MetadataDownload::Found &found : std::as_const(identified.books)) {
+        books.append(QJsonObject{
+            { QStringLiteral("title"), found.title },
+            { QStringLiteral("authors"), QJsonArray::fromStringList(found.authors) },
+            { QStringLiteral("author_sort"), found.authorSort },
+            { QStringLiteral("publisher"), found.publisher },
+            { QStringLiteral("pubdate"), found.pubdate ? QJsonValue(found.pubdate->toString(Qt::ISODate)) : QJsonValue() },
+            { QStringLiteral("series"), found.series },
+            { QStringLiteral("series_index"), found.seriesIndex ? QJsonValue(*found.seriesIndex) : QJsonValue() },
+            { QStringLiteral("tags"), QJsonArray::fromStringList(found.tags) },
+            { QStringLiteral("rating"), found.rating ? QJsonValue(*found.rating) : QJsonValue() },
+            { QStringLiteral("comments"), found.comments },
+            { QStringLiteral("languages"), QJsonArray::fromStringList(found.languages) },
+            { QStringLiteral("identifiers"), pairs(found.identifiers) },
+            { QStringLiteral("has_cover"), found.hasCover },
+            { QStringLiteral("changes"),
+              QJsonObject::fromVariantMap(MetadataDownload::changes(data, *book, config, found, fields,
+                                                                    identified.appendComments)) },
+        });
+    }
+    QJsonObject result{ { QStringLiteral("books"), books },
+                        { QStringLiteral("ignore_fields"), QJsonArray::fromStringList(identified.ignoredFields) },
+                        { QStringLiteral("append_comments"), identified.appendComments } };
+    if (covers && !identified.books.isEmpty()) {
+        // The dialog's: the book's title and authors, the identifiers found.
+        query.identifiers = identified.books.first().identifiers;
+        QList<MetadataDownload::Cover> found;
+        if (native) {
+            QEventLoop loop;
+            QObject::connect(&client, &OpenLibrary::Client::coverFound, &loop,
+                             [&found](const MetadataDownload::Cover &cover) { found.append(cover); });
+            QObject::connect(&client, &OpenLibrary::Client::coversFinished, &loop, [&](const QString &failure) {
+                error = failure;
+                loop.quit();
+            });
+            client.covers(0, folder.path());
+            loop.exec();
+            std::stable_sort(found.begin(), found.end(), [](const auto &a, const auto &b) {
+                return qint64(a.width) * a.height > qint64(b.width) * b.height;
+            });
+            if (!error.isEmpty())
+                err() << error << Qt::endl;
+        } else if (!run(MetadataDownload::prepareCovers) || !MetadataDownload::readCovers(folder.path(), &found, &error)) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+        QJsonArray list;
+        for (const MetadataDownload::Cover &cover : std::as_const(found))
+            list.append(QJsonObject{ { QStringLiteral("source"), cover.source },
+                                     { QStringLiteral("width"), cover.width },
+                                     { QStringLiteral("height"), cover.height } });
+        result.insert(QStringLiteral("covers"), list);
+    }
+    out() << QJsonDocument(result).toJson();
     return 0;
 }
 
@@ -552,6 +779,17 @@ int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine
 //   { "add": "book.epub" } or { "add": ["book.epub", "book.pdf"] }
 //   { "addFormat": { "book": 2, "file": "book.azw3" } }
 //   { "convert": { "book": 1, "format": "KEPUB" } }
+//   { "download": { "book": 2, "found": "folder", "result": 0,
+//                   "fields": ["title", …], "append": false } }
+//                                               what a book a download found
+//                                               changes, from the result.json
+//                                               of an identify job's folder,
+//                                               for the book as it was before
+//                                               the file's changes
+//   { "note": { "field": "tags", "item": 3, "name": "Fantasy",
+//               "html": "<p>…</p>", "text": "…" } }   an item's note, as
+//                                               Calibre 7 keeps them; no html
+//                                               removes it
 //   { "send": { "books": [1, 2], "device": "/run/media/…/KOBOeReader" } }
 //   { "removeFromDevice": { "device": …, "lpaths": ["Vian, Boris/…"] } }
 // A device is a Kobo's folder, "mtp" or "mtp:SERIAL" for a Kindle, or
@@ -580,6 +818,8 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
     QList<QPair<int, QString>> conversions;
     QList<QJsonObject> deviceOps;
     bool libraryChanges = false;
+    // The library as it is, read for the first download.
+    std::optional<LibraryData> before;
     for (const QJsonValue &value : document.array()) {
         const QJsonObject op = value.toObject();
         if (op.contains(QLatin1String("send")) || op.contains(QLatin1String("removeFromDevice"))) {
@@ -629,16 +869,67 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             request.newBooks.append(book);
             continue;
         }
+        if (op.contains(QLatin1String("note"))) {
+            const QJsonObject note = op.value(QLatin1String("note")).toObject();
+            request.notes.append({ note.value(QLatin1String("field")).toString(), note.value(QLatin1String("item")).toInt(),
+                                   note.value(QLatin1String("name")).toString(), note.value(QLatin1String("html")).toString(),
+                                   note.value(QLatin1String("text")).toString() });
+            continue;
+        }
         if (op.contains(QLatin1String("convert"))) {
             const QJsonObject convert = op.value(QLatin1String("convert")).toObject();
             conversions.append({ convert.value(QLatin1String("book")).toInt(),
                                  convert.value(QLatin1String("format")).toString().toUpper() });
             continue;
         }
+        if (op.contains(QLatin1String("bulk"))) {
+            BulkEdit bulk;
+            QString error;
+            if (!BulkEdit::fromVariantMap(op.value(QLatin1String("bulk")).toObject().toVariantMap(), &bulk, &error)) {
+                err() << error << Qt::endl;
+                return 2;
+            }
+            request.bulkEdits.append(bulk);
+            continue;
+        }
         if (op.contains(QLatin1String("addFormat"))) {
             const QJsonObject format = op.value(QLatin1String("addFormat")).toObject();
             request.newFormats.append({ format.value(QLatin1String("book")).toInt(),
                                         base.absoluteFilePath(format.value(QLatin1String("file")).toString()) });
+            continue;
+        }
+        if (op.contains(QLatin1String("download"))) {
+            const QJsonObject download = op.value(QLatin1String("download")).toObject();
+            if (!before) {
+                before.emplace();
+                if (!load(libraryPath, &*before))
+                    return 1;
+            }
+            const Book *book = before->book(download.value(QLatin1String("book")).toInt());
+            MetadataDownload::Identified identified;
+            QString error;
+            if (!MetadataDownload::readIdentified(base.absoluteFilePath(download.value(QLatin1String("found")).toString()),
+                                                  &identified, &error)) {
+                err() << error << Qt::endl;
+                return 2;
+            }
+            const qsizetype index = download.value(QLatin1String("result")).toInt();
+            if (!book || index < 0 || index >= identified.books.size()) {
+                err() << QStringLiteral("A download names no book or no result.") << Qt::endl;
+                return 2;
+            }
+            QStringList fields;
+            for (const QJsonValue &field : download.value(QLatin1String("fields")).toArray())
+                fields.append(field.toString());
+            BookEdit edit;
+            if (!BookEdit::fromVariantMap(book->id,
+                                          MetadataDownload::changes(*before, *book, config, identified.books.at(index), fields,
+                                                                    download.value(QLatin1String("append")).toBool()),
+                                          &edit, &error)) {
+                err() << error << Qt::endl;
+                return 2;
+            }
+            request.edits.append(edit);
             continue;
         }
         QVariantMap changes = op.value(QLatin1String("set")).toObject().toVariantMap();
@@ -719,6 +1010,18 @@ int read(const QStringList &paths)
                                  { QStringLiteral("width"), size.width() },
                                  { QStringLiteral("height"), size.height() } };
         }
+        // The custom columns' fields as adding the book reads them.
+        QJsonObject userMetadata;
+        for (const auto &[key, field] : mi.userMetadata) {
+            QJsonObject read;
+            for (const QString &name : { QStringLiteral("datatype"), QStringLiteral("is_multiple"),
+                                         QStringLiteral("#value#"), QStringLiteral("#extra#") }) {
+                const PythonJson::Value *value = field.find(name);
+                const QByteArray json = '[' + (value ? PythonJson::dumps(*value) : QStringLiteral("null")).toUtf8() + ']';
+                read.insert(name, QJsonDocument::fromJson(json).array().at(0));
+            }
+            userMetadata.insert(key, read);
+        }
         books.append(QJsonObject{
             { QStringLiteral("file"), QFileInfo(path).fileName() },
             { QStringLiteral("title"), mi.title },
@@ -738,6 +1041,7 @@ int read(const QStringList &paths)
             { QStringLiteral("rating"), mi.rating ? QJsonValue(*mi.rating) : QJsonValue() },
             { QStringLiteral("book_producer"), mi.bookProducer },
             { QStringLiteral("cover"), cover },
+            { QStringLiteral("user_metadata"), userMetadata },
         });
     }
     const QByteArray json = QJsonDocument(books).toJson(QJsonDocument::Indented);
@@ -759,13 +1063,21 @@ int main(int argc, char *argv[])
         "Reads a Calibre library without changing it, unless told to apply changes.\n\n"
         "Commands:\n"
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
+        "  search  Print the ids of the books an expression of Calibre's search\n"
+        "          language finds, as `calibredb search` does.\n"
         "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
         "  apply   Apply the changes of a JSON file (edits, added and removed books and\n"
         "          formats, restorations, conversions, books sent to or removed from a\n"
-        "          Kobo), as the application makes them.\n"
+        "          Kobo or a Kindle), as the application makes them.\n"
         "  read    Print the metadata adding the given book files would read.\n"
         "  device  Print the books on a reader: a Kobo by the folder it is mounted on,\n"
-        "          \"mtp\" or \"mtp:SERIAL\" for a Kindle connected over MTP.\n\n"
+        "          \"mtp\" or \"mtp:SERIAL\" for a Kindle connected over MTP.\n"
+        "  template  Print what each template of a JSON array makes of each book.\n"
+        "  download  Print what Calibre's metadata sources, on the web, find for the\n"
+        "          book of the id given, and what it would change; --covers adds the\n"
+        "          covers found. Without Calibre, Open Library is asked.\n"
+        "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
+        "          kepubify BOOK.epub BOOK.kepub\n\n"
         "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
         "Goyal and the Calibre contributors, https://calibre-ebook.com. GPL v3."));
     parser.addHelpOption();
@@ -778,7 +1090,14 @@ int main(int argc, char *argv[])
                                          QStringLiteral("apply: skip the sync, recent-change and conflict checks; "
                                                         "Calibre's lock still applies."));
     parser.addOption(forceOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("list, doctor, apply, read or device"));
+    const QCommandLineOption limitOption(QStringList{ QStringLiteral("l"), QStringLiteral("limit") },
+                                         QStringLiteral("search: the most ids to print."), QStringLiteral("n"),
+                                         QStringLiteral("-1"));
+    parser.addOption(limitOption);
+    const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
+    parser.addOption(coversOption);
+    parser.addPositionalArgument(QStringLiteral("command"),
+                                 QStringLiteral("list, search, doctor, apply, read, device, template, download or kepubify"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -786,7 +1105,30 @@ int main(int argc, char *argv[])
     const QStringList arguments = parser.positionalArguments();
     if (arguments.value(0) == QLatin1String("read") && arguments.size() > 1)
         return read(arguments.mid(1));
-    const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device");
+    if (arguments.value(0) == QLatin1String("search")) {
+        if (arguments.size() < 2) {
+            err() << QStringLiteral("Error: You must specify the search expression") << Qt::endl;
+            return 2;
+        }
+        const QString path = parser.isSet(libraryOption) ? parser.value(libraryOption)
+                                                         : CalibreConfig::defaultLibraryPath();
+        if (path.isEmpty()) {
+            err() << QStringLiteral("Calibre has no library on this computer; pass --library.") << Qt::endl;
+            return 2;
+        }
+        return search(path, arguments.mid(1).join(u' '), parser.value(limitOption).toInt());
+    }
+    if (arguments.value(0) == QLatin1String("kepubify") && arguments.size() == 3) {
+        QString error;
+        Kepub::Options options;
+        if (!Kepub::kepubify(arguments.at(1), arguments.at(2), options, &error)) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+        return 0;
+    }
+    const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device")
+        || arguments.value(0) == QLatin1String("template") || arguments.value(0) == QLatin1String("download");
     if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != takesOne)
         parser.showHelp(2);
     const QString libraryPath = parser.isSet(libraryOption) ? parser.value(libraryOption)
@@ -803,6 +1145,10 @@ int main(int argc, char *argv[])
         return apply(libraryPath, arguments.at(1), parser.isSet(forceOption));
     if (arguments.first() == QLatin1String("device"))
         return device(libraryPath, arguments.at(1));
+    if (arguments.first() == QLatin1String("template"))
+        return templates(libraryPath, arguments.at(1));
+    if (arguments.first() == QLatin1String("download"))
+        return download(libraryPath, arguments.at(1), parser.isSet(coversOption));
     err() << QStringLiteral("Unknown command “%1”.").arg(arguments.first()) << Qt::endl;
     return 2;
 }

@@ -10,10 +10,16 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <optional>
+
 #include "book.h"
 #include "book_edit.h"
+#include "book_list_model.h"
+#include "book_sort.h"
 #include "book_operations.h"
 #include "calibre_config.h"
+#include "calibre_search.h"
+#include "metadata_download.h"
 #include "commit_engine.h"
 #include "library_check.h"
 
@@ -38,28 +44,63 @@ class BookLibrary : public QObject
     Q_PROPERTY(QString lastError READ lastError NOTIFY libraryChanged)
     Q_PROPERTY(QString libraryUuid READ libraryUuid NOTIFY libraryChanged)
     Q_PROPERTY(bool schemaKnown READ schemaKnown NOTIFY libraryChanged)
-    // { books, authors, series, tags, languages, publishers }.
-    Q_PROPERTY(QVariantMap counts READ counts NOTIFY libraryChanged)
+    // { books, authors, series, tags, languages, publishers, trash }, within
+    // the virtual library.
+    Q_PROPERTY(QVariantMap counts READ counts NOTIFY countsChanged)
     Q_PROPERTY(QString section READ section WRITE setSection NOTIFY sectionChanged)
     // The section's item the book list is narrowed to: { kind, id, name },
     // or empty.
     Q_PROPERTY(QVariantMap filter READ filter NOTIFY filterChanged)
     // The books of the section, or of the filter, before the search.
     Q_PROPERTY(int scopeCount READ scopeCount NOTIFY rowsChanged)
-    Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
+    // The books listed: those of the section or the filter that the search
+    // finds, in the sort order.
+    Q_PROPERTY(BookListModel *books READ books CONSTANT)
     // The items of a browse section: { id, name, count }.
     Q_PROPERTY(QVariantList facetRows READ facetRows NOTIFY facetRowsChanged)
     Q_PROPERTY(int facetCount READ facetCount NOTIFY facetRowsChanged)
+    // Calibre's search language; searchError says why the search cannot
+    // run, and nothing is listed then.
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
+    Q_PROPERTY(QString searchError READ searchError NOTIFY searchErrorChanged)
+    // The virtual libraries Calibre keeps in the library, by name, and the
+    // one every section is narrowed to, empty for none. The choice is kept
+    // per library; until one is made, Calibre's choice for the library's
+    // start.
+    Q_PROPERTY(QStringList virtualLibraries READ virtualLibraries NOTIFY libraryChanged)
+    Q_PROPERTY(QString virtualLibrary READ virtualLibrary WRITE setVirtualLibrary NOTIFY virtualLibraryChanged)
+    // Why the virtual library chosen cannot narrow the books, which then
+    // show all; empty when it does.
+    Q_PROPERTY(QString virtualLibraryError READ virtualLibraryError NOTIFY virtualLibraryChanged)
+    // Why the saved search the section lists cannot run; empty when it can.
+    Q_PROPERTY(QString sectionError READ sectionError NOTIFY rowsChanged)
+    // The saved searches of the library, { name, count, error }, by name, the
+    // count empty when the search cannot run; the section "search:<name>"
+    // lists a saved search's books.
+    Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
+    // The list's sort, as its first field: "title", "timestamp", "#genre"…,
+    // with "Desc" for the reverse order. Earlier sorts break its ties, as
+    // Calibre's sort history does.
     Q_PROPERTY(QString sortOption READ sortOption WRITE setSortOption NOTIFY sortOptionChanged)
+    // The list's columns, by field, the title first; kept for each library,
+    // Calibre's own at first.
+    Q_PROPERTY(QStringList columns READ columns WRITE setColumns NOTIFY columnsChanged)
+    // Every column the list can show, those shown first in their order:
+    // { key, title, kind, shown }, kind "text", "number", "date", "rating"
+    // or "long".
+    Q_PROPERTY(QVariantList availableColumns READ availableColumns NOTIFY columnsChanged)
     Q_PROPERTY(QString facetSortOption READ facetSortOption WRITE setFacetSortOption NOTIFY facetSortOptionChanged)
     Q_PROPERTY(int currentBookId READ currentBookId WRITE setCurrentBookId NOTIFY currentBookChanged)
     Q_PROPERTY(QVariantMap currentBook READ currentBook NOTIFY currentBookChanged)
     // Set by the session from the guard: edits are refused otherwise.
     Q_PROPERTY(bool writable READ writable WRITE setWritable NOTIFY writableChanged)
+    // Cousoir was built with its reader, and Qt WebEngine is there.
+    Q_PROPERTY(bool readerAvailable READ readerAvailable CONSTANT)
     Q_PROPERTY(bool saving READ saving NOTIFY savingChanged)
     // The current book has changed since it was opened.
     Q_PROPERTY(bool canRevert READ canRevert NOTIFY canRevertChanged)
+    // The last bulk edit can be undone: its books' values before it are kept.
+    Q_PROPERTY(int bulkUndoCount READ bulkUndoCount NOTIFY bulkUndoChanged)
     // The metadata.db Cousoir last wrote, for the guard's ownChangeKey.
     Q_PROPERTY(QString publishedKey READ publishedKey NOTIFY publishedKeyChanged)
     // Calibre's interface language as set here, empty for Calibre's own; and
@@ -81,7 +122,7 @@ class BookLibrary : public QObject
     // What the last check found, but what the user ignored: { count,
     // checked (the time it ran), caseDuplicates, ignored, rows }. A row is
     // { kind, key } and, by kind: "duplicates" { sameTitle, isbns, books:
-    // [{ id, title, authors, formats, missing, added, cover, gains }] };
+    // [{ id, title, authors, formats, added, cover, gains }] };
     // "authors" { initials, ids, authors: [{ id, name, count }] };
     // "missing" { bookId, title, authors, formats, noFormats, folderMissing };
     // "outside" { path, folder, size, bookId }.
@@ -110,21 +151,34 @@ public:
     bool schemaKnown() const;
     QVariantMap counts() const;
     // "books", "authors", "series", "tags", "languages", "publishers",
-    // "trash" or "check". Another section clears the filter and the search;
-    // the check runs again.
+    // "trash", "check", "highlights", or "search:<name>" for a saved
+    // search's books.
+    // Another section clears the filter and the search; the check runs
+    // again.
     QString section() const;
     void setSection(const QString &section);
     QVariantMap filter() const;
+    // Keeps `text` as the note of the item the books are of, as Calibre 7
+    // keeps notes; an empty text removes it.
+    Q_INVOKABLE QString setFilterNote(const QString &text);
     int scopeCount() const;
-    QVariantList rows() const;
+    BookListModel *books();
     QVariantList facetRows() const;
     int facetCount() const;
     QString searchText() const;
     void setSearchText(const QString &searchText);
-    // "title", "authors", "series", "added" or "rating", with "Desc" for the
-    // reverse order.
+    QString searchError() const;
+    QStringList virtualLibraries() const;
+    QString virtualLibrary() const;
+    void setVirtualLibrary(const QString &name);
+    QString virtualLibraryError() const;
+    QString sectionError() const;
+    QVariantList savedSearches() const;
     QString sortOption() const;
     void setSortOption(const QString &sortOption);
+    QStringList columns() const;
+    void setColumns(const QStringList &columns);
+    QVariantList availableColumns() const;
     // "name" or "count", with "Desc" for the reverse order.
     QString facetSortOption() const;
     void setFacetSortOption(const QString &sortOption);
@@ -132,10 +186,22 @@ public:
     void setCurrentBookId(int bookId);
     QVariantMap currentBook() const;
     const LibraryData &data() const;
+    // update_from_mi() of Calibre's Edit metadata dialog: what a book found
+    // by a download changes of `bookId`, for the fields chosen, as
+    // updateBook() takes it; empty for a book that is gone.
+    QVariantMap downloadedChanges(int bookId, const MetadataDownload::Found &found, const QStringList &fields,
+                                  bool appendComments) const;
+    // What a book found would change of `bookId`, field by field: { key,
+    // label, current, found, chosen }, as texts; chosen when the field
+    // changes and is not one of Calibre's `ignored`.
+    QVariantList downloadFields(int bookId, const MetadataDownload::Found &found, const QStringList &ignored,
+                                bool appendComments) const;
     bool writable() const;
+    bool readerAvailable() const;
     void setWritable(bool writable);
     bool saving() const;
     bool canRevert() const;
+    int bulkUndoCount() const;
     QString publishedKey() const;
     QString calibreLanguage() const;
     void setCalibreLanguage(const QString &language);
@@ -152,12 +218,25 @@ public:
     // Narrows the books to the item with `id` of the current browse section,
     // clearing the search.
     Q_INVOKABLE void openFacetItem(int id);
+    // Sorts the list by `field`, the other way round when it is sorted by it
+    // already.
+    Q_INVOKABLE void sortBy(const QString &field);
     // Back to the section's items, with the search cleared.
     Q_INVOKABLE void clearFilter();
     // Opens a book's file with the desktop's application for it: `format`,
     // or the first of EPUB, KEPUB, AZW3, MOBI and PDF it has. Returns an
     // error message, empty on success.
     Q_INVOKABLE QString openFormat(int bookId, const QString &format = {});
+    // The format Cousoir's reader reads the book in: EPUB, KEPUB, then PDF;
+    // empty for none.
+    Q_INVOKABLE QString readableFormat(int bookId) const;
+    // Keeps in the library, in one change, where Cousoir's reader stopped in
+    // the book and the highlights made or removed there, as Calibre keeps its
+    // viewer's. False, and nothing kept, while the library cannot be written.
+    bool saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations);
+    // The highlights and bookmarks of Calibre's viewer in the book's format,
+    // as last read from the library.
+    QList<Annotation> annotations(int bookId, const QString &format) const;
     // Shows the book's folder in the file manager. Returns an error message,
     // empty on success.
     Q_INVOKABLE QString openFolder(int bookId);
@@ -171,6 +250,9 @@ public:
     // the book's language. Returns an error message for a value it refuses,
     // empty once the edit is on its way: saved() or saveFailed() follows.
     Q_INVOKABLE QString updateBook(int bookId, const QVariantMap &changes);
+    // The book's description from the editor's text, Description's; an
+    // unchanged text writes nothing. Same returns as updateBook().
+    Q_INVOKABLE QString saveDescription(int bookId, const QString &text);
     // The book's cover from an image file, from the image on the clipboard,
     // or none. Same returns as updateBook().
     Q_INVOKABLE QString setCover(int bookId, const QString &fileUrl);
@@ -178,8 +260,25 @@ public:
     Q_INVOKABLE QString removeCover(int bookId);
     // Puts the current book back as it was when it was opened.
     Q_INVOKABLE void revertCurrentBook();
+    // Edits the books together, BulkEdit's keys, as Calibre's bulk metadata
+    // edit does; `bookIds` in the list's order, which numbers a series. Same
+    // returns as updateBook().
+    Q_INVOKABLE QString updateBooks(const QVariantList &bookIds, const QVariantMap &changes);
+    // Puts the books of the last bulk edit back as they were before it, in
+    // the fields it could change.
+    Q_INVOKABLE void undoBulkEdit();
+    // What the command palette finds for `text`: { kind, id, key, title,
+    // detail }, the window's `commands`, { kind, key, title, detail }, then
+    // the library's authors, series, tags, publishers and books. See
+    // Palette::search().
+    Q_INVOKABLE QVariantList paletteSearch(const QString &text, const QVariantList &commands, int limit = 40) const;
     // Whether `text` is a date updateBook() takes for pubdate.
     Q_INVOKABLE bool isDate(const QString &text) const;
+    // Whether a custom column takes the text as a date, as its writer reads
+    // it.
+    Q_INVOKABLE bool isCustomDate(const QString &text) const;
+    // A description's text as the HTML it saves as.
+    Q_INVOKABLE QString textToHtml(const QString &text) const;
     // Shows the folder of backups in the file manager.
     Q_INVOKABLE void openBackupFolder();
 
@@ -230,8 +329,13 @@ signals:
     void filterChanged();
     void rowsChanged();
     void facetRowsChanged();
+    void countsChanged();
     void searchTextChanged();
+    void searchErrorChanged();
+    void virtualLibraryChanged();
+    void savedSearchesChanged();
     void sortOptionChanged();
+    void columnsChanged();
     void facetSortOptionChanged();
     void currentBookChanged();
     // A reload failed while the books read before stay shown.
@@ -239,6 +343,7 @@ signals:
     void writableChanged();
     void savingChanged();
     void canRevertChanged();
+    void bulkUndoChanged();
     void publishedKeyChanged();
     void calibreLanguageChanged();
     // An edit went into the library.
@@ -261,13 +366,41 @@ signals:
     void importWarning(const QString &message);
 
 private:
+    // What the book list needs of each book, by its place in the library's
+    // books: what a search compares, and its sort keys. Made with each load,
+    // on the worker thread.
+    struct BookIndex
+    {
+        CalibreSearch::Index search;
+        // The books' sort keys, those of `sortFields` made already.
+        std::shared_ptr<const BookSort::Sorter> sorter;
+        QHash<int, qsizetype> rowOf;
+    };
+
     struct LoadResult
     {
         QString path;
         LibraryData data;
+        BookIndex index;
         QString error;
         QString recovered;
         bool ok = false;
+    };
+
+    // A save, the index of the books it leaves, and its bulk edits.
+    struct CommitResult
+    {
+        CommitEngine::Result result;
+        BookIndex index;
+        QList<BulkEdit> bulkEdits;
+    };
+
+    // A field of a book a bulk edit set: as it was before, and as the edit
+    // left it.
+    struct BulkUndo
+    {
+        QVariantMap before;
+        QVariantMap after;
     };
 
     struct ImportResult
@@ -292,9 +425,37 @@ private:
     void rebuildCheck();
     void startCommit();
     void finishCommit();
-    void applyData(LibraryData data);
+    void applyData(LibraryData data, BookIndex index);
+    // The undo of a bulk edit just saved: the fields it set, before and
+    // after, by book.
+    void keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before);
+    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config, const QStringList &sortFields);
+    // The fields of the sort history, whose keys a load makes.
+    QStringList sortFields() const;
+    // The columns and sort kept for the library, else Calibre's.
+    void restoreView();
+    void saveView();
+    // The rows of the virtual library, or all, and the saved searches'
+    // counts in it, after a load or another choice.
+    void applyVirtualLibrary();
+    void rebuildSavedSearches();
+    // The rows the search text finds within the virtual library, searched
+    // again only when the text or the books change.
+    const QBitArray &searchRows();
+    // A saved search, within the virtual library.
+    CalibreSearch::Result savedSearch(const QString &name);
+    // The items of a browse section, counted within the virtual library:
+    // those without a book there are left out.
+    QList<FacetItem> visibleItems(const QString &kind) const;
+    // The library's books in the sort order, without its direction.
+    const QList<qsizetype> &sortedBooks();
     // What the current book's fields hold, as updateBook() takes them.
     QVariantMap editableValues(const Book &book) const;
+    // The book's custom columns as the page shows and edits them: { key,
+    // name, datatype, multiple, names, editable, halfStars, html, choices,
+    // text, editText, seriesIndexText }, a composite left out; long text in
+    // HTML edits as the description does.
+    QVariantList customFields(const Book &book) const;
     // Keeps the current book as it is before its first change.
     void keepOriginal(const Book &book);
     CalibreConfig effectiveConfig() const;
@@ -318,23 +479,45 @@ private:
     QFileSystemWatcher m_watcher;
     QTimer m_changeTimer;
     QCollator m_collator;
-    // Each book's title, authors, series and tags, folded for the search.
-    QHash<int, QString> m_searchTexts;
+    BookIndex m_index;
+    QString m_virtualLibrary;
+    QString m_virtualLibraryError;
+    // visibleItems() by kind, for the virtual library and books shown.
+    mutable QHash<QString, QList<FacetItem>> m_visibleItems;
+    // The library the choice of virtual library was read for.
+    QString m_virtualLibraryOf;
+    QBitArray m_restriction;
+    // searchRows(), the text it is for, and why it could not run.
+    QBitArray m_searchRows;
+    std::optional<QString> m_searchedText;
+    QString m_searchError;
+    // The rows of the saved search the section lists, and why it could not
+    // run.
+    QBitArray m_sectionRows;
+    QString m_sectionError;
+    QVariantList m_savedSearches;
+    // sortedBooks(), and the sort it is for; empty until asked.
+    QList<qsizetype> m_sorted;
+    QList<BookSort::Level> m_sortedBy;
 
     QString m_section = QStringLiteral("books");
     QString m_filterKind;
     int m_filterId = 0;
-    QVariantList m_rows;
+    BookListModel m_bookList;
     int m_scopeCount = 0;
     QVariantList m_facetRows;
     QString m_searchText;
-    QString m_sortOption = QStringLiteral("title");
+    // The sorts asked for, the last first, maximum_resort_levels of them.
+    QList<BookSort::Level> m_sortHistory{ { QStringLiteral("title"), true } };
+    QStringList m_columns;
+    // The library whose columns and sort these are.
+    QString m_viewOf;
     QString m_facetSortOption = QStringLiteral("name");
     int m_currentBookId = 0;
     QVariantMap m_currentBook;
 
     bool m_writable = false;
-    QFutureWatcher<CommitEngine::Result> m_commitWatcher;
+    QFutureWatcher<CommitResult> m_commitWatcher;
     // The changes waiting, in order; edits in a row go together.
     QList<CommitEngine::Request> m_pending;
     QFutureWatcher<ImportResult> m_importWatcher;
@@ -351,6 +534,8 @@ private:
     bool m_backedUp = false;
     QString m_publishedKey;
     QString m_calibreLanguage;
+    // The books of the last bulk edit, in the fields it set.
+    QHash<int, BulkUndo> m_bulkUndo;
     // The current book as it was opened, kept at its first change.
     int m_originalBookId = 0;
     QVariantMap m_original;

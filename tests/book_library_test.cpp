@@ -1,8 +1,8 @@
 #include <QtTest>
 
 #include <QDesktopServices>
-#include <QDirIterator>
 #include <QGuiApplication>
+#include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>
@@ -10,20 +10,25 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include "calibre_languages.h"
 #include "book_library.h"
 #include "calibre_db.h"
 #include "conversion_service.h"
+#include "metadata_downloader.h"
 #include "device_library.h"
+#include "fake_open_library.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
 namespace {
 
-CalibreConfig frenchConfig()
+// The rows the book list shows, as maps.
+QVariantList bookRows(BookLibrary &library)
 {
-    CalibreConfig config;
-    config.interfaceLanguage = QStringLiteral("fr");
-    return config;
+    QVariantList result;
+    for (int row = 0; row < library.books()->count(); ++row)
+        result.append(library.books()->get(row));
+    return result;
 }
 
 QList<int> ids(const QVariantList &rows)
@@ -62,11 +67,16 @@ class BookLibraryTest : public QObject
 
 private slots:
     void initTestCase();
+    void init();
     void loadsLibrary();
     void sortsBooks_data();
     void sortsBooks();
+    void keepsColumnsAndSort();
     void searchesBooks_data();
     void searchesBooks();
+    void keepsRowsInPlace();
+    void keepsVirtualLibraryChoice();
+    void undoesOnlyBulkEdits();
     void browsesSections();
     void filtersByItem();
     void describesCurrentBook();
@@ -84,8 +94,13 @@ private slots:
     void addsAndRemovesFormats();
     void movesBooksToTrash();
     void convertsBooks();
+    void convertsWithoutCalibre();
+    void downloadsMetadata();
+    void downloadsFromOpenLibrary();
     void sendsToKobos();
+    void sendsToKobosWithoutCalibre();
     void sendsToKindles();
+    void readsKindleClippings();
     void checksLibrary();
     void mergesAuthorVariants();
     void keepsOneCopy();
@@ -100,6 +115,16 @@ void BookLibraryTest::initTestCase()
     QStandardPaths::setTestModeEnabled(true);
     QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
     QCoreApplication::setApplicationName(QStringLiteral("book-library"));
+    QSettings().clear();
+    // Calibre's names of languages from a part of its resources, whatever
+    // Calibre is installed.
+    CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
+}
+
+// Each test starts with no columns or sort kept: the fixture's copies are
+// all the same library.
+void BookLibraryTest::init()
+{
     QSettings().clear();
 }
 
@@ -124,12 +149,12 @@ void BookLibraryTest::loadsLibrary()
     QCOMPARE(library->counts().value(QStringLiteral("books")).toInt(), 6);
     QCOMPARE(library->counts().value(QStringLiteral("authors")).toInt(), 6);
     QCOMPARE(library->scopeCount(), 6);
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
     // Its copy of the database stays out of the library.
     QVERIFY(QFileInfo::exists(BookLibrary::cacheFolder(library->libraryPath()) + QStringLiteral("/snapshot.db")));
     QVERIFY(!QFileInfo::exists(QDir(fixtureLibrary()).filePath(QStringLiteral("metadata.db-journal"))));
 
-    const QVariantMap black = library->rows().first().toMap();
+    const QVariantMap black = bookRows(*library).first().toMap();
     QCOMPARE(black.value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
     QCOMPARE(black.value(QStringLiteral("authors")).toString(), QStringLiteral("Glen Cook"));
     QCOMPARE(black.value(QStringLiteral("series")).toString(), QStringLiteral("Chronicles of the Black Company [1]"));
@@ -147,11 +172,16 @@ void BookLibraryTest::sortsBooks_data()
     QTest::newRow("title") << QStringLiteral("title") << QList<int>{ 2, 1, 4, 5, 6, 3 };
     QTest::newRow("titleDesc") << QStringLiteral("titleDesc") << QList<int>{ 3, 6, 5, 4, 1, 2 };
     QTest::newRow("authors") << QStringLiteral("authors") << QList<int>{ 2, 3, 5, 4, 6, 1 };
-    // In series order, books in no series last.
-    QTest::newRow("series") << QStringLiteral("series") << QList<int>{ 2, 3, 6, 1, 4, 5 };
-    QTest::newRow("added") << QStringLiteral("added") << QList<int>{ 1, 2, 3, 4, 5, 6 };
-    QTest::newRow("addedDesc") << QStringLiteral("addedDesc") << QList<int>{ 6, 5, 4, 3, 2, 1 };
+    // As Calibre sorts them: books in no series first, by title as the list
+    // was sorted before; the series in the order of their numbers.
+    QTest::newRow("series") << QStringLiteral("series") << QList<int>{ 1, 4, 5, 2, 3, 6 };
+    QTest::newRow("seriesDesc") << QStringLiteral("seriesDesc") << QList<int>{ 6, 3, 2, 1, 4, 5 };
+    QTest::newRow("timestamp") << QStringLiteral("timestamp") << QList<int>{ 1, 2, 3, 4, 5, 6 };
+    // Reversed, books added the same second keep their order.
+    QTest::newRow("timestampDesc") << QStringLiteral("timestampDesc") << QList<int>{ 6, 4, 5, 3, 2, 1 };
     QTest::newRow("rating") << QStringLiteral("rating") << QList<int>{ 5, 6, 3, 4, 1, 2 };
+    // An undefined date is Calibre's year 101.
+    QTest::newRow("pubdate") << QStringLiteral("pubdate") << QList<int>{ 4, 5, 6, 3, 1, 2 };
 }
 
 void BookLibraryTest::sortsBooks()
@@ -162,7 +192,7 @@ void BookLibraryTest::sortsBooks()
     QVERIFY(library);
     library->setSortOption(option);
     QCOMPARE(library->sortOption(), option);
-    QCOMPARE(ids(library->rows()), expected);
+    QCOMPARE(ids(bookRows(*library)), expected);
     library->setSortOption(QStringLiteral("nonsense"));
     QCOMPARE(library->sortOption(), option);
 }
@@ -190,8 +220,43 @@ void BookLibraryTest::searchesBooks()
     auto library = open();
     QVERIFY(library);
     library->setSearchText(search);
-    QCOMPARE(ids(library->rows()), expected);
+    QCOMPARE(ids(bookRows(*library)), expected);
     QCOMPARE(library->scopeCount(), 6);
+}
+
+void BookLibraryTest::keepsRowsInPlace()
+{
+    auto library = open();
+    QVERIFY(library);
+    BookListModel *books = library->books();
+    QCOMPARE(books->count(), 6);
+    QCOMPARE(books->idAt(0), 2);
+    QCOMPARE(books->indexOf(2), 0);
+    QCOMPARE(books->indexOf(3), 5);
+    QCOMPARE(books->indexOf(99), -1);
+    QCOMPARE(books->idAt(6), 0);
+    QVERIFY(books->get(-1).isEmpty());
+    QCOMPARE(books->data(books->index(1), Qt::UserRole).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("L'Écume des jours"));
+
+    // The same books read again only change their values; another order
+    // starts the list again.
+    QSignalSpy resets(books, &QAbstractItemModel::modelReset);
+    QSignalSpy changes(books, &QAbstractItemModel::dataChanged);
+    QSignalSpy loaded(library.get(), &BookLibrary::libraryChanged);
+    library->reload();
+    QVERIFY(loaded.wait(10000));
+    QCOMPARE(resets.count(), 0);
+    QCOMPARE(changes.count(), 1);
+    library->setSortOption(QStringLiteral("added"));
+    QCOMPARE(resets.count(), 1);
+    QCOMPARE(books->ids(), (QList<int>{ 1, 2, 3, 4, 5, 6 }));
+    // A search narrows the sorted list without sorting it again.
+    library->setSearchText(QStringLiteral("glen"));
+    QCOMPARE(books->ids(), (QList<int>{ 2, 3 }));
+    QCOMPARE(books->indexOf(3), 1);
+    library->setSortOption(QStringLiteral("addedDesc"));
+    QCOMPARE(books->ids(), (QList<int>{ 3, 2 }));
 }
 
 void BookLibraryTest::browsesSections()
@@ -203,7 +268,7 @@ void BookLibraryTest::browsesSections()
     // A browse section lists items, not books, and starts without a search.
     library->setSection(QStringLiteral("authors"));
     QVERIFY(library->searchText().isEmpty());
-    QVERIFY(library->rows().isEmpty());
+    QVERIFY(bookRows(*library).isEmpty());
     QCOMPARE(library->facetCount(), 6);
     QCOMPARE(names(library->facetRows()),
              (QStringList{ QStringLiteral("Glen Cook"), QStringLiteral("Jean-Pierre Dupont"),
@@ -225,7 +290,7 @@ void BookLibraryTest::browsesSections()
              (QStringList{ QStringLiteral("Classique"), QStringLiteral("Fantasy"), QStringLiteral("Humour"),
                            QStringLiteral("Roman"), QStringLiteral("Technique") }));
     library->setSection(QStringLiteral("languages"));
-    QCOMPARE(names(library->facetRows()), (QStringList{ QStringLiteral("English"), QStringLiteral("French") }));
+    QCOMPARE(names(library->facetRows()), (QStringList{ QStringLiteral("Anglais"), QStringLiteral("Français") }));
     library->setSection(QStringLiteral("series"));
     QCOMPARE(names(library->facetRows()),
              (QStringList{ QStringLiteral("Chronicles of the Black Company"), QStringLiteral("Contes") }));
@@ -233,6 +298,60 @@ void BookLibraryTest::browsesSections()
     QCOMPARE(library->facetCount(), 3);
     library->setSection(QStringLiteral("nowhere"));
     QCOMPARE(library->section(), QStringLiteral("publishers"));
+}
+
+void BookLibraryTest::keepsVirtualLibraryChoice()
+{
+    QTemporaryDir copy;
+    QVERIFY(copyTree(fixtureLibrary(), copy.path()));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY(db.open(QDir(copy.path()).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error));
+        // Broken's search misses its closing parenthesis.
+        QVERIFY2(db.exec(QStringLiteral(
+            "INSERT OR REPLACE INTO preferences(key, val) VALUES "
+            "('virtual_libraries', '{\"Fantasy\": \"tags:fantasy\", \"Broken\": \"(tags:x\"}'),"
+            "('virtual_lib_on_startup', '\"Fantasy\"'),"
+            "('saved_searches', '{\"Cook\": \"author:cook\", \"Read\": \"rating:many\"}');"), &error),
+                 qPrintable(error));
+    }
+    QSettings().remove(QStringLiteral("Library/virtualLibrary"));
+
+    // Calibre's choice at the library's start, until one is made here.
+    auto library = open(copy.path());
+    QVERIFY(library);
+    QCOMPARE(library->virtualLibraries(), (QStringList{ QStringLiteral("Broken"), QStringLiteral("Fantasy") }));
+    QCOMPARE(library->virtualLibrary(), QStringLiteral("Fantasy"));
+    QCOMPARE(library->counts().value(QStringLiteral("books")).toInt(), 3);
+    // Fantasy and Humour.
+    QCOMPARE(library->counts().value(QStringLiteral("tags")).toInt(), 2);
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 4, 3 }));
+    QCOMPARE(library->savedSearches().value(0).toMap().value(QStringLiteral("count")).toInt(), 2);
+
+    // A virtual library Cousoir cannot search leaves the books whole, and
+    // says why.
+    library->setVirtualLibrary(QStringLiteral("Broken"));
+    QCOMPARE(bookRows(*library).size(), 6);
+    QCOMPARE(library->virtualLibraryError(), QStringLiteral("missing )"));
+    library->setVirtualLibrary(QString());
+    QVERIFY(library->virtualLibraryError().isEmpty());
+    QCOMPARE(bookRows(*library).size(), 6);
+    QCOMPARE(library->savedSearches().value(0).toMap().value(QStringLiteral("count")).toInt(), 2);
+    // A saved search Cousoir cannot run has no count, but its reason.
+    const QVariantMap read = library->savedSearches().value(1).toMap();
+    QCOMPARE(read.value(QStringLiteral("count")).toString(), QString());
+    QVERIFY(!read.value(QStringLiteral("error")).toString().isEmpty());
+    library->setSection(QStringLiteral("search:Read"));
+    QVERIFY(bookRows(*library).isEmpty());
+    QCOMPARE(library->sectionError(), read.value(QStringLiteral("error")).toString());
+    library.reset();
+
+    // None is a choice too.
+    library = open(copy.path());
+    QVERIFY(library);
+    QCOMPARE(library->virtualLibrary(), QString());
+    QCOMPARE(library->counts().value(QStringLiteral("books")).toInt(), 6);
 }
 
 void BookLibraryTest::filtersByItem()
@@ -245,17 +364,17 @@ void BookLibraryTest::filtersByItem()
     QCOMPARE(filterChanged.size(), 1);
     QCOMPARE(library->filter().value(QStringLiteral("kind")).toString(), QStringLiteral("authors"));
     QCOMPARE(library->filter().value(QStringLiteral("name")).toString(), QStringLiteral("Glen Cook"));
-    QCOMPARE(ids(library->rows()), (QList<int>{ 2, 3 }));
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 3 }));
     QCOMPARE(library->scopeCount(), 2);
 
     library->setSearchText(QStringLiteral("shadows"));
-    QCOMPARE(ids(library->rows()), QList<int>{ 3 });
+    QCOMPARE(ids(bookRows(*library)), QList<int>{ 3 });
     QCOMPARE(library->scopeCount(), 2);
 
     library->clearFilter();
     QVERIFY(library->filter().isEmpty());
     QVERIFY(library->searchText().isEmpty());
-    QVERIFY(library->rows().isEmpty());
+    QVERIFY(bookRows(*library).isEmpty());
 
     // An id the section does not have changes nothing.
     library->openFacetItem(999);
@@ -264,10 +383,10 @@ void BookLibraryTest::filtersByItem()
     library->setSection(QStringLiteral("languages"));
     const QVariantList languages = library->facetRows();
     library->openFacetItem(languages.last().toMap().value(QStringLiteral("id")).toInt());
-    QCOMPARE(ids(library->rows()), (QList<int>{ 1, 5, 6 }));
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 1, 5, 6 }));
     library->setSection(QStringLiteral("books"));
     QVERIFY(library->filter().isEmpty());
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
 }
 
 void BookLibraryTest::describesCurrentBook()
@@ -281,7 +400,7 @@ void BookLibraryTest::describesCurrentBook()
     QCOMPARE(book.value(QStringLiteral("authors")).toStringList(), QStringList{ QStringLiteral("Boris Vian") });
     QCOMPARE(book.value(QStringLiteral("rating")).toString(), QStringLiteral("★★★★"));
     QCOMPARE(book.value(QStringLiteral("published")).toString(), QStringLiteral("Mar 1947"));
-    QCOMPARE(book.value(QStringLiteral("languages")).toStringList(), QStringList{ QStringLiteral("French") });
+    QCOMPARE(book.value(QStringLiteral("languages")).toStringList(), QStringList{ QStringLiteral("Français") });
     QCOMPARE(book.value(QStringLiteral("publisher")).toString(), QStringLiteral("Gallimard"));
     // The description keeps its structure and loses the editor's styling.
     QCOMPARE(book.value(QStringLiteral("description")).toString(),
@@ -293,7 +412,6 @@ void BookLibraryTest::describesCurrentBook()
     QCOMPARE(formats.size(), 1);
     QCOMPARE(formats.first().toMap().value(QStringLiteral("format")).toString(), QStringLiteral("EPUB"));
     QVERIFY(!formats.first().toMap().value(QStringLiteral("missing")).toBool());
-    QCOMPARE(book.value(QStringLiteral("missingFiles")).toInt(), 0);
 
     library->setCurrentBookId(4);
     book = library->currentBook();
@@ -379,7 +497,7 @@ void BookLibraryTest::keepsBooksWhenReloadFails()
     QVERIFY(failed.wait(10000));
     QVERIFY(failed.first().first().toString().contains(QStringLiteral("Calibre is writing")));
     QVERIFY(library->loaded());
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
 }
 
 void BookLibraryTest::switchesLibrary()
@@ -401,7 +519,7 @@ void BookLibraryTest::switchesLibrary()
     QVERIFY(!library->loaded());
     QCOMPARE(library->currentBookId(), 0);
     QTRY_VERIFY_WITH_TIMEOUT(library->loaded(), 10000);
-    QCOMPARE(library->rows().size(), 5);
+    QCOMPARE(bookRows(*library).size(), 5);
 }
 
 void BookLibraryTest::reportsMissingLibrary()
@@ -412,7 +530,7 @@ void BookLibraryTest::reportsMissingLibrary()
     QVERIFY(changed.wait(10000));
     QVERIFY(!library->loaded());
     QVERIFY(library->lastError().contains(QStringLiteral("no Calibre library")));
-    QVERIFY(library->rows().isEmpty());
+    QVERIFY(bookRows(*library).isEmpty());
 }
 
 void BookLibraryTest::followsCalibreOnReload()
@@ -435,7 +553,7 @@ void BookLibraryTest::followsCalibreOnReload()
     library->reload();
     QCOMPARE(library->libraryPath(), QDir::cleanPath(fixtureLibrary()));
     QTRY_VERIFY_WITH_TIMEOUT(library->loaded(), 10000);
-    QCOMPARE(library->rows().size(), 6);
+    QCOMPARE(bookRows(*library).size(), 6);
 }
 
 namespace {
@@ -465,6 +583,48 @@ QString title(BookLibrary *library)
 
 } // namespace
 
+void BookLibraryTest::undoesOnlyBulkEdits()
+{
+    QTemporaryDir copy;
+    QVERIFY(copyTree(fixtureLibrary(), copy.path()));
+    auto library = open(copy.path());
+    QVERIFY(library);
+    library->setWritable(true);
+    const auto field = [&library](int id, const char *key) {
+        library->setCurrentBookId(id);
+        const QVariant value = library->currentBook().value(QLatin1String(key));
+        library->setCurrentBookId(0);
+        return value;
+    };
+    const QVariant publisher2 = field(2, "publisher");
+
+    QCOMPARE(library->updateBooks({ 1, 2 }, { { QStringLiteral("publisher"), QStringLiteral("Folio") },
+                                              { QStringLiteral("rating"), 6 } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->bulkUndoCount(), 2);
+    QCOMPARE(field(1, "publisher").toString(), QStringLiteral("Folio"));
+    // A field edited since stays as it is edited.
+    QCOMPARE(library->updateBook(1, { { QStringLiteral("rating"), 2 } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    library->undoBulkEdit();
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(field(1, "publisher").toString(), QStringLiteral("Gallimard"));
+    QCOMPARE(field(1, "rating").toString(), QStringLiteral("★"));
+    QCOMPARE(field(2, "publisher"), publisher2);
+    QCOMPARE(library->bulkUndoCount(), 0);
+
+    // Two in a row: the undo puts back the second only.
+    QCOMPARE(library->updateBooks({ 3 }, { { QStringLiteral("publisher"), QStringLiteral("A") } }), QString());
+    QCOMPARE(library->updateBooks({ 3 }, { { QStringLiteral("publisher"), QStringLiteral("B") } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_VERIFY_WITH_TIMEOUT(!library->saving(), 15000);
+    QTRY_COMPARE(field(3, "publisher").toString(), QStringLiteral("B"));
+    QCOMPARE(library->bulkUndoCount(), 1);
+    library->undoBulkEdit();
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(field(3, "publisher").toString(), QStringLiteral("A"));
+}
+
 void BookLibraryTest::editsBooks()
 {
     auto copy = writableCopy();
@@ -473,11 +633,14 @@ void BookLibraryTest::editsBooks()
     library->setWritable(true);
     library->setCurrentBookId(2);
     QSignalSpy saved(library.get(), &BookLibrary::saved);
+    // A save refused tells why, should it happen.
+    QSignalSpy saveFailed(library.get(), &BookLibrary::saveFailed);
     QCOMPARE(library->updateBook(2, { { QStringLiteral("title"), QStringLiteral("The White Rose") } }), QString());
     QVERIFY(library->saving());
     // Edits made meanwhile wait their turn.
     QCOMPARE(library->updateBook(2, { { QStringLiteral("tags"), QStringLiteral("Fantasy, Military") } }), QString());
     QTRY_VERIFY_WITH_TIMEOUT(!library->saving(), 15000);
+    QVERIFY2(saveFailed.isEmpty(), qPrintable(saveFailed.isEmpty() ? QString() : saveFailed.constFirst().constFirst().toString()));
     QVERIFY(saved.size() >= 1);
     QCOMPARE(title(library.get()), QStringLiteral("The White Rose"));
     QCOMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(),
@@ -491,6 +654,72 @@ void BookLibraryTest::editsBooks()
     QVERIFY(!library->updateBook(2, { { QStringLiteral("pubdate"), QStringLiteral("someday") } }).isEmpty());
     QVERIFY(!library->updateBook(2, { { QStringLiteral("colour"), QStringLiteral("red") } }).isEmpty());
     QVERIFY(!library->updateBook(99, { { QStringLiteral("title"), QStringLiteral("X") } }).isEmpty());
+}
+
+// The list's columns and sort are kept for the library, Calibre's own at
+// first; a sort keeps the earlier ones for its ties, as Calibre's list does.
+void BookLibraryTest::keepsColumnsAndSort()
+{
+    auto copy = writableCopy();
+    {
+        auto library = open(copy->path());
+        QVERIFY(library);
+        QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("authors"),
+                                                   QStringLiteral("series"), QStringLiteral("formats"),
+                                                   QStringLiteral("timestamp"), QStringLiteral("rating") }));
+        // Known columns once, the title first.
+        library->setColumns({ QStringLiteral("pubdate"), QStringLiteral("title"), QStringLiteral("nonsense"),
+                              QStringLiteral("pubdate"), QStringLiteral("tags") });
+        QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("pubdate"), QStringLiteral("tags") }));
+        const QVariantList available = library->availableColumns();
+        QCOMPARE(available.at(1).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("pubdate"));
+        QVERIFY(available.at(2).toMap().value(QStringLiteral("shown")).toBool());
+        QVERIFY(!available.at(3).toMap().value(QStringLiteral("shown")).toBool());
+        // The rows have the text of each column.
+        const QVariantMap row = library->books()->get(library->books()->indexOf(4));
+        QCOMPARE(row.value(QStringLiteral("tags")).toString(), QStringLiteral("Fantasy, Humour"));
+        QCOMPARE(library->books()->get(library->books()->indexOf(1)).value(QStringLiteral("pubdate")).toString(),
+                 QStringLiteral("Mar 1947"));
+
+        // Sorted by rating, the books without one by title, as before.
+        library->sortBy(QStringLiteral("rating"));
+        QCOMPARE(library->sortOption(), QStringLiteral("rating"));
+        library->sortBy(QStringLiteral("rating"));
+        QCOMPARE(library->sortOption(), QStringLiteral("ratingDesc"));
+        QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 1, 4, 5, 6, 3 }));
+        // Cousoir's old name.
+        library->setSortOption(QStringLiteral("addedDesc"));
+        QCOMPARE(library->sortOption(), QStringLiteral("timestampDesc"));
+    }
+    {
+        // Kept for the library.
+        auto library = open(copy->path());
+        QVERIFY(library);
+        QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("pubdate"), QStringLiteral("tags") }));
+        QCOMPARE(library->sortOption(), QStringLiteral("timestampDesc"));
+        // Its ties by rating, then title: 4 before 5, added the same second.
+        QCOMPARE(ids(bookRows(*library)), (QList<int>{ 6, 4, 5, 3, 2, 1 }));
+    }
+
+    // Calibre's list as it left it, before Cousoir kept anything.
+    QSettings().clear();
+    SqliteDb db;
+    QString error;
+    QVERIFY(db.open(copy->filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error));
+    QVERIFY(db.exec(QStringLiteral(
+        "INSERT INTO preferences(key, val) VALUES ('library_view books view state', "
+        "'{\"hidden_columns\": [\"tags\", \"size\"], \"column_positions\": {\"ondevice\": 0, \"authors\": 1, "
+        "\"title\": 2, \"tags\": 3, \"size\": 4, \"rating\": 5, \"publisher\": 6}, "
+        "\"sort_history\": [[\"rating\", false], [\"date\", true], [\"title\", true], [\"authors\", true]]}')"),
+                    &error));
+    db.close();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    QCOMPARE(library->columns(), (QStringList{ QStringLiteral("title"), QStringLiteral("authors"),
+                                               QStringLiteral("rating"), QStringLiteral("publisher") }));
+    QCOMPARE(library->sortOption(), QStringLiteral("ratingDesc"));
+    // Calibre's three last sorts: the books without a rating by date added.
+    QCOMPARE(ids(bookRows(*library)), (QList<int>{ 2, 1, 4, 3, 5, 6 }));
 }
 
 void BookLibraryTest::followsSortsLikeCalibre()
@@ -577,14 +806,6 @@ namespace {
 QString importFile(const QString &name)
 {
     return QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/") + name;
-}
-
-QStringList formatsOf(const QVariantMap &book)
-{
-    QStringList formats;
-    for (const QVariant &format : book.value(QStringLiteral("formats")).toList())
-        formats.append(format.toMap().value(QStringLiteral("format")).toString());
-    return formats;
 }
 
 QStringList trashKeys(BookLibrary *library)
@@ -689,7 +910,7 @@ void BookLibraryTest::movesBooksToTrash()
     QCOMPARE(library->moveToTrash({ 4 }), QString());
     QVERIFY(waitForSave(library.get()));
     QTRY_COMPARE(library->counts().value(QStringLiteral("books")).toInt(), 5);
-    QVERIFY(!ids(library->rows()).contains(4));
+    QVERIFY(!ids(bookRows(*library)).contains(4));
     QCOMPARE(trashKeys(library.get()), QStringList{ QStringLiteral("b-4") });
     QCOMPARE(library->counts().value(QStringLiteral("trash")).toInt(), 1);
     const QVariantMap entry = library->trashEntries().first().toMap();
@@ -722,7 +943,6 @@ void BookLibraryTest::convertsBooks()
     ConversionService service;
     service.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
     service.setLibrary(library.get());
-    QVERIFY(service.available());
     QCOMPARE(service.formatsFor(1), (QStringList{ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
     QVERIFY(service.formatsFor(6).isEmpty());
     // Read-only, nothing is converted.
@@ -782,9 +1002,272 @@ void BookLibraryTest::convertsBooks()
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 }
 
+// A metadata download lists what Calibre's sources found, compares it with
+// the book, finds covers and saves the fields chosen and a cover as one
+// edit, which Revert undoes; Calibre is a stand-in here.
+void BookLibraryTest::downloadsFromOpenLibrary()
+{
+    // Without Calibre: Open Library, here a server of the test's own.
+    FakeHttpServer server;
+    server.handler = fakeOpenLibrary;
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    MetadataDownloader downloader;
+    downloader.setNative(true);
+    downloader.setSite({ server.url(), server.url() });
+    downloader.setLibrary(library.get());
+    QCOMPARE(downloader.source(), QStringLiteral("openlibrary"));
+    library->setCurrentBookId(3);
+    QCOMPARE(downloader.search(3), QString());
+    QCOMPARE(downloader.state(), QStringLiteral("searching"));
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    const QVariantMap first = downloader.results().first().toMap();
+    QCOMPARE(first.value(QStringLiteral("title")).toString(), QStringLiteral("Shadows Linger"));
+    QCOMPARE(first.value(QStringLiteral("published")).toString(), QStringLiteral("1990"));
+    QVERIFY(first.value(QStringLiteral("hasSummary")).toBool());
+
+    QHash<QString, QVariantMap> fields;
+    for (const QVariant &row : downloader.fields(0))
+        fields.insert(row.toMap().value(QStringLiteral("key")).toString(), row.toMap());
+    QCOMPARE(fields.value(QStringLiteral("publisher")).value(QStringLiteral("found")).toString(), QStringLiteral("Tor Fantasy"));
+    QVERIFY(fields.value(QStringLiteral("comments")).value(QStringLiteral("chosen")).toBool());
+
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    const QVariantList covers = downloader.covers();
+    QCOMPARE(covers.size(), 2);
+    QCOMPARE(covers.at(1).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Open Library"));
+    QVERIFY(downloader.coversError().isEmpty());
+
+    QCOMPARE(downloader.apply(0, { QStringLiteral("comments"), QStringLiteral("publisher") },
+                              covers.at(1).toMap().value(QStringLiteral("url")).toString()),
+             QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("publisher")).toString(), QStringLiteral("Tor Fantasy"));
+    QVERIFY(library->currentBook().value(QStringLiteral("description")).toString().contains(QStringLiteral("White Rose")));
+    QCOMPARE(QImageReader(copy->filePath(QStringLiteral("Glen Cook/Shadows Linger (3)/cover.jpg"))).size(),
+             QSize(300 + 6874911 % 100, 450));
+}
+
+void BookLibraryTest::downloadsMetadata()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    MetadataDownloader downloader;
+    downloader.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
+    downloader.setLibrary(library.get());
+    QVERIFY(!downloader.search(99).isEmpty());
+    library->setCurrentBookId(2);
+    QCOMPARE(downloader.search(2), QString());
+    QCOMPARE(downloader.state(), QStringLiteral("searching"));
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    QCOMPARE(downloader.bookId(), 2);
+    const QVariantList results = downloader.results();
+    QCOMPARE(results.size(), 4);
+    const QVariantMap first = results.first().toMap();
+    QCOMPARE(first.value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    QCOMPARE(first.value(QStringLiteral("published")).toString(), QStringLiteral("1984"));
+    QVERIFY(first.value(QStringLiteral("hasCover")).toBool());
+    QVERIFY(first.value(QStringLiteral("hasSummary")).toBool());
+    QVERIFY(!results.at(1).toMap().value(QStringLiteral("hasCover")).toBool());
+
+    // Each field the book found has, beside the book's; chosen when it
+    // differs.
+    QHash<QString, QVariantMap> fields;
+    for (const QVariant &row : downloader.fields(0))
+        fields.insert(row.toMap().value(QStringLiteral("key")).toString(), row.toMap());
+    QCOMPARE(fields.size(), 10);
+    QCOMPARE(fields.value(QStringLiteral("title")).value(QStringLiteral("found")).toString(), QStringLiteral("The Black Company"));
+    QVERIFY(!fields.value(QStringLiteral("title")).value(QStringLiteral("chosen")).toBool());
+    QCOMPARE(fields.value(QStringLiteral("tags")).value(QStringLiteral("current")).toString(), QStringLiteral("Fantasy"));
+    QCOMPARE(fields.value(QStringLiteral("tags")).value(QStringLiteral("found")).toString(),
+             QStringLiteral("Dark fantasy, fiction, Fantasy"));
+    QVERIFY(fields.value(QStringLiteral("tags")).value(QStringLiteral("chosen")).toBool());
+    // 4.3 stars is four, as Calibre's editor has no half stars.
+    QCOMPARE(fields.value(QStringLiteral("rating")).value(QStringLiteral("found")).toString(), QStringLiteral("★★★★"));
+    QCOMPARE(fields.value(QStringLiteral("pubdate")).value(QStringLiteral("found")).toString(), QStringLiteral("1984-05-01"));
+    QCOMPARE(fields.value(QStringLiteral("identifiers")).value(QStringLiteral("found")).toString(),
+             QStringLiteral("google:xE4_AAAA, isbn:9780812521399"));
+    QCOMPARE(fields.value(QStringLiteral("series")).value(QStringLiteral("found")).toString(),
+             QStringLiteral("The Chronicles of the Black Company, book 1"));
+    QVERIFY(downloader.fields(9).isEmpty());
+
+    // The book's own cover, then those found, the largest first.
+    downloader.searchCovers(0);
+    QVERIFY(downloader.searchingCovers());
+    QTRY_VERIFY(!downloader.searchingCovers());
+    const QVariantList covers = downloader.covers();
+    QCOMPARE(covers.size(), 3);
+    QVERIFY(covers.at(0).toMap().value(QStringLiteral("own")).toBool());
+    QCOMPARE(covers.at(1).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Google"));
+    QCOMPARE(covers.at(1).toMap().value(QStringLiteral("width")).toInt(), 1200);
+    QCOMPARE(covers.at(2).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("Amazon.com"));
+    QVERIFY(downloader.coversError().isEmpty());
+
+    // Asked for again, for another book found and back, the covers are
+    // those of the last asked; asked for while they come, too.
+    downloader.searchCovers(1);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    QCOMPARE(downloader.covers().size(), 3);
+    QVERIFY(downloader.coversError().isEmpty());
+    qputenv("COUSOIR_FAKE_DELAY", "20");
+    downloader.searchCovers(1);
+    QVERIFY(downloader.searchingCovers());
+    qunsetenv("COUSOIR_FAKE_DELAY");
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    QCOMPARE(downloader.covers().size(), 3);
+    QVERIFY(downloader.coversError().isEmpty());
+
+    // A cover by its address; one that is not there is refused.
+    QVERIFY(!downloader.apply(0, { QStringLiteral("tags") }, QStringLiteral("file:///nowhere/cover.jpg")).isEmpty());
+    QCOMPARE(downloader.apply(0, { QStringLiteral("tags"), QStringLiteral("pubdate"), QStringLiteral("series") },
+                              downloader.covers().at(1).toMap().value(QStringLiteral("url")).toString()),
+             QString());
+    QCOMPARE(downloader.state(), QStringLiteral("idle"));
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(),
+                 (QStringList{ QStringLiteral("Dark fantasy"), QStringLiteral("fiction"), QStringLiteral("Fantasy") }));
+    QCOMPARE(library->currentBook().value(QStringLiteral("series")).toString(),
+             QStringLiteral("The Chronicles of the Black Company"));
+    QCOMPARE(library->currentBook().value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    const QString coverPath = copy->filePath(QStringLiteral("Glen Cook/The Black Company (2)/cover.jpg"));
+    // Scaled to Calibre's largest cover, as Calibre saves one.
+    QCOMPARE(QImageReader(coverPath).size(), QSize(1466, 2200));
+    // The job's folder goes with the download.
+    const QDir jobs(QDir(BookLibrary::cacheFolder(library->libraryPath())).filePath(QStringLiteral("downloads")));
+    QVERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+    // Revert puts the book back, cover included.
+    QVERIFY(library->canRevert());
+    library->revertCurrentBook();
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->currentBook().value(QStringLiteral("tags")).toStringList(), QStringList{ QStringLiteral("Fantasy") });
+    QVERIFY(QImageReader(coverPath).size() != QSize(1466, 2200));
+
+    // Covers that fail tell why, those saved before kept.
+    QCOMPARE(downloader.search(2), QString());
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    qputenv("COUSOIR_FAKE_FAIL_COVERS", "1");
+    downloader.searchCovers(0);
+    QTRY_VERIFY(!downloader.searchingCovers());
+    qunsetenv("COUSOIR_FAKE_FAIL_COVERS");
+    QVERIFY(downloader.coversError().contains(QStringLiteral("Covers unreachable")));
+    QCOMPARE(downloader.covers().size(), 2);
+
+    // A field Calibre is set to leave aside is not ticked; a book without
+    // a cover keeps having none unless one is picked.
+    qputenv("COUSOIR_FAKE_IGNORE", "tags");
+    QCOMPARE(downloader.search(5), QString());
+    QTRY_COMPARE(downloader.state(), QStringLiteral("found"));
+    qunsetenv("COUSOIR_FAKE_IGNORE");
+    for (const QVariant &row : downloader.fields(0)) {
+        if (row.toMap().value(QStringLiteral("key")) == QLatin1String("tags"))
+            QVERIFY(!row.toMap().value(QStringLiteral("chosen")).toBool());
+        if (row.toMap().value(QStringLiteral("key")) == QLatin1String("publisher"))
+            QVERIFY(row.toMap().value(QStringLiteral("chosen")).toBool());
+    }
+    QCOMPARE(downloader.covers().size(), 1);
+    QVERIFY(downloader.covers().first().toMap().value(QStringLiteral("own")).toBool());
+    QVERIFY(downloader.covers().first().toMap().value(QStringLiteral("url")).toString().isEmpty());
+    downloader.cancel();
+    QVERIFY(downloader.covers().isEmpty());
+
+    // A failure tells what Calibre logged.
+    qputenv("COUSOIR_FAKE_FAIL", "1");
+    QCOMPARE(downloader.search(2), QString());
+    QTRY_COMPARE(downloader.state(), QStringLiteral("failed"));
+    QVERIFY(downloader.error().contains(QStringLiteral("Sources unreachable")));
+    qunsetenv("COUSOIR_FAKE_FAIL");
+
+    // Stopped, it is over at once.
+    qputenv("COUSOIR_FAKE_DELAY", "20");
+    QElapsedTimer timer;
+    timer.start();
+    QCOMPARE(downloader.search(3), QString());
+    QCOMPARE(downloader.state(), QStringLiteral("searching"));
+    downloader.cancel();
+    QCOMPARE(downloader.state(), QStringLiteral("idle"));
+    QVERIFY(timer.elapsed() < 10000);
+    qunsetenv("COUSOIR_FAKE_DELAY");
+    QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+}
+
+// Without Calibre, a KEPUB made by Cousoir of the book's EPUB goes into the
+// library as Calibre's would.
+void BookLibraryTest::convertsWithoutCalibre()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    ConversionService service;
+    service.setNative(true);
+    service.setLibrary(library.get());
+    QVERIFY(!service.calibre());
+    QCOMPARE(service.formatsFor(1), QStringList{ QStringLiteral("KEPUB") });
+    // A PDF alone, nothing.
+    QVERIFY(service.formatsFor(5).isEmpty());
+    QVERIFY(!service.convert(1, QStringLiteral("AZW3")).isEmpty());
+    QSignalSpy converted(&service, &ConversionService::converted);
+    QCOMPARE(service.convert(1, QStringLiteral("KEPUB")), QString());
+    QVERIFY(converted.wait(10000));
+    QVERIFY(waitForSave(library.get()));
+    library->setCurrentBookId(1);
+    QTRY_COMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.kepub"))));
+}
+
 // A Kobo shows up while mounted, with its books matched with the library's;
 // books go to it through Calibre, a stand-in here, and come off it; ejected,
 // it stays out until plugged in again.
+// Without Calibre, Cousoir sends to a Kobo itself: the EPUB as a KEPUB at
+// the driver's place, the book in metadata.calibre, and the Kobo's list
+// with it, matched with the library's book.
+void BookLibraryTest::sendsToKobosWithoutCalibre()
+{
+    auto library = open();
+    QVERIFY(library);
+    QTemporaryDir kobo;
+    QVERIFY(makeKobo(kobo.path()));
+    const QString root = QDir::cleanPath(kobo.path());
+    QTemporaryDir config;
+    QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
+    DeviceLibrary devices;
+    devices.setNative(true);
+    devices.setConfigDirectory(config.path());
+    devices.setVolumeProvider([&volumes] { return volumes; }, 20);
+    devices.setLibrary(library.get());
+    QTRY_COMPARE(devices.devices().size(), 1);
+    devices.setCurrentRoot(root);
+    QTRY_VERIFY(!devices.loading());
+    QSignalSpy sent(&devices, &DeviceLibrary::sent);
+    QCOMPARE(devices.send({ 1, 5 }, root), QString());
+    QVERIFY(sent.wait(10000));
+    const QString kepub = QStringLiteral("Vian, Boris/Ecume des jours, L_ - Boris Vian.kepub.epub");
+    QVERIFY(QFileInfo::exists(QDir(root).filePath(kepub)));
+    QVERIFY(QFileInfo::exists(QDir(root).filePath(QStringLiteral("Dupont, Jean-Pierre/Manuel technique - Jean-Pierre Dupont.pdf"))));
+    QFile metadata(QDir(root).filePath(QStringLiteral("metadata.calibre")));
+    QVERIFY(metadata.open(QIODevice::ReadOnly));
+    const QJsonArray books = QJsonDocument::fromJson(metadata.readAll()).array();
+    QCOMPARE(books.size(), 2);
+    QCOMPARE(books.first().toObject().value(QStringLiteral("lpath")).toString(), kepub);
+    QCOMPARE(books.first().toObject().value(QStringLiteral("uuid")).toString(), library->data().book(1)->uuid);
+    QVERIFY(QFileInfo::exists(QDir(root).filePath(QStringLiteral("driveinfo.calibre"))));
+    // The Kobo's list has them, matched with the library's books.
+    QTRY_COMPARE(devices.rows().size(), 2);
+    QStringList matched;
+    for (const QVariant &row : devices.rows())
+        matched.append(QString::number(row.toMap().value(QStringLiteral("bookId")).toInt()));
+    matched.sort();
+    QCOMPARE(matched, (QStringList{ QStringLiteral("1"), QStringLiteral("5") }));
+}
+
 void BookLibraryTest::sendsToKobos()
 {
     auto library = open();
@@ -809,7 +1292,6 @@ void BookLibraryTest::sendsToKobos()
     devices.setVolumeProvider([&volumes] { return volumes; }, 20);
     devices.setLibrary(library.get());
     QVERIFY(devices.devices().isEmpty());
-    QVERIFY(devices.available());
     QVERIFY(devices.writable());
 
     // Any folder with a .kobo in it.
@@ -959,6 +1441,56 @@ void BookLibraryTest::sendsToKindles()
 
     kindles = {};
     QTRY_VERIFY(devices.devices().isEmpty());
+}
+
+// The highlights and notes of a Kindle's My Clippings.txt, on the book's
+// page, on the Kindle's, and still there once it is unplugged.
+void BookLibraryTest::readsKindleClippings()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    QTemporaryDir kindle;
+    const QDir root(kindle.path());
+    QVERIFY(root.mkpath(QStringLiteral("documents")));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kindle/My Clippings.txt"),
+                        root.filePath(QStringLiteral("documents/My Clippings.txt"))));
+    QVERIFY(writeAll(root.filePath(QStringLiteral("documents/L'Écume des jours - Boris Vian.azw3")), "book"));
+    QTemporaryDir config;
+    QList<KindleSlot> kindles{ { 0, 0, 0x9981, kindle.path() } };
+    DeviceLibrary devices;
+    devices.setProgram(QStringLiteral(COUSOIR_TEST_TOOL));
+    devices.setConfigDirectory(config.path());
+    devices.setVolumeProvider([] { return QList<Volume>(); }, 20);
+    devices.setKindleProvider([&kindles] { return kindles; });
+    devices.setLibrary(library.get());
+    QTRY_COMPARE(devices.devices().size(), 1);
+    devices.setCurrentRoot(devices.devices().first().toMap().value(QStringLiteral("root")).toString());
+    QTRY_VERIFY(!devices.loading());
+
+    // On the Kindle: the book's notes counted.
+    QVariantMap ecumeRow;
+    for (const QVariant &row : devices.rows()) {
+        if (row.toMap().value(QStringLiteral("bookId")).toInt() == 1)
+            ecumeRow = row.toMap();
+    }
+    QCOMPARE(ecumeRow.value(QStringLiteral("notes")).toInt(), 4);
+    const QVariantList reading = devices.reading(1);
+    QCOMPARE(reading.size(), 1);
+    const QVariantList notes = reading.first().toMap().value(QStringLiteral("notes")).toList();
+    QCOMPARE(notes.size(), 4);
+    QCOMPARE(notes.first().toMap().value(QStringLiteral("position")).toString(), QStringLiteral("page 12, location 170-172"));
+    QCOMPARE(notes.first().toMap().value(QStringLiteral("created")).toString(), QStringLiteral("2024-03-03"));
+    QVERIFY(reading.first().toMap().value(QStringLiteral("markdown")).toString().contains(QStringLiteral("Le ton du livre")));
+    // A book no longer on the Kindle keeps its notes.
+    QCOMPARE(devices.reading(6).size(), 1);
+
+    kindles = {};
+    QTRY_VERIFY(devices.devices().isEmpty());
+    const QVariantList kept = devices.reading(6);
+    QCOMPARE(kept.size(), 1);
+    QVERIFY(!kept.first().toMap().value(QStringLiteral("connected")).toBool());
+    QCOMPARE(kept.first().toMap().value(QStringLiteral("notes")).toList().size(), 1);
 }
 
 namespace {

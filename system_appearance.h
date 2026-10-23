@@ -12,7 +12,6 @@ class SystemAppearance : public QObject
     Q_PROPERTY(QVariantMap palette READ palette NOTIFY paletteChanged)
     Q_PROPERTY(QFont fixedFont READ fixedFont NOTIFY fontsChanged)
     Q_PROPERTY(qreal uiFontPointSize READ uiFontPointSize NOTIFY fontsChanged)
-    Q_PROPERTY(bool dark READ dark NOTIFY paletteChanged)
 
 public:
     explicit SystemAppearance(QObject *parent = nullptr);
@@ -20,7 +19,6 @@ public:
     QVariantMap palette() const;
     QFont fixedFont() const;
     qreal uiFontPointSize() const;
-    bool dark() const;
 
     // QFontInfo reports a negative size when the font is pixel-sized or has no
     // matching face. Callers that paint with a point size use this instead.
@@ -41,5 +39,4 @@ private:
     QVariantMap m_palette;
     QFont m_uiFont;
     QFont m_fixedFont;
-    bool m_dark = false;
 };

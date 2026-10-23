@@ -447,6 +447,7 @@ bool readMobi(const QString &path, ImportedMetadata *metadata, QString *error, c
 const char calibreReader[] = R"(
 import json, sys
 from calibre.customize.ui import get_file_type_metadata
+from calibre.utils.config import to_json
 from calibre.utils.date import isoformat, is_date_undefined
 
 path, ftype, out, cover = sys.argv[-4:]
@@ -485,7 +486,8 @@ with open(out, 'w', encoding='utf-8') as f:
         'identifiers': list(mi.get_identifiers().items()),
         'rating': mi.rating,
         'book_producer': mi.book_producer or '',
-    }, f)
+        'user_metadata': mi.get_all_user_metadata(False),
+    }, f, default=to_json)
 )";
 
 // Calibre's reader for any format, through calibre-debug.
@@ -524,7 +526,8 @@ bool readWithCalibre(const QString &path, ImportedMetadata *metadata, bool cover
         metadata->cover = image.readAll();
     if (coverOnly)
         return true;
-    const QJsonObject read = QJsonDocument::fromJson(result.readAll()).object();
+    const QByteArray raw = result.readAll();
+    const QJsonObject read = QJsonDocument::fromJson(raw).object();
     ImportedMetadata mi;
     const auto list = [&read](const char *key) {
         QStringList values;
@@ -554,6 +557,12 @@ bool readWithCalibre(const QString &path, ImportedMetadata *metadata, bool cover
     if (read.value(QLatin1String("rating")).isDouble())
         mi.rating = read.value(QLatin1String("rating")).toDouble();
     mi.bookProducer = read.value(QLatin1String("book_producer")).toString();
+    // The custom columns' fields, decoded already, in Calibre's order.
+    const PythonJson::Value all = PythonJson::parse(raw);
+    if (const PythonJson::Value *fields = all.find(QStringLiteral("user_metadata"))) {
+        for (const auto &field : fields->fields)
+            mi.setUserMetadata(field.first, field.second);
+    }
     mi.cover = metadata->cover;
     *metadata = mi;
     return true;
@@ -585,18 +594,14 @@ QString calibreDebug()
 bool readFileMetadata(const QString &path, const CalibreConfig &config, ImportedMetadata *metadata, QString *error)
 {
     const QString format = formatOf(path).toLower();
-    bool ok;
-    if (format == QLatin1String("epub") || format == QLatin1String("kepub")) {
-        ok = readEpub(path, format == QLatin1String("kepub"), metadata, error);
-    } else if (format == QLatin1String("mobi") || format == QLatin1String("azw") || format == QLatin1String("azw3")
-               || format == QLatin1String("prc")) {
-        ok = readMobi(path, metadata, error, config);
-    } else if (format == QLatin1String("pdf")) {
-        ok = PdfReader::read(path, config.interfaceLanguage, metadata, error);
-    } else {
-        ok = readWithCalibre(path, metadata, false, error);
-    }
-    return ok;
+    if (format == QLatin1String("epub") || format == QLatin1String("kepub"))
+        return readEpub(path, format == QLatin1String("kepub"), metadata, error);
+    if (format == QLatin1String("mobi") || format == QLatin1String("azw") || format == QLatin1String("azw3")
+        || format == QLatin1String("prc"))
+        return readMobi(path, metadata, error, config);
+    if (format == QLatin1String("pdf"))
+        return PdfReader::read(path, config.interfaceLanguage, metadata, error);
+    return readWithCalibre(path, metadata, false, error);
 }
 
 ImportedMetadata metadataFromFilename(const QString &path, const CalibreConfig &config)
@@ -719,6 +724,7 @@ ImportedMetadata metadataForAdding(const QString &path, const CalibreConfig &con
         base.languages = other.languages;
     if (base.series.isEmpty())
         base.seriesIndex.reset();
+    base.updateUserMetadata(other);
 
     // An "Unknown" sort is none: Calibre computes one.
     if (base.authorSort == unknown)

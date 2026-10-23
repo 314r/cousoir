@@ -22,8 +22,10 @@ struct Command
 const Command commands[] = {
     { "compare-libraries", Tool::compareLibraries, 2, 7,
       "[--files-only] [--added-from N] [--converted BOOK:FORMAT,...] CALIBRE COUSOIR" },
-    { "compare-devices", Tool::compareDevices, 2, 3, "[--lpaths-only] CALIBRE COUSOIR" },
+    { "compare-devices", Tool::compareDevices, 2, 4, "[--lpaths-only] [--native] CALIBRE COUSOIR" },
     { "compare-reads", Tool::compareReads, 2, 2, "CALIBRE.json COUSOIR.json" },
+    { "compare-reading", Tool::compareReading, 2, 2, "CALIBRE.json DEVICE.json" },
+    { "compare-templates", Tool::compareTemplates, 2, 2, "CALIBRE.json COUSOIR.json" },
     { "conversion-settings", Tool::conversionSettings, 1, 1, "LIBRARY" },
     { "kobo-import", Tool::koboImport, 1, 1, "KOBO" },
     { "kindle-sync", Tool::kindleSync, 1, 1, "KINDLE" },
@@ -37,6 +39,11 @@ const Command commands[] = {
     { "make-epub", Tool::makeEpub, 4, -1, "OUT.epub TITLE AUTHOR LANGUAGE PARAGRAPH..." },
     { "make-import-epubs", Tool::makeImportEpubs, 2, 2, "FOLDER COVER.jpg" },
     { "make-pdf", Tool::makePdf, 2, 4, "OUT.pdf TEXT [INFO.json [PACKET.xml]]" },
+    { "make-library", Tool::makeLibrary, 2, 3, "FOLDER BOOKS [SEED]" },
+    { "search-books", Tool::searchBooks, 3, 3, "LIBRARY QUERIES.txt OUT.json" },
+    { "compare-searches", Tool::compareSearches, 2, 2, "CALIBRE.json COUSOIR.json" },
+    { "sort-books", Tool::sortBooks, 3, 3, "LIBRARY SORTS.json OUT.json" },
+    { "compare-sorts", Tool::compareSorts, 2, 2, "CALIBRE.json COUSOIR.json" },
 };
 
 } // namespace

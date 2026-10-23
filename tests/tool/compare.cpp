@@ -11,6 +11,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QtEndian>
 #include <QXmlStreamReader>
 
 #include <algorithm>
@@ -181,8 +182,10 @@ std::optional<QMap<QString, Table>> tables(const QString &path, const LibraryOpt
             if (name == QLatin1String("books_pages_link"))
                 row[column("timestamp")] = QStringLiteral("<now>");
             // Calibre inserts a book's identifiers from a set, in no
-            // particular order.
-            if (name == QLatin1String("identifiers"))
+            // particular order; and queues the books whose metadata.opf it
+            // writes again in the order its writes reach them, which tells
+            // nothing: the queue is compared by its books.
+            if (name == QLatin1String("identifiers") || name == QLatin1String("metadata_dirtied"))
                 row[column("id")] = QStringLiteral("<id>");
             table.rows.append(row);
         }
@@ -681,6 +684,13 @@ int compareLibraries(const QStringList &arguments)
 // - driveinfo.calibre without the time of the connection, the uuid drawn for
 //   a new device or the folder a Kobo is mounted on.
 //
+// With --native, Cousoir sent without Calibre: its KEPUBs are its own, so a
+// book file only has to be a KEPUB with Kobo's spans; a MOBI or AZW3 has to
+// be Calibre's but for its cover images, a Kindle's cover thumbnails only
+// their size, a PDF or EPUB sent as it is nothing; metadata.calibre and
+// driveinfo.calibre leave out the cover's thumbnail bytes and Calibre's
+// version.
+//
 // Prints each difference and exits with 1 when there is one.
 
 namespace {
@@ -724,7 +734,51 @@ bool truthy(const QJsonValue &value)
     }
 }
 
-std::optional<QMap<QString, QJsonObject>> deviceMetadata(const QString &path)
+bool isMobi(const QString &path)
+{
+    static const QStringList extensions{ QStringLiteral(".mobi"), QStringLiteral(".azw3"), QStringLiteral(".azw"),
+                                         QStringLiteral(".prc"),  QStringLiteral(".azw4"), QStringLiteral(".pobi") };
+    return std::any_of(extensions.cbegin(), extensions.cend(),
+                       [&path](const QString &extension) { return path.endsWith(extension, Qt::CaseInsensitive); });
+}
+
+// Where two MOBI files differ, record by record, but for JPEG records of
+// the same size, the cover and its thumbnail; empty when alike.
+QString mobiDifference(const QString &a, const QString &b)
+{
+    const QByteArray x = readFile(a).value_or(QByteArray());
+    const QByteArray y = readFile(b).value_or(QByteArray());
+    if (x == y)
+        return {};
+    const auto records = [](const QByteArray &book) {
+        QList<QByteArray> found;
+        if (book.size() < 78)
+            return found;
+        const int count = qFromBigEndian<quint16>(book.constData() + 76);
+        for (int i = 0; i < count && 78 + 8 * (i + 1) <= book.size(); ++i) {
+            const qsizetype start = qFromBigEndian<quint32>(book.constData() + 78 + 8 * i);
+            const qsizetype end = i + 1 < count ? qFromBigEndian<quint32>(book.constData() + 78 + 8 * (i + 1)) : book.size();
+            found.append(book.mid(start, end - start));
+        }
+        return found;
+    };
+    const QList<QByteArray> rx = records(x);
+    const QList<QByteArray> ry = records(y);
+    if (rx.size() != ry.size() || rx.isEmpty())
+        return QStringLiteral("%1 records, %2").arg(rx.size()).arg(ry.size());
+    if (x.left(78 + 8 * rx.size()) != y.left(78 + 8 * ry.size()))
+        return QStringLiteral("the record list");
+    for (qsizetype i = 0; i < rx.size(); ++i) {
+        if (rx.at(i) == ry.at(i))
+            continue;
+        if (rx.at(i).size() == ry.at(i).size() && rx.at(i).startsWith("\xff\xd8") && ry.at(i).startsWith("\xff\xd8"))
+            continue;
+        return QStringLiteral("record %1").arg(i);
+    }
+    return {};
+}
+
+std::optional<QMap<QString, QJsonObject>> deviceMetadata(const QString &path, bool native = false)
 {
     const std::optional<QJsonValue> books = readJson(path);
     if (!books)
@@ -737,14 +791,20 @@ std::optional<QMap<QString, QJsonObject>> deviceMetadata(const QString &path)
         else
             book.insert(QStringLiteral("cover"), get(book, QStringLiteral("cover")));
         const QString lpath = book.value(QLatin1String("lpath")).toString();
-        if (lpath.toLower().endsWith(QLatin1String(".epub")))
+        if (lpath.toLower().endsWith(QLatin1String(".epub")) || native)
             book.insert(QStringLiteral("size"), QStringLiteral("<size>"));
+        if (native) {
+            // Cousoir's thumbnail is of the library's cover, when there is
+            // one; Calibre's also of a PDF's first page.
+            book.insert(QStringLiteral("thumbnail"), QStringLiteral("<thumbnail>"));
+            book.insert(QStringLiteral("cover"), QStringLiteral("<cover>"));
+        }
         found.insert(lpath, book);
     }
     return found;
 }
 
-std::optional<QJsonObject> driveinfo(const QString &path, const QString &root)
+std::optional<QJsonObject> driveinfo(const QString &path, const QString &root, bool native = false)
 {
     const std::optional<QJsonValue> read = readJson(path);
     if (!read)
@@ -752,6 +812,8 @@ std::optional<QJsonObject> driveinfo(const QString &path, const QString &root)
     QJsonObject info = read->toObject();
     info.insert(QStringLiteral("date_last_connected"), QStringLiteral("<now>"));
     info.insert(QStringLiteral("device_store_uuid"), QStringLiteral("<uuid>"));
+    if (native)
+        info.remove(QStringLiteral("calibre_version"));
     if (info.contains(QLatin1String("prefix")))
         info.insert(QStringLiteral("prefix"), info.value(QLatin1String("prefix"))
                                                   .toString()
@@ -764,11 +826,12 @@ std::optional<QJsonObject> driveinfo(const QString &path, const QString &root)
 int compareDevices(const QStringList &arguments)
 {
     const bool lpathsOnly = arguments.contains(QStringLiteral("--lpaths-only"));
+    const bool native = arguments.contains(QStringLiteral("--native"));
     QStringList paths;
     for (const QString &argument : arguments) {
         if (!argument.startsWith(QLatin1String("--"))) {
             paths.append(argument);
-        } else if (argument != QLatin1String("--lpaths-only")) {
+        } else if (argument != QLatin1String("--lpaths-only") && argument != QLatin1String("--native")) {
             err() << "Unknown option: " << argument << Qt::endl;
             return 2;
         }
@@ -796,8 +859,8 @@ int compareDevices(const QStringList &arguments)
             problems.append(QStringLiteral("%1 only on the %2 device")
                                 .arg(rel, fa.contains(rel) ? QStringLiteral("Calibre") : QStringLiteral("Cousoir")));
         } else if (rel == QLatin1String("metadata.calibre")) {
-            const auto ma = deviceMetadata(fa[rel]);
-            const auto mb = deviceMetadata(fb[rel]);
+            const auto ma = deviceMetadata(fa[rel], native);
+            const auto mb = deviceMetadata(fb[rel], native);
             if (!ma || !mb) {
                 problems.append(QStringLiteral("metadata.calibre cannot be read"));
                 continue;
@@ -827,13 +890,36 @@ int compareDevices(const QStringList &arguments)
                 }
             }
         } else if (rel == QLatin1String("driveinfo.calibre")) {
-            const auto da = driveinfo(fa[rel], calibreDevice);
-            const auto db = driveinfo(fb[rel], cousoirDevice);
+            const auto da = driveinfo(fa[rel], calibreDevice, native);
+            const auto db = driveinfo(fb[rel], cousoirDevice, native);
             if (!da || !db)
                 problems.append(QStringLiteral("driveinfo.calibre cannot be read"));
             else if (*da != *db)
                 problems.append(QStringLiteral("driveinfo.calibre differs:\n    Calibre: %1\n    Cousoir: %2")
                                     .arg(display(*da), display(*db)));
+        } else if (native && rel.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive)
+                   && (rel.startsWith(QLatin1String("system/thumbnails/")) || rel.startsWith(QLatin1String("amazon-cover-bug/")))) {
+            // A Kindle's cover thumbnail, of Qt's JPEG: its size.
+            if (QImage(fa[rel]).size() != QImage(fb[rel]).size())
+                problems.append(QStringLiteral("%1 is not the same size").arg(rel));
+        } else if (native && isMobi(rel)) {
+            // Calibre's metadata, but for the cover images, of Qt's JPEG.
+            if (const QString difference = mobiDifference(fa[rel], fb[rel]); !difference.isEmpty())
+                problems.append(QStringLiteral("%1 differs: %2").arg(rel, difference));
+        } else if (native && !rel.endsWith(QLatin1String(".kepub.epub")) && !rel.endsWith(QLatin1String(".calibre"))
+                   && !rel.endsWith(QLatin1String(".apnx")) && !rel.startsWith(QLatin1String("amazon-cover-bug/"))
+                   && !rel.startsWith(u'.')) {
+            // Cousoir puts no metadata in a PDF or EPUB it sends as it is.
+            continue;
+        } else if (native && rel.endsWith(QLatin1String(".kepub.epub"))) {
+            const std::optional<ZipEntries> zip = readZip(fb[rel]);
+            QByteArray pages;
+            if (zip) {
+                for (const auto &[name, data] : *zip)
+                    pages += data;
+            }
+            if (!pages.contains("koboSpan"))
+                problems.append(QStringLiteral("%1 is no KEPUB").arg(rel));
         } else if (content(fa[rel]) != content(fb[rel])) {
             problems.append(QStringLiteral("%1 differs").arg(rel));
         }
@@ -896,6 +982,114 @@ int compareReads(const QStringList &arguments)
     if (!counts.isEmpty())
         out() << " {" << counts.join(QStringLiteral(", ")) << '}';
     out() << '\n';
+    return differences ? 1 : 0;
+}
+
+// --- compare-templates ---------------------------------------------------
+
+// Compares what tools/oracle/template_oracle.py and `cousoir-cli template`
+// make of each template on each book: the same text, or an error on both
+// sides, whatever its message, which Calibre writes in its own language.
+
+int compareTemplates(const QStringList &arguments)
+{
+    const std::optional<QJsonValue> calibreRead = readJson(arguments.at(0));
+    const std::optional<QJsonValue> cousoirRead = readJson(arguments.at(1));
+    if (!calibreRead || !cousoirRead)
+        return 1;
+    const QJsonArray calibre = calibreRead->toArray();
+    const QJsonArray cousoir = cousoirRead->toArray();
+    if (calibre.size() != cousoir.size()) {
+        err() << calibre.size() << " templates for Calibre, " << cousoir.size() << " for Cousoir" << Qt::endl;
+        return 1;
+    }
+    int differences = 0;
+    int alike = 0;
+    for (qsizetype i = 0; i < calibre.size(); ++i) {
+        const QJsonObject theirs = calibre.at(i).toObject();
+        const QJsonObject ours = cousoir.at(i).toObject();
+        const QJsonObject theirBooks = theirs.value(QLatin1String("books")).toObject();
+        const QJsonObject ourBooks = ours.value(QLatin1String("books")).toObject();
+        bool same = true;
+        for (auto it = theirBooks.constBegin(); it != theirBooks.constEnd(); ++it) {
+            const QJsonValue a = it.value();
+            const QJsonValue b = ourBooks.value(it.key());
+            if (a == b || (a.isObject() && b.isObject()))
+                continue;
+            if (same) {
+                out() << display(theirs.value(QLatin1String("template"))) << '\n';
+                same = false;
+            }
+            ++differences;
+            out() << "  book " << it.key() << "\n    calibre " << display(a) << "\n    cousoir " << display(b) << '\n';
+        }
+        if (same)
+            ++alike;
+    }
+    out() << '\n' << alike << " of " << calibre.size() << " templates alike, " << differences << " differences\n";
+    return differences ? 1 : 0;
+}
+
+// --- compare-reading -----------------------------------------------------
+
+// Compares what tools/oracle/kobo_reading.py reads of a Kobo's books with
+// what `cousoir-cli device` prints of them: each book of Calibre's, by its
+// ContentID, its percent and last reading and its notes, field by field.
+
+int compareReading(const QStringList &arguments)
+{
+    const std::optional<QJsonValue> calibreRead = readJson(arguments.at(0));
+    const std::optional<QJsonValue> cousoirRead = readJson(arguments.at(1));
+    if (!calibreRead || !cousoirRead)
+        return 1;
+    const QJsonObject calibre = calibreRead->toObject();
+    QHash<QString, QJsonObject> cousoir;
+    for (const QJsonValue &book : cousoirRead->toObject().value(QLatin1String("books")).toArray()) {
+        const QString id = book.toObject().value(QLatin1String("content_id")).toString();
+        if (!id.isEmpty())
+            cousoir.insert(id, book.toObject().value(QLatin1String("reading")).toObject());
+    }
+    int differences = 0;
+    int notes = 0;
+    const auto differ = [&differences](const QString &where, const QJsonValue &a, const QJsonValue &b) {
+        ++differences;
+        out() << where << "\n    calibre " << display(a) << "\n    cousoir " << display(b) << '\n';
+    };
+    for (auto it = calibre.constBegin(); it != calibre.constEnd(); ++it) {
+        if (!cousoir.contains(it.key())) {
+            ++differences;
+            out() << it.key() << ": not listed by Cousoir\n";
+            continue;
+        }
+        const QJsonObject theirs = it.value().toObject();
+        const QJsonObject ours = cousoir.take(it.key());
+        for (const char *key : { "percent_read", "last_read" }) {
+            if (theirs.value(QLatin1String(key)) != ours.value(QLatin1String(key)))
+                differ(it.key() + QStringLiteral(": ") + QLatin1String(key), theirs.value(QLatin1String(key)),
+                       ours.value(QLatin1String(key)));
+        }
+        const QJsonArray a = theirs.value(QLatin1String("notes")).toArray();
+        const QJsonArray b = ours.value(QLatin1String("notes")).toArray();
+        if (a.size() != b.size()) {
+            differ(it.key() + QStringLiteral(": notes"), a.size(), b.size());
+            continue;
+        }
+        for (qsizetype i = 0; i < a.size(); ++i) {
+            ++notes;
+            const QJsonObject x = a.at(i).toObject();
+            const QJsonObject y = b.at(i).toObject();
+            for (auto field = x.constBegin(); field != x.constEnd(); ++field) {
+                if (field.value() != y.value(field.key()))
+                    differ(QStringLiteral("%1: note %2, %3").arg(it.key()).arg(i).arg(field.key()), field.value(),
+                           y.value(field.key()));
+            }
+        }
+    }
+    for (auto it = cousoir.constBegin(); it != cousoir.constEnd(); ++it) {
+        ++differences;
+        out() << it.key() << ": not read by Calibre\n";
+    }
+    out() << '\n' << calibre.size() << " books, " << notes << " notes, " << differences << " differences\n";
     return differences ? 1 : 0;
 }
 

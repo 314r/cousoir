@@ -1,10 +1,12 @@
 #pragma once
 
 #include <QDateTime>
+#include <QSet>
 #include <QString>
 
 #include "book.h"
 #include "calibre_config.h"
+#include "python_json.h"
 
 class SqliteDb;
 
@@ -39,10 +41,20 @@ QString schemaFingerprint(SqliteDb &db);
 bool isKnownSchema(int userVersion, const QString &fingerprint);
 
 // Reads the books, the items they link to and the library's id.
-bool readLibrary(SqliteDb &db, LibraryData *data, QString *error);
+bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLanguage, QString *error);
+// The custom columns, by id, as initialize_custom_columns() keeps them:
+// those marked for deletion and those whose tables are gone left out.
+bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *error);
+// multiple_seps of a custom column, as initialize_custom_columns() sets
+// them: an empty dict for a column of single values.
+PythonJson::Value multipleSeparators(const CustomColumn &column);
+// format_abspath() without its rename: the file of a format in the book's
+// folder, the one Calibre expects or one with the format's extension; empty
+// when there is none.
+QString formatFile(const QString &folder, const QString &name, const QString &format);
 // Finds each book's cover and format files in its folder, as calibredb list
 // does: a format whose file has another name is found by its extension.
-void findFiles(LibraryData *data);
+void findFiles(LibraryData *data, const QSet<int> *only = nullptr);
 
 // Everything above: the snapshot, a prepared immutable connection to it, the
 // read and the file check.
@@ -53,6 +65,15 @@ bool loadLibrary(const QString &libraryPath, const QString &snapshotPath, const 
 // to the second. NULL and text that is no date are Calibre's undefined date.
 QDateTime parseDate(const QVariant &value);
 QDateTime undefinedDate();
+
+// The folder of the library's notes, .calnotes, and its database.
+QString notesFolder(const QString &libraryPath);
+// Reads the library's notes into `data`, whose libraryPath is set: none when
+// Calibre 7 has never opened it.
+void readNotes(LibraryData *data);
+// Calibre's field of a browse section's items: "publisher" for
+// "publishers"; empty for one without notes.
+QString notesField(const QString &kind);
 bool isUndefinedDate(const QDateTime &date);
 // "2015-07-07T18:41:43+00:00", Python's isoformat() of the UTC date.
 QString isoFormat(const QDateTime &date);

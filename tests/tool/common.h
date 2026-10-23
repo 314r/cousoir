@@ -55,6 +55,8 @@ QString extension(const QString &path);
 int compareLibraries(const QStringList &arguments);
 int compareDevices(const QStringList &arguments);
 int compareReads(const QStringList &arguments);
+int compareReading(const QStringList &arguments);
+int compareTemplates(const QStringList &arguments);
 
 // readers.cpp
 int koboImport(const QStringList &arguments);
@@ -77,5 +79,16 @@ int jsonGet(const QStringList &arguments);
 int makeEpub(const QStringList &arguments);
 int makeImportEpubs(const QStringList &arguments);
 int makePdf(const QStringList &arguments);
+
+// large.cpp
+int makeLibrary(const QStringList &arguments);
+
+// search.cpp
+int searchBooks(const QStringList &arguments);
+int compareSearches(const QStringList &arguments);
+
+// sort.cpp
+int sortBooks(const QStringList &arguments);
+int compareSorts(const QStringList &arguments);
 
 } // namespace Tool

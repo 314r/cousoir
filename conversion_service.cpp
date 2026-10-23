@@ -1,12 +1,14 @@
 #include "conversion_service.h"
 
 #include <QDir>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <utility>
 
 #include "book_library.h"
 #include "calibre_job.h"
 #include "conversion.h"
+#include "kepub.h"
 
 ConversionService::ConversionService(QObject *parent)
     : QObject(parent)
@@ -47,10 +49,24 @@ void ConversionService::setLibrary(BookLibrary *library)
     emit libraryChanged();
 }
 
-bool ConversionService::available() const
+bool ConversionService::calibre() const
 {
-    return !m_program.isEmpty();
+    return !m_program.isEmpty() && !m_native;
 }
+
+namespace {
+
+// The book's EPUB, for Cousoir's own KEPUB.
+QString epubOf(const Book &book)
+{
+    for (const BookFormat &format : book.formats) {
+        if (format.format == QLatin1String("EPUB") && !format.file.isEmpty())
+            return format.file;
+    }
+    return {};
+}
+
+} // namespace
 
 QVariantList ConversionService::jobs() const
 {
@@ -61,7 +77,7 @@ QVariantList ConversionService::jobs() const
             { QStringLiteral("bookId"), job.bookId },
             { QStringLiteral("title"), job.title },
             { QStringLiteral("format"), job.format },
-            { QStringLiteral("running"), index == 0 && m_process },
+            { QStringLiteral("running"), index == 0 && (m_process || m_nativeJob) },
             { QStringLiteral("progress"), job.progress },
         });
     }
@@ -75,18 +91,20 @@ bool ConversionService::busy() const
 
 QStringList ConversionService::formatsFor(int bookId) const
 {
-    if (!m_library || !available())
+    if (!m_library)
         return {};
     const Book *book = m_library->data().book(bookId);
-    return book && !Conversion::inputFormats(*book).isEmpty() ? Conversion::outputFormats() : QStringList();
+    if (!book)
+        return {};
+    if (!calibre())
+        return epubOf(*book).isEmpty() ? QStringList() : QStringList{ QStringLiteral("KEPUB") };
+    return !Conversion::inputFormats(*book).isEmpty() ? Conversion::outputFormats() : QStringList();
 }
 
 QString ConversionService::convert(int bookId, const QString &format)
 {
     if (!m_library)
         return tr("No library is open.");
-    if (!available())
-        return tr("Converting needs Calibre, which is not installed.");
     if (!m_library->writable())
         return tr("The library cannot be changed right now.");
     const Book *book = m_library->data().book(bookId);
@@ -95,7 +113,10 @@ QString ConversionService::convert(int bookId, const QString &format)
     const QString upper = format.toUpper();
     if (!Conversion::outputFormats().contains(upper))
         return tr("Cousoir does not convert to %1.").arg(format);
-    if (Conversion::inputFormats(*book).isEmpty())
+    if (!calibre() && (upper != QLatin1String("KEPUB") || epubOf(*book).isEmpty()))
+        return upper == QLatin1String("KEPUB") ? tr("Without Calibre, Cousoir makes a KEPUB of an EPUB only.")
+                                               : tr("Converting to %1 needs Calibre, which is not installed.").arg(upper);
+    if (calibre() && Conversion::inputFormats(*book).isEmpty())
         return tr("Calibre converts none of this book's formats.");
     for (const Job &job : std::as_const(m_jobs)) {
         if (job.bookId == bookId && job.format == upper)
@@ -114,8 +135,9 @@ void ConversionService::cancel(int bookId)
         stopProcess();
         m_folder.reset();
     }
-    // The running one stays when it is another book's.
-    const qsizetype from = m_process ? 1 : 0;
+    // The running one stays when it is another book's, or Cousoir's own,
+    // which ends in a moment.
+    const qsizetype from = m_process || m_nativeJob ? 1 : 0;
     const qsizetype before = m_jobs.size();
     m_jobs.erase(std::remove_if(m_jobs.begin() + from, m_jobs.end(), matches), m_jobs.end());
     if (m_jobs.size() != before)
@@ -123,17 +145,20 @@ void ConversionService::cancel(int bookId)
     startNext();
 }
 
+void ConversionService::setNative(bool native)
+{
+    m_native = native;
+    emit calibreChanged();
+}
+
 void ConversionService::setProgram(const QString &program)
 {
-    const bool wasAvailable = available();
     m_program = program.isEmpty() ? Conversion::program() : program;
-    if (available() != wasAvailable)
-        emit availableChanged();
 }
 
 void ConversionService::startNext()
 {
-    if (m_process || m_jobs.isEmpty() || !m_library || m_library->saving() || m_library->loading())
+    if (m_process || m_nativeJob || m_jobs.isEmpty() || !m_library || m_library->saving() || m_library->loading())
         return;
     const Job job = m_jobs.first();
     const Book *book = m_library->data().book(job.bookId);
@@ -150,7 +175,7 @@ void ConversionService::startNext()
         folder = std::make_shared<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
         if (!folder->isValid())
             error = tr("Cannot create a folder for the conversion in %1.").arg(base);
-        else
+        else if (calibre())
             Conversion::prepare(m_library->data(), *book, job.format, m_library->interfaceLanguage(), folder->path(),
                                 &error);
     }
@@ -163,6 +188,10 @@ void ConversionService::startNext()
     }
 
     m_folder = folder;
+    if (!calibre()) {
+        startNative(*book);
+        return;
+    }
     m_process = new QProcess(this);
     m_process->setProcessEnvironment(CalibreJob::environment(folder->path(), m_library->interfaceLanguage()));
     m_process->setStandardErrorFile(QProcess::nullDevice());
@@ -219,6 +248,47 @@ void ConversionService::finishJob()
         emit converted(job.bookId, job.title, job.format);
     } else {
         emit failed(tr("“%1” was not converted to %2: %3").arg(job.title, job.format, error));
+    }
+    startNext();
+}
+
+void ConversionService::startNative(const Book &book)
+{
+    // What the conversion reads of the book, taken now: the library may
+    // change while it runs.
+    const Kepub::Options options = Kepub::optionsFor(book);
+    const QString epub = epubOf(book);
+    const QString output = QDir(m_folder->path()).filePath(QStringLiteral("output.kepub"));
+    m_nativeJob = new QFutureWatcher<QString>(this);
+    connect(m_nativeJob, &QFutureWatcher<QString>::finished, this, &ConversionService::finishNative);
+    m_nativeJob->setFuture(QtConcurrent::run([epub, output, options] {
+        QString error;
+        return Kepub::kepubify(epub, output, options, &error) ? QString() : error;
+    }));
+    emit jobsChanged();
+}
+
+void ConversionService::finishNative()
+{
+    const QString error = m_nativeJob->result();
+    m_nativeJob->deleteLater();
+    m_nativeJob = nullptr;
+    const Job job = m_jobs.takeFirst();
+    const std::shared_ptr<QTemporaryDir> folder = std::exchange(m_folder, nullptr);
+    QString failure = error;
+    if (failure.isEmpty()) {
+        Conversion::Outcome outcome;
+        outcome.ok = true;
+        outcome.inputFormat = QStringLiteral("epub");
+        outcome.file = QDir(folder->path()).filePath(QStringLiteral("output.kepub"));
+        failure = m_library ? m_library->addConversion(job.bookId, job.format, outcome) : tr("No library is open.");
+    }
+    emit jobsChanged();
+    if (failure.isEmpty()) {
+        m_handedOver.append(folder);
+        emit converted(job.bookId, job.title, job.format);
+    } else {
+        emit failed(tr("“%1” was not converted to %2: %3").arg(job.title, job.format, failure));
     }
     startNext();
 }

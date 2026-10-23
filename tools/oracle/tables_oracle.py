@@ -15,7 +15,7 @@ import sys
 
 from calibre.constants import __version__
 from calibre.ebooks.html_entities import html5_entities
-from calibre.ebooks.mobi.langcodes import mobi2iana
+from calibre.ebooks.mobi.langcodes import IANA_MOBI, mobi2iana
 from calibre.ebooks.unihandecode.unidecoder import Unidecoder
 from calibre.utils.localization import canonicalize_lang, get_all_translators
 
@@ -95,6 +95,15 @@ with open(os.path.join(out, 'calibre_strings.inc'), 'w', encoding='utf-8') as f:
             language = None
         if language:
             f.write('    { %d, %s },\n' % (code, c_string(language)))
+    f.write('};\n')
+    f.write('\n// iana2mobi() of a language with no region: the main and sub language codes\n')
+    f.write('// of a MOBI header, by ISO 639-1 code; the first is for none.\n')
+    f.write('static const struct { const char *language; int main; int sub; } mobiCodes[] = {\n')
+    default = IANA_MOBI[None][None]
+    f.write('    { "", %d, %d },\n' % (default[0], default[1]))
+    for lang in sorted(k for k in IANA_MOBI if k):
+        code = IANA_MOBI[lang][None]
+        f.write('    { %s, %d, %d },\n' % (c_string(lang), code[0], code[1]))
     f.write('};\n')
     f.write('\n// replace_entities()\'s named references, sorted by name.\n')
     f.write('static const struct { const char *name; const char *value; } htmlEntities[] = {\n')

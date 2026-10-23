@@ -1,0 +1,443 @@
+{
+ "calibre_version": "9.16.0",
+ "title_tokens": [
+  [
+   "The Black Company",
+   [
+    "Black",
+    "Company"
+   ]
+  ],
+  [
+   "Shadows Linger",
+   [
+    "Shadows",
+    "Linger"
+   ]
+  ],
+  [
+   "L'Écume des jours",
+   [
+    "L'Écume",
+    "des",
+    "jours"
+   ]
+  ],
+  [
+   "Le Petit Prince",
+   [
+    "Le",
+    "Petit",
+    "Prince"
+   ]
+  ],
+  [
+   "A Tale of Two Cities",
+   [
+    "Tale",
+    "of",
+    "Two",
+    "Cities"
+   ]
+  ],
+  [
+   "The Lord of the Rings (Omnibus)",
+   [
+    "Lord",
+    "of",
+    "Rings"
+   ]
+  ],
+  [
+   "Dune (1965)",
+   [
+    "Dune"
+   ]
+  ],
+  [
+   "Harry Potter (Paperback)",
+   [
+    "Harry",
+    "Potter"
+   ]
+  ],
+  [
+   "Foundation [Mass Market]",
+   [
+    "Foundation"
+   ]
+  ],
+  [
+   "Neuromancer (20th Anniversary Edition)",
+   [
+    "Neuromancer"
+   ]
+  ],
+  [
+   "The Hobbit (ed. 2)",
+   [
+    "Hobbit"
+   ]
+  ],
+  [
+   "1,000,000 Words",
+   [
+    "1000,000",
+    "Words"
+   ]
+  ],
+  [
+   "Good Omens - The Novel",
+   [
+    "Good",
+    "Omens",
+    "Novel"
+   ]
+  ],
+  [
+   "Spider-Man",
+   [
+    "Spider-Man"
+   ]
+  ],
+  [
+   "Title: A Subtitle",
+   [
+    "Title:",
+    "Subtitle"
+   ]
+  ],
+  [
+   "\"Quoted\"",
+   [
+    "Quoted"
+   ]
+  ],
+  [
+   "'Single'",
+   [
+    "Single"
+   ]
+  ],
+  [
+   "And Then There Were None",
+   [
+    "Then",
+    "There",
+    "Were",
+    "None"
+   ]
+  ],
+  [
+   "A & B",
+   [
+    "B"
+   ]
+  ],
+  [
+   "the",
+   []
+  ],
+  [
+   "War and Peace",
+   [
+    "War",
+    "Peace"
+   ]
+  ],
+  [
+   "  Spaced   Out  ",
+   [
+    "Spaced",
+    "Out"
+   ]
+  ],
+  [
+   "Les Misérables, tome 1",
+   [
+    "Les",
+    "Misérables,",
+    "tome",
+    "1"
+   ]
+  ],
+  [
+   "C++ Primer",
+   [
+    "C++",
+    "Primer"
+   ]
+  ],
+  [
+   "Un amour de Swann",
+   [
+    "Un",
+    "amour",
+    "de",
+    "Swann"
+   ]
+  ],
+  [
+   "Flatland: A Romance of Many Dimensions",
+   [
+    "Flatland:",
+    "Romance",
+    "of",
+    "Many",
+    "Dimensions"
+   ]
+  ],
+  [
+   "Title 《Chinese》",
+   [
+    "Title",
+    "《Chinese》"
+   ]
+  ],
+  [
+   "",
+   []
+  ]
+ ],
+ "author_tokens": [
+  [
+   [
+    "Glen Cook"
+   ],
+   [
+    "Glen",
+    "Cook"
+   ]
+  ],
+  [
+   [
+    "Boris Vian"
+   ],
+   [
+    "Boris",
+    "Vian"
+   ]
+  ],
+  [
+   [
+    "Antoine de Saint-Exupéry"
+   ],
+   [
+    "Antoine",
+    "Saint",
+    "Exupéry"
+   ]
+  ],
+  [
+   [
+    "Cook, Glen"
+   ],
+   [
+    "Glen",
+    "Cook"
+   ]
+  ],
+  [
+   [
+    "J. R. R. Tolkien"
+   ],
+   [
+    "Tolkien"
+   ]
+  ],
+  [
+   [
+    "Ludwig van Beethoven"
+   ],
+   [
+    "Ludwig",
+    "Beethoven"
+   ]
+  ],
+  [
+   [
+    "Wernher von Braun"
+   ],
+   [
+    "Wernher",
+    "Braun"
+   ]
+  ],
+  [
+   [
+    "Flann O'Brien"
+   ],
+   [
+    "Flann",
+    "O'Brien"
+   ]
+  ],
+  [
+   [
+    "Terry Pratchett",
+    "Neil Gaiman"
+   ],
+   [
+    "Terry",
+    "Pratchett"
+   ]
+  ],
+  [
+   [
+    "Unknown"
+   ],
+   []
+  ],
+  [
+   [
+    "Jean-Paul Sartre"
+   ],
+   [
+    "Jean",
+    "Paul",
+    "Sartre"
+   ]
+  ],
+  [
+   [
+    "Al Ng"
+   ],
+   []
+  ],
+  [
+   [
+    "Edwin A. Abbott"
+   ],
+   [
+    "Edwin",
+    "Abbott"
+   ]
+  ],
+  [
+   [
+    "[Anonymous]"
+   ],
+   [
+    "Anonymous"
+   ]
+  ],
+  [
+   [],
+   []
+  ]
+ ],
+ "cleanup_title": [
+  [
+   "The Black Company",
+   "black company"
+  ],
+  [
+   "Shadows Linger",
+   "shadows linger"
+  ],
+  [
+   "L'Écume des jours",
+   "l'écume des jours"
+  ],
+  [
+   "Le Petit Prince",
+   "le petit prince"
+  ],
+  [
+   "A Tale of Two Cities",
+   "tale of two cities"
+  ],
+  [
+   "The Lord of the Rings (Omnibus)",
+   "lord of the rings"
+  ],
+  [
+   "Dune (1965)",
+   "dune"
+  ],
+  [
+   "Harry Potter (Paperback)",
+   "harry potter"
+  ],
+  [
+   "Foundation [Mass Market]",
+   "foundation [mass market]"
+  ],
+  [
+   "Neuromancer (20th Anniversary Edition)",
+   "neuromancer"
+  ],
+  [
+   "The Hobbit (ed. 2)",
+   "hobbit"
+  ],
+  [
+   "1,000,000 Words",
+   "1,000,000 words"
+  ],
+  [
+   "Good Omens - The Novel",
+   "good omens - the novel"
+  ],
+  [
+   "Spider-Man",
+   "spider-man"
+  ],
+  [
+   "Title: A Subtitle",
+   "title: a subtitle"
+  ],
+  [
+   "\"Quoted\"",
+   "\"quoted\""
+  ],
+  [
+   "'Single'",
+   "'single'"
+  ],
+  [
+   "And Then There Were None",
+   "then there were none"
+  ],
+  [
+   "A & B",
+   "& b"
+  ],
+  [
+   "the",
+   "the"
+  ],
+  [
+   "War and Peace",
+   "war and peace"
+  ],
+  [
+   "  Spaced   Out  ",
+   "spaced out"
+  ],
+  [
+   "Les Misérables, tome 1",
+   "les misérables, tome 1"
+  ],
+  [
+   "C++ Primer",
+   "c++ primer"
+  ],
+  [
+   "Un amour de Swann",
+   "un amour de swann"
+  ],
+  [
+   "Flatland: A Romance of Many Dimensions",
+   "flatland: a romance of many dimensions"
+  ],
+  [
+   "Title 《Chinese》",
+   "title 《chinese》"
+  ],
+  [
+   "",
+   "unknown"
+  ]
+ ]
+}

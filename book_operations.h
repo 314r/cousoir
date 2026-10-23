@@ -113,22 +113,24 @@ bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, c
 bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &removal, const Context &context,
                    Result *result, QString *error);
 bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds, const Context &context,
-                 Result *result, QString *error);
+                 QString *error);
 bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoration, const Context &context,
              FieldWriters::Result *fields, Result *result, QString *error);
 
 // set_conversion_options() of backend.py: the settings of the book's last
 // conversion, `data` as Calibre stores it.
 bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QString *error);
+// save_last_read_position_to_cursor() of Calibre's backend: a reader's
+// position in the book, in place of the one it had.
+bool setReadPosition(SqliteDb &db, int bookId, const ReadPosition &position, QString *error);
+// save_annotations_for_book() of Calibre's backend, for one annotation of
+// its viewer: in place of the one of the same id.
+bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QString *error);
 
 // update_path() of backend.py for one book: its folder and files follow its
 // title and first author, in the database and on disk.
 bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath, int bookId, const QString &unknown,
                 QString *error);
-
-// format_abspath() without its rename: the file Calibre expects, or one with
-// the format's extension.
-QString formatFile(const QString &folder, const QString &name, const QString &format);
 
 // list_trash_entries(): the books and formats in the library's trash.
 QList<TrashEntry> trashEntries(const QString &libraryPath, const QString &interfaceLanguage);

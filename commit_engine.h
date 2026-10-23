@@ -13,6 +13,7 @@
 #include "book_edit.h"
 #include "book_operations.h"
 #include "calibre_config.h"
+#include "calibre_notes.h"
 
 // Writes edits to a library as Calibre would, without the library ever
 // being half written. While Calibre's own lock keeps Calibre from starting:
@@ -35,6 +36,9 @@ struct Request
     QString backupFolder;
     CalibreConfig config;
     QList<BookEdit> edits;
+    // Then bulk edits, each worked out on the books as the changes before it
+    // left them.
+    QList<BulkEdit> bulkEdits;
     // After the edits, in this order: formats copied from one book to
     // another, before anything leaves, then formats moved to the trash, books
     // moved to the trash, books and formats restored from it, books added and
@@ -48,6 +52,11 @@ struct Request
     // Last, the settings of conversions, for the books' next ones: book and
     // conversion_options data.
     QList<QPair<int, QByteArray>> conversionOptions;
+    // And where a reader stopped in books, and highlights made there.
+    QList<QPair<int, ReadPosition>> readPositions;
+    QList<QPair<int, Annotation>> annotations;
+    // Notes on items, written first, in the library's notes.db.
+    QList<CalibreNotes::Change> notes;
     // The software writing the metadata.opf files: name and version, and the
     // short name it files under.
     QString producer;
@@ -63,7 +72,8 @@ struct Request
     bool hasOperations() const
     {
         return !formatCopies.isEmpty() || !formatRemovals.isEmpty() || !trash.isEmpty() || !restorations.isEmpty()
-            || !newBooks.isEmpty() || !newFormats.isEmpty() || !conversionOptions.isEmpty();
+            || !newBooks.isEmpty() || !newFormats.isEmpty() || !conversionOptions.isEmpty() || !readPositions.isEmpty()
+            || !annotations.isEmpty();
     }
 };
 
@@ -79,8 +89,12 @@ struct Result
     QSet<int> dirtied;
     // The ids of the books added, in order.
     QList<int> added;
+    // The books the bulk edits changed, as they were before them.
+    QList<Book> bulkBefore;
     // The backup made, if any.
     QString backup;
+    // Whether notes were written.
+    bool notesWritten = false;
 };
 
 Result commit(const Request &request);

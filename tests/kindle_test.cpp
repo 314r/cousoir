@@ -1,7 +1,8 @@
 #include <QtTest>
 
 #include <QCryptographicHash>
-#include <QDirIterator>
+#include <QDateTime>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -10,20 +11,12 @@
 #include "calibre_db.h"
 #include "device_files.h"
 #include "kindle.h"
+#include "kindle_clippings.h"
 #include "kindle_send.h"
+#include "mobi_metadata.h"
 #include "test_support.h"
 
 namespace {
-
-QStringList filesUnder(const QString &root)
-{
-    QStringList files;
-    QDirIterator it(root, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext())
-        files.append(QDir(root).relativeFilePath(it.next()));
-    files.sort();
-    return files;
-}
 
 QStringList paths(const QList<DeviceFiles::Entry> &entries)
 {
@@ -66,6 +59,215 @@ private slots:
         QVERIFY2(CalibreDb::loadLibrary(fixtureLibrary(), m_snapshotFolder.filePath(QStringLiteral("snapshot.db")), config,
                                         &m_data, &error),
                  qPrintable(error));
+    }
+
+    // Without Calibre: the AZW3 with the library's metadata, its cover
+    // thumbnail kept against Amazon's bug, its page numbers, a PDF as it is,
+    // and both in metadata.calibre; sent again, in place.
+    void sendsWithoutCalibre()
+    {
+        QTemporaryDir root;
+        QTemporaryDir config;
+        QVERIFY(makeKindle(root.path()));
+        const QStringList formats = Kindle::formatMap(config.path(), QStringLiteral("G000000000000000"));
+        for (int round = 0; round < 2; ++round) {
+            FolderFiles files(root.path(), true);
+            QString error;
+            QVERIFY2(files.scan(&error), qPrintable(error));
+            QTemporaryDir job;
+            QVERIFY2(KindleSend::prepareNatively(m_data, { 2, 5 }, files, KindleSend::standIn(), formats, config.path(),
+                                                 QStringLiteral("fr"), job.path(), &error),
+                     qPrintable(error));
+            const KindleSend::Outcome outcome = KindleSend::outcome(job.path(), 0);
+            QVERIFY2(outcome.ok, qPrintable(outcome.error));
+            QCOMPARE(outcome.sent.size(), 2);
+            QCOMPARE(outcome.sent.first().lpath, company);
+            QVERIFY2(KindleSend::apply(job.path(), outcome, files, &error), qPrintable(error));
+        }
+        const QByteArray book = readAll(root.filePath(company));
+        QHash<quint32, QByteArray> exth;
+        for (const auto &[id, content] : MobiMetadata::exthRecords(book))
+            exth.insert(id, content);
+        const Book *black = m_data.book(2);
+        QCOMPARE(exth.value(112), QStringLiteral("calibre:%1").arg(black->uuid).toUtf8());
+        QCOMPARE(exth.value(101), QByteArray("Tor"));
+        QCOMPARE(exth.value(105), QByteArray("Fantasy"));
+        const QString thumbnail = MobiMetadata::thumbnailName(book);
+        QVERIFY(!thumbnail.isEmpty());
+        const QImage cover(root.filePath(QStringLiteral("system/thumbnails/") + thumbnail));
+        QVERIFY(!cover.isNull());
+        QCOMPARE(cover.height(), 500);
+        QVERIFY(QFileInfo::exists(root.filePath(QStringLiteral("amazon-cover-bug/") + thumbnail)));
+        QCOMPARE(readAll(root.filePath(QStringLiteral("amazon-cover-bug/") + QString::fromLatin1(index(company)))),
+                 thumbnail.toUtf8());
+        QVERIFY(QFileInfo::exists(root.filePath(
+            QStringLiteral("documents/Black Company, The - Glen Cook.sdr/Black Company, The - Glen Cook.apnx"))));
+        // The PDF as it is.
+        const QString manual = QStringLiteral("documents/Manuel technique - Jean-Pierre Dupont.pdf");
+        QCOMPARE(readAll(root.filePath(manual)), readAll(m_data.book(5)->formats.first().file));
+
+        const QJsonArray entries = QJsonDocument::fromJson(readAll(root.filePath(QStringLiteral("metadata.calibre")))).array();
+        QCOMPARE(entries.size(), 2);
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("lpath")).toString(), company.toLower());
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("uuid")).toString(), black->uuid);
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("size")).toInteger(), book.size());
+        QCOMPARE(entries.at(0).toObject().value(QLatin1String("thumbnail")).toArray().at(1).toInt(), 500);
+        const QJsonObject info = QJsonDocument::fromJson(readAll(root.filePath(QStringLiteral("driveinfo.calibre")))).object();
+        QCOMPARE(info.value(QLatin1String("device_name")).toString(), QStringLiteral("Kindle"));
+        QCOMPARE(info.value(QLatin1String("last_library_uuid")).toString(), m_data.uuid);
+        QVERIFY(info.value(QLatin1String("mtp_prefix")).toString().startsWith(QLatin1String("mtp:::")));
+    }
+
+    // A metadata.calibre that cannot be read stops the send rather than be
+    // written over without the books it lists.
+    void keepsWhatItCannotRead()
+    {
+        QTemporaryDir root;
+        QTemporaryDir config;
+        QVERIFY(makeKindle(root.path()));
+        const QString metadata = root.filePath(QStringLiteral("metadata.calibre"));
+        QVERIFY(writeAll(metadata, "[]"));
+        QVERIFY(QFile::setPermissions(metadata, QFileDevice::WriteOwner));
+        FolderFiles files(root.path(), true);
+        QString error;
+        QVERIFY(files.scan(&error));
+        QTemporaryDir job;
+        QVERIFY(!KindleSend::prepareNatively(m_data, { 2 }, files, KindleSend::standIn(),
+                                             Kindle::formatMap(config.path(), QStringLiteral("G000000000000000")),
+                                             config.path(), QStringLiteral("fr"), job.path(), &error));
+        QVERIFY(!error.isEmpty());
+        QFile::setPermissions(metadata, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QCOMPARE(readAll(metadata), QByteArray("[]"));
+    }
+
+    // My Clippings.txt as Kindles write it, in their languages and their
+    // older forms.
+    void readsClippings()
+    {
+        const QList<KindleClippings::Clipping> clippings
+            = KindleClippings::parse(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kindle/My Clippings.txt")));
+        QCOMPARE(clippings.size(), 13);
+        const KindleClippings::Clipping &first = clippings.first();
+        QCOMPARE(first.title, QStringLiteral("L’Écume des jours"));
+        QCOMPARE(first.authors, QStringLiteral("Vian, Boris"));
+        QCOMPARE(first.kind, KindleClippings::Clipping::Kind::Highlight);
+        QCOMPARE(first.page, 12);
+        QCOMPARE(first.start, 170);
+        QCOMPARE(first.end, 171);
+        // The Kindle's local time, with this computer's offset.
+        QCOMPARE(first.added.left(19), QStringLiteral("2024-03-03T22:15:32"));
+        QCOMPARE(QDateTime::fromString(first.added, Qt::ISODate).toLocalTime().date(), QDate(2024, 3, 3));
+        QCOMPARE(first.text, QStringLiteral("Chick, Alise, Chloé et Colin"));
+        QCOMPARE(clippings.at(3).kind, KindleClippings::Clipping::Kind::Bookmark);
+        QCOMPARE(clippings.at(4).added.left(19), QStringLiteral("2024-03-04T00:30:00"));
+        QCOMPARE(QDateTime::fromString(clippings.at(4).added, Qt::ISODate).toLocalTime().date(), QDate(2024, 3, 4));
+        // In French.
+        QCOMPARE(clippings.at(6).kind, KindleClippings::Clipping::Kind::Highlight);
+        QCOMPARE(clippings.at(6).start, 300);
+        QCOMPARE(clippings.at(6).added.left(19), QStringLiteral("2024-03-02T21:05:09"));
+        QCOMPARE(clippings.at(7).kind, KindleClippings::Clipping::Kind::Note);
+        // "Loc. 1702-05" of the older Kindles.
+        QCOMPARE(clippings.at(8).start, 1702);
+        QCOMPARE(clippings.at(8).end, 1705);
+        QCOMPARE(clippings.at(8).added.left(19), QStringLiteral("2011-01-03T20:12:00"));
+        // In German.
+        QCOMPARE(clippings.at(11).title, QStringLiteral("Der Prozess"));
+        QCOMPARE(clippings.at(11).kind, KindleClippings::Clipping::Kind::Highlight);
+        QCOMPARE(clippings.at(11).added.left(19), QStringLiteral("2024-03-03T10:15:32"));
+        QCOMPARE(KindleClippings::readDate(QStringLiteral("Added on someday")), QString());
+    }
+
+    // By book: a highlight changed is its last version, a note goes on the
+    // highlight it was made on, in the book's order.
+    void groupsClippings()
+    {
+        const QList<KindleClippings::Book> books = KindleClippings::byBook(
+            KindleClippings::parse(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kindle/My Clippings.txt"))));
+        QCOMPARE(books.size(), 5);
+        const KindleClippings::Book &ecume = books.first();
+        QCOMPARE(ecume.authors, QStringList{ QStringLiteral("Boris Vian") });
+        QCOMPARE(ecume.notes.size(), 4);
+        QCOMPARE(ecume.notes.at(0).type, QStringLiteral("Annotation"));
+        QCOMPARE(ecume.notes.at(0).text,
+                 QStringLiteral("Chick, Alise, Chloé et Colin passent leur temps à dire des choses rigolotes"));
+        QCOMPARE(ecume.notes.at(0).annotation, QStringLiteral("Le ton du livre"));
+        QCOMPARE(ecume.notes.at(0).position, QStringLiteral("page 12, location 170-172"));
+        QCOMPARE(ecume.notes.at(1).type, QStringLiteral("Highlight"));
+        // A note on no highlight.
+        QCOMPARE(ecume.notes.at(2).type, QStringLiteral("Annotation"));
+        QVERIFY(ecume.notes.at(2).text.isEmpty());
+        QCOMPARE(ecume.notes.at(2).annotation, QStringLiteral("Relire ce passage"));
+        QCOMPARE(ecume.notes.at(3).type, QStringLiteral("Bookmark"));
+        QCOMPARE(ecume.notes.at(3).position, QStringLiteral("page 40, location 610"));
+
+        QCOMPARE(books.at(1).notes.size(), 1);
+        QCOMPARE(books.at(1).notes.first().annotation, QStringLiteral("L’essentiel est invisible pour les yeux."));
+        QCOMPARE(books.at(2).authors, (QStringList{ QStringLiteral("Terry Pratchett"), QStringLiteral("Neil Gaiman") }));
+        // Pages only, a PDF's.
+        QCOMPARE(books.at(3).notes.size(), 1);
+        QCOMPARE(books.at(3).notes.first().annotation, QStringLiteral("À essayer"));
+        QCOMPARE(books.at(3).notes.first().position, QStringLiteral("page 3"));
+        // An emptied highlight left out.
+        QCOMPARE(books.at(4).notes.size(), 1);
+
+        const QString markdown = DeviceBooks::notesMarkdown(ecume.title, ecume.authors, ecume.notes);
+        QVERIFY(markdown.contains(QStringLiteral("> Chick, Alise")));
+        QVERIFY(markdown.contains(QStringLiteral("*Bookmark, page 40, location 610*")));
+    }
+
+    // The Kindle's books get their clippings, matched with the library's
+    // books; those of books no longer on it stay apart.
+    void attachesClippings()
+    {
+        QTemporaryDir root;
+        QVERIFY(makeKindle(root.path()));
+        QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kindle/My Clippings.txt"),
+                            root.filePath(QStringLiteral("documents/My Clippings.txt"))));
+        QVERIFY(writeAll(root.filePath(QStringLiteral("documents/L'Écume des jours - Boris Vian.azw3")), "book"));
+        FolderFiles files(root.path(), true);
+        QString error;
+        QVERIFY(files.scan(&error));
+        QList<DeviceBook> books = Kindle::books(files, &error);
+        // The clippings file is a book too, as Calibre's driver lists it:
+        // it leaves out text files at the root only.
+        QCOMPARE(books.size(), 2);
+        std::sort(books.begin(), books.end(), [](const DeviceBook &a, const DeviceBook &b) { return a.lpath < b.lpath; });
+        QList<DeviceBook> clippings = Kindle::clippings(files, &error);
+        QCOMPARE(error, QString());
+        QCOMPARE(clippings.size(), 5);
+        DeviceBooks::match(&books, m_data);
+        DeviceBooks::match(&clippings, m_data);
+        Kindle::attachClippings(&books, &clippings);
+        QCOMPARE(books.first().bookId, 1);
+        QCOMPARE(books.first().reading.notes.size(), 4);
+        QCOMPARE(books.first().reading.status, 1);
+        QStringList left;
+        for (const DeviceBook &book : std::as_const(clippings))
+            left.append(QStringLiteral("%1:%2").arg(book.title).arg(book.bookId));
+        QCOMPARE(left, (QStringList{ QStringLiteral("Le Petit Prince:6"), QStringLiteral("Good Omens:4"),
+                                     QStringLiteral("Manuel technique:5"), QStringLiteral("Der Prozess:0") }));
+        // The same book under two headings: the notes of both, in order.
+        QList<DeviceBook> twice(2);
+        for (int i = 0; i < 2; ++i) {
+            twice[i].bookId = 1;
+            ReaderNote note;
+            note.type = QStringLiteral("Highlight");
+            note.text = QString::number(i);
+            note.location = 20 - i * 10;
+            twice[i].reading.notes = { note };
+        }
+        QList<DeviceBook> onKindle(1);
+        onKindle.first().bookId = 1;
+        Kindle::attachClippings(&onKindle, &twice);
+        QVERIFY(twice.isEmpty());
+        QCOMPARE(onKindle.first().reading.notes.size(), 2);
+        QCOMPARE(onKindle.first().reading.notes.first().text, QStringLiteral("1"));
+
+        // A Kindle without the file has none.
+        QVERIFY(QFile::remove(root.filePath(QStringLiteral("documents/My Clippings.txt"))));
+        FolderFiles bare(root.path(), true);
+        QVERIFY(bare.scan(&error));
+        QVERIFY(Kindle::clippings(bare, &error).isEmpty());
     }
 
     // is_folder_ignored() of Calibre's MTP driver, with its default rules.

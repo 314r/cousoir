@@ -1,0 +1,10 @@
+[
+  { "bulk": { "books": [1, 4, 6], "addTags": ["fantasy", "Favori", "  À   lire  ", "favori"], "removeTags": "Humour, Roman, À lire" } },
+  { "bulk": { "books": [1, 4], "series": "chronicles of the black company", "numberSeries": true } },
+  { "bulk": { "books": [5, 6], "series": "Contes", "numberSeries": true, "seriesStart": 10, "seriesIncrement": 0.5 } },
+  { "bulk": { "books": [2, 3], "rating": 6, "publisher": "Orbit", "languages": "eng", "pubdate": "1984-05" } },
+  { "bulk": { "books": [5], "authors": "Jean Dupont & Marie Curie" } },
+  { "bulk": { "books": [6, 2], "removeAllTags": true, "addTags": ["Jeunesse"] } },
+  { "bulk": { "books": [3], "series": "", "publisher": "" } },
+  { "bulk": { "books": [4], "series": "Discworld" } }
+]

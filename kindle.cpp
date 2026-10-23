@@ -21,6 +21,7 @@
 #include <QTemporaryDir>
 
 #include "device_files.h"
+#include "kindle_clippings.h"
 
 namespace {
 
@@ -168,7 +169,6 @@ QList<DeviceBook> books(DeviceFiles &files, QString *error)
             book.title = known->value(QLatin1String("title")).toString();
             for (const QJsonValue &author : known->value(QLatin1String("authors")).toArray())
                 book.authors.append(author.toString());
-            book.authorSort = known->value(QLatin1String("author_sort")).toString();
             book.uuid = known->value(QLatin1String("uuid")).toString();
             book.applicationId = known->value(QLatin1String("application_id")).toInt();
         } else {
@@ -184,6 +184,45 @@ QList<DeviceBook> books(DeviceFiles &files, QString *error)
         found.append(book);
     }
     return found;
+}
+
+QList<DeviceBook> clippings(DeviceFiles &files, QString *error)
+{
+    const QString path = QStringLiteral("documents/My Clippings.txt");
+    QList<DeviceBook> books;
+    for (const KindleClippings::Book &clipped : KindleClippings::byBook(KindleClippings::parse(readWhole(files, path, error)))) {
+        DeviceBook book;
+        book.lpath = path;
+        book.title = clipped.title;
+        book.authors = clipped.authors;
+        // Highlighted, so begun; how far, the Kindle does not write there.
+        book.reading.status = 1;
+        book.reading.notes = clipped.notes;
+        books.append(book);
+    }
+    return books;
+}
+
+void attachClippings(QList<DeviceBook> *books, QList<DeviceBook> *clippings)
+{
+    for (DeviceBook &book : *books)
+        book.reading = {};
+    for (qsizetype i = clippings->size() - 1; i >= 0; --i) {
+        const DeviceBook &clipped = clippings->at(i);
+        if (clipped.bookId <= 0)
+            continue;
+        const auto on = std::find_if(books->begin(), books->end(),
+                                     [&clipped](const DeviceBook &book) { return book.bookId == clipped.bookId; });
+        if (on == books->end())
+            continue;
+        // The same book under two headings, an Amazon copy and one sent for
+        // instance: the notes of both, in the book's order.
+        on->reading.status = std::max(on->reading.status, clipped.reading.status);
+        on->reading.notes += clipped.reading.notes;
+        std::stable_sort(on->reading.notes.begin(), on->reading.notes.end(),
+                         [](const ReaderNote &a, const ReaderNote &b) { return a.location < b.location; });
+        clippings->removeAt(i);
+    }
 }
 
 bool removeBooks(DeviceFiles &files, const QList<DeviceBook> &books, QString *error)

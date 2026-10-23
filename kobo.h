@@ -34,7 +34,6 @@ struct Device
     // The USB product id, 0 when unknown.
     int productId = 0;
     qint64 freeBytes = 0;
-    qint64 totalBytes = 0;
 };
 
 // Calibre's is_main_drive(): a .kobo folder at the root.

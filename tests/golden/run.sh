@@ -3,9 +3,9 @@
 # each on its own copy of the fixture library and, with COUSOIR_GOLDEN_REAL=1,
 # of the library Calibre opens; `cousoir-cli read` with Calibre's readers on
 # book files; and the libraries Calibre and `cousoir-cli apply` leave after
-# the same edits, additions, removals and conversions. calibredb can rename
-# files and touches metadata.db even to list it, so neither ever runs on the
-# library itself.
+# the same edits, additions, removals, conversions and metadata downloads.
+# calibredb can rename files and touches metadata.db even to list it, so
+# neither ever runs on the library itself.
 #
 #   tests/golden/run.sh build/cousoir-cli [build/cousoir-test-tool]
 #
@@ -61,7 +61,7 @@ compare() {
             \( -iname '*conflicted copy*' -o -iname '*copie en conflit*' -o -iname '*case conflict*' \) -delete
     done
     calibredb list --with-library "$work/$name-calibre" --for-machine --fields all \
-        | sed "s|$work/$name-calibre|@LIBRARY@|g" > "$work/$name-calibre.json"
+        | sed -e "s|$work/$name-calibre|@LIBRARY@|g" > "$work/$name-calibre.json"
     "$cli" list --library "$work/$name-cousoir" \
         | sed "s|$work/$name-cousoir|@LIBRARY@|g" > "$work/$name-cousoir.json"
     if cmp -s "$work/$name-calibre.json" "$work/$name-cousoir.json"; then
@@ -74,6 +74,11 @@ compare() {
 }
 
 compare fixture "$root/tests/data/library"
+compare custom "$root/tests/data/library-custom"
+# Two thousand made-up books, for the names, titles and files six books
+# leave out: names in other scripts, long titles, the same book twice.
+"$tool" make-library "$work/generated" 2000 7 > /dev/null
+compare generated "$work/generated"
 
 # What adding a file reads from it, Calibre's readers against Cousoir's, on
 # the book files of folders: the fixture library's and tests/data/import.
@@ -108,14 +113,93 @@ reads() {
 
 reads fixture "$root/tests/data/import" "$root/tests/data/library"
 
+# What the templates of tests/data/templates/templates.json make of each book,
+# with Calibre's formatter (tools/oracle/template_oracle.py) and Cousoir's:
+# the same text, or an error on both sides.
+templates() {
+    local name=$1 source=$2
+    rm -rf "$work/$name-templates"
+    cp -a --reflink=auto "$source" "$work/$name-templates"
+    oracle "$root/tools/oracle/template_oracle.py" -- "$work/$name-templates" \
+        "$root/tests/data/templates/templates.json" "$work/$name-templates-calibre.json" || return 0
+    if ! "$cli" template --library "$work/$name-templates" "$root/tests/data/templates/templates.json" \
+        > "$work/$name-templates-cousoir.json" 2> "$work/$name-templates.log"; then
+        echo "$name templates: cousoir-cli template failed:"
+        tail -20 "$work/$name-templates.log"
+        status=1
+        return 0
+    fi
+    if "$tool" compare-templates "$work/$name-templates-calibre.json" "$work/$name-templates-cousoir.json" \
+        > "$work/$name-templates.txt"; then
+        echo "$name templates: $(tail -1 "$work/$name-templates.txt")"
+    else
+        echo "$name templates: Cousoir's templates differ from Calibre's:"
+        head -60 "$work/$name-templates.txt"
+        status=1
+    fi
+}
+
+templates fixture "$root/tests/data/library"
+templates custom "$root/tests/data/library-custom"
+templates generated "$work/generated"
+
+# The searches of tests/data/search/queries.txt, Calibre's and Cousoir's, on
+# a library with the saved searches, virtual libraries, grouped search terms
+# and user categories of tests/data/search/preferences.sql added.
+searches() {
+    local name=$1 source=$2
+    rm -rf "$work/$name-search"
+    cp -a --reflink=auto "$source" "$work/$name-search"
+    "$tool" run-sql "$work/$name-search/metadata.db" "$root/tests/data/search/preferences.sql"
+    oracle "$root/tools/oracle/search_books.py" -- "$work/$name-search" "$root/tests/data/search/queries.txt" \
+        "$work/$name-search-calibre.json" || return 0
+    "$tool" search-books "$work/$name-search" "$root/tests/data/search/queries.txt" "$work/$name-search-cousoir.json"
+    if "$tool" compare-searches "$work/$name-search-calibre.json" "$work/$name-search-cousoir.json" \
+        > "$work/$name-searches.txt"; then
+        echo "$name searches: $(tail -1 "$work/$name-searches.txt")"
+    else
+        echo "$name searches: Cousoir finds other books than Calibre:"
+        head -60 "$work/$name-searches.txt"
+        status=1
+    fi
+}
+
+searches fixture "$root/tests/data/library"
+searches custom "$root/tests/data/library-custom"
+searches generated "$work/generated"
+
+# The sorts of tests/data/sort/sorts.json, sort histories as Calibre's list
+# keeps them, through Calibre's multisort() and Cousoir's, on the three
+# libraries.
+sorts() {
+    local name=$1 source=$2
+    rm -rf "$work/$name-sort"
+    cp -a --reflink=auto "$source" "$work/$name-sort"
+    oracle "$root/tools/oracle/sort_oracle.py" -- "$work/$name-sort" \
+        "$root/tests/data/sort/sorts.json" "$work/$name-sort-calibre.json" || return 0
+    "$tool" sort-books "$work/$name-sort" "$root/tests/data/sort/sorts.json" \
+        "$work/$name-sort-cousoir.json"
+    if "$tool" compare-sorts "$work/$name-sort-calibre.json" "$work/$name-sort-cousoir.json" > "$work/$name-sorts.txt"; then
+        echo "$name sorts: $(tail -1 "$work/$name-sorts.txt")"
+    else
+        echo "$name sorts: Cousoir sorts the books otherwise than Calibre:"
+        grep -v "not compared" "$work/$name-sorts.txt" | head -40
+        status=1
+    fi
+}
+
+sorts fixture "$root/tests/data/library"
+sorts custom "$root/tests/data/library-custom"
+sorts generated "$work/generated"
+
 # The same edits written by Calibre and by Cousoir, then compared table by
 # table and file by file; calibredb then checks Cousoir's copy and lists it as
 # it lists Calibre's.
 edits() {
-    local edits=$1
+    local edits=$1 library=${2:-$root/tests/data/library}
     for side in calibre cousoir; do
         rm -rf "$work/edit-$side"
-        cp -a --reflink=auto "$root/tests/data/library" "$work/edit-$side"
+        cp -a --reflink=auto "$library" "$work/edit-$side"
     done
     oracle "$root/tools/oracle/apply_edits.py" -- "$work/edit-calibre" "$edits" || return 0
     if ! "$cli" apply --force --library "$work/edit-cousoir" "$edits" >/dev/null; then
@@ -147,14 +231,53 @@ edits() {
 }
 
 edits "$root/tests/data/edits/edits.json"
+edits "$root/tests/data/edits/bulk.json"
+edits "$root/tests/data/edits/custom.json" "$root/tests/data/library-custom"
+
+# Metadata downloads, without the web: Cousoir's identify job run on the
+# books of found.json as Calibre's sources would return them, then the books
+# found applied to copies of the fixture by Calibre's Edit metadata dialog,
+# shown offscreen, and by Cousoir.
+downloads() {
+    local dir="$work/download"
+    rm -rf "$dir" "$work/download-calibre" "$work/download-cousoir"
+    mkdir -p "$dir"
+    cp "$root/tests/data/download/download.json" "$dir/"
+    oracle "$root/tools/oracle/download_oracle.py" -- identify "$root/metadata_download.cpp" "$dir/found" \
+        "$root/tests/data/download/found.json" || return 0
+    cp -a "$dir/found" "$dir/covers"
+    oracle "$root/tools/oracle/download_oracle.py" -- covers "$root/metadata_download.cpp" "$dir/covers" || return 0
+    for side in calibre cousoir; do
+        cp -a --reflink=auto "$root/tests/data/library" "$work/download-$side"
+    done
+    QT_QPA_PLATFORM=offscreen oracle "$root/tools/oracle/download_oracle.py" -- apply "$work/download-calibre" \
+        "$dir/download.json" || return 0
+    if ! "$cli" apply --force --library "$work/download-cousoir" "$dir/download.json" >/dev/null; then
+        status=1
+        return 0
+    fi
+    if "$tool" compare-libraries "$work/download-calibre" "$work/download-cousoir"; then
+        echo "downloads: Calibre's dialog and Cousoir change the books alike"
+    else
+        status=1
+    fi
+}
+
+downloads
 
 # Books and formats added, moved to the trash and restored, then one copy of
-# a book kept with the formats of another, step by step on both copies, each
-# step compared.
+# a book kept with the formats of another, step by step on both copies of
+# LIBRARY, each step compared. PREPARE, if not empty, runs on each copy
+# first.
 operations() {
+    local library=$1 prepare=$2
+    shift 2
     for side in calibre cousoir; do
         rm -rf "$work/ops-$side"
-        cp -a --reflink=auto "$root/tests/data/library" "$work/ops-$side"
+        cp -a --reflink=auto "$library" "$work/ops-$side"
+        if [ -n "$prepare" ]; then
+            "$prepare" "$work/ops-$side"
+        fi
     done
     local ops
     for ops in "$@"; do
@@ -181,29 +304,41 @@ operations() {
     done
 }
 
-operations "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" "$root/tests/data/edits/ops-3.json" \
-    "$root/tests/data/edits/ops-4.json"
+operations "$root/tests/data/library" "" "$root/tests/data/edits/ops-1.json" "$root/tests/data/edits/ops-2.json" \
+    "$root/tests/data/edits/ops-3.json" "$root/tests/data/edits/ops-4.json"
 
-# Each restores what the other moved to the trash: the second step applied by
-# Calibre to Cousoir's copy, and by Cousoir to Calibre's, ends as the other.
+# Each restores what the other moved to the trash: the step SECOND applied by
+# Calibre to Cousoir's copy after FIRST, and by Cousoir to Calibre's, ends as
+# the other.
 cross() {
+    local first=$1 second=$2
     rm -rf "$work/cross-calibre" "$work/cross-cousoir"
-    cp -a --reflink=auto "$work/after-ops-1-cousoir" "$work/cross-calibre"
-    cp -a --reflink=auto "$work/after-ops-1-calibre" "$work/cross-cousoir"
-    oracle "$root/tools/oracle/apply_edits.py" -- "$work/cross-calibre" "$root/tests/data/edits/ops-2.json" || return 0
-    if ! "$cli" apply --force --library "$work/cross-cousoir" "$root/tests/data/edits/ops-2.json" >/dev/null; then
+    cp -a --reflink=auto "$work/after-$first-cousoir" "$work/cross-calibre"
+    cp -a --reflink=auto "$work/after-$first-calibre" "$work/cross-cousoir"
+    oracle "$root/tools/oracle/apply_edits.py" -- "$work/cross-calibre" "$root/tests/data/edits/$second.json" \
+        || return 0
+    if ! "$cli" apply --force --library "$work/cross-cousoir" "$root/tests/data/edits/$second.json" >/dev/null; then
         status=1
         return 0
     fi
     echo "Calibre restoring Cousoir's trash:"
-    "$tool" compare-libraries --added-from 7 "$work/after-ops-2-calibre" "$work/cross-calibre" \
+    "$tool" compare-libraries --added-from 7 "$work/after-$second-calibre" "$work/cross-calibre" \
         || status=1
     echo "Cousoir restoring Calibre's trash:"
-    "$tool" compare-libraries --added-from 7 "$work/after-ops-2-cousoir" "$work/cross-cousoir" \
+    "$tool" compare-libraries --added-from 7 "$work/after-$second-cousoir" "$work/cross-cousoir" \
         || status=1
 }
 
-cross
+cross ops-1 ops-2
+
+# The same on custom columns: books added with the values their files hold
+# and those the columns give new books, then restored with theirs.
+custom_defaults() {
+    "$tool" run-sql "$1/metadata.db" "$root/tests/data/edits/defaults.sql"
+}
+operations "$root/tests/data/library-custom" custom_defaults "$root/tests/data/edits/ops-custom-1.json" \
+    "$root/tests/data/edits/ops-custom-2.json"
+cross ops-custom-1 ops-custom-2
 
 # Books converted by Calibre's convert action and by cousoir-cli, compared:
 # the files of conversions by their content, without the time each stamps
@@ -246,10 +381,10 @@ conversion_settings() { "$tool" conversion-settings "$1"; }
 conversions conversions "$root/tests/data/library" "$root/tests/data/edits/convert.json" 1:KEPUB,2:AZW3,3:AZW3,5:KEPUB \
     conversion_settings
 
-# The round trip: Calibre writes again the metadata.opf files of the books
-# Cousoir changed, as its GUI does when it starts, and finds nothing to
-# change in them; then edits the library itself, which Cousoir reads as
-# calibredb does.
+# The round trip, on the custom library edited last: Calibre writes again the
+# metadata.opf files of the books Cousoir changed, as its GUI does when it
+# starts, and finds nothing to change in them, custom columns included; then
+# edits the library itself, which Cousoir reads as calibredb does.
 round_trip() {
     rm -rf "$work/trip" "$work/trip-before"
     cp -a --reflink=auto "$work/edit-cousoir" "$work/trip"
@@ -261,7 +396,8 @@ round_trip() {
         status=1
     fi
     calibredb set_metadata --with-library "$work/trip" 1 --field "title:Mood Indigo" --field "tags:Jazz,Roman" >/dev/null
-    calibredb list --with-library "$work/trip" --for-machine --fields all | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-calibre.json"
+    calibredb list --with-library "$work/trip" --for-machine --fields all \
+        | sed -e "s|$work/trip|@LIBRARY@|g" > "$work/trip-calibre.json"
     "$cli" list --library "$work/trip" | sed "s|$work/trip|@LIBRARY@|g" > "$work/trip-cousoir.json"
     if cmp -s "$work/trip-calibre.json" "$work/trip-cousoir.json"; then
         echo "round trip: Calibre keeps Cousoir's files and Cousoir reads Calibre's change"
@@ -289,7 +425,9 @@ round_trip
 #
 #   devices <kobo|kindle> <name> <library> <books first> <books then> <book removed>
 devices() {
-    local kind=$1 name=$2 library=$3 side step lpath product=0 calibre_device cousoir_device
+    local kind=$1 name=$2 library=$3 side step lpath product=0 calibre_device cousoir_device native=()
+    # Cousoir sending without Calibre: its KEPUBs are its own.
+    [ -n "${COUSOIR_NATIVE_SEND:-}" ] && native=(--native)
     for side in calibre cousoir; do
         rm -rf "$work/$name-library-$side" "$work/$name-$side"
         cp -a --reflink=auto "$library" "$work/$name-library-$side"
@@ -333,7 +471,7 @@ devices() {
         fi
         local only=()
         [ "$step" = 3 ] && only=(--lpaths-only)
-        if "$tool" compare-devices "${only[@]}" "$work/$name-calibre" "$work/$name-cousoir" \
+        if "$tool" compare-devices "${only[@]}" "${native[@]}" "$work/$name-calibre" "$work/$name-cousoir" \
             > "$work/$name.txt"; then
             echo "$name step $step: $(tail -1 "$work/$name.txt")"
         else
@@ -364,7 +502,7 @@ devices() {
         "$cli" device --library "$work/$name-library-cousoir" "$listed" | "$tool" device-books \
             > "$work/$name-listed-$side.json"
     done
-    if "$tool" compare-devices "$work/$name-read-calibre" "$work/$name-read-cousoir" \
+    if "$tool" compare-devices "${native[@]}" "$work/$name-read-calibre" "$work/$name-read-cousoir" \
         > "$work/$name.txt"; then
         echo "$name once Calibre connects: $(tail -1 "$work/$name.txt")"
     else
@@ -388,7 +526,73 @@ devices() {
 }
 
 devices kobo kobo "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
+# The same, Cousoir sending without Calibre.
+COUSOIR_NATIVE_SEND=1 devices kobo kobo-native "$root/tests/data/library" '[1, 2, 3, 5]' '[2, 4]' 3
 devices kindle kindle "$root/tests/data/library" '[2, 5]' '[2]' 5
+COUSOIR_NATIVE_SEND=1 devices kindle kindle-native "$root/tests/data/library" '[2, 5]' '[2]' 5
+
+# Notes cousoir-cli writes, changes and removes on a copy of the fixture
+# with the notes Calibre wrote (tests/data/notes), then read, searched,
+# changed and brought back by Calibre itself (tools/oracle/notes_check.py):
+# the notes' full text index must be as Calibre's own tokenizer makes it.
+notes() {
+    local library="$work/notes-library"
+    rm -rf "$library"
+    cp -a --reflink=auto "$root/tests/data/library" "$library"
+    rm -rf "$library/.calnotes"
+    cp -a "$root/tests/data/notes/.calnotes" "$library/.calnotes"
+    cat > "$work/notes-ops.json" <<'JSON'
+[{"note": {"field": "tags", "item": 3, "name": "Fantasy", "html": "<p>Other worlds, élégantes.</p>", "text": "Other worlds, élégantes."}},
+ {"note": {"field": "publisher", "item": 2, "name": "Tor", "html": "<p>New York.</p>", "text": "New York."}},
+ {"note": {"field": "series", "item": 2, "name": "Contes", "html": ""}}]
+JSON
+    if ! "$cli" apply --library "$library" "$work/notes-ops.json" > "$work/notes.log" 2>&1; then
+        echo "notes: cousoir-cli apply failed:"
+        tail -5 "$work/notes.log"
+        status=1
+        return 0
+    fi
+    if oracle "$root/tools/oracle/notes_check.py" -- "$library" > "$work/notes-check.txt"; then
+        echo "notes: Calibre reads, searches, changes and brings back the notes Cousoir wrote"
+    else
+        echo "notes: Calibre and Cousoir's notes differ:"
+        cat "$work/notes-check.txt"
+        status=1
+    fi
+}
+
+notes
+
+# What a Kobo knows of the reading of its books, read by Calibre's Kobo
+# Bookmark (tools/oracle/kobo_reading.py) and by `cousoir-cli device`, on a
+# fake Kobo whose database has books read, finished and bought, with
+# highlights, notes and bookmarks (tests/data/kobo-reading.sql).
+reading() {
+    local kobo="$work/reading-kobo"
+    rm -rf "$kobo"
+    mkdir -p "$kobo/.kobo" "$kobo/Vian, Boris" "$kobo/Pratchett, Terry"
+    printf 'N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390' > "$kobo/.kobo/version"
+    "$tool" run-sql "$kobo/.kobo/KoboReader.sqlite" "$root/tests/data/kobo.sql"
+    "$tool" run-sql "$kobo/.kobo/KoboReader.sqlite" "$root/tests/data/kobo-reading.sql"
+    for file in "Vian, Boris/Ecume.kepub.epub" "Pratchett, Terry/Mort.epub" Notes.pdf; do
+        printf 'book' > "$kobo/$file"
+    done
+    oracle "$root/tools/oracle/kobo_reading.py" -- "$kobo" "$work/reading-calibre.json" || return 0
+    if ! "$cli" device --library "$root/tests/data/library" "$kobo" > "$work/reading-cousoir.json"; then
+        echo "reading: cousoir-cli device failed"
+        status=1
+        return 0
+    fi
+    if "$tool" compare-reading "$work/reading-calibre.json" "$work/reading-cousoir.json" > "$work/reading.txt"; then
+        echo "reading: $(tail -1 "$work/reading.txt")"
+    else
+        echo "reading: Cousoir reads the Kobo's reading differently:"
+        head -40 "$work/reading.txt"
+        status=1
+    fi
+}
+
+reading
 
 # A few books of the real library converted, with the user's Calibre
 # settings: the two smallest EPUBs to KEPUB and AZW3, the smallest book

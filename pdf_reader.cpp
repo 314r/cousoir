@@ -18,6 +18,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
@@ -98,6 +99,7 @@ const QString prismNs = QStringLiteral("http://prismstandard.org/namespaces/basi
 const QString xmlNs = QStringLiteral("http://www.w3.org/XML/1998/namespace");
 const QString calibreNs = QStringLiteral("http://calibre-ebook.com/xmp-namespace");
 const QString calibreSiNs = QStringLiteral("http://calibre-ebook.com/xmp-namespace-series-index");
+const QString calibreCcNs = QStringLiteral("http://calibre-ebook.com/xmp-namespace-custom-columns");
 
 bool is(const QDomElement &element, const QString &ns, const QString &name)
 {
@@ -377,6 +379,29 @@ std::optional<Xmp> readXmp(const QByteArray &packet, const QString &interfaceLan
     }
     for (const auto &identifier : std::as_const(identifiers))
         mi.setIdentifier(identifier.first, identifier.second);
+
+    // read_user_metadata(): each custom column of calibre:custom_metadata,
+    // the first of a key that reads winning.
+    QSet<QString> fields;
+    for (const QDomElement &item : everywhere(document, calibreNs, QStringLiteral("custom_metadata"))) {
+        for (QDomElement bag = item.firstChildElement(); !bag.isNull(); bag = bag.nextSiblingElement()) {
+            if (!is(bag, rdfNs, QStringLiteral("Bag")))
+                continue;
+            for (QDomElement li = bag.firstChildElement(); !li.isNull(); li = li.nextSiblingElement()) {
+                if (!is(li, rdfNs, QStringLiteral("li")))
+                    continue;
+                const QList<QDomElement> names = descendants(li, calibreCcNs, QStringLiteral("name"));
+                const QString name = names.isEmpty() ? QString() : leadingText(names.first());
+                if (!name.startsWith(u'#') || fields.contains(name))
+                    continue;
+                const QList<QDomElement> values = descendants(li, rdfNs, QStringLiteral("value"));
+                PythonJson::Value field;
+                if (!values.isEmpty() && OpfReader::readUserField(leadingText(values.first()), &field)
+                    && mi.setUserMetadata(name, field))
+                    fields.insert(name);
+            }
+        }
+    }
     return xmp;
 }
 
@@ -483,6 +508,7 @@ bool read(const QString &path, const QString &interfaceLanguage, ImportedMetadat
                 mi.languages = other.languages;
             if (mi.series.isEmpty())
                 mi.seriesIndex.reset();
+            mi.updateUserMetadata(other);
 
             bool preferInfo = false;
             if (const std::optional<QString> modified = value(QStringLiteral("ModDate")); modified && xmp->metadataDate) {

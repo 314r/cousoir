@@ -1,5 +1,6 @@
 #include "kobo_send.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -7,7 +8,15 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QObject>
+#include <QRegularExpression>
+#include <QUuid>
 
+#include "book.h"
+#include "calibre_job.h"
+#include "device_books.h"
+#include "kepub.h"
+#include "native_send.h"
+#include "python_json.h"
 #include "send_job.h"
 
 namespace {
@@ -146,6 +155,149 @@ QJsonArray identity(const QString &path)
 } // namespace
 
 namespace KoboSend {
+
+DriverSettings driverSettings(const QString &configDirectory)
+{
+    DriverSettings settings;
+    QFile file(QDir(configDirectory).filePath(QStringLiteral("device_drivers_KOBOTOUCH.py.json")));
+    if (!file.open(QIODevice::ReadOnly))
+        return settings;
+    const QJsonObject json = QJsonDocument::fromJson(file.readAll()).object();
+    if (json.value(QLatin1String("save_template")).isString())
+        settings.saveTemplate = json.value(QLatin1String("save_template")).toString();
+    if (json.value(QLatin1String("kepubify")).isBool())
+        settings.kepubify = json.value(QLatin1String("kepubify")).toBool();
+    if (json.value(QLatin1String("use_subdirs")).isBool())
+        settings.useSubdirs = json.value(QLatin1String("use_subdirs")).toBool();
+    return settings;
+}
+
+QString uploadPath(const LibraryData &data, const Book &book, const QString &root, const QString &extension, bool kepub,
+                   const DriverSettings &settings, const QString &interfaceLanguage)
+{
+    NativeSend::UploadOptions options;
+    options.saveTemplate = settings.saveTemplate;
+    // USBMS puts the folder the Kobo is mounted on before the path.
+    options.prefix = QDir::cleanPath(root);
+    // MAX_PATH_LEN of KoboTouch.
+    options.maxLength = 185;
+    options.useSubdirs = settings.useSubdirs;
+    // filename_callback(): a KEPUB's ".kepub.epub".
+    options.nameSuffix = kepub ? QStringLiteral(".kepub") : QString();
+    // KoboTouch's sanitize_path_components().
+    options.sanitizeComponents = [](QStringList *components) {
+        static const QRegularExpression invalid(QStringLiteral("[\\/\\\\\\?%\\*:;\\|\"'><\\$!]"));
+        for (QString &component : *components)
+            component.replace(invalid, QStringLiteral("_"));
+    };
+    return NativeSend::uploadPath(data, book, extension, options, interfaceLanguage);
+}
+
+bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, const Kobo::Device &device,
+                     const QStringList &formatMap, const QString &configDirectory, const QString &interfaceLanguage,
+                     const QString &folder, QString *error)
+{
+    const DriverSettings settings = driverSettings(configDirectory);
+    const QDir root(device.root);
+    const QDir staging(QDir(folder).filePath(QStringLiteral("device")));
+    QDir().mkpath(staging.path());
+    // What tells, at apply(), that the Kobo changed meanwhile.
+    QJsonObject identities;
+    for (const char *name : deviceFiles)
+        identities.insert(QLatin1String(name), identity(root.filePath(QLatin1String(name))));
+    QFile metadataFile(root.filePath(QStringLiteral("metadata.calibre")));
+    QList<QByteArray> entries = metadataFile.open(QIODevice::ReadOnly) ? DeviceBooks::arrayElements(metadataFile.readAll())
+                                                                       : QList<QByteArray>();
+    // KoboTouch's books(), which a send reads first, gives the books the Kobo
+    // took in their type from its database, and no thumbnail.
+    QHash<QString, QString> mimes;
+    QString listError;
+    for (const DeviceBook &onDevice : Kobo::books(device, &listError)) {
+        if (!onDevice.mime.isEmpty())
+            mimes.insert(onDevice.lpath, onDevice.mime);
+    }
+    for (QByteArray &element : entries) {
+        PythonJson::Value entry = PythonJson::parse(element);
+        const auto mime = mimes.constFind(entry.text(QStringLiteral("lpath")));
+        if (entry.kind != PythonJson::Value::Kind::Dict || mime == mimes.cend())
+            continue;
+        entry.insert(QStringLiteral("mime"), PythonJson::Value::from(*mime));
+        entry.insert(QStringLiteral("thumbnail"), PythonJson::Value::null());
+        element = NativeSend::entryText(entry);
+    }
+    QJsonArray sent;
+    QJsonArray unsendable;
+    QStringList files;
+    for (const int bookId : bookIds) {
+        const Book *book = data.book(bookId);
+        if (!book)
+            continue;
+        QString source;
+        const QString format = NativeSend::sendFormat(*book, formatMap, &source);
+        if (format.isEmpty()) {
+            unsendable.append(book->title);
+            continue;
+        }
+        const bool epub = format.compare(QLatin1String("EPUB"), Qt::CaseInsensitive) == 0;
+        const bool kepub = format.compare(QLatin1String("KEPUB"), Qt::CaseInsensitive) == 0 || (epub && settings.kepubify);
+        const QString extension = epub || kepub ? QStringLiteral(".epub") : u'.' + format.toLower();
+        const QString lpath = uploadPath(data, *book, device.root, extension, kepub, settings, interfaceLanguage);
+        const QString target = staging.filePath(lpath);
+        QDir().mkpath(QFileInfo(target).path());
+        if (epub && settings.kepubify) {
+            // The library's metadata and cover in the KEPUB, as Calibre's
+            // send puts them in what it sends.
+            if (!Kepub::kepubify(source, target, Kepub::optionsFor(*book), error))
+                return false;
+        } else if (!SendJob::copyInto(source, target, error)) {
+            return false;
+        }
+        // The book's entry, in place of one at the same place.
+        const QByteArray text = NativeSend::entryText(
+            NativeSend::bookEntry(data, *book, lpath, QFileInfo(target).size(), NativeSend::thumbnail(*book, 0, 68)));
+        entries.removeIf([&lpath](const QByteArray &element) {
+            return PythonJson::parse(element).text(QStringLiteral("lpath")) == lpath;
+        });
+        entries.append(text);
+        sent.append(QJsonObject{ { QStringLiteral("book"), bookId }, { QStringLiteral("lpath"), lpath } });
+        files.append(lpath);
+    }
+    if (!sent.isEmpty()) {
+        // driveinfo.calibre, as Calibre leaves it after a send.
+        QFile infoFile(root.filePath(QStringLiteral("driveinfo.calibre")));
+        PythonJson::Value info = infoFile.open(QIODevice::ReadOnly) ? PythonJson::parse(infoFile.readAll()) : PythonJson::Value::dict();
+        if (info.kind != PythonJson::Value::Kind::Dict)
+            info = PythonJson::Value::dict();
+        if (info.text(QStringLiteral("device_store_uuid")).isEmpty())
+            info.insert(QStringLiteral("device_store_uuid"),
+                        PythonJson::Value::from(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        if (info.text(QStringLiteral("device_name")).isEmpty())
+            info.insert(QStringLiteral("device_name"), PythonJson::Value::from(QStringLiteral("Kobo eReader")));
+        info.insert(QStringLiteral("location_code"), PythonJson::Value::from(QStringLiteral("main")));
+        info.insert(QStringLiteral("last_library_uuid"), PythonJson::Value::from(data.uuid));
+        info.insert(QStringLiteral("date_last_connected"),
+                    PythonJson::Value::from(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)));
+        info.insert(QStringLiteral("prefix"), PythonJson::Value::from(QDir::cleanPath(device.root) + u'/'));
+        if (!CalibreJob::writeFile(staging.filePath(QStringLiteral("driveinfo.calibre")),
+                                PythonJson::dumps(info).toUtf8(), error)
+            || !CalibreJob::writeFile(staging.filePath(QStringLiteral("metadata.calibre")),
+                                   DeviceBooks::joinElements(entries), error))
+            return false;
+        files << QStringLiteral("driveinfo.calibre") << QStringLiteral("metadata.calibre");
+    }
+    const QJsonObject job{
+        { QStringLiteral("device"), device.root },
+        { QStringLiteral("identities"), identities },
+    };
+    const QJsonObject result{
+        { QStringLiteral("sent"), sent },
+        { QStringLiteral("unsendable"), unsendable },
+        { QStringLiteral("files"), QJsonArray::fromStringList(files) },
+        { QStringLiteral("clear_covers"), true },
+    };
+    return CalibreJob::writeFile(QDir(folder).filePath(QStringLiteral("job.json")), QJsonDocument(job).toJson(), error)
+        && CalibreJob::writeFile(QDir(folder).filePath(QStringLiteral("result.json")), QJsonDocument(result).toJson(), error);
+}
 
 bool prepare(const LibraryData &data, const QList<int> &bookIds, const Kobo::Device &device,
              const QStringList &formatMap, const QString &folder, QString *error)

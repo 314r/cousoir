@@ -4,7 +4,6 @@
 // GPL v3:
 // - src/calibre/db/utils.py: find_identical_books()
 // - src/calibre/ebooks/__init__.py: BOOK_EXTENSIONS
-// - src/calibre/ebooks/metadata/__init__.py: fmt_sidx() and rating_to_stars()
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
@@ -20,16 +19,25 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
 #include <QRegularExpression>
+#include <QTextDocument>
 #include <QUrl>
 #include <QPromise>
 #include <QSet>
+#include <QSettings>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
+#include <numeric>
 
 #include "book_import.h"
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
 #include "calibre_db.h"
 #include "calibre_text.h"
 #include "concurrency_guard.h"
@@ -37,6 +45,9 @@
 #include "cover_cache.h"
 #include "field_writers.h"
 #include "cousoir_paths.h"
+#include "description.h"
+#include "palette.h"
+#include "sqlite_db.h"
 
 namespace {
 
@@ -45,19 +56,8 @@ const QStringList &sections()
     static const QStringList names = { QStringLiteral("books"), QStringLiteral("authors"), QStringLiteral("series"),
                                        QStringLiteral("tags"), QStringLiteral("languages"),
                                        QStringLiteral("publishers"), QStringLiteral("trash"),
-                                       QStringLiteral("check") };
+                                       QStringLiteral("check"), QStringLiteral("highlights") };
     return names;
-}
-
-bool isSortOption(const QString &option)
-{
-    static const QStringList keys = { QStringLiteral("title"), QStringLiteral("authors"), QStringLiteral("series"),
-                                      QStringLiteral("added"), QStringLiteral("rating") };
-    for (const QString &key : keys) {
-        if (option == key || option == key + QLatin1String("Desc"))
-            return true;
-    }
-    return false;
 }
 
 bool isFacetSortOption(const QString &option)
@@ -66,76 +66,65 @@ bool isFacetSortOption(const QString &option)
         || option == QLatin1String("count") || option == QLatin1String("countDesc");
 }
 
-// fmt_sidx(): "2" for a whole series index, "2.5" otherwise.
-QString seriesIndexText(double index)
+// The columns Cousoir shows a library Calibre has shown none of.
+const QStringList defaultColumns{ QStringLiteral("title"), QStringLiteral("authors"), QStringLiteral("series"),
+                                  QStringLiteral("formats"), QStringLiteral("timestamp"), QStringLiteral("rating") };
+
+// The built-in columns of Calibre's list (column_map of
+// gui2/library/models.py) and how wide their text is.
+struct ColumnInfo
 {
-    if (index == std::floor(index))
-        return QString::number(qint64(index));
-    QString text = QString::number(index, 'f', 2);
-    while (text.endsWith(u'0'))
-        text.chop(1);
-    return text;
+    const char *key;
+    const char *title;
+    const char *kind;
+};
+const ColumnInfo builtinColumns[] = {
+    { "title", QT_TRANSLATE_NOOP("BookLibrary", "Title"), "text" },
+    { "authors", QT_TRANSLATE_NOOP("BookLibrary", "Authors"), "text" },
+    { "series", QT_TRANSLATE_NOOP("BookLibrary", "Series"), "text" },
+    { "rating", QT_TRANSLATE_NOOP("BookLibrary", "Rating"), "rating" },
+    { "tags", QT_TRANSLATE_NOOP("BookLibrary", "Tags"), "long" },
+    { "publisher", QT_TRANSLATE_NOOP("BookLibrary", "Publisher"), "text" },
+    { "pubdate", QT_TRANSLATE_NOOP("BookLibrary", "Published"), "date" },
+    { "timestamp", QT_TRANSLATE_NOOP("BookLibrary", "Added"), "date" },
+    { "last_modified", QT_TRANSLATE_NOOP("BookLibrary", "Modified"), "date" },
+    { "size", QT_TRANSLATE_NOOP("BookLibrary", "Size"), "number" },
+    { "languages", QT_TRANSLATE_NOOP("BookLibrary", "Languages"), "text" },
+    { "formats", QT_TRANSLATE_NOOP("BookLibrary", "Formats"), "text" },
+    { "identifiers", QT_TRANSLATE_NOOP("BookLibrary", "Identifiers"), "long" },
+    { "pages", QT_TRANSLATE_NOOP("BookLibrary", "Pages"), "number" },
+    { "id", QT_TRANSLATE_NOOP("BookLibrary", "Id"), "number" },
+    { "path", QT_TRANSLATE_NOOP("BookLibrary", "Path"), "long" },
+};
+
+// The `columns` the list can show, by availableColumns(), each once, the
+// title first.
+QStringList knownColumns(const QStringList &columns, const QVariantList &available)
+{
+    QStringList known;
+    for (const QVariant &column : available)
+        known.append(column.toMap().value(QStringLiteral("key")).toString());
+    QStringList kept{ QStringLiteral("title") };
+    for (const QString &column : columns) {
+        if (known.contains(column) && !kept.contains(column))
+            kept.append(column);
+    }
+    return kept;
 }
 
-QString seriesText(const Book &book)
+// How the books and items sort: as the system's language sorts them, case
+// aside.
+QCollator listCollator()
 {
-    return book.seriesId > 0
-        ? BookLibrary::tr("%1 [%2]").arg(book.series, seriesIndexText(book.seriesIndex)) : QString();
-}
-
-// Two ratings make a star; an odd rating ends in a half.
-QString ratingText(int rating)
-{
-    return QString(rating / 2, u'★') + (rating % 2 ? QStringLiteral("½") : QString());
-}
-
-QString localDate(const QDateTime &date)
-{
-    return CalibreDb::isUndefinedDate(date) ? QString() : date.toLocalTime().date().toString(Qt::ISODate);
+    QCollator collator;
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    return collator;
 }
 
 QString localDateTime(const QDateTime &date)
 {
     return CalibreDb::isUndefinedDate(date) ? QString()
                                             : date.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"));
-}
-
-// Calibre shows a publication date as its month: "Apr 2015".
-QString monthYear(const QDateTime &date)
-{
-    return CalibreDb::isUndefinedDate(date) ? QString()
-                                            : QLocale::c().toString(date.toLocalTime().date(), QStringLiteral("MMM yyyy"));
-}
-
-QString sizeText(qint64 size)
-{
-    return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
-}
-
-// The HTML Calibre keeps for a description, without the fonts, sizes and
-// colours its editors leave behind: the page shows it in the theme's own.
-QString cleanDescription(const QString &html)
-{
-    if (html.trimmed().isEmpty())
-        return {};
-    if (!html.contains(u'<')) {
-        QStringList paragraphs;
-        static const QRegularExpression blankLines(QStringLiteral("\\n\\s*\\n"));
-        for (const QString &paragraph : html.split(blankLines))
-            paragraphs.append(QStringLiteral("<p>%1</p>")
-                                  .arg(paragraph.toHtmlEscaped().replace(u'\n', QStringLiteral("<br>"))));
-        return paragraphs.join(QString());
-    }
-    static const QRegularExpression attributes(
-        QStringLiteral("\\s(style|face|color|size|class|bgcolor|width|height|align|dir|lang)"
-                       "\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)"),
-        QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression wrappers(QStringLiteral("</?(font|span)\\b[^>]*>"),
-                                             QRegularExpression::CaseInsensitiveOption);
-    QString cleaned = html;
-    cleaned.remove(attributes);
-    cleaned.remove(wrappers);
-    return cleaned.trimmed();
 }
 
 // A book identifier's label and, where there is one, its page.
@@ -240,6 +229,13 @@ QStringList bookFiles(const QVariantList &urls)
     return files;
 }
 
+// The book's cover.jpg as it is, empty when it has none.
+QByteArray coverBytes(const Book &book)
+{
+    QFile file(book.coverFile);
+    return !book.coverFile.isEmpty() && file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
 // The key of the library's covers in CoverCache: its cache folder's name.
 QString coverKeyOf(const QString &libraryPath)
 {
@@ -260,17 +256,19 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
     m_defaultPath = libraryPath.isEmpty();
     m_libraryPath = m_defaultPath ? CalibreConfig::defaultLibraryPath()
                                   : QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath());
-    m_collator.setCaseSensitivity(Qt::CaseInsensitive);
+    m_collator = listCollator();
     m_changeTimer.setSingleShot(true);
     m_changeTimer.setInterval(1500);
     connect(&m_changeTimer, &QTimer::timeout, this, &BookLibrary::reloadIfChanged);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_changeTimer, qOverload<>(&QTimer::start));
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_changeTimer, qOverload<>(&QTimer::start));
     connect(&m_loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &BookLibrary::finishLoad);
-    connect(&m_commitWatcher, &QFutureWatcher<CommitEngine::Result>::finished, this, &BookLibrary::finishCommit);
+    connect(&m_commitWatcher, &QFutureWatcher<CommitResult>::finished, this, &BookLibrary::finishCommit);
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::finished, this, &BookLibrary::finishImport);
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::progressValueChanged, this, &BookLibrary::importChanged);
     connect(&m_checkWatcher, &QFutureWatcher<LibraryCheck::Findings>::finished, this, &BookLibrary::finishCheck);
+    connect(this, &BookLibrary::libraryChanged, this, &BookLibrary::countsChanged);
+    connect(this, &BookLibrary::trashChanged, this, &BookLibrary::countsChanged);
     // QML may still set another library; only the last one loads.
     QMetaObject::invokeMethod(this, &BookLibrary::startLoad, Qt::QueuedConnection);
 }
@@ -305,7 +303,14 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_libraryPath = cleaned;
     emit libraryPathChanged();
     m_data = {};
-    m_searchTexts.clear();
+    m_index = {};
+    m_sorted.clear();
+    m_sortedBy.clear();
+    m_restriction.clear();
+    m_searchedText.reset();
+    m_sectionRows.clear();
+    m_sectionError.clear();
+    m_visibleItems.clear();
     m_loaded = false;
     m_filterKind.clear();
     m_filterId = 0;
@@ -318,6 +323,8 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_importedBooks.clear();
     m_importedDuplicates.clear();
     m_backedUp = false;
+    m_bulkUndo.clear();
+    emit bulkUndoChanged();
     rebuildCheck();
     emit libraryChanged();
     emit filterChanged();
@@ -360,15 +367,20 @@ bool BookLibrary::schemaKnown() const
 
 QVariantMap BookLibrary::counts() const
 {
+    const bool restricted = !m_virtualLibrary.isEmpty() && m_virtualLibraryError.isEmpty();
+    const auto items = [&](const char *kind) {
+        return restricted ? visibleItems(QLatin1String(kind)).size() : facetItems(QLatin1String(kind))->size();
+    };
     return {
-        { QStringLiteral("books"), m_data.books.size() },
-        { QStringLiteral("authors"), m_data.authors.size() },
-        { QStringLiteral("series"), m_data.series.size() },
-        { QStringLiteral("tags"), m_data.tags.size() },
-        { QStringLiteral("languages"), m_data.languages.size() },
-        { QStringLiteral("publishers"), m_data.publishers.size() },
+        { QStringLiteral("books"), restricted ? m_restriction.count(true) : m_data.books.size() },
+        { QStringLiteral("authors"), items("authors") },
+        { QStringLiteral("series"), items("series") },
+        { QStringLiteral("tags"), items("tags") },
+        { QStringLiteral("languages"), items("languages") },
+        { QStringLiteral("publishers"), items("publishers") },
         // Nothing for an empty trash.
         { QStringLiteral("trash"), m_trashEntries.isEmpty() ? QVariant(QString()) : QVariant(m_trashEntries.size()) },
+        { QStringLiteral("highlights"), m_data.annotationCount ? QVariant(m_data.annotationCount) : QVariant(QString()) },
     };
 }
 
@@ -379,9 +391,14 @@ QString BookLibrary::section() const
 
 void BookLibrary::setSection(const QString &section)
 {
-    if (m_section == section || !sections().contains(section))
+    const bool savedSearch = section.startsWith(QLatin1String("search:"))
+        && m_index.search.preferences().savedSearches.contains(section.mid(7));
+    if (m_section == section || !(sections().contains(section) || savedSearch))
         return;
     m_section = section;
+    const CalibreSearch::Result found = savedSearch ? this->savedSearch(section.mid(7)) : CalibreSearch::Result();
+    m_sectionRows = found.rows;
+    m_sectionError = found.error;
     const bool hadFilter = !m_filterKind.isEmpty();
     m_filterKind.clear();
     m_filterId = 0;
@@ -409,11 +426,72 @@ QVariantMap BookLibrary::filter() const
         if (item.id == m_filterId)
             name = item.name;
     }
+    // Its note: HTML whose images are the library's resources, and the text
+    // it is edited as.
+    const QString field = CalibreDb::notesField(m_filterKind);
+    const ItemNote note = m_data.notes.value(field).value(m_filterId);
+    QString html = note.doc;
+    static const QRegularExpression resource(QStringLiteral("calres://([a-z0-9]+)/([0-9a-f]+)(\\?[^\"']*)?"));
+    const QString resources = QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("resources"));
+    QHash<QString, QSize> sizes;
+    for (auto it = resource.globalMatch(note.doc); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        const QString digest = match.captured(2);
+        const QString file = QDir(resources).filePath(digest.left(2) + u'/' + match.captured(1) + u'-' + digest);
+        const QString url = QUrl::fromLocalFile(file).toString();
+        html.replace(match.captured(0), url);
+        sizes.insert(url, QImageReader(file).size());
+    }
+    html = Description::cleaned(html);
+    // Each image's own size, which the pane shrinks to its width.
+    for (auto it = sizes.cbegin(); it != sizes.cend(); ++it) {
+        if (it.value().isValid())
+            html.replace(QStringLiteral("src=\"%1\"").arg(it.key()),
+                         QStringLiteral("src=\"%1\" width=\"%2\" height=\"%3\"")
+                             .arg(it.key())
+                             .arg(it.value().width())
+                             .arg(it.value().height()));
+    }
     return {
         { QStringLiteral("kind"), m_filterKind },
         { QStringLiteral("id"), m_filterId },
         { QStringLiteral("name"), name },
+        // Notes can be kept on it: Calibre 7 opened the library.
+        { QStringLiteral("notes"), !field.isEmpty() && QFileInfo::exists(QDir(CalibreDb::notesFolder(m_libraryPath)).filePath(QStringLiteral("notes.db"))) },
+        { QStringLiteral("note"), html },
+        { QStringLiteral("noteText"), Description::toText(note.doc) },
+        { QStringLiteral("noteHasImages"), !note.resources.isEmpty() },
+        // What its text would leave out, for Calibre to change it.
+        { QStringLiteral("noteLosesFormatting"), Description::noteLosesFormatting(note.doc) },
     };
+}
+
+QString BookLibrary::setFilterNote(const QString &text)
+{
+    const QString field = CalibreDb::notesField(m_filterKind);
+    if (field.isEmpty())
+        return tr("These items have no notes.");
+    const QVariantMap current = filter();
+    if (current.value(QStringLiteral("noteHasImages")).toBool())
+        return tr("This note has images: change it in Calibre.");
+    if (current.value(QStringLiteral("noteLosesFormatting")).toBool())
+        return tr("This note has formatting Cousoir cannot write: change it in Calibre.");
+    CalibreNotes::Change change;
+    change.field = field;
+    change.item = m_filterId;
+    // The item as Calibre's id_map holds it: a language by its code.
+    for (const FacetItem &item : *facetItems(m_filterKind)) {
+        if (item.id == m_filterId)
+            change.itemValue = m_filterKind == QLatin1String("languages") ? item.sort : item.name;
+    }
+    change.html = Description::toHtml(text);
+    // The text a search finds: the note without its markup.
+    QTextDocument document;
+    document.setHtml(change.html);
+    change.searchable = document.toPlainText();
+    CommitEngine::Request request;
+    request.notes.append(change);
+    return queueChange(request);
 }
 
 int BookLibrary::scopeCount() const
@@ -421,9 +499,9 @@ int BookLibrary::scopeCount() const
     return m_scopeCount;
 }
 
-QVariantList BookLibrary::rows() const
+BookListModel *BookLibrary::books()
 {
-    return m_rows;
+    return &m_bookList;
 }
 
 QVariantList BookLibrary::facetRows() const
@@ -433,8 +511,7 @@ QVariantList BookLibrary::facetRows() const
 
 int BookLibrary::facetCount() const
 {
-    const QList<FacetItem> *items = facetItems(m_section);
-    return items ? int(items->size()) : 0;
+    return int(visibleItems(m_section).size());
 }
 
 QString BookLibrary::searchText() const
@@ -452,18 +529,319 @@ void BookLibrary::setSearchText(const QString &searchText)
     rebuildFacetRows();
 }
 
+QString BookLibrary::searchError() const
+{
+    return m_searchError;
+}
+
+QStringList BookLibrary::virtualLibraries() const
+{
+    QStringList names = m_index.search.preferences().virtualLibraries.keys();
+    std::sort(names.begin(), names.end(), [this](const QString &a, const QString &b) {
+        return m_collator.compare(a, b) < 0;
+    });
+    return names;
+}
+
+QString BookLibrary::virtualLibrary() const
+{
+    return m_virtualLibrary;
+}
+
+void BookLibrary::setVirtualLibrary(const QString &name)
+{
+    const QString chosen = m_index.search.preferences().virtualLibraries.contains(name) ? name : QString();
+    if (!m_data.uuid.isEmpty())
+        QSettings().setValue(QStringLiteral("Library/virtualLibrary/%1").arg(m_data.uuid), chosen);
+    if (chosen == m_virtualLibrary)
+        return;
+    m_virtualLibrary = chosen;
+    emit virtualLibraryChanged();
+    applyVirtualLibrary();
+    rebuildRows();
+    rebuildFacetRows();
+}
+
+QVariantList BookLibrary::savedSearches() const
+{
+    return m_savedSearches;
+}
+
+void BookLibrary::applyVirtualLibrary()
+{
+    m_visibleItems.clear();
+    m_restriction = QBitArray(m_data.books.size(), true);
+    QString error;
+    const QString query = m_index.search.preferences().virtualLibraries.value(m_virtualLibrary);
+    if (!m_virtualLibrary.isEmpty()) {
+        const CalibreSearch::Result result = CalibreSearch::search(m_index.search, QString(), query);
+        // One Cousoir cannot search, a custom column's for instance, leaves
+        // the books whole rather than hide them, and says so.
+        if (result.ok())
+            m_restriction = result.rows;
+        else
+            error = result.error;
+    }
+    if (error != m_virtualLibraryError) {
+        m_virtualLibraryError = error;
+        emit virtualLibraryChanged();
+    }
+    m_searchedText.reset();
+    if (m_section.startsWith(QLatin1String("search:"))) {
+        const CalibreSearch::Result found = savedSearch(m_section.mid(7));
+        m_sectionRows = found.rows;
+        m_sectionError = found.error;
+    }
+    rebuildSavedSearches();
+    emit countsChanged();
+}
+
+QString BookLibrary::virtualLibraryError() const
+{
+    return m_virtualLibraryError;
+}
+
+QString BookLibrary::sectionError() const
+{
+    return m_sectionError;
+}
+
+void BookLibrary::rebuildSavedSearches()
+{
+    const QMap<QString, QString> &saved = m_index.search.preferences().savedSearches;
+    QStringList names = saved.keys();
+    std::sort(names.begin(), names.end(), [this](const QString &a, const QString &b) {
+        return m_collator.compare(a, b) < 0;
+    });
+    QVariantList rows;
+    for (const QString &name : std::as_const(names)) {
+        const CalibreSearch::Result found = savedSearch(name);
+        rows.append(QVariantMap{
+            { QStringLiteral("name"), name },
+            { QStringLiteral("count"), found.ok() ? QVariant(found.rows.count(true)) : QVariant(QString()) },
+            { QStringLiteral("error"), found.error },
+        });
+    }
+    if (rows == m_savedSearches)
+        return;
+    m_savedSearches = rows;
+    emit savedSearchesChanged();
+}
+
+const QBitArray &BookLibrary::searchRows()
+{
+    if (m_searchedText == m_searchText && m_searchRows.size() == m_data.books.size())
+        return m_searchRows;
+    const CalibreSearch::Result result = CalibreSearch::search(m_index.search, m_searchText, m_restriction);
+    m_searchRows = result.rows;
+    m_searchedText = m_searchText;
+    if (m_searchError != result.error) {
+        m_searchError = result.error;
+        emit searchErrorChanged();
+    }
+    return m_searchRows;
+}
+
+CalibreSearch::Result BookLibrary::savedSearch(const QString &name)
+{
+    QString quoted = name;
+    quoted.replace(u'\\', QStringLiteral("\\\\")).replace(u'"', QStringLiteral("\\\""));
+    return CalibreSearch::search(m_index.search, QStringLiteral("search:\"=%1\"").arg(quoted), m_restriction);
+}
+
+QList<FacetItem> BookLibrary::visibleItems(const QString &kind) const
+{
+    const QList<FacetItem> *all = facetItems(kind);
+    if (!all)
+        return {};
+    if (m_virtualLibrary.isEmpty() || !m_virtualLibraryError.isEmpty())
+        return *all;
+    if (const auto cached = m_visibleItems.constFind(kind); cached != m_visibleItems.cend())
+        return *cached;
+    QHash<int, int> counts;
+    for (qsizetype row = 0; row < m_data.books.size(); ++row) {
+        if (row >= m_restriction.size() || !m_restriction.testBit(row))
+            continue;
+        const Book &book = m_data.books.at(row);
+        if (kind == QLatin1String("authors")) {
+            for (const int id : book.authorIds)
+                ++counts[id];
+        } else if (kind == QLatin1String("series")) {
+            if (book.seriesId > 0)
+                ++counts[book.seriesId];
+        } else if (kind == QLatin1String("tags")) {
+            for (const int id : book.tagIds)
+                ++counts[id];
+        } else if (kind == QLatin1String("languages")) {
+            for (const int id : book.languageIds)
+                ++counts[id];
+        } else if (kind == QLatin1String("publishers")) {
+            if (book.publisherId > 0)
+                ++counts[book.publisherId];
+        }
+    }
+    QList<FacetItem> items;
+    for (FacetItem item : *all) {
+        item.count = counts.value(item.id);
+        if (item.count > 0)
+            items.append(item);
+    }
+    m_visibleItems.insert(kind, items);
+    return items;
+}
+
 QString BookLibrary::sortOption() const
 {
-    return m_sortOption;
+    const BookSort::Level &first = m_sortHistory.first();
+    return first.ascending ? first.field : first.field + QStringLiteral("Desc");
 }
 
 void BookLibrary::setSortOption(const QString &sortOption)
 {
-    if (m_sortOption == sortOption || !isSortOption(sortOption))
+    const bool descending = sortOption.endsWith(QLatin1String("Desc"));
+    QString field = descending ? sortOption.chopped(4) : sortOption;
+    // Cousoir's name before it took Calibre's.
+    if (field == QLatin1String("added"))
+        field = QStringLiteral("timestamp");
+    if (!BookSort::sortable(m_data, field))
         return;
-    m_sortOption = sortOption;
+    const BookSort::Level level{ field, !descending };
+    if (m_sortHistory.first() == level)
+        return;
+    m_sortHistory = BookSort::addToHistory(m_sortHistory, level, std::max(1, effectiveConfig().tweaks.maximumResortLevels));
     emit sortOptionChanged();
+    saveView();
     rebuildRows();
+}
+
+void BookLibrary::sortBy(const QString &field)
+{
+    const BookSort::Level &first = m_sortHistory.first();
+    setSortOption(first.field == field && first.ascending ? field + QStringLiteral("Desc") : field);
+}
+
+QStringList BookLibrary::sortFields() const
+{
+    QStringList fields;
+    for (const BookSort::Level &level : m_sortHistory)
+        fields.append(level.field);
+    return fields;
+}
+
+QStringList BookLibrary::columns() const
+{
+    return m_columns.isEmpty() ? defaultColumns : m_columns;
+}
+
+void BookLibrary::setColumns(const QStringList &columns)
+{
+    const QStringList kept = knownColumns(columns, availableColumns());
+    if (kept == this->columns())
+        return;
+    m_columns = kept;
+    m_bookList.setColumns(kept, m_data.customColumns, effectiveConfig().interfaceLanguage);
+    saveView();
+    emit columnsChanged();
+}
+
+QVariantList BookLibrary::availableColumns() const
+{
+    QVariantList shown;
+    QVariantList hidden;
+    const QStringList current = columns();
+    const auto add = [&](const QString &key, const QString &title, const QString &kind) {
+        const QVariantMap column{ { QStringLiteral("key"), key }, { QStringLiteral("title"), title },
+                                  { QStringLiteral("kind"), kind }, { QStringLiteral("shown"), current.contains(key) } };
+        (current.contains(key) ? shown : hidden).append(column);
+    };
+    for (const ColumnInfo &column : builtinColumns)
+        add(QString::fromLatin1(column.key), tr(column.title), QString::fromLatin1(column.kind));
+    for (const CustomColumn &column : m_data.customColumns) {
+        const QString &type = column.datatype;
+        const QString kind = type == QLatin1String("int") || type == QLatin1String("float") ? QStringLiteral("number")
+            : type == QLatin1String("rating")                                             ? QStringLiteral("rating")
+            : type == QLatin1String("datetime")                                           ? QStringLiteral("date")
+            : type == QLatin1String("comments") || column.multiple                        ? QStringLiteral("long")
+                                                                                          : QStringLiteral("text");
+        add(u'#' + column.label, column.name, kind);
+    }
+    // Those shown in their order.
+    std::sort(shown.begin(), shown.end(), [&current](const QVariant &a, const QVariant &b) {
+        return current.indexOf(a.toMap().value(QStringLiteral("key")).toString())
+            < current.indexOf(b.toMap().value(QStringLiteral("key")).toString());
+    });
+    return shown + hidden;
+}
+
+void BookLibrary::saveView()
+{
+    if (m_data.uuid.isEmpty() || m_viewOf != m_data.uuid)
+        return;
+    QJsonArray history;
+    for (const BookSort::Level &level : std::as_const(m_sortHistory))
+        history.append(QJsonArray{ level.field, level.ascending });
+    QSettings settings;
+    settings.setValue(QStringLiteral("Library/sortHistory/%1").arg(m_data.uuid),
+                      QString::fromUtf8(QJsonDocument(history).toJson(QJsonDocument::Compact)));
+    if (!m_columns.isEmpty())
+        settings.setValue(QStringLiteral("Library/columns/%1").arg(m_data.uuid), m_columns);
+}
+
+void BookLibrary::restoreView()
+{
+    if (m_viewOf == m_data.uuid && !m_viewOf.isNull())
+        return;
+    m_viewOf = m_data.uuid;
+    QSettings settings;
+    const QString savedHistory = settings.value(QStringLiteral("Library/sortHistory/%1").arg(m_data.uuid)).toString();
+    const QStringList savedColumns = settings.value(QStringLiteral("Library/columns/%1").arg(m_data.uuid)).toStringList();
+    // Calibre's list as it left it: get_state() of gui2/library/views.py.
+    const QJsonObject calibre
+        = QJsonDocument::fromJson(m_data.preferences.value(QStringLiteral("library_view books view state")).toUtf8()).object();
+    QList<BookSort::Level> history;
+    const QJsonArray historyRows = savedHistory.isEmpty() ? calibre.value(QLatin1String("sort_history")).toArray()
+                                                          : QJsonDocument::fromJson(savedHistory.toUtf8()).array();
+    // apply_sort_history(): Calibre's three last sorts.
+    const qsizetype levels = savedHistory.isEmpty() ? 3 : std::max(1, effectiveConfig().tweaks.maximumResortLevels);
+    for (const QJsonValue &row : historyRows) {
+        QString field = row.toArray().at(0).toString();
+        field = field == QLatin1String("date") ? QStringLiteral("timestamp")
+            : field == QLatin1String("sort")   ? QStringLiteral("title")
+                                               : field;
+        if (!row.toArray().at(1).isBool() || !BookSort::sortable(m_data, field)
+            || std::any_of(history.cbegin(), history.cend(), [&field](const auto &level) { return level.field == field; }))
+            continue;
+        if (history.size() < levels)
+            history.append({ field, row.toArray().at(1).toBool() });
+    }
+    const QList<BookSort::Level> sort = history.isEmpty() ? QList<BookSort::Level>{ { QStringLiteral("title"), true } }
+                                                          : history;
+    if (sort != m_sortHistory) {
+        m_sortHistory = sort;
+        emit sortOptionChanged();
+    }
+
+    QStringList columns = savedColumns;
+    if (columns.isEmpty() && calibre.contains(QLatin1String("column_positions"))) {
+        // The columns Calibre shows, in its order.
+        const QJsonObject positions = calibre.value(QLatin1String("column_positions")).toObject();
+        QStringList hidden;
+        for (const QJsonValue &column : calibre.value(QLatin1String("hidden_columns")).toArray())
+            hidden.append(column.toString());
+        QList<QPair<int, QString>> shown;
+        for (auto it = positions.begin(); it != positions.end(); ++it) {
+            if (!hidden.contains(it.key()))
+                shown.append({ it.value().toInt(), it.key() });
+        }
+        std::sort(shown.begin(), shown.end());
+        for (const auto &[position, key] : std::as_const(shown))
+            columns.append(key);
+    }
+    m_columns.clear();
+    if (!columns.isEmpty())
+        m_columns = knownColumns(columns, availableColumns());
+    m_bookList.setColumns(this->columns(), m_data.customColumns, effectiveConfig().interfaceLanguage);
+    emit columnsChanged();
 }
 
 QString BookLibrary::facetSortOption() const
@@ -611,7 +989,8 @@ void BookLibrary::startLoad()
     const QString path = m_libraryPath;
     const QString cache = cacheFolder(path);
     const CalibreConfig config = effectiveConfig();
-    m_loadWatcher.setFuture(QtConcurrent::run([path, cache, config] {
+    const QStringList sortFields = this->sortFields();
+    m_loadWatcher.setFuture(QtConcurrent::run([path, cache, config, sortFields] {
         LoadResult result;
         result.path = path;
         // A change a crash interrupted is put right before anything is read.
@@ -622,6 +1001,8 @@ void BookLibrary::startLoad()
         }
         result.ok = CalibreDb::loadLibrary(path, cache + QStringLiteral("/snapshot.db"), config, &result.data,
                                            &result.error);
+        if (result.ok)
+            result.index = indexBooks(result.data, config, sortFields);
         return result;
     }));
     emit loadingChanged();
@@ -629,7 +1010,8 @@ void BookLibrary::startLoad()
 
 void BookLibrary::finishLoad()
 {
-    LoadResult result = m_loadWatcher.result();
+    // Taken, not copied: the watcher would keep a whole library alive.
+    LoadResult result = m_loadWatcher.future().takeResult();
     emit loadingChanged();
     if (!result.recovered.isEmpty())
         emit recovered(result.recovered);
@@ -647,7 +1029,7 @@ void BookLibrary::finishLoad()
     if (result.ok) {
         m_loaded = true;
         m_lastError.clear();
-        applyData(std::move(result.data));
+        applyData(std::move(result.data), std::move(result.index));
     } else if (m_loaded) {
         // A failed reload, Calibre writing for instance, keeps the books
         // shown; the next change to the database reloads them.
@@ -656,22 +1038,38 @@ void BookLibrary::finishLoad()
         emit libraryChanged();
     } else {
         m_lastError = result.error;
-        applyData({});
+        applyData({}, {});
     }
     // Edits made while it loaded.
     startCommit();
 }
 
-void BookLibrary::applyData(LibraryData data)
+BookLibrary::BookIndex BookLibrary::indexBooks(const LibraryData &data, const CalibreConfig &config,
+                                               const QStringList &sortFields)
+{
+    BookIndex index;
+    index.search = CalibreSearch::Index(data, CalibreSearch::Preferences::fromRows(data.preferences), config.tweaks,
+                                        config.interfaceLanguage);
+    const auto sorter = std::make_shared<BookSort::Sorter>(data, config);
+    sorter->prepare(sortFields);
+    index.sorter = sorter;
+    const qsizetype count = data.books.size();
+    index.rowOf.reserve(count);
+    for (qsizetype row = 0; row < count; ++row)
+        index.rowOf.insert(data.books.at(row).id, row);
+    return index;
+}
+
+void BookLibrary::applyData(LibraryData data, BookIndex index)
 {
     m_data = std::move(data);
+    m_index = std::move(index);
+    m_sorted.clear();
+    m_sortedBy.clear();
     QHash<int, CoverCache::Cover> covers;
-    m_searchTexts.clear();
     for (const Book &book : std::as_const(m_data.books)) {
         if (!book.coverFile.isEmpty())
             covers.insert(book.id, { book.coverFile, book.coverModified });
-        const QStringList searched{ book.title, book.authors.join(u' '), book.series, book.tags.join(u' ') };
-        m_searchTexts.insert(book.id, CalibreText::foldForSearch(searched.join(u' ')));
     }
     const QString key = coverKeyOf(m_libraryPath);
     CoverCache::setCovers(key, cacheFolder(m_libraryPath) + QStringLiteral("/covers"), covers);
@@ -685,6 +1083,34 @@ void BookLibrary::applyData(LibraryData data)
     }
     if (!findBook(m_currentBookId))
         m_currentBookId = 0;
+
+    // The choice made for this library, or Calibre's at its start.
+    const CalibreSearch::Preferences &preferences = m_index.search.preferences();
+    restoreView();
+    // The columns of this load: a custom column added or gone shows so.
+    m_columns.removeIf([this](const QString &key) {
+        return key.startsWith(u'#') && !BookSort::sortable(m_data, key);
+    });
+    m_bookList.setColumns(columns(), m_data.customColumns, effectiveConfig().interfaceLanguage);
+    emit columnsChanged();
+    if (m_virtualLibraryOf != m_data.uuid) {
+        m_virtualLibraryOf = m_data.uuid;
+        const QVariant chosen = QSettings().value(QStringLiteral("Library/virtualLibrary/%1").arg(m_data.uuid));
+        const QString name = chosen.isValid() ? chosen.toString() : preferences.virtualLibraryOnStartup;
+        if (name != m_virtualLibrary) {
+            m_virtualLibrary = name;
+            emit virtualLibraryChanged();
+        }
+    }
+    if (!m_virtualLibrary.isEmpty() && !preferences.virtualLibraries.contains(m_virtualLibrary)) {
+        m_virtualLibrary.clear();
+        emit virtualLibraryChanged();
+    }
+    if (m_section.startsWith(QLatin1String("search:")) && !preferences.savedSearches.contains(m_section.mid(7))) {
+        m_section = QStringLiteral("books");
+        emit sectionChanged();
+    }
+    applyVirtualLibrary();
 
     rebuildTrash();
     emit libraryChanged();
@@ -735,88 +1161,52 @@ bool BookLibrary::inFilter(const Book &book) const
     return true;
 }
 
+const QList<qsizetype> &BookLibrary::sortedBooks()
+{
+    if (m_sortedBy == m_sortHistory && m_sorted.size() == m_data.books.size())
+        return m_sorted;
+    // The books by id, as Calibre's list has them, then sorted by the
+    // history.
+    m_sorted.resize(m_data.books.size());
+    std::iota(m_sorted.begin(), m_sorted.end(), qsizetype(0));
+    if (m_index.sorter)
+        m_index.sorter->sort(m_sortHistory, &m_sorted);
+    m_sortedBy = m_sortHistory;
+    return m_sorted;
+}
+
 void BookLibrary::rebuildRows()
 {
-    QList<const Book *> books;
     // A browse section lists its items until one is opened.
-    if (m_section == QLatin1String("books") || !m_filterKind.isEmpty()) {
-        for (const Book &book : std::as_const(m_data.books)) {
-            if (inFilter(book))
-                books.append(&book);
-        }
-    }
-    const int scopeCount = int(books.size());
-
-    const QStringList words = searchWords(m_searchText);
-    if (!words.isEmpty()) {
-        books.removeIf([this, &words](const Book *book) { return !matchesAll(m_searchTexts.value(book->id), words); });
-    }
-
-    QHash<int, QString> seriesSorts;
-    for (const FacetItem &item : std::as_const(m_data.series))
-        seriesSorts.insert(item.id, item.sort.isEmpty() ? item.name : item.sort);
-    const QString key = m_sortOption.endsWith(QLatin1String("Desc")) ? m_sortOption.chopped(4) : m_sortOption;
-    const auto byTitle = [this](const Book *a, const Book *b) {
-        const int order = m_collator.compare(a->sort, b->sort);
-        return order != 0 ? order < 0 : a->id < b->id;
+    const bool savedSearch = m_section.startsWith(QLatin1String("search:"));
+    const bool listed = m_section == QLatin1String("books") || !m_filterKind.isEmpty() || savedSearch;
+    static const QList<qsizetype> none;
+    const QList<qsizetype> &sorted = listed ? sortedBooks() : none;
+    static const QBitArray nothing;
+    const QBitArray &found = listed ? searchRows() : nothing;
+    const bool searching = !m_searchText.trimmed().isEmpty();
+    QList<qsizetype> order;
+    int scopeCount = 0;
+    const auto add = [&](qsizetype row) {
+        if (row >= m_restriction.size() || !m_restriction.testBit(row) || !inFilter(m_data.books.at(row))
+            || (savedSearch && !m_sectionRows.testBit(row)))
+            return;
+        ++scopeCount;
+        if (!searching || found.testBit(row))
+            order.append(row);
     };
-    std::stable_sort(books.begin(), books.end(), [&](const Book *a, const Book *b) {
-        if (key == QLatin1String("authors")) {
-            const int order = m_collator.compare(a->authorSort, b->authorSort);
-            if (order != 0)
-                return order < 0;
-        } else if (key == QLatin1String("series")) {
-            // Books in no series come after the others.
-            if ((a->seriesId > 0) != (b->seriesId > 0))
-                return a->seriesId > 0;
-            const int order = m_collator.compare(seriesSorts.value(a->seriesId), seriesSorts.value(b->seriesId));
-            if (order != 0)
-                return order < 0;
-            if (a->seriesIndex != b->seriesIndex)
-                return a->seriesIndex < b->seriesIndex;
-        } else if (key == QLatin1String("added")) {
-            if (a->timestamp != b->timestamp)
-                return a->timestamp < b->timestamp;
-        } else if (key == QLatin1String("rating")) {
-            if (a->rating != b->rating)
-                return a->rating < b->rating;
-        }
-        return byTitle(a, b);
-    });
-    if (m_sortOption.endsWith(QLatin1String("Desc")))
-        std::reverse(books.begin(), books.end());
+    std::for_each(sorted.cbegin(), sorted.cend(), add);
 
-    const QString coverKey = coverKeyOf(m_libraryPath);
-    QVariantList rows;
-    for (const Book *book : std::as_const(books)) {
-        QStringList formats;
-        for (const BookFormat &format : book->formats)
-            formats.append(format.format);
-        rows.append(QVariantMap{
-            { QStringLiteral("id"), book->id },
-            { QStringLiteral("title"), book->title },
-            { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
-            { QStringLiteral("series"), seriesText(*book) },
-            { QStringLiteral("formats"), formats.join(QStringLiteral(", ")) },
-            { QStringLiteral("added"), localDate(book->timestamp) },
-            { QStringLiteral("rating"), ratingText(book->rating) },
-            { QStringLiteral("cover"), book->coverFile.isEmpty()
-                  ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
-        });
-    }
-
-    if (m_rows == rows && m_scopeCount == scopeCount)
+    const bool changed = m_bookList.setRows(m_data.books, std::move(order), coverKeyOf(m_libraryPath));
+    if (m_scopeCount == scopeCount && !changed)
         return;
-    m_rows = rows;
     m_scopeCount = scopeCount;
     emit rowsChanged();
 }
 
 void BookLibrary::rebuildFacetRows()
 {
-    QList<FacetItem> items;
-    if (const QList<FacetItem> *all = facetItems(m_section))
-        items = *all;
+    QList<FacetItem> items = visibleItems(m_section);
 
     const QStringList words = searchWords(m_searchText);
     if (!words.isEmpty() && m_filterKind.isEmpty()) {
@@ -837,12 +1227,14 @@ void BookLibrary::rebuildFacetRows()
     if (m_facetSortOption.endsWith(QLatin1String("Desc")))
         std::reverse(items.begin(), items.end());
 
+    const QHash<int, ItemNote> notes = m_data.notes.value(CalibreDb::notesField(m_section));
     QVariantList rows;
     for (const FacetItem &item : std::as_const(items)) {
         rows.append(QVariantMap{
             { QStringLiteral("id"), item.id },
             { QStringLiteral("name"), item.name },
             { QStringLiteral("count"), item.count },
+            { QStringLiteral("hasNote"), notes.contains(item.id) },
         });
     }
     if (m_facetRows == rows)
@@ -863,13 +1255,10 @@ void BookLibrary::rebuildCurrentBook()
     }
 
     QVariantList formats;
-    int missing = 0;
     for (const BookFormat &format : book->formats) {
-        missing += format.file.isEmpty() ? 1 : 0;
         formats.append(QVariantMap{
             { QStringLiteral("format"), format.format },
-            { QStringLiteral("size"), sizeText(format.size) },
-            { QStringLiteral("file"), format.file },
+            { QStringLiteral("size"), BookDisplay::fileSize(format.size) },
             { QStringLiteral("missing"), format.file.isEmpty() },
         });
     }
@@ -882,8 +1271,9 @@ void BookLibrary::rebuildCurrentBook()
     for (const auto &identifier : book->identifiers)
         identifierTexts.append(identifier.first + u':' + identifier.second);
     QStringList languages;
+    const QString interfaceLanguage = effectiveConfig().interfaceLanguage;
     for (const QString &code : book->languages)
-        languages.append(CalibreText::languageName(code));
+        languages.append(CalibreText::languageName(code, interfaceLanguage));
 
     const QString coverKey = coverKeyOf(m_libraryPath);
     const QVariantMap current{
@@ -894,36 +1284,50 @@ void BookLibrary::rebuildCurrentBook()
         { QStringLiteral("authorSort"), book->authorSort },
         { QStringLiteral("series"), book->series },
         { QStringLiteral("seriesText"), book->seriesId > 0
-              ? tr("Book %1 of %2").arg(seriesIndexText(book->seriesIndex), book->series) : QString() },
+              ? tr("Book %1 of %2").arg(CalibreText::seriesIndexText(book->seriesIndex), book->series) : QString() },
         { QStringLiteral("tags"), book->tags },
         { QStringLiteral("publisher"), book->publisher },
-        { QStringLiteral("rating"), ratingText(book->rating) },
+        { QStringLiteral("rating"), BookDisplay::rating(book->rating) },
         { QStringLiteral("languages"), languages },
         { QStringLiteral("identifiers"), identifiers },
-        { QStringLiteral("published"), monthYear(book->pubdate) },
+        { QStringLiteral("published"), BookDisplay::monthYear(book->pubdate) },
         { QStringLiteral("added"), localDateTime(book->timestamp) },
         { QStringLiteral("modified"), localDateTime(book->lastModified) },
         { QStringLiteral("path"), book->path },
-        { QStringLiteral("description"), cleanDescription(book->comments) },
+        { QStringLiteral("description"), Description::cleaned(book->comments) },
+        // The description as the editor shows it, and whether saving it
+        // from there leaves something out.
+        { QStringLiteral("descriptionText"), Description::toText(book->comments) },
+        { QStringLiteral("descriptionLosesFormatting"), Description::losesFormatting(book->comments) },
         { QStringLiteral("cover"), book->coverFile.isEmpty()
               ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
         { QStringLiteral("formats"), formats },
-        { QStringLiteral("missingFiles"), missing },
         { QStringLiteral("hasCover"), !book->coverFile.isEmpty() },
         // The values as the fields edit them.
         { QStringLiteral("authorsText"), book->authors.join(QStringLiteral(" & ")) },
-        { QStringLiteral("seriesIndexText"), seriesIndexText(book->seriesIndex) },
+        { QStringLiteral("seriesIndexText"), CalibreText::seriesIndexText(book->seriesIndex) },
         { QStringLiteral("tagsText"), book->tags.join(QStringLiteral(", ")) },
         { QStringLiteral("ratingValue"), book->rating },
         { QStringLiteral("languagesText"), languages.join(QStringLiteral(", ")) },
         { QStringLiteral("identifiersText"), identifierTexts.join(QStringLiteral(", ")) },
         { QStringLiteral("pubdateText"), CalibreDb::isUndefinedDate(book->pubdate)
               ? QString() : book->pubdate.toUTC().date().toString(Qt::ISODate) },
+        { QStringLiteral("custom"), customFields(*book) },
     };
     if (m_currentBook == current)
         return;
     m_currentBook = current;
     emit currentBookChanged();
+}
+
+bool BookLibrary::readerAvailable() const
+{
+#ifdef COUSOIR_READER
+    // Set up before the application, as main() does.
+    return BookReader::ready();
+#else
+    return false;
+#endif
 }
 
 bool BookLibrary::writable() const
@@ -985,12 +1389,83 @@ CalibreConfig BookLibrary::effectiveConfig() const
     return config;
 }
 
+QVariantList BookLibrary::customFields(const Book &book) const
+{
+    QVariantList fields;
+    for (qsizetype index = 0; index < m_data.customColumns.size(); ++index) {
+        const CustomColumn &column = m_data.customColumns.at(index);
+        const QJsonObject display = QJsonDocument::fromJson(column.display).object();
+        const bool names = display.value(QLatin1String("is_names")).toBool();
+        const QString interpretAs = display.value(QLatin1String("interpret_as")).toString();
+        const bool html = column.datatype == QLatin1String("comments") && interpretAs != QLatin1String("short-text")
+            && interpretAs != QLatin1String("long-text") && interpretAs != QLatin1String("markdown");
+        const CustomValue value = book.custom.value(index);
+        const QString &type = column.datatype;
+        // What the page shows, and what the field edits.
+        QString text;
+        QString editText;
+        if (type == QLatin1String("composite")) {
+            // As its template made it.
+            text = value.value.toString();
+        } else if (column.multiple) {
+            text = value.value.toStringList().join(names ? QStringLiteral(" & ") : QStringLiteral(", "));
+            editText = text;
+        } else if (value.value.isNull()) {
+        } else if (type == QLatin1String("rating")) {
+            text = BookDisplay::rating(value.value.toInt());
+            editText = value.value.toString();
+        } else if (type == QLatin1String("bool")) {
+            text = value.value.toBool() ? tr("Yes") : tr("No");
+            editText = value.value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+        } else if (type == QLatin1String("datetime")) {
+            text = BookDisplay::date(value.value.toDateTime());
+            editText = text;
+        } else if (type == QLatin1String("float")) {
+            text = PythonJson::floatRepr(value.value.toDouble());
+            editText = text;
+        } else if (type == QLatin1String("series")) {
+            text = tr("%1 [%2]").arg(value.value.toString(), CalibreText::seriesIndexText(value.seriesIndex));
+            editText = value.value.toString();
+        } else if (type == QLatin1String("comments")) {
+            // HTML unless the column says it holds plain text or Markdown.
+            text = html ? Description::toText(value.value.toString()) : value.value.toString();
+            editText = text;
+        } else {
+            text = value.value.toString();
+            editText = text;
+        }
+        QStringList choices;
+        for (const QJsonValue &choice : display.value(QLatin1String("enum_values")).toArray())
+            choices.append(choice.toString());
+        fields.append(QVariantMap{
+            { QStringLiteral("key"), u'#' + column.label },
+            { QStringLiteral("name"), column.name },
+            { QStringLiteral("datatype"), type },
+            { QStringLiteral("multiple"), column.multiple },
+            { QStringLiteral("names"), names },
+            { QStringLiteral("editable"), column.editable && type != QLatin1String("composite") },
+            { QStringLiteral("halfStars"), display.value(QLatin1String("allow_half_stars")).toBool() },
+            { QStringLiteral("html"), html },
+            // A long text holding more than its text shows, a table or an
+            // image, which saving from its text would leave out.
+            { QStringLiteral("losesFormatting"), type == QLatin1String("comments") && html
+                                                     && Description::losesFormatting(value.value.toString()) },
+            { QStringLiteral("choices"), choices },
+            { QStringLiteral("text"), text },
+            { QStringLiteral("editText"), editText },
+            { QStringLiteral("seriesIndexText"), value.value.isNull() ? QString()
+                                                                      : CalibreText::seriesIndexText(value.seriesIndex) },
+        });
+    }
+    return fields;
+}
+
 QVariantMap BookLibrary::editableValues(const Book &book) const
 {
     QStringList identifiers;
     for (const auto &identifier : book.identifiers)
         identifiers.append(identifier.first + u':' + identifier.second);
-    return {
+    QVariantMap values{
         { QStringLiteral("title"), book.title },
         { QStringLiteral("sort"), book.sort },
         { QStringLiteral("authors"), book.authors },
@@ -1005,7 +1480,57 @@ QVariantMap BookLibrary::editableValues(const Book &book) const
         // The exact date, which a revert puts back as it was.
         { QStringLiteral("pubdate"), CalibreDb::isUndefinedDate(book.pubdate) ? QString()
                                                                               : CalibreDb::isoFormat(book.pubdate) },
+        { QStringLiteral("comments"), book.comments },
     };
+    // The custom columns, as updateBook() takes them back.
+    for (qsizetype index = 0; index < m_data.customColumns.size(); ++index) {
+        const CustomColumn &column = m_data.customColumns.at(index);
+        if (column.datatype == QLatin1String("composite"))
+            continue;
+        const CustomValue value = book.custom.value(index);
+        const QString key = u'#' + column.label;
+        // A date as its exact text, the undefined date as nothing, which
+        // Calibre's adapter makes undefined again.
+        if (column.datatype == QLatin1String("datetime") && !value.value.isNull())
+            values.insert(key, CalibreDb::isUndefinedDate(value.value.toDateTime())
+                                   ? QString() : CalibreDb::isoFormat(value.value.toDateTime()));
+        else
+            values.insert(key, value.value);
+        if (column.datatype == QLatin1String("series") && !value.value.isNull())
+            values.insert(key + QStringLiteral("_index"), value.seriesIndex);
+    }
+    return values;
+}
+
+QString BookLibrary::textToHtml(const QString &text) const
+{
+    return Description::toHtml(text);
+}
+
+QVariantList BookLibrary::paletteSearch(const QString &text, const QVariantList &commands, int limit) const
+{
+    // A command's key rides, by its index, in the hit's id while it is
+    // matched.
+    QList<Palette::Hit> given;
+    QStringList keys;
+    for (const QVariant &command : commands) {
+        const QVariantMap map = command.toMap();
+        given.append({ map.value(QStringLiteral("kind")).toString(), int(keys.size()),
+                       map.value(QStringLiteral("title")).toString(), map.value(QStringLiteral("detail")).toString(), 0 });
+        keys.append(map.value(QStringLiteral("key")).toString());
+    }
+    QVariantList hits;
+    for (const Palette::Hit &hit : Palette::search(m_index.search, text, limit, given)) {
+        const bool command = hit.kind == QLatin1String("action") || hit.kind == QLatin1String("section");
+        hits.append(QVariantMap{
+            { QStringLiteral("kind"), hit.kind },
+            { QStringLiteral("id"), command ? 0 : hit.id },
+            { QStringLiteral("key"), command ? keys.value(hit.id) : QString() },
+            { QStringLiteral("title"), hit.title },
+            { QStringLiteral("detail"), hit.detail },
+        });
+    }
+    return hits;
 }
 
 bool BookLibrary::isDate(const QString &text) const
@@ -1014,10 +1539,99 @@ bool BookLibrary::isDate(const QString &text) const
         || FieldWriters::parseExactDate(text);
 }
 
+bool BookLibrary::isCustomDate(const QString &text) const
+{
+    return text.trimmed().isEmpty() || FieldWriters::parseCustomDate(text);
+}
+
 void BookLibrary::openBackupFolder()
 {
     QDir().mkpath(backupFolder());
     QDesktopServices::openUrl(QUrl::fromLocalFile(backupFolder()));
+}
+
+QVariantMap BookLibrary::downloadedChanges(int bookId, const MetadataDownload::Found &found, const QStringList &fields,
+                                           bool appendComments) const
+{
+    const Book *book = findBook(bookId);
+    return book ? MetadataDownload::changes(m_data, *book, effectiveConfig(), found, fields, appendComments) : QVariantMap();
+}
+
+QVariantList BookLibrary::downloadFields(int bookId, const MetadataDownload::Found &found, const QStringList &ignored,
+                                         bool appendComments) const
+{
+    const Book *book = findBook(bookId);
+    if (!book)
+        return {};
+    const CalibreConfig config = effectiveConfig();
+    const QVariantMap current = editableValues(*book);
+    // Each field as the dialog shows it, from the values updateBook() takes.
+    const auto text = [&config](const QString &field, const QVariantMap &values) -> QString {
+        const QVariant value = values.value(field);
+        if (field == QLatin1String("authors"))
+            return value.toStringList().join(QStringLiteral(" & "));
+        if (field == QLatin1String("tags"))
+            return value.toStringList().join(QStringLiteral(", "));
+        if (field == QLatin1String("rating"))
+            return BookDisplay::rating(value.toInt());
+        if (field == QLatin1String("languages")) {
+            QStringList names;
+            for (const QString &code : value.toStringList())
+                names.append(CalibreText::languageName(code, config.interfaceLanguage));
+            return names.join(QStringLiteral(", "));
+        }
+        if (field == QLatin1String("identifiers")) {
+            QStringList pairs;
+            if (value.typeId() == QMetaType::QVariantMap) {
+                const QVariantMap map = value.toMap();
+                for (auto it = map.cbegin(); it != map.cend(); ++it)
+                    pairs.append(it.key() + u':' + it.value().toString());
+            } else {
+                pairs = value.toString().split(QStringLiteral(", "), Qt::SkipEmptyParts);
+            }
+            pairs.sort();
+            return pairs.join(QStringLiteral(", "));
+        }
+        if (field == QLatin1String("pubdate")) {
+            const QDateTime date = QDateTime::fromString(value.toString(), Qt::ISODate);
+            return date.isValid() ? date.toLocalTime().date().toString(Qt::ISODate) : QString();
+        }
+        if (field == QLatin1String("series")) {
+            const QString series = value.toString();
+            return series.isEmpty() ? QString()
+                                    : tr("%1, book %2").arg(series, CalibreText::seriesIndexText(values.value(QStringLiteral("seriesIndex")).toDouble()));
+        }
+        if (field == QLatin1String("comments"))
+            return Description::toText(value.toString()).trimmed();
+        return value.toString();
+    };
+    static const QHash<QString, const char *> labels{
+        { QStringLiteral("title"), QT_TR_NOOP("Title") },         { QStringLiteral("authors"), QT_TR_NOOP("Authors") },
+        { QStringLiteral("rating"), QT_TR_NOOP("Rating") },       { QStringLiteral("publisher"), QT_TR_NOOP("Publisher") },
+        { QStringLiteral("tags"), QT_TR_NOOP("Tags") },           { QStringLiteral("identifiers"), QT_TR_NOOP("Identifiers") },
+        { QStringLiteral("pubdate"), QT_TR_NOOP("Published") },   { QStringLiteral("series"), QT_TR_NOOP("Series") },
+        { QStringLiteral("languages"), QT_TR_NOOP("Languages") }, { QStringLiteral("comments"), QT_TR_NOOP("Description") },
+    };
+    QVariantList rows;
+    for (const QString &field : MetadataDownload::fields()) {
+        const QVariantMap changes = MetadataDownload::changes(m_data, *book, config, found, { field }, appendComments);
+        if (changes.isEmpty())
+            continue;
+        QVariantMap after = current;
+        for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+            after.insert(it.key(), it.value());
+        const QString before = text(field, current);
+        const QString now = text(field, after);
+        rows.append(QVariantMap{
+            { QStringLiteral("key"), field },
+            { QStringLiteral("label"), tr(labels.value(field)) },
+            { QStringLiteral("current"), before },
+            { QStringLiteral("found"), now },
+            // Calibre's preferences may leave a field aside.
+            { QStringLiteral("chosen"), before != now && !ignored.contains(field) },
+        });
+    }
+    return rows;
 }
 
 QString BookLibrary::updateBook(int bookId, const QVariantMap &changes)
@@ -1060,9 +1674,19 @@ void BookLibrary::keepOriginal(const Book &book)
         return;
     m_originalBookId = book.id;
     m_original = editableValues(book);
-    QFile cover(book.coverFile);
-    m_originalCover = !book.coverFile.isEmpty() && cover.open(QIODevice::ReadOnly) ? cover.readAll() : QByteArray();
+    m_originalCover = coverBytes(book);
     emit canRevertChanged();
+}
+
+QString BookLibrary::saveDescription(int bookId, const QString &text)
+{
+    const Book *book = findBook(bookId);
+    if (!book)
+        return tr("This book is no longer in the library.");
+    // Unchanged, the description keeps its HTML as it is.
+    if (text.trimmed() == Description::toText(book->comments).trimmed())
+        return {};
+    return updateBook(bookId, { { QStringLiteral("comments"), Description::toHtml(text) } });
 }
 
 QString BookLibrary::setCover(int bookId, const QString &fileUrl)
@@ -1113,10 +1737,7 @@ void BookLibrary::revertCurrentBook()
     BookEdit edit;
     QString error;
     BookEdit::fromVariantMap(m_currentBookId, changes, &edit, &error);
-    QFile cover(book->coverFile);
-    const QByteArray coverNow = !book->coverFile.isEmpty() && cover.open(QIODevice::ReadOnly) ? cover.readAll()
-                                                                                             : QByteArray();
-    if (coverNow != m_originalCover)
+    if (coverBytes(*book) != m_originalCover)
         edit.cover = m_originalCover;
     m_originalBookId = 0;
     m_original.clear();
@@ -1126,12 +1747,108 @@ void BookLibrary::revertCurrentBook()
         queueEdit(edit);
 }
 
+int BookLibrary::bulkUndoCount() const
+{
+    return int(m_bulkUndo.size());
+}
+
+QString BookLibrary::updateBooks(const QVariantList &bookIds, const QVariantMap &changes)
+{
+    if (!m_writable)
+        return tr("The library cannot be changed right now.");
+    if (changes.contains(QStringLiteral("pubdate")) && !isDate(changes.value(QStringLiteral("pubdate")).toString()))
+        return tr("“%1” is not a date.").arg(changes.value(QStringLiteral("pubdate")).toString());
+    QVariantMap withBooks = changes;
+    withBooks.insert(QStringLiteral("books"), bookIds);
+    BulkEdit bulk;
+    QString error;
+    if (!BulkEdit::fromVariantMap(withBooks, &bulk, &error))
+        return error;
+    bulk.bookIds.removeIf([this](int id) { return !findBook(id); });
+    if (bulk.isEmpty())
+        return {};
+    // The undo of an earlier one gives way; this one's comes once it is
+    // saved.
+    if (!m_bulkUndo.isEmpty()) {
+        m_bulkUndo.clear();
+        emit bulkUndoChanged();
+    }
+    CommitEngine::Request request;
+    request.bulkEdits.append(bulk);
+    return queueChange(request);
+}
+
+void BookLibrary::undoBulkEdit()
+{
+    if (m_bulkUndo.isEmpty() || !m_writable)
+        return;
+    CommitEngine::Request request;
+    for (auto it = m_bulkUndo.constBegin(); it != m_bulkUndo.constEnd(); ++it) {
+        const Book *book = findBook(it.key());
+        if (!book)
+            continue;
+        // A field changed since, by Cousoir or by Calibre, stays as it is.
+        const QVariantMap current = editableValues(*book);
+        QVariantMap changes;
+        for (auto field = it->before.constBegin(); field != it->before.constEnd(); ++field) {
+            if (current.value(field.key()) == it->after.value(field.key()) && field.value() != it->after.value(field.key()))
+                changes.insert(field.key(), field.value());
+        }
+        BookEdit edit;
+        QString error;
+        if (BookEdit::fromVariantMap(it.key(), changes, &edit, &error) && !edit.isEmpty())
+            request.edits.append(edit);
+    }
+    m_bulkUndo.clear();
+    emit bulkUndoChanged();
+    if (!request.edits.isEmpty())
+        queueChange(request);
+}
+
+void BookLibrary::keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before)
+{
+    // The fields the edits set.
+    QStringList fields;
+    for (const BulkEdit &bulk : bulkEdits) {
+        if (bulk.authors)
+            fields << QStringLiteral("authors") << QStringLiteral("authorSort");
+        if (bulk.series)
+            fields << QStringLiteral("series") << QStringLiteral("seriesIndex");
+        if (bulk.removeAllTags || !bulk.addTags.isEmpty() || !bulk.removeTags.isEmpty())
+            fields << QStringLiteral("tags");
+        if (bulk.rating)
+            fields << QStringLiteral("rating");
+        if (bulk.publisher)
+            fields << QStringLiteral("publisher");
+        if (bulk.languages)
+            fields << QStringLiteral("languages");
+        if (bulk.pubdate)
+            fields << QStringLiteral("pubdate");
+    }
+    m_bulkUndo.clear();
+    for (const Book &old : before) {
+        const Book *now = findBook(old.id);
+        if (!now)
+            continue;
+        const QVariantMap was = editableValues(old);
+        const QVariantMap is = editableValues(*now);
+        BulkUndo undo;
+        for (const QString &field : std::as_const(fields)) {
+            undo.before.insert(field, was.value(field));
+            undo.after.insert(field, is.value(field));
+        }
+        if (undo.before != undo.after)
+            m_bulkUndo.insert(old.id, undo);
+    }
+    emit bulkUndoChanged();
+}
+
 QString BookLibrary::queueEdit(const BookEdit &edit)
 {
     if (edit.isEmpty())
         return {};
     // With the edits just before it, if the last change waiting is edits.
-    if (!m_pending.isEmpty() && !m_pending.constLast().hasOperations()) {
+    if (!m_pending.isEmpty() && !m_pending.constLast().hasOperations() && m_pending.constLast().bulkEdits.isEmpty()) {
         m_pending.last().edits.append(edit);
     } else {
         CommitEngine::Request request;
@@ -1141,6 +1858,53 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     emit savingChanged();
     startCommit();
     return {};
+}
+
+QString BookLibrary::readableFormat(int bookId) const
+{
+    const Book *book = findBook(bookId);
+    if (!book || !readerAvailable())
+        return {};
+    for (const char *wanted : { "EPUB", "KEPUB", "PDF" }) {
+        for (const BookFormat &format : book->formats) {
+            if (format.format == QLatin1String(wanted) && !format.file.isEmpty())
+                return format.format;
+        }
+    }
+    return {};
+}
+
+bool BookLibrary::saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations)
+{
+    if (!m_writable || !findBook(bookId))
+        return false;
+    CommitEngine::Request request;
+    if (position && !position->cfi.isEmpty())
+        request.readPositions.append({ bookId, *position });
+    for (const Annotation &annotation : annotations)
+        request.annotations.append({ bookId, annotation });
+    if (request.readPositions.isEmpty() && request.annotations.isEmpty())
+        return true;
+    return queueChange(request).isEmpty();
+}
+
+QList<Annotation> BookLibrary::annotations(int bookId, const QString &format) const
+{
+    // From the copy of the database the library was read from.
+    QList<Annotation> found;
+    SqliteDb db;
+    QString error;
+    if (m_libraryPath.isEmpty()
+        || !db.open(cacheFolder(m_libraryPath) + QStringLiteral("/snapshot.db"), SqliteDb::Mode::Immutable, &error))
+        return found;
+    for (const QVariantList &row :
+         db.rows(QStringLiteral("SELECT annot_type, annot_id, timestamp, annot_data, searchable_text FROM annotations "
+                                "WHERE book=? AND format=? AND user_type='local' AND user='viewer'"),
+                 { bookId, format.toUpper() })) {
+        found.append({ format.toUpper(), row.value(0).toString(), row.value(1).toString(), row.value(2).toDouble(),
+                       row.value(3).toString().toUtf8(), row.value(4).toString() });
+    }
+    return found;
 }
 
 QString BookLibrary::queueChange(const CommitEngine::Request &change)
@@ -1173,7 +1937,13 @@ void BookLibrary::startCommit()
     const QString version = QCoreApplication::applicationVersion();
     request.producer = version.isEmpty() ? QStringLiteral("Cousoir") : QStringLiteral("Cousoir (%1)").arg(version);
     request.producerId = QStringLiteral("cousoir");
-    m_commitWatcher.setFuture(QtConcurrent::run([request] { return CommitEngine::commit(request); }));
+    const QStringList sortFields = this->sortFields();
+    m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
+        CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits };
+        if (committed.result.ok && committed.result.written)
+            committed.index = indexBooks(committed.result.data, request.config, sortFields);
+        return committed;
+    }));
     // The files move meanwhile: the check waits for the library saved.
     if (m_checkWatcher.isRunning()) {
         m_checkWatcher.cancel();
@@ -1184,11 +1954,20 @@ void BookLibrary::startCommit()
 
 void BookLibrary::finishCommit()
 {
-    const CommitEngine::Result result = m_commitWatcher.result();
+    CommitResult committed = m_commitWatcher.future().takeResult();
+    const CommitEngine::Result &result = committed.result;
+    if (result.notesWritten && (!result.ok || !result.written)) {
+        // The notes went in, whatever came after them.
+        CalibreDb::readNotes(&m_data);
+        emit filterChanged();
+        rebuildFacetRows();
+    }
     if (!result.ok) {
         // What follows was made on what failed; the library shows what it
         // holds.
         m_pending.clear();
+        m_bulkUndo.clear();
+        emit bulkUndoChanged();
         emit saveFailed(result.error);
         m_reloadPending = true;
     } else if (result.data.libraryPath == m_libraryPath) {
@@ -1198,7 +1977,9 @@ void BookLibrary::finishCommit()
         if (result.written) {
             m_loaded = true;
             m_lastError.clear();
-            applyData(result.data);
+            applyData(result.data, std::move(committed.index));
+            if (!committed.bulkEdits.isEmpty())
+                keepBulkUndo(committed.bulkEdits, result.bulkBefore);
             m_publishedKey = ConcurrencyGuard::changeKey(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")));
             emit publishedKeyChanged();
         }
@@ -1578,17 +2359,11 @@ void BookLibrary::rebuildCheck()
                         gains.append(format);
                 }
             }
-            QStringList missing;
-            for (const BookFormat &format : book->formats) {
-                if (format.file.isEmpty())
-                    missing.append(format.format);
-            }
             books.append(QVariantMap{
                 { QStringLiteral("id"), id },
                 { QStringLiteral("title"), book->title },
                 { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
                 { QStringLiteral("formats"), present(*book) },
-                { QStringLiteral("missing"), missing },
                 { QStringLiteral("added"), QLocale().toString(book->timestamp.toLocalTime().date(), QLocale::ShortFormat) },
                 { QStringLiteral("cover"), book->coverFile.isEmpty()
                       ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
@@ -1646,7 +2421,7 @@ void BookLibrary::rebuildCheck()
               { QStringLiteral("key"), LibraryCheck::key(file) },
               { QStringLiteral("path"), file.path },
               { QStringLiteral("folder"), file.folder },
-              { QStringLiteral("size"), file.folder ? QString() : sizeText(file.size) },
+              { QStringLiteral("size"), file.folder ? QString() : BookDisplay::fileSize(file.size) },
               { QStringLiteral("bookId"), file.book } });
     }
 
@@ -1707,7 +2482,8 @@ void BookLibrary::rebuildTrash()
 
 const Book *BookLibrary::findBook(int bookId) const
 {
-    return bookId > 0 ? m_data.book(bookId) : nullptr;
+    const qsizetype row = m_index.rowOf.value(bookId, -1);
+    return row >= 0 ? &m_data.books.at(row) : nullptr;
 }
 
 const QList<FacetItem> *BookLibrary::facetItems(const QString &kind) const

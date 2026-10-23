@@ -3,7 +3,9 @@
 // Ported from Calibre, https://calibre-ebook.com, Copyright (C) Kovid Goyal,
 // GPL v3:
 // - src/calibre/db/backend.py: the SQL functions, aggregates and temporary
-//   author triggers of a connection, and format_abspath()
+//   author triggers of a connection, format_abspath(), and the custom
+//   columns initialize_custom_columns() keeps, with their separators
+// - src/calibre/db/tables.py: how the custom columns' tables are read
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
@@ -30,7 +32,10 @@
 #include <sys/stat.h>
 #endif
 
+#include "annotation_search.h"
 #include "calibre_date.h"
+#include "calibre_fts.h"
+#include "calibre_template.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -375,6 +380,11 @@ bool prepareConnection(SqliteDb &db, const CalibreText::Tweaks &tweaks, const QS
     sqlite3_busy_timeout(handle, 10000);
     if (!db.exec(QStringLiteral("PRAGMA cache_size=-5000; PRAGMA temp_store=2; PRAGMA foreign_keys=ON;"), error))
         return false;
+    // Calibre's full text tokenizer in place of SQLite's, as Calibre's
+    // connections have it: the annotations' index is made with it. Without
+    // FTS5, a write that needs it fails there.
+    QString ftsError;
+    CalibreFts::registerTokenizers(handle, interfaceLanguage, &ftsError);
 
     constexpr int flags = SQLITE_UTF8 | SQLITE_INNOCUOUS;
     constexpr int pure = flags | SQLITE_DETERMINISTIC;
@@ -494,7 +504,126 @@ bool isKnownSchema(int userVersion, const QString &fingerprint)
     });
 }
 
-bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
+PythonJson::Value multipleSeparators(const CustomColumn &column)
+{
+    PythonJson::Value separators = PythonJson::Value::dict();
+    if (!column.multiple)
+        return separators;
+    const PythonJson::Value display = PythonJson::parse(column.display);
+    const PythonJson::Value *names = display.find(QStringLiteral("is_names"));
+    QString cache = QStringLiteral("|");
+    QString ui = QStringLiteral(",");
+    QString list = QStringLiteral(", ");
+    if (names && PythonJson::truthy(*names)) {
+        ui = QStringLiteral("&");
+        list = QStringLiteral(" & ");
+    } else if (column.datatype == QLatin1String("composite")) {
+        cache = QStringLiteral(",");
+    }
+    separators.insert(QStringLiteral("cache_to_list"), PythonJson::Value::from(cache));
+    separators.insert(QStringLiteral("ui_to_list"), PythonJson::Value::from(ui));
+    separators.insert(QStringLiteral("list_to_ui"), PythonJson::Value::from(list));
+    return separators;
+}
+
+bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *error)
+{
+    columns->clear();
+    QStringList tables;
+    if (!forEachRow(db, QStringLiteral("SELECT name FROM sqlite_master WHERE type='table'"),
+                    [&](SqliteStatement &row) { tables.append(row.text(0)); }, error)
+        || !forEachRow(db, QStringLiteral("SELECT id, label, name, datatype, is_multiple, normalized, editable, display "
+                                          "FROM custom_columns WHERE mark_for_delete=0 ORDER BY id"),
+                       [&](SqliteStatement &row) {
+                           CustomColumn column;
+                           column.id = int(row.integer(0));
+                           column.label = row.text(1);
+                           column.name = row.text(2);
+                           column.datatype = row.text(3);
+                           column.multiple = row.integer(4) != 0;
+                           column.normalized = row.integer(5) != 0;
+                           column.editable = row.integer(6) != 0;
+                           column.display = row.text(7).toUtf8();
+                           columns->append(column);
+                       }, error)) {
+        return false;
+    }
+    // initialize_custom_columns() leaves out a column whose tables are gone.
+    columns->removeIf([&tables](const CustomColumn &column) {
+        const QString table = QStringLiteral("custom_column_%1").arg(column.id);
+        const QString link = QStringLiteral("books_custom_column_%1_link").arg(column.id);
+        return !tables.contains(table) || (column.normalized && !tables.contains(link));
+    });
+    return true;
+}
+
+// The custom columns and each book's values, as Calibre's tables read them
+// in db/tables.py: a normalized column's items by link order, a series'
+// number from its link's extra, the others one row per book. A composite's
+// values are Calibre's to compute.
+template<typename BookWithId>
+bool readCustomValues(SqliteDb &db, QList<Book> &books, const BookWithId &bookWithId, QList<CustomColumn> *columns,
+                      QString *error)
+{
+    if (!readCustomColumns(db, columns, error))
+        return false;
+    for (Book &book : books)
+        book.custom.resize(columns->size());
+
+    for (qsizetype index = 0; index < columns->size(); ++index) {
+        const CustomColumn &column = columns->at(index);
+        if (column.datatype == QLatin1String("composite"))
+            continue;
+        const auto convert = [&column](SqliteStatement &row, int at) -> QVariant {
+            if (row.isNull(at))
+                return {};
+            const QString &type = column.datatype;
+            if (type == QLatin1String("int") || type == QLatin1String("rating"))
+                return row.integer(at);
+            if (type == QLatin1String("float"))
+                return row.real(at);
+            if (type == QLatin1String("bool"))
+                return row.integer(at) != 0;
+            if (type == QLatin1String("datetime"))
+                return parseDate(row.value(at));
+            return row.text(at);
+        };
+        const bool series = column.datatype == QLatin1String("series");
+        const QString sql = column.normalized
+            ? QStringLiteral("SELECT l.book, v.value%1 FROM books_custom_column_%2_link l "
+                             "JOIN custom_column_%2 v ON v.id=l.value ORDER BY l.id")
+                  .arg(series ? QStringLiteral(", l.extra") : QString()).arg(column.id)
+            : QStringLiteral("SELECT book, value FROM custom_column_%1").arg(column.id);
+        if (!forEachRow(db, sql, [&](SqliteStatement &row) {
+                Book *book = bookWithId(row.integer(0));
+                if (!book)
+                    return;
+                CustomValue &value = book->custom[index];
+                const QVariant read = convert(row, 1);
+                if (column.multiple) {
+                    QStringList values = value.value.toStringList();
+                    values.append(read.toString());
+                    value.value = values;
+                } else {
+                    value.value = read;
+                }
+                if (series)
+                    value.seriesIndex = row.isNull(2) ? 1.0 : row.real(2);
+            }, error)) {
+            return false;
+        }
+        // A book with none of several values has an empty list.
+        if (column.multiple) {
+            for (Book &book : books) {
+                if (book.custom[index].value.isNull())
+                    book.custom[index].value = QStringList();
+            }
+        }
+    }
+    return true;
+}
+
+bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLanguage, QString *error)
 {
     data->userVersion = db.value(QStringLiteral("PRAGMA user_version")).toInt();
     data->schemaFingerprint = schemaFingerprint(db);
@@ -504,6 +633,14 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
     const double expiry = db.value(QStringLiteral("SELECT val FROM preferences WHERE key='expire_old_trash_after'"))
                               .toString().toDouble(&expiryOk);
     data->trashExpirySeconds = expiryOk ? std::max<qint64>(24 * 3600, qint64(expiry)) : 14 * 24 * 3600;
+
+    for (const char *key : { "saved_searches", "virtual_libraries", "grouped_search_terms", "user_categories",
+                             "virtual_lib_on_startup", "bools_are_tristate", "library_view books view state" }) {
+        SqliteStatement preference(db, QStringLiteral("SELECT val FROM preferences WHERE key=?"));
+        preference.bind(1, QString::fromLatin1(key));
+        if (preference.step())
+            data->preferences.insert(QString::fromLatin1(key), preference.text(0));
+    }
 
     QList<Book> books;
     QHash<int, qsizetype> rows;
@@ -610,7 +747,7 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
         && forEachRow(db, QStringLiteral("SELECT id, lang_code FROM languages"), [&](SqliteStatement &row) {
             // Shown by name; the code stays in `sort`.
             const QString code = row.text(1);
-            languages.insert(int(row.integer(0)), { int(row.integer(0)), CalibreText::languageName(code), code, 0, {} });
+            languages.insert(int(row.integer(0)), { int(row.integer(0)), CalibreText::languageName(code, interfaceLanguage), code, 0, {} });
         }, error)
         && forEachRow(db, QStringLiteral("SELECT book, lang_code FROM books_languages_link ORDER BY id"),
                       [&](SqliteStatement &row) {
@@ -640,6 +777,15 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                       [&](SqliteStatement &row) {
                           if (Book *book = bookWithId(row.integer(0)))
                               book->conversionOptions = row.blob(1);
+                      }, error)
+        && forEachRow(db, QStringLiteral("SELECT book, pages FROM books_pages_link"), [&](SqliteStatement &row) {
+            if (Book *book = bookWithId(row.integer(0)))
+                book->pages = row.isNull(1) ? -1 : int(row.integer(1));
+        }, error)
+        && forEachRow(db, QStringLiteral("SELECT book, format, user, device, cfi, epoch, pos_frac FROM last_read_positions"),
+                      [&](SqliteStatement &row) {
+                          data->readPositions[int(row.integer(0))].append(
+                              { row.text(1).toUpper(), row.text(2), row.text(3), row.text(4), row.real(5), row.real(6) });
                       }, error);
     if (!ok)
         return false;
@@ -649,50 +795,48 @@ bool readLibrary(SqliteDb &db, LibraryData *data, QString *error)
                   [](const BookFormat &a, const BookFormat &b) { return a.format < b.format; });
     }
 
+    if (!readCustomValues(db, books, bookWithId, &data->customColumns, error))
+        return false;
+
     data->books = std::move(books);
     data->authors = facetItems(authors, authorCounts);
     data->series = facetItems(series, seriesCounts);
     data->tags = facetItems(tags, tagCounts);
     data->publishers = facetItems(publishers, publisherCounts);
     data->languages = facetItems(languages, languageCounts);
+    data->annotationCount = AnnotationSearch::count(db);
+    if (!data->libraryPath.isEmpty())
+        readNotes(data);
     return true;
 }
 
-void findFiles(LibraryData *data)
+QString formatFile(const QString &folder, const QString &name, const QString &format)
+{
+    const QString extension = u'.' + format.toLower();
+    const QString expected = QDir(folder).filePath(name + extension);
+    if (QFileInfo(expected).isFile())
+        return expected;
+    const QStringList entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
+    for (const QString &entry : entries) {
+        if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._")))
+            return QDir(folder).filePath(entry);
+    }
+    return {};
+}
+
+void findFiles(LibraryData *data, const QSet<int> *only)
 {
     const QDir library(data->libraryPath);
     for (Book &book : data->books) {
+        if (only && !only->contains(book.id))
+            continue;
         const QString folder = library.filePath(book.path);
         const QFileInfo cover(QDir(folder).filePath(QStringLiteral("cover.jpg")));
         book.coverFile = !book.path.isEmpty() && cover.isFile() ? cover.filePath() : QString();
         book.coverModified = book.coverFile.isEmpty()
             ? 0 : cover.fileTime(QFileDevice::FileModificationTime).toMSecsSinceEpoch();
-
-        QStringList entries;
-        bool listed = false;
-        for (BookFormat &format : book.formats) {
-            const QString extension = u'.' + format.format.toLower();
-            const QString expected = QDir(folder).filePath(format.name + extension);
-            if (!book.path.isEmpty() && QFileInfo(expected).isFile()) {
-                format.file = expected;
-                continue;
-            }
-            // format_abspath() renames a file found this way; Cousoir only
-            // reads it.
-            format.file.clear();
-            if (book.path.isEmpty())
-                continue;
-            if (!listed) {
-                entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
-                listed = true;
-            }
-            for (const QString &entry : std::as_const(entries)) {
-                if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._"))) {
-                    format.file = QDir(folder).filePath(entry);
-                    break;
-                }
-            }
-        }
+        for (BookFormat &format : book.formats)
+            format.file = book.path.isEmpty() ? QString() : formatFile(folder, format.name, format.format);
     }
 }
 
@@ -707,13 +851,61 @@ bool loadLibrary(const QString &libraryPath, const QString &snapshotPath, const 
     SqliteDb db;
     if (!db.open(snapshotPath, SqliteDb::Mode::Immutable, error)
         || !prepareConnection(db, config.tweaks, config.interfaceLanguage, error)
-        || !readLibrary(db, &loaded, error)) {
+        || !readLibrary(db, &loaded, config.interfaceLanguage, error)) {
         return false;
     }
     db.close();
     findFiles(&loaded);
+    CalibreTemplate::computeComposites(&loaded, config.interfaceLanguage);
     *data = std::move(loaded);
     return true;
+}
+
+QString notesFolder(const QString &libraryPath)
+{
+    return QDir(libraryPath).filePath(QStringLiteral(".calnotes"));
+}
+
+void readNotes(LibraryData *data)
+{
+    data->notes.clear();
+    const QString path = QDir(notesFolder(data->libraryPath)).filePath(QStringLiteral("notes.db"));
+    if (!QFileInfo::exists(path))
+        return;
+    // Read without a lock or a file beside it, as metadata.db's copy is.
+    SqliteDb db;
+    QString error;
+    if (!db.open(path, SqliteDb::Mode::Immutable, &error))
+        return;
+    QHash<int, QPair<QString, int>> byId;
+    for (const QVariantList &row :
+         db.rows(QStringLiteral("SELECT id, item, colname, doc, searchable_text, ctime, mtime FROM notes"))) {
+        const QString field = row.value(2).toString().toLower();
+        const int item = row.value(1).toInt();
+        ItemNote note;
+        note.id = row.value(0).toInt();
+        note.doc = row.value(3).toString();
+        note.searchable = row.value(4).toString();
+        note.created = row.value(5).toDouble();
+        note.modified = row.value(6).toDouble();
+        data->notes[field].insert(item, note);
+        byId.insert(note.id, { field, item });
+    }
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT note, resource FROM notes_resources_link"))) {
+        const auto found = byId.constFind(row.value(0).toInt());
+        if (found != byId.cend())
+            data->notes[found->first][found->second].resources.append(row.value(1).toString());
+    }
+}
+
+QString notesField(const QString &kind)
+{
+    static const QHash<QString, QString> fields{
+        { QStringLiteral("authors"), QStringLiteral("authors") },     { QStringLiteral("series"), QStringLiteral("series") },
+        { QStringLiteral("tags"), QStringLiteral("tags") },           { QStringLiteral("publishers"), QStringLiteral("publisher") },
+        { QStringLiteral("languages"), QStringLiteral("languages") },
+    };
+    return fields.value(kind);
 }
 
 QDateTime undefinedDate()

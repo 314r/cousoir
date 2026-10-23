@@ -2,10 +2,12 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QHash>
 #include <QList>
 #include <QPair>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 // One file of a book, from Calibre's data table.
 struct BookFormat
@@ -17,6 +19,35 @@ struct BookFormat
     qint64 size = 0;
     // The file found in the book's folder; empty when it is missing.
     QString file;
+};
+
+// A custom column of the library, as custom_columns describes it.
+struct CustomColumn
+{
+    int id = 0;
+    // "genre" for #genre.
+    QString label;
+    QString name;
+    // text, comments, series, enumeration, int, float, rating, datetime,
+    // bool or composite.
+    QString datatype;
+    // Several values per book, as tags have.
+    bool multiple = false;
+    // Its values are items with a link table, as authors and tags are.
+    bool normalized = false;
+    bool editable = true;
+    // How Calibre shows it, as JSON: the template of a composite, the values
+    // of an enumeration, half stars.
+    QByteArray display;
+};
+
+// A book's value of a custom column: null when it has none. A list for a
+// column of several values; else text, a number, a date or true and false.
+struct CustomValue
+{
+    QVariant value;
+    // The book's number in a series column.
+    double seriesIndex = 1;
 };
 
 // A row of Calibre's books table and the items linked to it. Ids are those
@@ -52,6 +83,9 @@ struct Book
     QString path;
     QString uuid;
     bool hasCover = false;
+    // Its page count, as Calibre counted it; 0 until it does, -1 without a
+    // row in books_pages_link.
+    int pages = -1;
     // HTML.
     QString comments;
     // Sorted by format, like Calibre.
@@ -59,6 +93,9 @@ struct Book
     // The settings Calibre's last conversion of the book saved for the next
     // one, its conversion_options row as stored; empty when there is none.
     QByteArray conversionOptions;
+
+    // Its custom columns' values, in the order of the library's columns.
+    QList<CustomValue> custom;
 
     // From the book's folder rather than the database: its cover.jpg, empty
     // when there is none, and the cover's modification time in ms.
@@ -90,6 +127,54 @@ struct FileIdentity
     bool operator==(const FileIdentity &) const = default;
 };
 
+// Where a reader stopped in a book, as Calibre keeps it in
+// last_read_positions: its viewer (user "local", device
+// "calibre-desktop-viewer"), its content server, or Cousoir's reader.
+struct ReadPosition
+{
+    QString format;
+    QString user;
+    QString device;
+    // "epubcfi(/6/2/4/2/1:120)".
+    QString cfi;
+    // Seconds since 1970.
+    double epoch = 0;
+    // How far into the book, 0 to 1.
+    double fraction = 0;
+};
+
+// A highlight or bookmark of Calibre's viewer, a row of its annotations
+// table: user type "local", user "viewer".
+struct Annotation
+{
+    QString format;
+    // "highlight" or "bookmark".
+    QString type;
+    QString id;
+    // Seconds since 1970.
+    double timestamp = 0;
+    // Its JSON, as the viewer keeps it.
+    QByteArray data;
+    // The text a search finds it by.
+    QString searchable;
+};
+
+// A note of Calibre 7 on an item, an author, series, tag or publisher, as
+// .calnotes/notes.db keeps it.
+struct ItemNote
+{
+    int id = 0;
+    // HTML; its images as calres:// addresses of resources.
+    QString doc;
+    // The item's name, a line, then the note's text: what a search finds.
+    QString searchable;
+    // Seconds since 1970.
+    double created = 0;
+    double modified = 0;
+    // The resources' hashes it uses, "xxh64:5f8c87fa2ca5d829".
+    QStringList resources;
+};
+
 struct LibraryData
 {
     QString libraryPath;
@@ -109,6 +194,20 @@ struct LibraryData
     qint64 trashExpirySeconds = 14 * 24 * 3600;
     // metadata.db as it was copied.
     FileIdentity source;
+    // The custom columns, by id.
+    QList<CustomColumn> customColumns;
+    // Where readers stopped, by book.
+    QHash<int, QList<ReadPosition>> readPositions;
+    // The notes on items, by Calibre's field ("authors", "publisher",
+    // "#genre") then by item id.
+    QHash<QString, QHash<int, ItemNote>> notes;
+    // How many highlights and bookmarks the library keeps, the removed
+    // aside.
+    int annotationCount = 0;
+    // The preferences a search reads, by key, as JSON: saved searches,
+    // virtual libraries, grouped search terms and user categories; and the
+    // columns and sort Calibre's list last had.
+    QHash<QString, QString> preferences;
 
     // The book with that id, or nullptr.
     const Book *book(int id) const

@@ -5,13 +5,23 @@
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
+#include "metadata_downloader.h"
 #include "device_library.h"
+#include "highlight_browser.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
 #include "system_appearance.h"
 
+#ifdef COUSOIR_READER
+#include "book_reader.h"
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef COUSOIR_READER
+    // Before the application: the books' addresses, and WebEngine.
+    BookReader::initialize();
+#endif
     QGuiApplication app(argc, argv);
 
     app.setOrganizationName(QStringLiteral("cousoir"));
@@ -25,7 +35,12 @@ int main(int argc, char *argv[])
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
+    qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
+    qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+#ifdef COUSOIR_READER
+    qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
+#endif
     qmlRegisterType<OmarchyTheme>("Cousoir", 1, 0, "OmarchyTheme");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
 

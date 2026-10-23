@@ -31,6 +31,7 @@
 #include "book_operations.h"
 #include "calibre_db.h"
 #include "calibre_lock.h"
+#include "calibre_template.h"
 #include "field_writers.h"
 #include "file_transaction.h"
 #include "opf.h"
@@ -38,6 +39,18 @@
 #include "sqlite_db.h"
 
 namespace {
+
+// The composite columns' values of the books whose metadata.opf is
+// written: found with their files, which templates may read.
+void withComposites(LibraryData *data, const QString &interfaceLanguage, const QSet<int> &books)
+{
+    const bool composites = std::any_of(data->customColumns.cbegin(), data->customColumns.cend(),
+                                        [](const CustomColumn &c) { return c.datatype == QLatin1String("composite"); });
+    if (!composites)
+        return;
+    CalibreDb::findFiles(data, &books);
+    CalibreTemplate::computeComposites(data, interfaceLanguage, &books);
+}
 
 using CommitEngine::Request;
 using CommitEngine::Result;
@@ -141,6 +154,12 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         return fail(QObject::tr("Calibre is open on this computer: close it to change the library."));
     if (CalibreDb::hasJournal(database))
         return fail(QObject::tr("Calibre is writing to the library. Try again in a moment."));
+    // Notes go to their own database, under the same lock.
+    if (!request.notes.isEmpty()) {
+        if (!CalibreNotes::apply(request.libraryPath, request.notes, request.config.interfaceLanguage, &error))
+            return fail(error);
+        result->notesWritten = true;
+    }
 
     const FileIdentity before = CalibreDb::identify(database);
     const QByteArray original = readFile(database, &error);
@@ -188,15 +207,37 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         files.rollback(nullptr);
         return fail(message);
     };
-    for (const BookEdit &edit : request.edits) {
+    const auto applyEdit = [&](const BookEdit &edit) {
         const QSet<int> dirtiedBefore = std::exchange(state.dirtied, {});
         if (!FieldWriters::apply(db, edit, context, &state, &error))
-            return undo(error);
+            return false;
         // Cache.set_field() moves the files of every book a title or author
         // change touched.
         if (edit.movesFiles())
             moved.unite(state.dirtied);
         state.dirtied.unite(dirtiedBefore);
+        return true;
+    };
+    for (const BookEdit &edit : request.edits) {
+        if (!applyEdit(edit))
+            return undo(error);
+    }
+    for (const BulkEdit &bulk : request.bulkEdits) {
+        LibraryData current;
+        current.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
+        if (!CalibreDb::readLibrary(db, &current, request.config.interfaceLanguage, &error))
+            return undo(error);
+        for (const int id : bulk.bookIds) {
+            const Book *book = current.book(id);
+            const bool kept = std::any_of(result->bulkBefore.cbegin(), result->bulkBefore.cend(),
+                                          [id](const Book &before) { return before.id == id; });
+            if (book && !kept)
+                result->bulkBefore.append(*book);
+        }
+        for (const BookEdit &edit : bulk.edits(current, request.config.tweaks)) {
+            if (!applyEdit(edit))
+                return undo(error);
+        }
     }
     for (const int book : std::as_const(moved)) {
         if (!BookOperations::updatePath(db, files, request.libraryPath, book, unknown, &error))
@@ -220,10 +261,12 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     if (!request.trash.isEmpty()) {
         // The books as they are now, for their metadata.opf.
         trashed.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-        if (!CalibreDb::readLibrary(db, &trashed, &error))
+        if (!CalibreDb::readLibrary(db, &trashed, request.config.interfaceLanguage, &error))
             return undo(error);
+        withComposites(&trashed, request.config.interfaceLanguage,
+                       QSet<int>(request.trash.cbegin(), request.trash.cend()));
         operations.before = &trashed;
-        if (!BookOperations::removeBooks(db, files, request.trash, operations, &done, &error))
+        if (!BookOperations::removeBooks(db, files, request.trash, operations, &error))
             return undo(error);
         operations.before = nullptr;
     }
@@ -241,6 +284,14 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     }
     for (const auto &options : request.conversionOptions) {
         if (!BookOperations::setConversionOptions(db, options.first, options.second, &error))
+            return undo(error);
+    }
+    for (const auto &[bookId, position] : request.readPositions) {
+        if (!BookOperations::setReadPosition(db, bookId, position, &error))
+            return undo(error);
+    }
+    for (const auto &[bookId, annotation] : request.annotations) {
+        if (!BookOperations::setAnnotation(db, bookId, annotation, &error))
             return undo(error);
     }
 
@@ -273,10 +324,11 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     // dates of the books added and restored as Calibre holds them then.
     LibraryData data;
     data.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-    if (!CalibreDb::readLibrary(db, &data, &error)) {
+    if (!CalibreDb::readLibrary(db, &data, request.config.interfaceLanguage, &error)) {
         files.rollback(nullptr);
         return fail(error);
     }
+    withComposites(&data, request.config.interfaceLanguage, dirtied);
     QHash<int, Opf::ExactDates> exactDates;
     for (const int id : done.added + done.restored) {
         SqliteStatement dates(db, QStringLiteral("SELECT pubdate, timestamp FROM books WHERE id=?"));

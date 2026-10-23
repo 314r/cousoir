@@ -1,6 +1,5 @@
 #include <QtTest>
 
-#include <QDirIterator>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -11,6 +10,7 @@
 #include "calibre_job.h"
 #include "commit_engine.h"
 #include "conversion.h"
+#include "kepub.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -26,28 +26,25 @@ QByteArray pickled(const QByteArray &raw)
     return data + raw + '.';
 }
 
-// The text of every HTML file of an EPUB.
-QByteArray epubText(const QString &path)
+// One file of a ZIP archive.
+QByteArray zipEntry(const QString &path, const QString &name)
 {
     int error = 0;
     zip_t *archive = zip_open(QFile::encodeName(path).constData(), ZIP_RDONLY, &error);
     if (!archive)
         return {};
-    QByteArray text;
-    for (zip_int64_t index = 0; index < zip_get_num_entries(archive, 0); ++index) {
-        const QString name = QString::fromUtf8(zip_get_name(archive, index, 0));
-        zip_stat_t stat;
-        if (!name.contains(QStringLiteral("htm")) || zip_stat_index(archive, index, 0, &stat) != 0)
-            continue;
-        zip_file_t *file = zip_fopen_index(archive, index, 0);
-        QByteArray data(qsizetype(stat.size), Qt::Uninitialized);
-        if (file && zip_fread(file, data.data(), stat.size) == zip_int64_t(stat.size))
-            text += data;
+    QByteArray data;
+    zip_stat_t stat;
+    if (zip_stat(archive, name.toUtf8().constData(), 0, &stat) == 0) {
+        zip_file_t *file = zip_fopen(archive, name.toUtf8().constData(), 0);
+        data.resize(qsizetype(stat.size));
+        if (!file || zip_fread(file, data.data(), stat.size) != zip_int64_t(stat.size))
+            data.clear();
         if (file)
             zip_fclose(file);
     }
     zip_close(archive);
-    return text;
+    return data;
 }
 
 QStringList entries(const QString &path)
@@ -288,6 +285,50 @@ private slots:
         QVERIFY(text.contains("L'Écume des jours") || text.contains("L’Écume des jours"));
         // Calibre's temporary files stayed in the job's folder.
         QVERIFY(QFileInfo(folder.filePath(QStringLiteral("tmp"))).isDir());
+    }
+
+    // Cousoir's own KEPUB: each page as Calibre's kepubify writes it, the
+    // library's metadata and cover in the package.
+    void makesKepubsWithoutCalibre()
+    {
+        QTemporaryDir folder;
+        const QString kepub = folder.filePath(QStringLiteral("rich.kepub"));
+        Kepub::Options options;
+        Kepub::Metadata metadata;
+        metadata.title = QStringLiteral("L'Écume des jours");
+        metadata.authors = { QStringLiteral("Boris Vian") };
+        metadata.authorSort = QStringLiteral("Vian, Boris");
+        metadata.languages = { QStringLiteral("fra") };
+        metadata.series = QStringLiteral("Romans");
+        metadata.seriesIndex = 2;
+        metadata.tags = { QStringLiteral("Roman") };
+        options.metadata = metadata;
+        QString error;
+        QVERIFY2(Kepub::kepubify(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kepub/rich.epub"), kepub, options, &error),
+                 qPrintable(error));
+        QFile expected(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kepub/chapter 1 by calibre.xhtml"));
+        QVERIFY(expected.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(zipEntry(kepub, QStringLiteral("OEBPS/text/chapter 1.xhtml"))),
+                 QString::fromUtf8(expected.readAll()));
+        QVERIFY(entries(kepub).contains(QStringLiteral("kobo.js")));
+        QCOMPARE(entries(kepub).first(), QStringLiteral("mimetype"));
+        // The book opens on its cover page: no title page is added.
+        QVERIFY(!entries(kepub).join(u' ').contains(QStringLiteral("kobo-title-page")));
+        const QString opf = QString::fromUtf8(zipEntry(kepub, QStringLiteral("OEBPS/content.opf")));
+        QVERIFY(opf.contains(QStringLiteral("<dc:language>fra</dc:language>")));
+        QVERIFY(opf.contains(QStringLiteral("<meta name=\"calibre:series\" content=\"Romans\"/>")));
+        QVERIFY(opf.contains(QStringLiteral("<meta name=\"calibre:series_index\" content=\"2\"/>")));
+        QVERIFY(opf.contains(QStringLiteral("<dc:subject>Roman</dc:subject>")));
+        QVERIFY(opf.contains(QStringLiteral("href=\"../kobo.js\"")));
+
+        // A book that opens on text gets a title page; one that is no EPUB
+        // is refused.
+        const QString vian = QStringLiteral(COUSOIR_TEST_DATA_DIR "/library/Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.epub");
+        QVERIFY(Kepub::kepubify(vian, folder.filePath(QStringLiteral("vian.kepub")), {}, &error));
+        QVERIFY(entries(folder.filePath(QStringLiteral("vian.kepub"))).contains(QStringLiteral("kobo-title-page-generated-by-calibre.xhtml")));
+        QVERIFY(!Kepub::kepubify(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kepub/chapter 1 by calibre.xhtml"),
+                                 folder.filePath(QStringLiteral("none.kepub")), {}, &error));
+        QVERIFY(!error.isEmpty());
     }
 };
 

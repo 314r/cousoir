@@ -32,37 +32,65 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 📚 **Your Calibre library, as it is.** Cousoir opens the library Calibre
   opens and works on Calibre's own `metadata.db`. Nothing to import, no second
   database.
-- 🖼️ **A table or a wall of covers.** Sort by title, author, series, date added or rating, in Calibre's own order:
-  *Le Petit Prince* files under "Petit Prince, Le".
-- 🔍 **Find anything.** Search titles, authors, series and tags, with or
-  without accents, or browse by author, series, tag, language and publisher.
+- 🖼️ **A table or a wall of covers.** Pick the columns, custom ones
+  included, and sort by any of them in Calibre's own order: *Le Petit
+  Prince* files under "Petit Prince, Le". Each library keeps its columns,
+  Calibre's at first.
+- 🔍 **Search like Calibre.** Calibre's own search language, `tag:sf
+  rating:>=4 not author:vian`, templates included, finding exactly the
+  books Calibre finds, with
+  your saved searches in the sidebar and your virtual libraries a click
+  away. Or browse by author, series, tag, language and publisher.
 - ✏️ **Edit in place.** Title, authors, series, tags, rating, publisher,
-  languages, dates and identifiers save as you leave the field. Drop or paste
-  an image to change the cover.
-- ➕ **Add books by dropping them.** Files or whole folders. Their metadata is
-  read as `calibredb add` reads it, and Cousoir asks before adding a book you
-  already have.
+  languages, dates, identifiers and your custom columns save as you leave
+  the field, and composite columns compute as in Calibre; the description edits as text, with **bold**, *italics*, lists
+  and links.
+  Drop or paste an image to change the cover.
+- 📚 **Many books at once.** Select with Ctrl, Shift or Ctrl+A, then trash,
+  convert, send, or edit them together as Calibre's bulk edit does: tags
+  added and removed, a series numbered, and Undo if you change your mind.
+- ➕ **Add books by dropping them.** Files or whole folders. Their metadata,
+  custom columns included, is read as Calibre reads it, and Cousoir asks
+  before adding a book you already have.
 - 🗑️ **A trash shared with Calibre.** Books and files go to the library's own
   trash and come back with Restore, from Cousoir or from Calibre.
 - 🩺 **A check-up for your library.** The Check section finds the same book
   added twice, an author filed under several names, books whose files are
   gone and files the database doesn't know. Keep one copy, merge the names or
   tidy the entries in a click, or ignore what you meant.
-- 🔄 **Convert with Calibre.** KEPUB for a Kobo, AZW3 for a Kindle, using your
-  Calibre conversion settings.
+- 🌐 **Metadata and covers from the web.** Calibre's own sources look the
+  book up, or Open Library when Calibre isn't installed; pick the fields to
+  take beside your values, and a cover among those found. Revert undoes it.
+- 🔄 **Convert for your reader.** KEPUB for a Kobo, AZW3 for a Kindle, with
+  Calibre and your conversion settings. Without Calibre, Cousoir makes the
+  KEPUB of an EPUB itself.
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
   exactly where Calibre puts them, and each app recognises the books the other
-  sent.
+  sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and writes a
+  Kindle book's metadata itself.
+- 📖 **Read in Cousoir.** EPUBs a page at a time in your theme, with their
+  table of contents, and PDFs. Your place and your highlights are kept
+  where Calibre's viewer keeps its own: each opens where the other stopped
+  and shows the other's highlights.
+- 🔎 **All your highlights in one place.** Every highlight and bookmark
+  from Cousoir's reader and Calibre's viewer, by book, searched as
+  Calibre searches them, opened in the reader where they are, exported
+  as Markdown.
+- 🖍️ **Your reading, back from the Kobo and the Kindle.** How far you got in
+  each book on a Kobo, and your highlights and notes, by chapter on a Kobo
+  and from "My Clippings" on a Kindle, copied or saved as Markdown, still
+  there once the reader is unplugged.
 - 🛡️ **Safe, shared or not.** Cousoir writes only when nothing else can:
   Calibre closed and, for a library in Dropbox, Syncthing, Nextcloud or on a
   network folder, no other computer editing.
 - 🎨 **Wears your Omarchy theme**, or follows your system's light or dark
   mode.
-- ⌨️ **Keyboard-first.** Every action has a shortcut, and the status bar shows
-  the ones that matter right now.
-- 🧰 **A command line, too.** `cousoir-cli` lists a library exactly as
-  `calibredb list` does, checks its health, and applies changes from a JSON
-  file.
+- ⌨️ **Keyboard-first.** Every action has a shortcut, the status bar shows
+  the ones that matter right now, and Ctrl+K finds any book, author, series,
+  tag, section or action by a few letters.
+- 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
+  exactly as `calibredb list` and `calibredb search` do, checks its health,
+  applies changes from a JSON file, and makes KEPUBs.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -73,19 +101,21 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 On Arch Linux and Omarchy:
 
 ```bash
-sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg sqlite libzip libmtp calibre
+sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine sqlite libzip icu libstemmer xxhash libmtp calibre
 git clone https://github.com/314r/cousoir.git
 cd cousoir
 make install
 ```
 
-On other distributions, you need Qt 6.9 or later, SQLite, libzip, CMake 3.21
-or later and a C++20 compiler; libmtp for a Kindle. [DOC.md](DOC.md) has the
-details.
+On other distributions, you need Qt 6.9 or later, SQLite, libzip, ICU, Snowball's libstemmer, xxHash, CMake 3.21
+or later and a C++20 compiler; libmtp for a Kindle; Qt WebEngine for the
+reader. [DOC.md](DOC.md) has the details.
 
-> **About Calibre:** Cousoir browses and edits a library on its own, but
-> Calibre itself converts books, sends them to a reader and reads the metadata
-> of formats other than EPUB, KEPUB, MOBI, AZW3 and PDF, so install it too.
+> **About Calibre:** Cousoir browses and edits a library, sends to a Kobo
+> or a Kindle, downloads metadata and reads books on its own. Calibre
+> itself converts to AZW3, downloads metadata from its own sources, and reads
+> the metadata of formats other than EPUB, KEPUB, MOBI, AZW3 and PDF: install
+> it too if you need those.
 
 Cousoir installs under `~/.local` and appears in your app launcher. Set
 `PREFIX` to install it somewhere else.
@@ -123,11 +153,14 @@ Cousoir installs under `~/.local` and appears in your app launcher. Set
 | Ctrl+N | Add books |
 | Ctrl+Shift+K, Ctrl+Shift+A | Convert the book to KEPUB or AZW3 |
 | Ctrl+D | Send the book to the reader plugged in |
-| Del | Move the book to the trash, or remove it from the reader |
+| Ctrl+click, Shift+click, Ctrl+A | Select several books, to act on or edit together |
+| Del | Move the selected books to the trash, or remove a book from the reader |
 | Ctrl+O | Open the book in your ebook reader |
+| Ctrl+Shift+O | Read the book in Cousoir |
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |
+| Ctrl+K | Find anything: a book, an author, a section, an action |
 | F5, Ctrl+R | Reload the library, or read the reader again |
 | Ctrl+I | Show or hide the book details pane |
 | Ctrl+V | Paste the clipboard's image as the cover |
@@ -150,8 +183,9 @@ library and keeps working exactly as before.
 - **Checked against Calibre itself.** The tests run Calibre and Cousoir side
   by side on the same libraries and compare every table, every file and every
   cover. `cousoir-cli list` matches `calibredb list` byte for byte.
-- **Calibre does the heavy lifting.** Conversions and transfers to readers run
-  Calibre's own converters and device drivers, with your settings.
+- **Calibre does the heavy lifting.** When Calibre is installed, conversions,
+  transfers to readers and metadata downloads run Calibre's own converters,
+  device drivers and sources, with your settings.
 - **Never in each other's way.** While Calibre is open, Cousoir only reads;
   while Cousoir saves, Calibre can't start.
 
@@ -178,8 +212,8 @@ The few places where Cousoir departs from Calibre on purpose are listed in
   library settings. A library only this computer changes is ready as soon as
   Calibre closes.
 - **Hands off your Kobo's database.** Cousoir only reads it.
-- **Nothing leaves your computer.** No accounts, no telemetry, no internet
-  access.
+- **Nothing leaves your computer.** No accounts, no telemetry; the web only
+  when you download a book's metadata and covers.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -212,9 +246,14 @@ Python to C++:
   books, formats and the trash;
 - 📖 **the metadata readers** for OPF 2 and 3, EPUB, MOBI, PDF and XMP, and
   the `metadata.opf` writer;
-- 📲 **how books on a Kobo or a Kindle are found** and matched with the
-  library, from Calibre's device drivers. The Kobo driver is the work of
-  Timothy Legge, Kovid Goyal and David Forrester.
+- 🔍 **the search language, the template language and the sort order**, so
+  that a search, a composite column or a sorted list come out as in Calibre;
+- 🖍️ **the reading positions and highlights** of Calibre's viewer, and the
+  notes Calibre keeps on authors, series, tags and publishers;
+- 📲 **how books are sent to a Kobo or a Kindle**, found there and matched
+  with the library, from Calibre's device drivers, and how a KEPUB is made,
+  from its kepubify. The Kobo driver is the work of Timothy Legge, Kovid
+  Goyal and David Forrester.
 
 And when Cousoir converts a book or sends it to a reader, Calibre itself does
 the work. [CREDITS.md](CREDITS.md) lists every piece of Calibre in Cousoir,
@@ -227,12 +266,14 @@ If Cousoir is useful to you, please
 > Calibre project. Please report Cousoir's bugs here, not to Calibre.
 
 Thanks also to Hiroshi Miura and John Schember for Unihandecode, and to Sean
-M. Burke for Text::Unidecode, which it grew from; to
+M. Burke for Text::Unidecode, which it grew from; to Grant Drake, whose Find
+Duplicates plugin gave the Check section its idea; to
 [kbextract](https://github.com/314r/kbextract) and JolieBulle, where Cousoir's
 structure, theming and Settings window come from; to bjarneo's
 [omadji](https://github.com/bjarneo/omadji), where its Omarchy theming comes
 from; to [Omarchy](https://omarchy.org) for the look; to [Lucide](https://lucide.dev)
-for a few icons; and to Qt, SQLite, libzip, libmtp and poppler.
+for a few icons; and to Qt, SQLite, libzip, ICU, Snowball, xxHash, libmtp and
+poppler.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 

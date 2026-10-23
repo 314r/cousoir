@@ -5,7 +5,7 @@
 // - src/calibre/ebooks/metadata/__init__.py: title_sort(),
 //   get_title_sort_pat(), quote_pairs, author_to_author_sort(),
 //   remove_bracketed_text(), string_to_authors(), authors_to_string(),
-//   check_isbn() and check_doi()
+//   check_isbn(), check_doi() and fmt_sidx()
 // - resources/default_tweaks.py: the title sort articles and the author sort
 //   word lists
 // - src/calibre/__init__.py: sanitize_file_name()
@@ -22,6 +22,8 @@
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
 #include "calibre_text.h"
+
+#include "calibre_languages.h"
 
 #include <QHash>
 #include <QLocale>
@@ -376,6 +378,9 @@ QString sqlAuthorToAuthorSort(const QString &author, const Tweaks &tweaks)
 
 QString canonicalizeLanguage(const QString &raw)
 {
+    // Calibre's own table when Calibre is there.
+    if (const std::optional<QString> code = CalibreLanguages::canonicalize(raw))
+        return *code;
     QString code = raw.toLower().trimmed();
     code.replace(u'_', u'-');
     code = code.section(u'-', 0, 0).section(u'@', 0, 0).trimmed();
@@ -514,12 +519,48 @@ QString checkDoi(const QString &text)
     return doi.match(text).captured(0);
 }
 
-QString languageName(const QString &code)
+QString languageAsIso6391(const QString &language)
 {
-    const QLocale::Language language = QLocale::codeToLanguage(code, QLocale::AnyLanguageCode);
-    if (language == QLocale::AnyLanguage)
-        return code;
-    return QLocale::languageToString(language);
+    const QString code = canonicalizeLanguage(language);
+    if (code.isEmpty())
+        return {};
+    if (const std::shared_ptr<const CalibreLanguages::Iso639> table = CalibreLanguages::iso639();
+        table && !table->threeToTwo.isEmpty())
+        return table->threeToTwo.value(code);
+    // Without Calibre's table, Qt's, which has the languages with two letter
+    // codes it knows.
+    const QLocale::Language qtLanguage = QLocale::codeToLanguage(code, QLocale::ISO639Part3);
+    return qtLanguage == QLocale::AnyLanguage ? QString() : QLocale::languageToCode(qtLanguage, QLocale::ISO639Part1);
+}
+
+QByteArray mobiLanguageCode(const QString &language)
+{
+    const QString two = languageAsIso6391(language);
+    int main = mobiCodes[0].main;
+    int sub = mobiCodes[0].sub;
+    for (const auto &entry : mobiCodes) {
+        if (!two.isEmpty() && two == QLatin1String(entry.language)) {
+            main = entry.main;
+            sub = entry.sub;
+        }
+    }
+    // pack('>HBB', 0, sub, main).
+    return QByteArray("\0\0", 2) + char(sub) + char(main);
+}
+
+QString seriesIndexText(double index)
+{
+    if (index == std::floor(index))
+        return QString::number(qint64(index));
+    QString text = QString::number(index, 'f', 2);
+    while (text.endsWith(u'0'))
+        text.chop(1);
+    return text;
+}
+
+QString languageName(const QString &code, const QString &interfaceLanguage)
+{
+    return CalibreLanguages::names(interfaceLanguage)->name(code);
 }
 
 QString asciiText(const QString &text)

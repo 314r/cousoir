@@ -72,11 +72,6 @@ qreal SystemAppearance::uiFontPointSize() const
     return resolvedPointSize(m_uiFont);
 }
 
-bool SystemAppearance::dark() const
-{
-    return m_dark;
-}
-
 bool SystemAppearance::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == qGuiApp
@@ -129,13 +124,12 @@ void SystemAppearance::reload()
     const QFont uiFont = QGuiApplication::font();
     const QFont fixedFont = QFontDatabase::systemFont(QFontDatabase::FixedFont);
 
-    const bool paletteDidChange = m_palette != palette || m_dark != dark;
+    const bool paletteDidChange = m_palette != palette;
     const bool fontsDidChange = m_uiFont != uiFont || m_fixedFont != fixedFont;
 
     m_palette = palette;
     m_uiFont = uiFont;
     m_fixedFont = fixedFont;
-    m_dark = dark;
 
     if (paletteDidChange)
         emit paletteChanged();

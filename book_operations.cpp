@@ -5,12 +5,13 @@
 // - src/calibre/db/cache.py: create_book_entry(), set_metadata(),
 //   _do_add_format(), remove_formats(), remove_books(),
 //   move_book_from_trash(), move_format_from_trash(),
-//   author_sort_from_authors(), get_next_series_num_for() and
-//   _add_newbook_tag()
+//   author_sort_from_authors(), get_next_series_num_for(),
+//   _add_newbook_tag() and _add_default_custom_column_values()
 // - src/calibre/db/backend.py: update_path(), add_format(), remove_formats(),
-//   remove_books(), move_book_to_trash(), list_trash_entries(),
-//   get_metadata_for_trash_book() and format_abspath()
+//   remove_books(), move_book_to_trash(), list_trash_entries() and
+//   get_metadata_for_trash_book()
 // - src/calibre/db/tables.py: update_fmt()
+// - src/calibre/db/write.py: the adapters' handling of a value's kind
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
@@ -114,22 +115,140 @@ QStringList folderEntries(const QString &folder)
     return entries;
 }
 
-// The custom columns, which Cousoir does not write.
-bool hasCustomColumns(SqliteDb &db)
+// What set_metadata() hands a custom column's writer, as FieldWriters takes
+// it: none where Calibre's adapter fails on the kind of value, which a new
+// book's set_metadata() ignores.
+std::optional<QVariant> customArgument(const CustomColumn &column, const PythonJson::Value &value)
 {
-    return db.rows(QStringLiteral("SELECT count(*) FROM custom_columns")).value(0).value(0).toInt() > 0;
+    using Kind = PythonJson::Value::Kind;
+    const QString &type = column.datatype;
+    if (column.multiple) {
+        // multiple_text(): nothing for a false value, a string split, else
+        // the strings of a list.
+        if (!PythonJson::truthy(value))
+            return QVariant(QStringList());
+        if (value.kind == Kind::String)
+            return QVariant(value.string);
+        if (value.kind != Kind::List)
+            return std::nullopt;
+        QStringList items;
+        for (const PythonJson::Value &item : value.items) {
+            if (item.kind != Kind::String)
+                return std::nullopt;
+            items.append(item.string);
+        }
+        return QVariant(items);
+    }
+    const bool number = type == QLatin1String("int") || type == QLatin1String("float")
+        || type == QLatin1String("rating");
+    switch (value.kind) {
+    case Kind::String:
+        return QVariant(value.string);
+    case Kind::Boolean:
+    case Kind::Integer:
+        if (number)
+            return QVariant(value.kind == Kind::Boolean ? qint64(value.boolean) : value.integer);
+        break;
+    case Kind::Float:
+        if (number)
+            return QVariant(value.real);
+        break;
+    case Kind::Dict:
+        // from_json(): a date as Calibre writes one.
+        if (type == QLatin1String("datetime") && value.text(QStringLiteral("__class__")) == QLatin1String("datetime.datetime")) {
+            const std::optional<CalibreDate> date = OpfReader::parseDate(value.text(QStringLiteral("__value__")), true);
+            if (!date)
+                return std::nullopt;
+            return QVariant(date->dateTime.addMSecs(date->microsecond / 1000));
+        }
+        break;
+    default:
+        break;
+    }
+    // adapt_bool(): bool() of anything.
+    if (type == QLatin1String("bool"))
+        return QVariant(PythonJson::truthy(value));
+    return std::nullopt;
 }
 
-// _add_default_custom_column_values(): whether a custom column gives new
-// books a value.
-bool hasCustomColumnDefaults(SqliteDb &db)
+// create_book_entry()'s custom fields. A book being added first takes the
+// values its custom columns give new books, where it has none
+// (_add_default_custom_column_values()); set_metadata() then writes each
+// field of the book that a column of the library takes: same type and, for
+// text, same separators.
+bool customFields(SqliteDb &db, const ImportedMetadata &mi, bool defaults, const QDateTime &now, BookEdit *edit,
+                  QString *error)
 {
-    for (const QVariantList &row : db.rows(QStringLiteral("SELECT display FROM custom_columns"))) {
-        const QJsonObject display = QJsonDocument::fromJson(row.at(0).toString().toUtf8()).object();
-        if (display.contains(QLatin1String("default_value")) && !display.value(QLatin1String("default_value")).isNull())
-            return true;
+    using PythonJson::Value;
+    QList<CustomColumn> columns;
+    if (!CalibreDb::readCustomColumns(db, &columns, error))
+        return false;
+    ImportedMetadata book;
+    book.userMetadata = mi.userMetadata;
+    for (const CustomColumn &column : std::as_const(columns)) {
+        const Value display = PythonJson::parse(column.display);
+        const Value *found = display.find(QStringLiteral("default_value"));
+        if (!defaults || column.datatype == QLatin1String("composite") || !found || found->kind == Value::Kind::Null)
+            continue;
+        const QString key = u'#' + column.label;
+        const bool had = book.userField(key);
+        if (!had) {
+            Value field = Value::dict();
+            field.insert(QStringLiteral("datatype"), Value::from(column.datatype));
+            field.insert(QStringLiteral("is_multiple"), CalibreDb::multipleSeparators(column));
+            field.insert(QStringLiteral("#value#"), Value::null());
+            field.insert(QStringLiteral("#extra#"), Value::null());
+            book.setUserMetadata(key, field);
+        }
+        // A date's default is "now", the time of adding, or a date as typed;
+        // icu_lower() fails on anything else.
+        Value value = *found;
+        if (column.datatype == QLatin1String("datetime")) {
+            if (value.kind != Value::Kind::String)
+                continue;
+            if (value.string.toLower() == QLatin1String("now")) {
+                value = Value::dict();
+                value.insert(QStringLiteral("__class__"), Value::from(QStringLiteral("datetime.datetime")));
+                value.insert(QStringLiteral("__value__"), Value::from(CalibreDate::fromDateTime(now).isoFormat()));
+            }
+        }
+        Value field = *book.userField(key);
+        const Value *current = field.find(QStringLiteral("#value#"));
+        if (had && current && current->kind != Value::Kind::Null)
+            continue;
+        field.insert(QStringLiteral("#value#"), value);
+        field.insert(QStringLiteral("#extra#"), Value::null());
+        book.setUserMetadata(key, field);
     }
-    return false;
+
+    for (const auto &[key, field] : std::as_const(book.userMetadata)) {
+        const auto column = std::find_if(columns.cbegin(), columns.cend(),
+                                         [&key](const CustomColumn &c) { return u'#' + c.label == key; });
+        if (column == columns.cend() || column->datatype == QLatin1String("composite")
+            || field.text(QStringLiteral("datatype")) != column->datatype)
+            continue;
+        const Value *separators = field.find(QStringLiteral("is_multiple"));
+        if (column->datatype == QLatin1String("text")
+            && (!separators || !PythonJson::equals(*separators, CalibreDb::multipleSeparators(*column))))
+            continue;
+        const Value *value = field.find(QStringLiteral("#value#"));
+        if (!value || value->kind == Value::Kind::Null)
+            continue;
+        if (const std::optional<QVariant> argument = customArgument(*column, *value))
+            edit->custom.insert(column->label, *argument);
+        // adapt_series_index() of the number: a number or text.
+        const Value *extra = field.find(QStringLiteral("#extra#"));
+        if (column->datatype != QLatin1String("series") || !extra)
+            continue;
+        if (extra->kind == Value::Kind::String)
+            edit->custom.insert(column->label + QStringLiteral("_index"), extra->string);
+        else if (extra->kind == Value::Kind::Integer || extra->kind == Value::Kind::Boolean)
+            edit->custom.insert(column->label + QStringLiteral("_index"),
+                                double(extra->kind == Value::Kind::Boolean ? extra->boolean : extra->integer));
+        else if (extra->kind == Value::Kind::Float)
+            edit->custom.insert(column->label + QStringLiteral("_index"), extra->real);
+    }
+    return true;
 }
 
 // author_sort_from_authors(): each author's sort in the library, else the
@@ -248,9 +367,12 @@ bool createBookEntry(SqliteDb &db, FileTransaction &files, const ImportedMetadat
     }
     if (!identifiers.isEmpty())
         edit.identifiers = identifiers;
+    if (!customFields(db, mi, applyImportTags, context.fields.now, &edit, error))
+        return false;
 
     FieldWriters::Context fieldContext = context.fields;
     fieldContext.allowCaseChange = false;
+    fieldContext.ignoreCustomErrors = true;
     if (!FieldWriters::apply(db, edit, fieldContext, fields, error)
         || !BookOperations::updatePath(db, files, context.libraryPath, *bookId, unknown, error))
         return false;
@@ -347,20 +469,6 @@ QString pythonJson(const QString &title, const QStringList &authors)
 
 namespace BookOperations {
 
-QString formatFile(const QString &folder, const QString &name, const QString &format)
-{
-    const QString extension = u'.' + format.toLower();
-    const QString expected = QDir(folder).filePath(name + extension);
-    if (QFileInfo(expected).isFile())
-        return expected;
-    const QStringList entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
-    for (const QString &entry : entries) {
-        if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._")))
-            return QDir(folder).filePath(entry);
-    }
-    return {};
-}
-
 bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath, int bookId, const QString &unknown,
                 QString *error)
 {
@@ -411,7 +519,7 @@ bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath
         if (!changed)
             return true;
         for (const auto &format : std::as_const(formats)) {
-            const QString file = formatFile(source, format.second, format.first);
+            const QString file = CalibreDb::formatFile(source, format.second, format.first);
             const QString renamed = QDir(source).filePath(name + u'.' + format.first.toLower());
             if (!file.isEmpty() && file != renamed && !files.move(file, renamed, error))
                 return false;
@@ -434,7 +542,7 @@ bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath
         // Every entry moves; the format files take the new name.
         QHash<QString, QString> renamedFormats;
         for (const auto &format : std::as_const(formats)) {
-            const QString file = formatFile(source, format.second, format.first);
+            const QString file = CalibreDb::formatFile(source, format.second, format.first);
             if (!file.isEmpty())
                 renamedFormats.insert(QFileInfo(file).fileName(), name + u'.' + format.first.toLower());
         }
@@ -455,9 +563,6 @@ bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath
 bool addBook(SqliteDb &db, FileTransaction &files, const NewBook &book, const Context &context,
              FieldWriters::Result *fields, Result *result, QString *error)
 {
-    if (hasCustomColumnDefaults(db))
-        return fail(error, QObject::tr("This library's custom columns give new books values Cousoir cannot set yet: "
-                                       "add the book in Calibre."));
     // format_map: one file per format, the last one given.
     QStringList formats;
     QHash<QString, QString> fileOf;
@@ -506,6 +611,34 @@ bool setConversionOptions(SqliteDb &db, int bookId, const QByteArray &data, QStr
                   { bookId, data }, error);
 }
 
+bool setReadPosition(SqliteDb &db, int bookId, const ReadPosition &position, QString *error)
+{
+    if (!bookExists(db, bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    return db.run(QStringLiteral("INSERT OR REPLACE INTO last_read_positions(book,format,user,device,cfi,epoch,pos_frac) "
+                                 "VALUES (?,?,?,?,?,?,?)"),
+                  { bookId, position.format.toUpper(), position.user, position.device, position.cfi, position.epoch,
+                    position.fraction },
+                  error);
+}
+
+bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QString *error)
+{
+    if (!bookExists(db, bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(bookId));
+    // Deleted, then inserted, as Calibre does: a REPLACE would delete the old
+    // row without its trigger, leaving its words in the search index.
+    return db.run(QStringLiteral("INSERT OR IGNORE INTO annotations_dirtied (book) VALUES (?)"), { bookId }, error)
+        && db.run(QStringLiteral("DELETE FROM annotations WHERE book=? AND format=? AND user_type='local' AND user='viewer' "
+                                 "AND annot_type=? AND annot_id=?"),
+                  { bookId, annotation.format.toUpper(), annotation.type, annotation.id }, error)
+        && db.run(QStringLiteral("INSERT INTO annotations(book,format,user_type,user,timestamp,annot_id,annot_type,"
+                                 "annot_data,searchable_text) VALUES (?,?,'local','viewer',?,?,?,?,?)"),
+                  { bookId, annotation.format.toUpper(), annotation.timestamp, annotation.id, annotation.type,
+                    QString::fromUtf8(annotation.data), annotation.searchable },
+                  error);
+}
+
 bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, const Context &context, Result *result,
                  QString *error)
 {
@@ -523,7 +656,7 @@ bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, c
             return found;
         const QString folder = QDir(context.libraryPath).filePath(path);
         for (const QVariantList &row : db.rows(QStringLiteral("SELECT format, name FROM data WHERE book=?"), { bookId })) {
-            const QString file = formatFile(folder, row.at(1).toString(), row.at(0).toString());
+            const QString file = CalibreDb::formatFile(folder, row.at(1).toString(), row.at(0).toString());
             if (!file.isEmpty())
                 found.insert(row.at(0).toString(), file);
         }
@@ -560,7 +693,7 @@ bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &re
                                                  { bookId, format });
         if (name.isEmpty() || name.first().first().toString().isEmpty() || path.isEmpty())
             continue;
-        const QString file = formatFile(folder, name.first().first().toString(), format);
+        const QString file = CalibreDb::formatFile(folder, name.first().first().toString(), format);
         if (!file.isEmpty())
             removed.append(file);
     }
@@ -588,9 +721,8 @@ bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &re
 }
 
 bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds, const Context &context,
-                 Result *result, QString *error)
+                 QString *error)
 {
-    Q_UNUSED(result);
     const QList<ItemTable> tables = itemTables(db);
     // The items of the books, which go when no other book has them.
     QList<QSet<int>> items(tables.size());
@@ -680,9 +812,6 @@ bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoratio
         return fail(error, QObject::tr("Book %1 is not in the trash.").arg(bookId));
     if (bookExists(db, bookId))
         return fail(error, QObject::tr("The library already has a book %1.").arg(bookId));
-    if (hasCustomColumns(db))
-        return fail(error, QObject::tr("This library has custom columns, whose values Cousoir cannot restore yet: "
-                                       "restore the book in Calibre."));
     const QByteArray raw = readFile(QDir(folder).filePath(QStringLiteral("metadata.opf")));
     if (raw.contains("calibre:annotation"))
         return fail(error, QObject::tr("The book has annotations, which Cousoir cannot restore yet: restore it in "

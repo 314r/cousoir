@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QThreadPool>
 #include <QTimer>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -16,6 +17,7 @@
 #include <memory>
 
 #include "kobo.h"
+#include "reading_log.h"
 
 class BookLibrary;
 
@@ -41,8 +43,9 @@ struct KindleSlot
 // Cousoir opens for each thing it does there, one at a time, on a thread of
 // their own. A reader's books are read once it shows up, and after each
 // change Cousoir makes. Sending goes through Calibre as KoboSend and
-// KindleSend describe, one batch at a time. While Calibre runs on this
-// computer it handles the readers itself, which Cousoir then leaves alone.
+// KindleSend describe, or through Cousoir alone without it, one batch at a
+// time. While Calibre runs on this computer it handles the readers itself,
+// which Cousoir then leaves alone.
 class DeviceLibrary : public QObject
 {
     Q_OBJECT
@@ -55,14 +58,17 @@ class DeviceLibrary : public QObject
     Q_PROPERTY(QString currentRoot READ currentRoot WRITE setCurrentRoot NOTIFY currentChanged)
     Q_PROPERTY(QVariantMap current READ current NOTIFY currentChanged)
     // Its books, by title: { lpath, title, authors, format, size, bookId,
-    // purchased }, with size as text.
+    // purchased, reading, notes }, with size as text, reading how far it is
+    // read, "43 %" or "✓" once finished, and notes the number of its
+    // highlights and notes.
     Q_PROPERTY(QVariantList rows READ rows NOTIFY rowsChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY rowsChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY rowsChanged)
     // The library's books on each reader: book id → the readers' names.
     Q_PROPERTY(QVariantMap onDevice READ onDevice NOTIFY rowsChanged)
-    // Calibre is there to send with.
-    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
+    // How many readers are connected, which changes with rows: cheap to
+    // bind on for what reading() tells.
+    Q_PROPERTY(int deviceCount READ deviceCount NOTIFY rowsChanged)
     Q_PROPERTY(bool writable READ writable NOTIFY writableChanged)
     Q_PROPERTY(QString readOnlyReason READ readOnlyReason NOTIFY writableChanged)
     // The batches to send, the running one first: { bookIds, titles, name,
@@ -89,7 +95,7 @@ public:
     bool loading() const;
     QString lastError() const;
     QVariantMap onDevice() const;
-    bool available() const;
+    int deviceCount() const;
     bool writable() const;
     QString readOnlyReason() const;
     QVariantList jobs() const;
@@ -115,6 +121,19 @@ public:
     Q_INVOKABLE void cancel(int bookId = 0);
     // Looks for readers again and reads their books.
     Q_INVOKABLE void refresh();
+    // What the readers know of the reading of a library book, a reader's
+    // copy of it at a time: { name, format, connected, seen, status,
+    // percent, state, lastRead, timeSpent, notes, markdown }, with seen,
+    // state, lastRead and timeSpent as text, percent -1 when unknown, notes
+    // { type, text, annotation, chapter, newChapter, progress, created,
+    // position }, created as text and newChapter true for a chapter's first,
+    // and markdown the notes as Markdown. A reader unplugged tells what it
+    // told when last seen, connected false. It changes with rows.
+    Q_INVOKABLE QVariantList reading(int bookId) const;
+    // Copies text, notes as Markdown, to the clipboard.
+    Q_INVOKABLE void copyNotes(const QString &markdown) const;
+    // Saves it to a file; returns an error message, empty on success.
+    Q_INVOKABLE QString saveNotes(const QString &markdown, const QUrl &file) const;
 
     // For the tests: where volumes and Kindles come from and how often to
     // look, the program run in place of calibre-debug, how ejecting is done
@@ -122,6 +141,8 @@ public:
     // are no volumes or Kindles until a test gives some.
     void setVolumeProvider(VolumeProvider provider, int intervalMs);
     void setKindleProvider(KindleProvider provider);
+    // For the tests: a Kobo sent to by Cousoir alone, even with Calibre.
+    void setNative(bool native);
     void setProgram(const QString &program);
     void setEjector(Ejector ejector);
     void setConfigDirectory(const QString &directory);
@@ -131,7 +152,6 @@ signals:
     void devicesChanged();
     void currentChanged();
     void rowsChanged();
-    void availableChanged();
     void writableChanged();
     void jobsChanged();
     // Books arrived on a reader.
@@ -153,6 +173,10 @@ private:
         // A Kindle's, once read: Calibre keeps its settings by it.
         QString serial;
         QList<DeviceBook> books;
+        // A Kindle's clippings of library books no longer on it, and, as
+        // read, of all; their notes go to the books on it.
+        QList<DeviceBook> clippings;
+        QList<DeviceBook> allClippings;
         QString error;
         bool loading = false;
     };
@@ -173,7 +197,13 @@ private:
     };
 
     void scan();
+    // Matches a Kindle's books and clippings with the library's books.
+    void matchKindle(Connected &connected);
     void load(const QString &root);
+    // Keeps what a reader tells of the reading of the library's books.
+    void recordReading(const Connected &connected);
+    QString deviceId(const Connected &connected) const;
+    const ReadingLog::Log &readingLog() const;
     void rematch();
     void updateWritable();
     const Connected *find(const QString &root) const;
@@ -183,6 +213,11 @@ private:
     void startProcess(const QString &folder);
     void readProgress();
     void finishJob();
+    // The rest of a send, once its files are ready: Calibre's job ended with
+    // `exitCode`, or Cousoir's own made them.
+    void finishSend(int exitCode);
+    // Cousoir sends to a Kobo itself: without Calibre, or when told.
+    bool sendsNatively() const;
     void finishCopy(bool ok, const QString &error);
     void stopProcess();
 
@@ -191,9 +226,13 @@ private:
     KindleProvider m_kindles;
     QTimer m_scanTimer;
     QString m_program;
+    bool m_native = false;
     Ejector m_ejector;
     QString m_configDirectory;
     QList<Connected> m_devices;
+    // What the readers told, for the library at m_readingLogPath.
+    mutable ReadingLog::Log m_readingLog;
+    mutable QString m_readingLogPath;
     QString m_currentRoot;
     bool m_writable = true;
     QList<Job> m_jobs;
