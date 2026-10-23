@@ -25,13 +25,6 @@ QJsonObject oracle()
     return data;
 }
 
-CalibreConfig frenchConfig()
-{
-    CalibreConfig config;
-    config.interfaceLanguage = QStringLiteral("fr");
-    return config;
-}
-
 QList<int> ids(const CalibreSearch::Index &index, const QBitArray &rows)
 {
     QList<int> result;

@@ -66,9 +66,6 @@ public:
     QVariantList highlights() const;
     QUrl fileUrl() const;
 
-    // The EPUB format a book is read in, empty for none.
-    static QString readableFormat(const QVariantList &formats);
-
     // Opens the book's EPUB. Returns why it cannot, empty once open.
     Q_INVOKABLE QString open(int bookId);
     // Opens the book's PDF; startPosition then has its { page }.

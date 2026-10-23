@@ -6,7 +6,6 @@
 // trim_retired_dir() and hash_key().
 
 #include <QDir>
-#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QObject>

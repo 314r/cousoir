@@ -47,7 +47,6 @@ QStringList strings(const QJsonValue &value)
     return result;
 }
 
-
 // Open Library's descriptions are Markdown, some with the references of
 // their source and a list of what a collection contains after a rule.
 QString descriptionHtml(QString text)

@@ -24,7 +24,7 @@ FocusScope {
     readonly property bool editing: activeFocus && Window.activeFocusItem?.detailField === true
     readonly property var ratingChoices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(rating => ({
         value: rating,
-        label: rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+        label: pane.ratingLabel(rating)
     }))
     readonly property var facts: [
         { key: "title", label: qsTr("Title"), value: book.title || "" },
@@ -45,20 +45,25 @@ FocusScope {
 
     // The formats Calibre can convert the book to, and its conversion, if
     // one runs or waits.
-    readonly property var convertFormats: conversions && conversions.available && (book.id || 0) > 0
+    readonly property var convertFormats: conversions && (book.id || 0) > 0
         ? conversions.formatsFor(book.id) : []
     readonly property var conversion: (conversions ? conversions.jobs : []).find(job => job.bookId === book.id) || null
     property DeviceLibrary devices: null
-    // The Kobos the book is on, and its batch being sent, if any.
+    // The readers the book is on, and its batch being sent, if any.
     readonly property var deviceNames: devices && (book.id || 0) > 0 ? (devices.onDevice[String(book.id)] || []) : []
     readonly property var sending: (devices ? devices.jobs : []).find(job => job.bookIds.includes(book.id)) || null
-    readonly property bool sendable: devices !== null && devices.available && devices.writable
+    readonly property bool sendable: devices !== null && devices.writable
         && devices.devices.length > 0 && (book.id || 0) > 0 && !sending
 
     signal failed(string message)
     signal convertRequested(string format)
-    // Send to the Kobo mounted on `root`.
+    // Send to the reader on `root`.
     signal sendRequested(string root)
+
+    // A rating from 0 to 10 as stars, two per star.
+    function ratingLabel(rating) {
+        return rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+    }
 
     function open(format) {
         const error = pane.library.openFormat(pane.book.id, format)
@@ -217,7 +222,7 @@ FocusScope {
             ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(rating => field.halfStars || rating % 2 === 0
                                                               || String(rating) === choiceRow.stored).map(rating => ({
                 value: String(rating),
-                label: rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+                label: pane.ratingLabel(rating)
             }))
             : field.datatype === "bool"
             ? [{ value: "", label: "—" }, { value: "true", label: qsTr("Yes") }, { value: "false", label: qsTr("No") }]
@@ -388,7 +393,6 @@ FocusScope {
                     }
 
                     ChoiceBox {
-                        id: ratingBox
                         objectName: "field_rating"
                         readonly property bool detailField: true
 
@@ -724,10 +728,8 @@ FocusScope {
 
                 Layout.fillWidth: true
                 visible: pane.devices !== null && pane.devices.devices.length > 0 && (pane.book.id || 0) > 0
-                    && (!pane.devices.available || !pane.devices.writable)
-                text: !pane.devices ? ""
-                    : !pane.devices.available ? qsTr("Sending books needs Calibre, which is not installed.")
-                    : pane.devices.readOnlyReason
+                    && !pane.devices.writable
+                text: pane.devices ? pane.devices.readOnlyReason : ""
                 color: Theme.textMuted
                 wrapMode: Text.Wrap
             }

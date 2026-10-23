@@ -185,10 +185,6 @@ bool itemId(SqliteDb &db, const ItemTable &table, const QVariant &value, const C
     return true;
 }
 
-} // namespace
-
-namespace {
-
 // Removes the items no book uses any more, as each writer of an item field
 // does in Calibre, whatever it changed. Items with a note stay.
 bool removeUnused(SqliteDb &db, const ItemTable &table, const Context &context, QString *error)

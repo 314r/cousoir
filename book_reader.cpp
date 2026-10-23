@@ -331,17 +331,6 @@ void BookReader::flush(bool withPosition)
     keepPending();
 }
 
-QString BookReader::readableFormat(const QVariantList &formats)
-{
-    for (const char *wanted : { "EPUB", "KEPUB" }) {
-        for (const QVariant &format : formats) {
-            if (format.toMap().value(QStringLiteral("format")).toString() == QLatin1String(wanted))
-                return QLatin1String(wanted);
-        }
-    }
-    return {};
-}
-
 QString BookReader::open(int bookId)
 {
     close();
@@ -374,9 +363,7 @@ QString BookReader::open(int bookId)
     }
     // Where reading stopped last: Cousoir's own position, or a newer one in
     // the library, of Calibre's viewer or its content server.
-    QFile file(positionsFile());
-    const QJsonObject positions = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object()
-                                                                 : QJsonObject();
+    const QJsonObject positions = readPositions();
     const QJsonObject kept = positions.value(m_uuid).toObject();
     QList<ReadPosition> candidates = m_library->data().readPositions.value(bookId);
     if (kept.value(QLatin1String("format")).toString() == m_format)
@@ -432,6 +419,7 @@ void BookReader::close()
 {
     if (!m_pdfPath.isEmpty()) {
         m_pdfPath.clear();
+        m_pdfTitle.clear();
         m_bookId = 0;
         m_format.clear();
         m_start.clear();
@@ -476,9 +464,7 @@ QString BookReader::openPdf(int bookId)
     m_uuid = book->uuid;
     m_pdfTitle = book->title;
     m_format = QStringLiteral("PDF");
-    QFile file(positionsFile());
-    const QJsonObject positions = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll()).object()
-                                                                 : QJsonObject();
+    const QJsonObject positions = readPositions();
     m_start = { { QStringLiteral("page"), positions.value(m_uuid + QStringLiteral(":PDF")).toObject().value(QLatin1String("page")).toInt() } };
     emit bookChanged();
     return {};
@@ -529,7 +515,7 @@ void BookReader::savePosition(int spineIndex, const QString &cfi, double fileFra
     positions.insert(m_uuid, QJsonObject{
                                  { QStringLiteral("format"), m_format },
                                  { QStringLiteral("cfi"), cfi },
-                                 { QStringLiteral("fraction"), bookFraction(spineIndex, fileFraction) },
+                                 { QStringLiteral("fraction"), m_lastFraction },
                                  { QStringLiteral("epoch"), double(QDateTime::currentMSecsSinceEpoch()) / 1000 },
                              });
     writePositions(positions);

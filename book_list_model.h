@@ -13,14 +13,17 @@
 // How the book list and the book's page show a book's values.
 namespace BookDisplay {
 
-// fmt_sidx(): "2" for a whole series index, "2.5" otherwise.
-QString seriesIndex(double index);
 // "Name [2]", or empty for a book in no series.
 QString series(const Book &book);
 // rating_to_stars(): two ratings make a star, an odd rating ends in a half.
 QString rating(int rating);
 // The local date, "2015-07-07"; empty for Calibre's undefined date.
 QString date(const QDateTime &date);
+// A publication date as Calibre shows it, its month: "Apr 2015"; empty for
+// Calibre's undefined date.
+QString monthYear(const QDateTime &date);
+// A file's size, "1.5 MB".
+QString fileSize(qint64 size);
 // What the list shows of a field of the book: a built-in field by Calibre's
 // name, "pubdate", or a custom column by its search term, "#genre".
 // Languages are named in `interfaceLanguage`, as Calibre names them.
@@ -32,9 +35,10 @@ QString field(const Book &book, const QString &key, const QList<CustomColumn> &c
 // The books the list shows, in their order: one row per book, whose single
 // role, `modelData` in a delegate, is a map of what the list shows of it,
 // { id, title, authors, series, formats, added, rating, cover, selected },
-// and the text of each column shown by its key, made when a row is shown. The rows point into the library's books, which
-// the model shares rather than copies. The books selected are kept by id:
-// a sort keeps them, a search drops those it hides.
+// and the text of each column shown by its key, made when a row is shown.
+// The rows point into the library's books, which the model shares rather
+// than copies. The books selected are kept by id: a sort keeps them, a
+// search drops those it hides.
 class BookListModel : public QAbstractListModel
 {
     Q_OBJECT

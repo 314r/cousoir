@@ -55,7 +55,6 @@ public:
     Q_INVOKABLE void copy(const QString &text) const;
     // Saves text to a file; an error message, empty on success.
     Q_INVOKABLE QString save(const QString &text, const QUrl &file) const;
-    Q_INVOKABLE void refresh();
 
 signals:
     void libraryChanged();
@@ -63,6 +62,7 @@ signals:
     void rowsChanged();
 
 private:
+    void refresh();
     void search();
 
     QPointer<BookLibrary> m_library;

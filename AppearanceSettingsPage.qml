@@ -46,7 +46,6 @@ Item {
             }
 
             Flow {
-                id: themeSelector
                 objectName: "themeSelector"
 
                 Layout.fillWidth: true

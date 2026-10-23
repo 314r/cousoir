@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QDate>
-#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QPointer>

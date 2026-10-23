@@ -43,8 +43,9 @@ struct KindleSlot
 // Cousoir opens for each thing it does there, one at a time, on a thread of
 // their own. A reader's books are read once it shows up, and after each
 // change Cousoir makes. Sending goes through Calibre as KoboSend and
-// KindleSend describe, one batch at a time. While Calibre runs on this
-// computer it handles the readers itself, which Cousoir then leaves alone.
+// KindleSend describe, or through Cousoir alone without it, one batch at a
+// time. While Calibre runs on this computer it handles the readers itself,
+// which Cousoir then leaves alone.
 class DeviceLibrary : public QObject
 {
     Q_OBJECT
@@ -68,8 +69,6 @@ class DeviceLibrary : public QObject
     // How many readers are connected, which changes with rows: cheap to
     // bind on for what reading() tells.
     Q_PROPERTY(int deviceCount READ deviceCount NOTIFY rowsChanged)
-    // Calibre is there to send with.
-    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
     Q_PROPERTY(bool writable READ writable NOTIFY writableChanged)
     Q_PROPERTY(QString readOnlyReason READ readOnlyReason NOTIFY writableChanged)
     // The batches to send, the running one first: { bookIds, titles, name,
@@ -97,7 +96,6 @@ public:
     QString lastError() const;
     QVariantMap onDevice() const;
     int deviceCount() const;
-    bool available() const;
     bool writable() const;
     QString readOnlyReason() const;
     QVariantList jobs() const;
@@ -127,10 +125,10 @@ public:
     // copy of it at a time: { name, format, connected, seen, status,
     // percent, state, lastRead, timeSpent, notes, markdown }, with seen,
     // state, lastRead and timeSpent as text, percent -1 when unknown, notes
-    // { type, text, annotation, chapter, newChapter, progress, created },
-    // created as text and newChapter true for a chapter's first, and
-    // markdown the notes as Markdown. A reader unplugged tells what it told
-    // when last seen, connected false. It changes with rows.
+    // { type, text, annotation, chapter, newChapter, progress, created,
+    // position }, created as text and newChapter true for a chapter's first,
+    // and markdown the notes as Markdown. A reader unplugged tells what it
+    // told when last seen, connected false. It changes with rows.
     Q_INVOKABLE QVariantList reading(int bookId) const;
     // Copies text, notes as Markdown, to the clipboard.
     Q_INVOKABLE void copyNotes(const QString &markdown) const;
@@ -154,7 +152,6 @@ signals:
     void devicesChanged();
     void currentChanged();
     void rowsChanged();
-    void availableChanged();
     void writableChanged();
     void jobsChanged();
     // Books arrived on a reader.

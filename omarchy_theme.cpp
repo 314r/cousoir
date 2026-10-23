@@ -88,11 +88,6 @@ QVariantMap OmarchyTheme::palette() const
     return m_palette;
 }
 
-bool OmarchyTheme::dark() const
-{
-    return m_dark;
-}
-
 bool OmarchyTheme::available() const
 {
     return m_available;
@@ -121,7 +116,6 @@ void OmarchyTheme::setActive(bool active)
 void OmarchyTheme::reload()
 {
     QVariantMap palette = fallbackPalette();
-    QString mode = QStringLiteral("dark");
 
     const QString colorsPath = QDir(m_stateRoot).filePath(QStringLiteral("theme/colors.toml"));
     QFile file(colorsPath);
@@ -144,23 +138,16 @@ void OmarchyTheme::reload()
                 value = value.mid(1, value.size() - 2);
             }
 
-            if (key == QLatin1String("mode")) {
-                mode = value;
-                continue;
-            }
-
             const QColor color(value);
-            if (color.isValid())
+            if (key != QLatin1String("mode") && color.isValid())
                 palette.insert(canonicalPaletteKey(key), color);
         }
     }
 
-    const bool dark = mode.compare(QLatin1String("dark"), Qt::CaseInsensitive) == 0;
-    const bool paletteDidChange = m_palette != palette || m_dark != dark;
+    const bool paletteDidChange = m_palette != palette;
     const bool availabilityDidChange = m_available != available;
 
     m_palette = std::move(palette);
-    m_dark = dark;
     m_available = available;
 
     if (paletteDidChange)

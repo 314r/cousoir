@@ -1,5 +1,6 @@
 #include "kobo_send.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -7,24 +8,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QObject>
-
-#include <QBuffer>
-#include <QDateTime>
-#include <QImage>
 #include <QRegularExpression>
 #include <QUuid>
 
-#include <cmath>
-
 #include "book.h"
-#include "calibre_db.h"
 #include "calibre_job.h"
-#include "calibre_template.h"
-#include "calibre_text.h"
 #include "device_books.h"
 #include "kepub.h"
 #include "native_send.h"
-#include "opf.h"
 #include "python_json.h"
 #include "send_job.h"
 
@@ -232,10 +223,7 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, const K
             continue;
         entry.insert(QStringLiteral("mime"), PythonJson::Value::from(*mime));
         entry.insert(QStringLiteral("thumbnail"), PythonJson::Value::null());
-        PythonJson::Format indented;
-        indented.indent = 2;
-        indented.ensureAscii = true;
-        element = PythonJson::dumps(entry, indented).toUtf8().replace("\n", "\n  ");
+        element = NativeSend::entryText(entry);
     }
     QJsonArray sent;
     QJsonArray unsendable;
@@ -244,20 +232,11 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, const K
         const Book *book = data.book(bookId);
         if (!book)
             continue;
-        QStringList formats;
-        for (const BookFormat &format : book->formats) {
-            if (!format.file.isEmpty())
-                formats.append(format.format);
-        }
-        const QString format = DeviceBooks::sendFormat(formats, formatMap);
+        QString source;
+        const QString format = NativeSend::sendFormat(*book, formatMap, &source);
         if (format.isEmpty()) {
             unsendable.append(book->title);
             continue;
-        }
-        QString source;
-        for (const BookFormat &bookFormat : book->formats) {
-            if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
-                source = bookFormat.file;
         }
         const bool epub = format.compare(QLatin1String("EPUB"), Qt::CaseInsensitive) == 0;
         const bool kepub = format.compare(QLatin1String("KEPUB"), Qt::CaseInsensitive) == 0 || (epub && settings.kepubify);
@@ -268,38 +247,14 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, const K
         if (epub && settings.kepubify) {
             // The library's metadata and cover in the KEPUB, as Calibre's
             // send puts them in what it sends.
-            Kepub::Options options;
-            options.language = book->languages.value(0, QStringLiteral("en"));
-            options.title = book->title;
-            options.authors = book->authors.join(QStringLiteral(" & "));
-            QFile cover(book->coverFile);
-            if (!book->coverFile.isEmpty() && cover.open(QIODevice::ReadOnly))
-                options.cover = cover.readAll();
-            Kepub::Metadata metadata;
-            metadata.title = book->title;
-            metadata.authors = book->authors;
-            metadata.authorSort = book->authorSort;
-            metadata.publisher = book->publisher;
-            metadata.languages = book->languages;
-            metadata.tags = book->tags;
-            metadata.series = book->series;
-            metadata.seriesIndex = book->seriesIndex;
-            metadata.comments = book->comments;
-            metadata.uuid = book->uuid;
-            metadata.identifiers = book->identifiers;
-            options.metadata = metadata;
-            if (!Kepub::kepubify(source, target, options, error))
+            if (!Kepub::kepubify(source, target, Kepub::optionsFor(*book), error))
                 return false;
         } else if (!SendJob::copyInto(source, target, error)) {
             return false;
         }
         // The book's entry, in place of one at the same place.
-        const PythonJson::Value entry = NativeSend::bookEntry(data, *book, lpath, QFileInfo(target).size(), NativeSend::thumbnail(*book, 0, 68));
-        PythonJson::Format format2;
-        format2.indent = 2;
-        format2.ensureAscii = true;
-        QByteArray text = PythonJson::dumps(entry, format2).toUtf8();
-        text.replace("\n", "\n  ");
+        const QByteArray text = NativeSend::entryText(
+            NativeSend::bookEntry(data, *book, lpath, QFileInfo(target).size(), NativeSend::thumbnail(*book, 0, 68)));
         entries.removeIf([&lpath](const QByteArray &element) {
             return PythonJson::parse(element).text(QStringLiteral("lpath")) == lpath;
         });

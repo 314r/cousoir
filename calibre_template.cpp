@@ -448,8 +448,8 @@ QString signOf(bool negative, const Spec &spec)
 
 QString formatFloat(double value, const Spec &spec)
 {
-    const QChar type = spec.type.isNull() ? QChar() : spec.type;
-    const bool negative = std::signbit(value) && !(value == 0 && false);
+    const QChar type = spec.type;
+    const bool negative = std::signbit(value);
     const double magnitude = std::abs(value);
     QString body;
     if (std::isnan(value)) {

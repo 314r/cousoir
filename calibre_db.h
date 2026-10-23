@@ -48,6 +48,10 @@ bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *erro
 // multiple_seps of a custom column, as initialize_custom_columns() sets
 // them: an empty dict for a column of single values.
 PythonJson::Value multipleSeparators(const CustomColumn &column);
+// format_abspath() without its rename: the file of a format in the book's
+// folder, the one Calibre expects or one with the format's extension; empty
+// when there is none.
+QString formatFile(const QString &folder, const QString &name, const QString &format);
 // Finds each book's cover and format files in its folder, as calibredb list
 // does: a format whose file has another name is found by its extension.
 void findFiles(LibraryData *data, const QSet<int> *only = nullptr);

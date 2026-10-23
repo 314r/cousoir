@@ -31,6 +31,7 @@
 
 #include <zip.h>
 
+#include "book.h"
 #include "calibre_text.h"
 
 namespace Kepub {
@@ -711,8 +712,7 @@ void embedMetadata(Node *package, const Metadata &metadata)
         const bool series = child.isElement("meta")
             && (name == QLatin1String("calibre:series") || name == QLatin1String("calibre:series_index"));
         // OPF 3 refinements of what goes: file-as, role, display-seq.
-        const bool refinement = child.isElement("meta") && refines.startsWith(u'#') && !refines.isEmpty()
-            && refines.mid(1) != uniqueId;
+        const bool refinement = child.isElement("meta") && refines.startsWith(u'#') && refines.mid(1) != uniqueId;
         if (dcReplaced || series || refinement)
             block->take(i);
         else
@@ -767,7 +767,7 @@ void embedMetadata(Node *package, const Metadata &metadata)
             index.chop(1);
         meta(QStringLiteral("calibre:series_index"), index);
     }
-    // The book's identifiers the library has, beside its own.
+    // The ISBN the library has, beside the book's own identifiers.
     for (const auto &[type, value] : metadata.identifiers) {
         if (type.compare(QLatin1String("isbn"), Qt::CaseInsensitive) == 0)
             add(QStringLiteral("identifier"), QStringLiteral("urn:isbn:") + value);
@@ -777,9 +777,31 @@ void embedMetadata(Node *package, const Metadata &metadata)
 
 } // namespace
 
-std::optional<QByteArray> kepubifyPage(const QByteArray &xhtml, const QString &scriptHref, const QString &language)
+Options optionsFor(const Book &book)
 {
-    Q_UNUSED(language);
+    Options options;
+    options.title = book.title;
+    options.authors = book.authors.join(QStringLiteral(" & "));
+    QFile cover(book.coverFile);
+    if (!book.coverFile.isEmpty() && cover.open(QIODevice::ReadOnly))
+        options.cover = cover.readAll();
+    Metadata metadata;
+    metadata.title = book.title;
+    metadata.authors = book.authors;
+    metadata.authorSort = book.authorSort;
+    metadata.publisher = book.publisher;
+    metadata.languages = book.languages;
+    metadata.tags = book.tags;
+    metadata.series = book.series;
+    metadata.seriesIndex = book.seriesIndex;
+    metadata.comments = book.comments;
+    metadata.identifiers = book.identifiers;
+    options.metadata = metadata;
+    return options;
+}
+
+std::optional<QByteArray> kepubifyPage(const QByteArray &xhtml, const QString &scriptHref)
+{
     std::unique_ptr<Node> root = parse(xhtml);
     if (!root || !documentElement(root.get()))
         return std::nullopt;
@@ -965,8 +987,7 @@ bool kepubify(const QString &epub, const QString &kepub, const Options &options,
         const QString name = nameOf(item->attribute(QStringLiteral("href")));
         if (!zip.data.contains(name))
             continue;
-        if (std::optional<QByteArray> page = kepubifyPage(zip.data.value(name), relativeHref(scriptName, name),
-                                                          options.language))
+        if (std::optional<QByteArray> page = kepubifyPage(zip.data.value(name), relativeHref(scriptName, name)))
             zip.data.insert(name, *page);
     }
     zip.data.insert(opfName, serialize(*opf));

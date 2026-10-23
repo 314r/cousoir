@@ -266,7 +266,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         withComposites(&trashed, request.config.interfaceLanguage,
                        QSet<int>(request.trash.cbegin(), request.trash.cend()));
         operations.before = &trashed;
-        if (!BookOperations::removeBooks(db, files, request.trash, operations, &done, &error))
+        if (!BookOperations::removeBooks(db, files, request.trash, operations, &error))
             return undo(error);
         operations.before = nullptr;
     }

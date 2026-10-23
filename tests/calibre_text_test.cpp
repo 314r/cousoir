@@ -7,6 +7,7 @@
 
 #include "calibre_languages.h"
 #include "calibre_text.h"
+#include "test_support.h"
 
 namespace {
 
@@ -187,14 +188,6 @@ void CalibreTextTest::foldsForSearch()
     QCOMPARE(CalibreText::foldForSearch(QStringLiteral("L'Écume des Jours")), QStringLiteral("l'ecume des jours"));
     QCOMPARE(CalibreText::foldForSearch(QStringLiteral("Bérénice Œuvre STRASSE ß")),
              QStringLiteral("berenice oeuvre strasse ss"));
-}
-
-QStringList strings(const QJsonValue &value)
-{
-    QStringList result;
-    for (const QJsonValue &item : value.toArray())
-        result.append(item.toString());
-    return result;
 }
 
 void CalibreTextTest::splitsAuthors()

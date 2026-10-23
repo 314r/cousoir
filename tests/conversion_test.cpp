@@ -1,6 +1,5 @@
 #include <QtTest>
 
-#include <QDirIterator>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -25,30 +24,6 @@ QByteArray pickled(const QByteArray &raw)
     for (int shift = 0; shift < 32; shift += 8)
         data.append(char((size >> shift) & 0xff));
     return data + raw + '.';
-}
-
-// The text of every HTML file of an EPUB.
-QByteArray epubText(const QString &path)
-{
-    int error = 0;
-    zip_t *archive = zip_open(QFile::encodeName(path).constData(), ZIP_RDONLY, &error);
-    if (!archive)
-        return {};
-    QByteArray text;
-    for (zip_int64_t index = 0; index < zip_get_num_entries(archive, 0); ++index) {
-        const QString name = QString::fromUtf8(zip_get_name(archive, index, 0));
-        zip_stat_t stat;
-        if (!name.contains(QStringLiteral("htm")) || zip_stat_index(archive, index, 0, &stat) != 0)
-            continue;
-        zip_file_t *file = zip_fopen_index(archive, index, 0);
-        QByteArray data(qsizetype(stat.size), Qt::Uninitialized);
-        if (file && zip_fread(file, data.data(), stat.size) == zip_int64_t(stat.size))
-            text += data;
-        if (file)
-            zip_fclose(file);
-    }
-    zip_close(archive);
-    return text;
 }
 
 // One file of a ZIP archive.

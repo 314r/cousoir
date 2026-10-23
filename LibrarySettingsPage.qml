@@ -234,7 +234,6 @@ Item {
                 spacing: Theme.gutter
 
                 FormField {
-                    id: languageField
                     objectName: "calibreLanguageField"
 
                     Layout.preferredWidth: Math.round(16 * Theme.charWidth)

@@ -43,8 +43,8 @@ int rangeEnd(const QString &start, const QString &end)
     return end.toInt();
 }
 
-// "Pratchett, Terry;Gaiman, Neil" as names and their sort.
-void readAuthors(const QString &written, QStringList *authors, QString *authorSort)
+// "Pratchett, Terry;Gaiman, Neil" as names.
+void readAuthors(const QString &written, QStringList *authors)
 {
     QStringList names;
     for (const QString &name : written.split(u';', Qt::SkipEmptyParts)) {
@@ -58,7 +58,6 @@ void readAuthors(const QString &written, QStringList *authors, QString *authorSo
         *authors = names;
         return;
     }
-    *authorSort = names.join(QStringLiteral(" & "));
     for (const QString &name : std::as_const(names))
         authors->append((name.section(u',', 1).trimmed() + u' ' + name.section(u',', 0, 0).trimmed()).trimmed());
 }
@@ -219,7 +218,7 @@ QList<Book> byBook(const QList<Clipping> &clippings)
             index.insert(key, books.size());
             Book book;
             book.title = clipping.title;
-            readAuthors(clipping.authors, &book.authors, &book.authorSort);
+            readAuthors(clipping.authors, &book.authors);
             books.append(book);
             grouped.append(QList<Clipping>{});
         }
@@ -254,12 +253,7 @@ QList<Book> byBook(const QList<Clipping> &clippings)
                     bookmarks.append(clipping);
             }
         }
-        struct Placed
-        {
-            ReaderNote note;
-            int order;
-        };
-        QList<Placed> placed;
+        QList<ReaderNote> placed;
         QList<bool> noteUsed(notes.size(), false);
         for (const Clipping &highlight : std::as_const(highlights)) {
             ReaderNote note;
@@ -280,7 +274,7 @@ QList<Book> byBook(const QList<Clipping> &clippings)
                     break;
                 }
             }
-            placed.append({ note, note.location });
+            placed.append(note);
         }
         for (qsizetype n = 0; n < notes.size(); ++n) {
             if (noteUsed.at(n))
@@ -291,7 +285,7 @@ QList<Book> byBook(const QList<Clipping> &clippings)
             note.created = notes.at(n).added;
             note.position = position(notes.at(n));
             note.location = notes.at(n).start > 0 ? notes.at(n).start : notes.at(n).page;
-            placed.append({ note, note.location });
+            placed.append(note);
         }
         for (const Clipping &bookmark : std::as_const(bookmarks)) {
             ReaderNote note;
@@ -299,11 +293,11 @@ QList<Book> byBook(const QList<Clipping> &clippings)
             note.created = bookmark.added;
             note.position = position(bookmark);
             note.location = bookmark.start > 0 ? bookmark.start : bookmark.page;
-            placed.append({ note, note.location });
+            placed.append(note);
         }
-        std::stable_sort(placed.begin(), placed.end(), [](const Placed &a, const Placed &b) { return a.order < b.order; });
-        for (const Placed &item : std::as_const(placed))
-            books[b].notes.append(item.note);
+        std::stable_sort(placed.begin(), placed.end(),
+                         [](const ReaderNote &a, const ReaderNote &b) { return a.location < b.location; });
+        books[b].notes = placed;
     }
     books.removeIf([](const Book &book) { return book.notes.isEmpty(); });
     return books;

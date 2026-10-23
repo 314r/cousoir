@@ -10,7 +10,6 @@
 
 #include <QLocale>
 
-#include <cmath>
 
 #include "calibre_db.h"
 #include "calibre_text.h"
@@ -20,19 +19,9 @@
 
 namespace BookDisplay {
 
-QString seriesIndex(double index)
-{
-    if (index == std::floor(index))
-        return QString::number(qint64(index));
-    QString text = QString::number(index, 'f', 2);
-    while (text.endsWith(u'0'))
-        text.chop(1);
-    return text;
-}
-
 QString series(const Book &book)
 {
-    return book.seriesId > 0 ? BookListModel::tr("%1 [%2]").arg(book.series, seriesIndex(book.seriesIndex))
+    return book.seriesId > 0 ? BookListModel::tr("%1 [%2]").arg(book.series, CalibreText::seriesIndexText(book.seriesIndex))
                              : QString();
 }
 
@@ -44,6 +33,17 @@ QString rating(int rating)
 QString date(const QDateTime &date)
 {
     return CalibreDb::isUndefinedDate(date) ? QString() : date.toLocalTime().date().toString(Qt::ISODate);
+}
+
+QString monthYear(const QDateTime &date)
+{
+    return CalibreDb::isUndefinedDate(date) ? QString()
+                                            : QLocale::c().toString(date.toLocalTime().date(), QStringLiteral("MMM yyyy"));
+}
+
+QString fileSize(qint64 size)
+{
+    return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
 }
 
 namespace {
@@ -69,7 +69,7 @@ QString customField(const Book &book, const CustomColumn &column, qsizetype inde
         return value.value.toStringList().join(areNames ? QStringLiteral(" & ") : QStringLiteral(", "));
     }
     if (type == QLatin1String("series"))
-        return BookListModel::tr("%1 [%2]").arg(value.value.toString(), seriesIndex(value.seriesIndex));
+        return BookListModel::tr("%1 [%2]").arg(value.value.toString(), CalibreText::seriesIndexText(value.seriesIndex));
     if (type == QLatin1String("rating"))
         return rating(value.value.toInt());
     if (type == QLatin1String("bool"))
@@ -102,7 +102,7 @@ QString field(const Book &book, const QString &key, const QList<CustomColumn> &c
     if (key == QLatin1String("series"))
         return series(book);
     if (key == QLatin1String("series_index"))
-        return seriesIndex(book.seriesIndex);
+        return CalibreText::seriesIndexText(book.seriesIndex);
     if (key == QLatin1String("rating"))
         return rating(book.rating);
     if (key == QLatin1String("publisher"))
@@ -132,14 +132,12 @@ QString field(const Book &book, const QString &key, const QList<CustomColumn> &c
     if (key == QLatin1String("last_modified"))
         return date(book.lastModified);
     if (key == QLatin1String("pubdate"))
-        return CalibreDb::isUndefinedDate(book.pubdate)
-            ? QString() : QLocale::c().toString(book.pubdate.toLocalTime().date(), QStringLiteral("MMM yyyy"));
+        return monthYear(book.pubdate);
     if (key == QLatin1String("size")) {
         qint64 largest = 0;
         for (const BookFormat &format : book.formats)
             largest = std::max(largest, format.size);
-        return book.formats.isEmpty() ? QString()
-                                      : QLocale::c().formattedDataSize(largest, 1, QLocale::DataSizeTraditionalFormat);
+        return book.formats.isEmpty() ? QString() : fileSize(largest);
     }
     if (key == QLatin1String("pages"))
         return book.pages > 0 ? QString::number(book.pages) : QString();

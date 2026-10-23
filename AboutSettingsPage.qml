@@ -8,8 +8,6 @@ import Cousoir
 
 // Cousoir's version, its credits, Calibre's first, and its license.
 Item {
-    id: aboutPage
-
     implicitHeight: contentLayout.implicitHeight + 2 * Theme.panePadding
 
     ColumnLayout {

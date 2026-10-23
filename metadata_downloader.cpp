@@ -2,7 +2,6 @@
 
 #include <QDir>
 #include <QImageReader>
-#include <QLocale>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -69,11 +68,6 @@ void MetadataDownloader::setLibrary(BookLibrary *library)
     if (m_library)
         connect(m_library, &BookLibrary::libraryPathChanged, this, &MetadataDownloader::cancel);
     emit libraryChanged();
-}
-
-bool MetadataDownloader::available() const
-{
-    return true;
 }
 
 QString MetadataDownloader::source() const
@@ -259,10 +253,7 @@ void MetadataDownloader::stopCovers()
 
 void MetadataDownloader::setProgram(const QString &program)
 {
-    const bool wasAvailable = available();
     m_program = program.isEmpty() ? MetadataDownload::program() : program;
-    if (available() != wasAvailable)
-        emit availableChanged();
 }
 
 void MetadataDownloader::setNative(bool native)
@@ -270,7 +261,7 @@ void MetadataDownloader::setNative(bool native)
     const QString before = source();
     m_native = native;
     if (source() != before)
-        emit availableChanged();
+        emit sourceChanged();
 }
 
 void MetadataDownloader::setSite(const OpenLibrary::Site &site)

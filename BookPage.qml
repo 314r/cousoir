@@ -46,7 +46,7 @@ Rectangle {
     signal failed(string message)
     // Convert, chosen in the details pane.
     signal convertRequested(string format)
-    // Send to a Kobo, chosen in the details pane.
+    // Send to the reader on `root`, chosen in the details pane.
     signal sendRequested(string root)
     // Something done, for the status bar.
     signal noticed(string message)
@@ -156,8 +156,6 @@ Rectangle {
             contentWidth: availableWidth
 
             ColumnLayout {
-                id: bookContent
-
                 x: Theme.pagePadding
                 width: bookScroll.availableWidth - 2 * Theme.pagePadding
                 spacing: Theme.pagePadding
@@ -487,7 +485,6 @@ Rectangle {
                                 id: note
 
                                 required property var modelData
-                                required property int index
                                 readonly property bool bookmark: note.modelData.type === "Bookmark"
 
                                 Layout.fillWidth: true

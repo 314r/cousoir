@@ -2,8 +2,8 @@ import QtQuick
 import Cousoir
 
 // One session per window: owns the library, the guard that says whether it
-// may be written, the conversions, the devices and the metadata downloads, and pushes the system
-// appearance into the Theme singleton.
+// may be written, the conversions, the devices and the metadata downloads,
+// and pushes the system appearance into the Theme singleton.
 QtObject {
     id: session
 
@@ -53,7 +53,6 @@ QtObject {
     }
 
     function applySystemAppearance() {
-        Theme.systemDark = appearance.dark
         Theme.systemPalette = appearance.palette
         Theme.systemMonoFont = appearance.fixedFont.family
         Theme.systemFontPointSize = appearance.uiFontPointSize

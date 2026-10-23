@@ -110,8 +110,8 @@ On other distributions, you need Qt 6.9 or later, SQLite, libzip, ICU, Snowball'
 or later and a C++20 compiler; libmtp for a Kindle; Qt WebEngine for the
 reader. [DOC.md](DOC.md) has the details.
 
-> **About Calibre:** Cousoir browses, edits and shares a library, sends to a
-> Kobo or a Kindle, downloads metadata and reads books on its own. Calibre
+> **About Calibre:** Cousoir browses and edits a library, sends to a Kobo
+> or a Kindle, downloads metadata and reads books on its own. Calibre
 > itself converts to AZW3, downloads metadata from its own sources, and reads
 > the metadata of formats other than EPUB, KEPUB, MOBI, AZW3 and PDF: install
 > it too if you need those.
@@ -209,8 +209,8 @@ The few places where Cousoir departs from Calibre on purpose are listed in
   library settings. A library only this computer changes is ready as soon as
   Calibre closes.
 - **Hands off your Kobo's database.** Cousoir only reads it.
-- **Nothing leaves your computer.** No accounts, no telemetry, no internet
-  access.
+- **Nothing leaves your computer.** No accounts, no telemetry; the web only
+  when you download a book's metadata and covers.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 

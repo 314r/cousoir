@@ -286,13 +286,13 @@ Calibre keeps the index Cousoir adds to.
 | 11. Instant saves | planned |
 | 12. Language names | done |
 | 14. A Kobo without Calibre | done; a PDF goes without metadata |
-| 15. The library on the network | done |
+| 15. The library on the network | reverted on 2026-10-23 |
 | 16. Metadata from the web without Calibre | done, with Open Library |
 | 17. Kindle highlights | done |
 | 13. Notes | done; notes with images are read, left to Calibre to change |
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
 | 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
-| 20. Reader apps over the network | done; Bonjour, collections and read columns later |
+| 20. Reader apps over the network | reverted on 2026-10-23 |
 | 21. The library's highlights | done; the readers' notes and editing a note later |
 | 22. Searching the books' text | planned |
 
@@ -1196,3 +1196,52 @@ under the new serializer came out right. Three bugs, fixed, and a minor one:
   book its writer fails on, and an entry that cannot be read fails the book
   rather than go missing from it; a send whose copy cannot be made fails,
   rather than tell the books sent.
+
+### 2026-10-23 — goals 15 and 20 reverted, and a cleanup (`exp-revert`)
+
+The user asked for goals 6, 8, 15 and 20 to be reverted, then for the whole
+code to be cleaned. Asked what the reverts would take with them, the user
+kept goal 6 (goal 17's Kindle clippings show only through it) and goal 8
+(the native sends to a Kobo and a Kindle make their paths with the template
+engine), and reverted goal 20 whole, its EPUB metadata writer included.
+
+- Goal 20 reverted (`exp-wireless`, `exp-review11`, `exp-epubmeta`,
+  `exp-review12`): Calibre's wireless device server, the sends to reader
+  apps, the EPUB metadata writer with `xml_tree` and `book_zip`. A KEPUB
+  gets the library's metadata from its own code again, and a plain EPUB
+  goes to a Kobo as a copy, as before goal 20.
+  `CalibreLanguages::Names::translate()` stays, as the highlights use it.
+- Goal 15 reverted (`exp-server`, `exp-review6`): the OPDS catalog and web
+  page, the HTTP server, the QR codes, Settings' Network section and
+  `cousoir-cli serve`. Two DOC.md fixes the merge carried, on what needs
+  Calibre and `cousoir-cli kepubify`, and a check of `editsBooks()` that
+  goal 20's review added, are back.
+- The 23 tests pass after the reverts.
+
+The cleanup, by five agents each on its own files, then their findings
+across files:
+
+- Dead code gone: functions, members, properties and map keys nothing read
+  (`CalibreSearch::locations()`, the search index's tag, series and
+  publisher rows, `Names::fromCalibre()`, `NativeSend::shortenComponents()`,
+  `BookReader::readableFormat()`, `DeviceBook::authorSort`, the Kindle
+  clippings' author sort, Kepub's language option, unused fields of the
+  EPUB reader, MOBI writer and annotation search, Theme's dark flags and
+  the `dark` properties of `SystemAppearance` and `OmarchyTheme`, the
+  `available` properties of the devices, conversions and downloads, which
+  had been always true since Cousoir sends, converts to KEPUB and downloads
+  without Calibre); unused includes, ids, QML functions, an icon and
+  reader.js exports.
+- Duplicates made one: `fmt_sidx()` (`CalibreText::seriesIndexText()`),
+  `format_abspath()` (`CalibreDb::formatFile()`), the file size and month
+  texts (`BookDisplay`), the KEPUB options (`Kepub::optionsFor()`), the
+  format a native send picks (`NativeSend::sendFormat()`), the list's known
+  columns, a book's cover bytes, the series number parsing of the edits,
+  two template functions' helpers, and the tests' shared helpers
+  (`test_support.h`).
+- Small bugs found on the way, fixed: the palette's Highlights section
+  focused the hidden books list; Convert to AZW3 was offered in the menu and
+  by Ctrl+Shift+A without Calibre, which refused it; a PDF closed kept its
+  title; the command line's help left out `kepubify` and Kindles.
+- Not changed, noted: a date search takes ISO and numeric dates only, where
+  Calibre's `parse_date()` reads "apr 2015" too.

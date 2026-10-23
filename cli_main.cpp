@@ -1068,7 +1068,7 @@ int main(int argc, char *argv[])
         "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
         "  apply   Apply the changes of a JSON file (edits, added and removed books and\n"
         "          formats, restorations, conversions, books sent to or removed from a\n"
-        "          Kobo), as the application makes them.\n"
+        "          Kobo or a Kindle), as the application makes them.\n"
         "  read    Print the metadata adding the given book files would read.\n"
         "  device  Print the books on a reader: a Kobo by the folder it is mounted on,\n"
         "          \"mtp\" or \"mtp:SERIAL\" for a Kindle connected over MTP.\n"
@@ -1097,7 +1097,7 @@ int main(int argc, char *argv[])
     const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
     parser.addOption(coversOption);
     parser.addPositionalArgument(QStringLiteral("command"),
-                                 QStringLiteral("list, search, doctor, apply, read, device, template or download"));
+                                 QStringLiteral("list, search, doctor, apply, read, device, template, download or kepubify"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);

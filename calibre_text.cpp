@@ -548,6 +548,16 @@ QByteArray mobiLanguageCode(const QString &language)
     return QByteArray("\0\0", 2) + char(sub) + char(main);
 }
 
+QString seriesIndexText(double index)
+{
+    if (index == std::floor(index))
+        return QString::number(qint64(index));
+    QString text = QString::number(index, 'f', 2);
+    while (text.endsWith(u'0'))
+        text.chop(1);
+    return text;
+}
+
 QString languageName(const QString &code, const QString &interfaceLanguage)
 {
     return CalibreLanguages::names(interfaceLanguage)->name(code);

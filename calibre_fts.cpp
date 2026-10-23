@@ -4,12 +4,10 @@
 // (C) 2021 Kovid Goyal, GPL v3: the Tokenizer, its UTF-8 decoding, its script
 // blocks and break iterators, its stemmer and its registration.
 
-#include <QByteArray>
 #include <QObject>
 
 #include <cstring>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>

@@ -543,8 +543,9 @@ metadata and cover put into the new file; the conversion in a Calibre worker
 process of its own. The file is added as Calibre adds it, and the settings
 are saved in `conversion_options` for the book's next conversion, as
 Calibre saves them; a format converted to itself keeps its old file as
-`ORIGINAL_AZW3` or `ORIGINAL_KEPUB`, as in Calibre. Converting needs Calibre;
-without it the Convert actions do not show.
+`ORIGINAL_AZW3` or `ORIGINAL_KEPUB`, as in Calibre. Without Calibre, only
+Convert to KEPUB of a book with an EPUB shows, which Cousoir does itself;
+AZW3, and KEPUB from other formats, need Calibre.
 
 Cousoir departs from Calibre here too:
 
@@ -611,7 +612,8 @@ and the book written into metadata.calibre and driveinfo.calibre as Calibre
 writes them, so that Calibre, when it connects later, knows the books
 Cousoir sent. The golden test sends the same books both ways and has
 Calibre read both Kobos. A PDF goes as it is, without the library's
-metadata, which Calibre would write into it. A Kindle still needs Calibre.
+metadata, which Calibre would write into it. A Kindle, below, goes without
+Calibre too.
 
 What the Kobo knows of each book's reading shows too, read from its
 database as Calibre's Kobo driver reads it to fetch annotations: the Kobo's
@@ -826,6 +828,7 @@ cousoir-cli read FILE…
 cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
 cousoir-cli download [--library PATH] [--covers] BOOK_ID
+cousoir-cli kepubify BOOK.epub BOOK.kepub
 ```
 
 `list` prints the books exactly as `calibredb list --for-machine --fields

@@ -2,11 +2,8 @@
 
 #include <QList>
 #include <QPair>
-#include <QSet>
 #include <QString>
 #include <QStringList>
-
-#include <optional>
 
 #include "python_json.h"
 
@@ -31,8 +28,6 @@ struct Query
     bool stemming = true;
     // "highlight", "bookmark", or empty for both.
     QString type;
-    // Only the books with these ids, when given.
-    std::optional<QSet<int>> bookIds;
 };
 
 struct Hit

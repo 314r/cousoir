@@ -599,16 +599,9 @@
             }
             return pagesById;
         },
-        next: next,
-        previous: previous,
-        currentCfi: currentCfi,
         applyHighlights: applyHighlights,
         removeHighlight: removeHighlight,
         selection: selection,
         clearSelection() { window.getSelection().removeAllRanges(); },
-        encode: encode,
-        decode: decode,
-        page: page,
-        pages: pages,
     };
 })();

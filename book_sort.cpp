@@ -13,13 +13,12 @@
 #include "book_sort.h"
 
 #include <QCollator>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLocale>
 #include <QMutex>
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <optional>
 
 #include "book.h"

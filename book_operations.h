@@ -113,7 +113,7 @@ bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, c
 bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &removal, const Context &context,
                    Result *result, QString *error);
 bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds, const Context &context,
-                 Result *result, QString *error);
+                 QString *error);
 bool restore(SqliteDb &db, FileTransaction &files, const Restoration &restoration, const Context &context,
              FieldWriters::Result *fields, Result *result, QString *error);
 
@@ -131,10 +131,6 @@ bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QStri
 // title and first author, in the database and on disk.
 bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath, int bookId, const QString &unknown,
                 QString *error);
-
-// format_abspath() without its rename: the file Calibre expects, or one with
-// the format's extension.
-QString formatFile(const QString &folder, const QString &name, const QString &format);
 
 // list_trash_entries(): the books and formats in the library's trash.
 QList<TrashEntry> trashEntries(const QString &libraryPath, const QString &interfaceLanguage);

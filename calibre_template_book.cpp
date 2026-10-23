@@ -12,9 +12,6 @@
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
-#include <QCollator>
-#include <QFileInfo>
-#include <QLocale>
 #include <QTimeZone>
 
 #include <algorithm>
@@ -27,7 +24,6 @@
 #include "calibre_template_p.h"
 #include "calibre_text.h"
 #include "field_writers.h"
-#include "opf_reader.h"
 #include "python_json.h"
 
 namespace CalibreTemplate::Internal {

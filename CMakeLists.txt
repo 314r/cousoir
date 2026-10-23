@@ -88,6 +88,7 @@ qt_add_library(cousoir_core STATIC
     calibre_strings.inc
     calibre_template.cpp
     calibre_template.h
+    calibre_template.inc
     calibre_template_book.cpp
     calibre_template_engine.cpp
     calibre_template_functions.cpp
@@ -275,7 +276,6 @@ set(COUSOIR_ICON_FILES
     assets/icons/search.svg
     assets/icons/settings-appearance.svg
     assets/icons/settings.svg
-    assets/icons/star.svg
     assets/icons/tag.svg
     assets/icons/theme-dark.svg
     assets/icons/theme-light.svg
@@ -390,7 +390,7 @@ if(BUILD_TESTING)
         tests/tool/main.cpp
         tests/tool/readers.cpp
         tests/tool/search.cpp
-    tests/tool/sort.cpp
+        tests/tool/sort.cpp
     )
     target_link_libraries(cousoir-test-tool PRIVATE cousoir_core)
     cousoir_configure_test_executable(cousoir-test-tool)

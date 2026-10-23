@@ -5,7 +5,6 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QLocale>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QStorageInfo>
@@ -26,6 +25,7 @@
 
 #include "book.h"
 #include "book_library.h"
+#include "book_list_model.h"
 #include "calibre_config.h"
 #include "calibre_job.h"
 #include "calibre_lock.h"
@@ -61,9 +61,6 @@ QList<Volume> mountedVolumes()
 #ifdef Q_OS_LINUX
 const QString udisks = QStringLiteral("org.freedesktop.UDisks2");
 
-// Unmounts the Kobo's filesystem through UDisks2, as a file manager's
-// "Safely remove" does, then powers its drive off, which takes the Kobo out
-// of its USB mode.
 // The block device's object in UDisks2, which spells "-" as "_2d".
 QString udisksBlock(const QString &node)
 {
@@ -77,6 +74,9 @@ QString udisksBlock(const QString &node)
     return QStringLiteral("/org/freedesktop/UDisks2/block_devices/") + name;
 }
 
+// Unmounts the Kobo's filesystem through UDisks2, as a file manager's
+// "Safely remove" does, then powers its drive off, which takes the Kobo out
+// of its USB mode.
 void udisksEject(const Kobo::Device &device, std::function<void(const QString &)> done)
 {
     const QString block = udisksBlock(device.node);
@@ -116,7 +116,6 @@ void udisksEject(const Kobo::Device &device, std::function<void(const QString &)
 }
 #endif
 
-// As the library shows the size of its files.
 // The notes worth showing: a highlight of nothing, which Calibre keeps, says
 // nothing.
 QList<ReaderNote> shownNotes(const ReadingState &reading)
@@ -159,11 +158,6 @@ QString durationText(qint64 seconds)
     if (minutes < 60)
         return QObject::tr("%1 min").arg(minutes);
     return QObject::tr("%1 h %2 min").arg(minutes / 60).arg(minutes % 60);
-}
-
-QString sizeText(qint64 size)
-{
-    return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
 }
 
 QStringList formatsOf(const Book &book)
@@ -301,7 +295,7 @@ QVariantList DeviceLibrary::devices() const
             { QStringLiteral("name"), connected.name },
             { QStringLiteral("kind"), connected.kind == Kind::Kobo ? QStringLiteral("kobo") : QStringLiteral("kindle") },
             { QStringLiteral("ejectable"), connected.kind == Kind::Kobo },
-            { QStringLiteral("free"), sizeText(connected.freeBytes) },
+            { QStringLiteral("free"), BookDisplay::fileSize(connected.freeBytes) },
         });
     }
     return list;
@@ -349,7 +343,7 @@ QVariantList DeviceLibrary::rows() const
             { QStringLiteral("title"), book.title },
             { QStringLiteral("authors"), book.authors.join(QLatin1String(" & ")) },
             { QStringLiteral("format"), book.format },
-            { QStringLiteral("size"), sizeText(book.size) },
+            { QStringLiteral("size"), BookDisplay::fileSize(book.size) },
             { QStringLiteral("bookId"), book.bookId },
             { QStringLiteral("purchased"), book.purchased },
             { QStringLiteral("reading"), book.reading.status == 2 ? QStringLiteral("✓")
@@ -525,12 +519,6 @@ QVariantMap DeviceLibrary::onDevice() const
 int DeviceLibrary::deviceCount() const
 {
     return int(m_devices.size());
-}
-
-bool DeviceLibrary::available() const
-{
-    // Neither a Kobo nor a Kindle needs Calibre.
-    return true;
 }
 
 bool DeviceLibrary::sendsNatively() const
@@ -763,10 +751,7 @@ void DeviceLibrary::setKindleProvider(KindleProvider provider)
 
 void DeviceLibrary::setProgram(const QString &program)
 {
-    const bool wasAvailable = available();
     m_program = program.isEmpty() ? SendJob::program() : program;
-    if (available() != wasAvailable)
-        emit availableChanged();
 }
 
 void DeviceLibrary::setEjector(Ejector ejector)

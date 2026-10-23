@@ -27,7 +27,6 @@
 #include <QSet>
 
 #include <algorithm>
-#include <cmath>
 
 #include "book.h"
 #include "book_import.h"

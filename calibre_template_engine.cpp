@@ -8,9 +8,6 @@
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
-#include <QCollator>
-#include <QLocale>
-
 #include <cmath>
 #include <iostream>
 
@@ -1093,13 +1090,7 @@ struct Interpreter
 
 // --- The formatter ---------------------------------------------------------------
 
-struct Formatter::Private
-{
-};
-
-Formatter::Formatter(const Library &library) : library(library), d(std::make_unique<Private>()) {}
-
-Formatter::~Formatter() = default;
+Formatter::Formatter(const Library &library) : library(library) {}
 
 int Formatter::compare(const QString &a, const QString &b) const
 {

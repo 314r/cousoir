@@ -50,7 +50,6 @@ ThemedWindow {
         : qsTr("Cousoir")
 
     function applyOmarchyTheme() {
-        Theme.omarchyDark = omarchyTheme.dark
         Theme.omarchyPalette = omarchyTheme.palette
         Theme.omarchyAvailable = omarchyTheme.available
     }
@@ -167,6 +166,8 @@ ThemedWindow {
             checkPage.focusList()
         else if (deviceShown)
             devicePage.focusList()
+        else if (highlightsShown)
+            highlightsPage.focusList()
         else
             booksPage.focusList()
     }
@@ -255,7 +256,7 @@ ThemedWindow {
         if (!bookId || !device)
             return
         const format = devices.convertFormat(target)
-        if (devices.sendFormat(bookId, target) === "" && format && library.writable && conversions.available
+        if (devices.sendFormat(bookId, target) === "" && format && library.writable
             && conversions.formatsFor(bookId).length > 0) {
             const row = bookRow(bookId)
             convertAndSendDialog.bookIds = [bookId]
@@ -290,7 +291,7 @@ ThemedWindow {
         const format = devices.convertFormat(target)
         const sendable = bookIds.filter(id => devices.sendFormat(id, target) !== "")
         const convertible = bookIds.filter(id => devices.sendFormat(id, target) === "" && format && library.writable
-                                               && conversions.available && conversions.formatsFor(id).length > 0)
+                                               && conversions.formatsFor(id).length > 0)
         if (sendable.length > 0) {
             const error = devices.send(sendable, target)
             if (error)
@@ -328,20 +329,20 @@ ThemedWindow {
         pendingSends = waiting
     }
 
-    // Asks before removing a book from the Kobo the device page shows.
+    // Asks before removing a book from the reader the device page shows.
     function removeFromDevice(lpath, title) {
         removeFromDeviceDialog.lpath = lpath
         removeFromDeviceDialog.title = qsTr("Remove “%1” from %2?").arg(title).arg(devices.current.name)
         removeFromDeviceDialog.ask()
     }
 
-    function ejectDevice() {
-        const error = devices.eject(devices.currentRoot)
+    function ejectDevice(root) {
+        const error = devices.eject(root)
         if (error)
             showNotice(error)
     }
 
-    // Reads the library again, or the Kobo the device page shows.
+    // Reads the library again, or the reader the device page shows.
     function reload() {
         if (deviceShown)
             devices.refresh()
@@ -448,16 +449,16 @@ ThemedWindow {
         add("read", qsTr("Read in Cousoir"), "Ctrl+Shift+O", "book", currentBookId() > 0 && library.readerAvailable)
         add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
         add("download", qsTr("Download metadata and covers"), "", "globe",
-            session.bookOpen && library.writable && downloads.available)
+            session.bookOpen && library.writable)
         add("kepub", books > 1 ? qsTr("Convert %1 books to KEPUB").arg(books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
-            "refresh", books > 0 && library.writable && conversions.available)
+            "refresh", books > 0 && library.writable)
         add("azw3", books > 1 ? qsTr("Convert %1 books to AZW3").arg(books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
             "refresh", books > 0 && library.writable && conversions.calibre)
         for (const device of devices.devices) {
             add("send:" + device.root, books > 1 ? qsTr("Send %1 books to %2").arg(books).arg(device.name)
                                                  : qsTr("Send to %1").arg(device.name),
                 device === devices.devices[0] ? "Ctrl+D" : "", "ereader",
-                books > 0 && devices.available && devices.writable)
+                books > 0 && devices.writable)
             add("eject:" + device.root, qsTr("Eject %1").arg(device.name), "", "eject", device.ejectable === true)
         }
         add("trash", books > 1 ? qsTr("Move %1 books to the trash").arg(books) : qsTr("Move to the trash"), "Del",
@@ -514,9 +515,7 @@ ThemedWindow {
         } else if (hit.key.startsWith("send:")) {
             sendBooks(targetIds(), hit.key.slice(5))
         } else if (hit.key.startsWith("eject:")) {
-            const error = devices.eject(hit.key.slice(6))
-            if (error)
-                showNotice(error)
+            ejectDevice(hit.key.slice(6))
         } else if (hit.key === "trash") {
             trashBooks(targetIds())
         } else if (hit.key === "grid") {
@@ -538,7 +537,8 @@ ThemedWindow {
         }
     }
 
-    // Calibre's sources asked about the open book, out of any field first.
+    // Calibre's sources, or Open Library, asked about the open book, out of
+    // any field first.
     function downloadMetadata() {
         if (!session.bookOpen)
             return
@@ -738,6 +738,19 @@ ThemedWindow {
 
         function onLibraryChanged() {
             window.sendConverted()
+        }
+
+        // The library goes back to its books when the saved search shown is
+        // gone; the sidebar follows it.
+        function onSectionChanged() {
+            if (!window.deviceSection && window.section !== window.library.section)
+                window.section = window.library.section
+        }
+
+        function onVirtualLibraryChanged() {
+            if (window.library.virtualLibraryError)
+                window.showNotice(qsTr("Cousoir cannot narrow the books to “%1”, so all show: %2")
+                                  .arg(window.library.virtualLibrary).arg(window.library.virtualLibraryError))
         }
     }
 
@@ -987,20 +1000,20 @@ ThemedWindow {
 
     Shortcut {
         sequence: "Ctrl+Shift+K"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
+        enabled: (session.bookOpen || window.booksShown) && window.library.writable
         onActivated: window.convertBooks(window.targetIds(), "KEPUB")
     }
 
     Shortcut {
         sequence: "Ctrl+Shift+A"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.available
+        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.calibre
         onActivated: window.convertBooks(window.targetIds(), "AZW3")
     }
 
     Shortcut {
         sequence: "Ctrl+D"
         enabled: (session.bookOpen || window.booksShown) && window.devices.devices.length > 0
-            && window.devices.available && window.devices.writable
+            && window.devices.writable
         onActivated: window.sendBooks(window.targetIds(), "")
     }
 
@@ -1116,23 +1129,6 @@ ThemedWindow {
         applyThemeMode()
         setTextScalePercent(appearanceSettings.textScalePercent)
         booksPage.focusList()
-    }
-
-    // The library goes back to its books when the saved search shown is
-    // gone; the sidebar follows it.
-    Connections {
-        target: window.library
-
-        function onSectionChanged() {
-            if (!window.deviceSection && window.section !== window.library.section)
-                window.section = window.library.section
-        }
-
-        function onVirtualLibraryChanged() {
-            if (window.library.virtualLibraryError)
-                window.showNotice(qsTr("Cousoir cannot narrow the books to “%1”, so all show: %2")
-                                  .arg(window.library.virtualLibrary).arg(window.library.virtualLibraryError))
-        }
     }
 
     onSectionChanged: {
@@ -1351,7 +1347,6 @@ ThemedWindow {
                     spacing: Theme.gutter
 
                     FlatButton {
-                        id: backButton
                         objectName: "backButton"
 
                         iconOnly: true
@@ -1491,7 +1486,6 @@ ThemedWindow {
                         objectName: "downloadMetadataButton"
 
                         visible: session.bookOpen && !bookPage.confirmingRevert && window.library.writable
-                                 && window.downloads.available
                         iconOnly: true
                         text: qsTr("Download metadata and covers")
                         icon.source: "assets/icons/globe.svg"
@@ -1544,7 +1538,7 @@ ThemedWindow {
                         text: qsTr("Eject")
                         tip: qsTr("Eject %1 so it can be unplugged").arg(window.devices.current.name || "")
                         icon.source: "assets/icons/eject.svg"
-                        onClicked: window.ejectDevice()
+                        onClicked: window.ejectDevice(window.devices.currentRoot)
                     }
 
                     FlatButton {
@@ -1643,7 +1637,6 @@ ThemedWindow {
                     }
 
                     FlatButton {
-                        id: settingsButton
                         objectName: "settingsButton"
 
                         visible: !session.bookOpen
@@ -1660,8 +1653,6 @@ ThemedWindow {
                 Layout.fillHeight: true
 
                 StackLayout {
-                    id: pages
-
                     anchors.fill: parent
                     currentIndex: window.pageIndex()
 

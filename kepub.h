@@ -8,6 +8,8 @@
 
 #include <optional>
 
+struct Book;
+
 // Making a KEPUB of an EPUB without Calibre, as Calibre's kepubify does
 // (ebooks/oeb/polish/kepubify.py): the text of each page in Kobo's spans,
 // a sentence each, numbered by paragraph; the body wrapped in Kobo's
@@ -31,15 +33,11 @@ struct Metadata
     double seriesIndex = 1;
     // HTML.
     QString comments;
-    QString uuid;
     QList<QPair<QString, QString>> identifiers;
 };
 
 struct Options
 {
-    // The language of the book, for a page that names none: an ISO 639
-    // code.
-    QString language = QStringLiteral("en");
     // The book's title and authors, for a title page without a cover.
     QString title;
     QString authors;
@@ -49,9 +47,13 @@ struct Options
     std::optional<Metadata> metadata;
 };
 
+// The options that put the library's metadata and cover of `book` into its
+// KEPUB, as Calibre's conversion and send put them into what they make.
+Options optionsFor(const Book &book);
+
 // kepubify_html_data(): a page of XHTML with Kobo's markup, `scriptHref`
 // the address of kobo.js from it; nothing for a page that is no XML.
-std::optional<QByteArray> kepubifyPage(const QByteArray &xhtml, const QString &scriptHref, const QString &language);
+std::optional<QByteArray> kepubifyPage(const QByteArray &xhtml, const QString &scriptHref);
 
 // kepubify_path(): writes the KEPUB of the EPUB at `epub` to `kepub`.
 bool kepubify(const QString &epub, const QString &kepub, const Options &options, QString *error);

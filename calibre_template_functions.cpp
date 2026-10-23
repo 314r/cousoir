@@ -10,8 +10,6 @@
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
-#include <QCollator>
-#include <QLocale>
 #include <QTimeZone>
 #include <QFileInfo>
 #include <QDir>
@@ -84,6 +82,21 @@ QString capitalize(const QString &text)
     if (text.isEmpty())
         return text;
     return text.left(1).toUpper() + text.mid(1).toLower();
+}
+
+// re.sub() whose replacement is computed for each match.
+QString substitute(const QRegularExpression &pattern, const QString &text,
+                   const std::function<QString(const QRegularExpressionMatch &)> &replace)
+{
+    QString output;
+    qsizetype at = 0;
+    QRegularExpressionMatchIterator matches = pattern.globalMatch(text);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        output += text.mid(at, match.capturedStart() - at) + replace(match);
+        at = match.capturedEnd();
+    }
+    return output + text.mid(at);
 }
 
 // titlecase(): every word capitalized but the small ones, as Calibre does.
@@ -159,22 +172,10 @@ QString titlecase(const QString &text)
         line.append(hyphenated.join(u'-'));
     }
     QString result = line.join(QString());
-    const auto substitute = [](const QString &input, const QRegularExpression &pattern,
-                               const std::function<QString(const QRegularExpressionMatch &)> &replace) {
-        QString output;
-        qsizetype at = 0;
-        QRegularExpressionMatchIterator matches = pattern.globalMatch(input);
-        while (matches.hasNext()) {
-            const QRegularExpressionMatch match = matches.next();
-            output += input.mid(at, match.capturedStart() - at) + replace(match);
-            at = match.capturedEnd();
-        }
-        return output + input.mid(at);
-    };
-    result = substitute(result, smallFirst, [](const auto &m) { return m.captured(1) + capitalize(m.captured(2)); });
-    result = substitute(result, smallAfterNumber, [](const auto &m) { return m.captured(1) + capitalize(m.captured(2)); });
-    result = substitute(result, smallLast, [](const auto &m) { return capitalize(m.captured(0)); });
-    result = substitute(result, subphrase, [](const auto &m) { return m.captured(1) + capitalize(m.captured(2)); });
+    result = substitute(smallFirst, result, [](const auto &m) { return m.captured(1) + capitalize(m.captured(2)); });
+    result = substitute(smallAfterNumber, result, [](const auto &m) { return m.captured(1) + capitalize(m.captured(2)); });
+    result = substitute(smallLast, result, [](const auto &m) { return capitalize(m.captured(0)); });
+    result = substitute(subphrase, result, [](const auto &m) { return m.captured(1) + capitalize(m.captured(2)); });
     return result;
 }
 
@@ -186,21 +187,6 @@ QString ratingToStars(double value, bool halfStars)
     if (halfStars && rating % 2)
         stars += QChar(0x2BE8);
     return stars;
-}
-
-// re.sub() whose replacement is computed for each match.
-QString substitute(const QRegularExpression &pattern, const QString &text,
-                   const std::function<QString(const QRegularExpressionMatch &)> &replace)
-{
-    QString output;
-    qsizetype at = 0;
-    QRegularExpressionMatchIterator matches = pattern.globalMatch(text);
-    while (matches.hasNext()) {
-        const QRegularExpressionMatch match = matches.next();
-        output += text.mid(at, match.capturedStart() - at) + replace(match);
-        at = match.capturedEnd();
-    }
-    return output + text.mid(at);
 }
 
 // The group each capturing group of a Python pattern is in, 0 for none, by
@@ -992,25 +978,6 @@ QHash<QString, Function> makeFunctions()
         return QString(u"");
     });
     add("not", 1, [](Ctx, Args a) { return a[0].isEmpty() ? QStringLiteral("1") : QString(u""); });
-    add("list_join", -1, [](Ctx, Args all) {
-        const QStringList args = all.mid(1);
-        if (args.size() % 2 != 0)
-            fail(QStringLiteral("Invalid 'List, separator' pairs. Every list must have one associated separator"));
-        QStringList keys;
-        QHash<QString, QString> values;
-        for (qsizetype i = 0; i < args.size(); i += 2) {
-            for (const QString &item : items(args[i], args[i + 1])) {
-                const QString key = item.toLower();
-                if (!values.contains(key))
-                    keys.append(key);
-                values.insert(key, item);
-            }
-        }
-        QStringList result;
-        for (const QString &key : std::as_const(keys))
-            result.append(values.value(key));
-        return result.join(all[0]);
-    }, 1);
     // A dict by lower case key: the first place, the last value.
     const auto merge = [](QStringList *keys, QHash<QString, QString> *values, const QStringList &list) {
         for (const QString &item : list) {
@@ -1020,6 +987,19 @@ QHash<QString, Function> makeFunctions()
             values->insert(key, item);
         }
     };
+    add("list_join", -1, [merge](Ctx, Args all) {
+        const QStringList args = all.mid(1);
+        if (args.size() % 2 != 0)
+            fail(QStringLiteral("Invalid 'List, separator' pairs. Every list must have one associated separator"));
+        QStringList keys;
+        QHash<QString, QString> values;
+        for (qsizetype i = 0; i < args.size(); i += 2)
+            merge(&keys, &values, items(args[i], args[i + 1]));
+        QStringList result;
+        for (const QString &key : std::as_const(keys))
+            result.append(values.value(key));
+        return result.join(all[0]);
+    }, 1);
     const auto listUnion = [merge](Ctx, Args a) {
         QStringList keys;
         QHash<QString, QString> values;

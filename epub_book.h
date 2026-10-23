@@ -18,7 +18,6 @@ public:
     struct SpineItem
     {
         QString name;
-        QString mediaType;
         bool linear = true;
         // The file's size, for how far into the book a position is.
         qint64 size = 0;

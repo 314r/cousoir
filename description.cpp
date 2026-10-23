@@ -20,11 +20,6 @@ const QString marks = QStringLiteral("\\`*_{}[]()#+-.!>");
 // the marks are read.
 constexpr char16_t escapeBase = 0xE000;
 
-QString htmlEscaped(const QString &text)
-{
-    return text.toHtmlEscaped();
-}
-
 // What a line of text holds: bold, italics and links, the characters a
 // backslash escapes kept as they are.
 QString inlineHtml(QString line)
@@ -34,7 +29,7 @@ QString inlineHtml(QString line)
         if (line.at(i) == u'\\' && marks.contains(line.at(i + 1)))
             line.replace(i, 2, QChar(char16_t(escapeBase + marks.indexOf(line.at(i + 1)))));
     }
-    line = htmlEscaped(line);
+    line = line.toHtmlEscaped();
 
     static const QRegularExpression link(QStringLiteral("\\[([^\\]]*)\\]\\(([^)\\s]+)\\)"));
     line.replace(link, QStringLiteral("<a href=\"\\2\">\\1</a>"));
@@ -51,7 +46,7 @@ QString inlineHtml(QString line)
     for (qsizetype i = 0; i < line.size(); ++i) {
         const char16_t c = line.at(i).unicode();
         if (c >= escapeBase && c < escapeBase + marks.size())
-            line.replace(i, 1, htmlEscaped(QString(marks.at(c - escapeBase))));
+            line.replace(i, 1, QString(marks.at(c - escapeBase)).toHtmlEscaped());
     }
     return line;
 }

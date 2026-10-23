@@ -1,7 +1,6 @@
 #include "cover_cache.h"
 
 #include <QDir>
-#include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
 #include <QMutex>

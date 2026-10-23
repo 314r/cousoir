@@ -2,7 +2,6 @@
 
 #include <QCryptographicHash>
 #include <QDateTime>
-#include <QDirIterator>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -18,16 +17,6 @@
 #include "test_support.h"
 
 namespace {
-
-QStringList filesUnder(const QString &root)
-{
-    QStringList files;
-    QDirIterator it(root, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext())
-        files.append(QDir(root).relativeFilePath(it.next()));
-    files.sort();
-    return files;
-}
 
 QStringList paths(const QList<DeviceFiles::Entry> &entries)
 {
@@ -197,7 +186,6 @@ private slots:
         QCOMPARE(books.size(), 5);
         const KindleClippings::Book &ecume = books.first();
         QCOMPARE(ecume.authors, QStringList{ QStringLiteral("Boris Vian") });
-        QCOMPARE(ecume.authorSort, QStringLiteral("Vian, Boris"));
         QCOMPARE(ecume.notes.size(), 4);
         QCOMPARE(ecume.notes.at(0).type, QStringLiteral("Annotation"));
         QCOMPARE(ecume.notes.at(0).text,

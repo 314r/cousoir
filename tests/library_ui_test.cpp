@@ -2,7 +2,6 @@
 
 #include <QClipboard>
 #include <QDesktopServices>
-#include <QDirIterator>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1506,19 +1505,6 @@ int main(int argc, char **argv)
     LibraryUiTest test;
     return QTest::qExec(&test, argc, argv);
 }
-
-
-namespace {
-
-QStringList formatsOf(const QVariantMap &book)
-{
-    QStringList formats;
-    for (const QVariant &format : book.value(QStringLiteral("formats")).toList())
-        formats.append(format.toMap().value(QStringLiteral("format")).toString());
-    return formats;
-}
-
-} // namespace
 
 void LibraryUiTest::movesBooksToTrashAndBack()
 {

@@ -162,7 +162,6 @@ struct Exth
 {
     // By id, the last of the same id: original_exth_records.
     std::map<quint32, QByteArray> records;
-    QByteArray timestamp;
     std::optional<quint32> coverIndex;
     std::optional<quint32> thumbnailIndex;
     bool found = false;
@@ -186,9 +185,7 @@ Exth readExth(const Book &book)
         const QByteArray content = record0.mid(pos + 8, size - 8);
         pos += size;
         exth.records[id] = content;
-        if (id == 106)
-            exth.timestamp = content;
-        else if (id == 201 && content.size() >= 4 && u32(content, 0) != 0xffffffff)
+        if (id == 201 && content.size() >= 4 && u32(content, 0) != 0xffffffff)
             exth.coverIndex = u32(content, 0);
         else if (id == 202 && content.size() >= 4 && u32(content, 0) > 0 && u32(content, 0) != 0xffffffff)
             exth.thumbnailIndex = u32(content, 0);

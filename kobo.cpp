@@ -280,7 +280,6 @@ Device describe(const QString &root, const QString &node, const QString &sysRoot
     device.name = named.isEmpty() ? modelName(device.productId, device.modelId) : named;
     const QStorageInfo storage(root);
     device.freeBytes = storage.bytesAvailable();
-    device.totalBytes = storage.bytesTotal();
     return device;
 }
 
@@ -370,7 +369,6 @@ QList<DeviceBook> books(const Device &device, QString *error)
         book->authors.clear();
         for (const QJsonValue &author : entry.value(QLatin1String("authors")).toArray())
             book->authors.append(author.toString());
-        book->authorSort = entry.value(QLatin1String("author_sort")).toString();
         book->uuid = entry.value(QLatin1String("uuid")).toString();
         book->applicationId = entry.value(QLatin1String("application_id")).toInt();
     };
@@ -396,12 +394,7 @@ QList<DeviceBook> books(const Device &device, QString *error)
     }
     if (opened) {
         const int dbVersion = db.value(QStringLiteral("SELECT version FROM dbversion")).toInt();
-        QSet<QString> columns;
-        {
-            SqliteStatement info(db, QStringLiteral("PRAGMA table_info(content)"));
-            while (info.step())
-                columns.insert(info.text(1).toLower());
-        }
+        const QSet<QString> columns = columnsOf(db, QStringLiteral("content"));
         const auto column = [&](const QString &name, const QString &fallback = QStringLiteral("NULL")) {
             return columns.contains(name.toLower()) ? name : fallback + QStringLiteral(" AS ") + name;
         };
@@ -484,10 +477,9 @@ QList<DeviceBook> books(const Device &device, QString *error)
         }
         // The notes, where the Kobo's database has what Calibre reads of them.
         const QSet<QString> bookmark = columnsOf(db, QStringLiteral("Bookmark"));
-        const QSet<QString> content = columnsOf(db, QStringLiteral("content"));
         const bool notes = std::all_of(std::begin(noteColumns), std::end(noteColumns),
                                        [&bookmark](const char *name) { return bookmark.contains(QLatin1String(name)); })
-            && content.contains(QStringLiteral("volumeindex")) && content.contains(QStringLiteral("___numpages"));
+            && columns.contains(QStringLiteral("volumeindex")) && columns.contains(QStringLiteral("___numpages"));
         if (notes) {
             const bool dates = bookmark.contains(QStringLiteral("datecreated"));
             for (DeviceBook &book : found)

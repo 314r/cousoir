@@ -1,6 +1,5 @@
 #include <QtTest>
 
-#include <QDirIterator>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -36,19 +35,6 @@ Run tool(const QStringList &arguments)
         return {};
     return { process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1,
              QString::fromUtf8(process.readAll()) };
-}
-
-bool copyFixture(const QString &to)
-{
-    const QDir from(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library"));
-    QDirIterator it(from.path(), QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString path = it.next();
-        const QString target = QDir(to).filePath(from.relativeFilePath(path));
-        if (!QDir().mkpath(QFileInfo(target).absolutePath()) || !QFile::copy(path, target))
-            return false;
-    }
-    return true;
 }
 
 bool replaceIn(const QString &path, const QByteArray &before, const QByteArray &after)
@@ -109,7 +95,7 @@ private slots:
     {
         QTemporaryDir a;
         QTemporaryDir b;
-        QVERIFY(copyFixture(a.path()) && copyFixture(b.path()));
+        QVERIFY(copyTree(fixtureLibrary(), a.path()) && copyTree(fixtureLibrary(), b.path()));
         Run run = tool({ QStringLiteral("compare-libraries"), a.path(), b.path() });
         QCOMPARE(run.exitCode, 0);
         QVERIFY2(run.lastLine().endsWith(QLatin1String(" files compared, 0 differences")), qPrintable(run.output));
@@ -140,7 +126,7 @@ private slots:
     {
         QTemporaryDir a;
         QTemporaryDir b;
-        QVERIFY(copyFixture(a.path()) && copyFixture(b.path()));
+        QVERIFY(copyTree(fixtureLibrary(), a.path()) && copyTree(fixtureLibrary(), b.path()));
         const QString opf = QDir(b.path()).filePath(blackCompany + QStringLiteral("/metadata.opf"));
         // Attributes in another order and space around the text are the same.
         QVERIFY(replaceIn(opf, R"(<dc:identifier opf:scheme="calibre" id="calibre_id">2</dc:identifier>)",
@@ -160,7 +146,7 @@ private slots:
     {
         QTemporaryDir a;
         QTemporaryDir b;
-        QVERIFY(copyFixture(a.path()) && copyFixture(b.path()));
+        QVERIFY(copyTree(fixtureLibrary(), a.path()) && copyTree(fixtureLibrary(), b.path()));
         // Encoded again, the same picture.
         const QString cover = QDir(b.path()).filePath(blackCompany + QStringLiteral("/cover.jpg"));
         QImage image(cover);
@@ -184,7 +170,7 @@ private slots:
     {
         QTemporaryDir a;
         QTemporaryDir b;
-        QVERIFY(copyFixture(a.path()) && copyFixture(b.path()));
+        QVERIFY(copyTree(fixtureLibrary(), a.path()) && copyTree(fixtureLibrary(), b.path()));
         QVERIFY(execute(b.path(), QStringLiteral("UPDATE books SET uuid = '00000000-0000-4000-8000-000000000000', "
                                                  "timestamp = '2030-01-01 00:00:00+00:00', last_modified = "
                                                  "'2030-01-01 00:00:00+00:00' WHERE id = 6")));
@@ -213,7 +199,7 @@ private slots:
     {
         QTemporaryDir a;
         QTemporaryDir b;
-        QVERIFY(copyFixture(a.path()) && copyFixture(b.path()));
+        QVERIFY(copyTree(fixtureLibrary(), a.path()) && copyTree(fixtureLibrary(), b.path()));
         // The same conversion done twice: its time, the ids drawn for its
         // anchors, its classes and the order of its entries but the first
         // differ.

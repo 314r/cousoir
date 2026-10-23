@@ -14,9 +14,14 @@ struct Book;
 struct LibraryData;
 
 // What a send without Calibre takes from Calibre's device drivers, whatever
-// the reader: the path a book goes to, its entry in metadata.calibre and the
-// thumbnail of its cover.
+// the reader: the format of a book it sends, the path the book goes to, its
+// entry in metadata.calibre and the thumbnail of its cover.
 namespace NativeSend {
+
+// The format Calibre's send picks of `book`: the first of `formatMap`, the
+// driver's ordered formats, the book has a file of; empty for none. Its
+// file goes to `file`.
+QString sendFormat(const Book &book, const QStringList &formatMap, QString *file);
 
 // What a driver gives create_upload_path().
 struct UploadOptions
@@ -37,9 +42,6 @@ struct UploadOptions
 // `extension` its file's, ".azw3".
 QString uploadPath(const LibraryData &data, const Book &book, const QString &extension, const UploadOptions &options,
                    const QString &interfaceLanguage);
-
-// shorten_components_to().
-QStringList shortenComponents(qsizetype length, const QStringList &components, bool lastHasExtension);
 
 // Calibre's ISO dates in metadata.calibre: "2015-07-07T18:41:43+00:00",
 // "None" for the undefined date.
