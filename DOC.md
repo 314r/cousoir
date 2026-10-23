@@ -543,9 +543,8 @@ metadata and cover put into the new file; the conversion in a Calibre worker
 process of its own. The file is added as Calibre adds it, and the settings
 are saved in `conversion_options` for the book's next conversion, as
 Calibre saves them; a format converted to itself keeps its old file as
-`ORIGINAL_AZW3` or `ORIGINAL_KEPUB`, as in Calibre. Without Calibre, only
-Convert to KEPUB of a book with an EPUB shows, which Cousoir does itself;
-AZW3, and KEPUB from other formats, need Calibre.
+`ORIGINAL_AZW3` or `ORIGINAL_KEPUB`, as in Calibre. Converting needs Calibre;
+without it the Convert actions do not show.
 
 Cousoir departs from Calibre here too:
 
@@ -757,46 +756,9 @@ highlights shown on the clipboard as Markdown; Export saves them as
 Markdown or plain text, as Calibre's export writes them: each book's
 title, its highlights under their chapters, each with its date and note.
 
-## Sharing on the network
-
-Settings, Network, Share the library serves the library open to the other
-devices of the local network, read only, while Cousoir is open:
-
-- an OPDS catalog, at `http://ADDRESS:8090/opds`, which KOReader, Thorium,
-  Moon+ Reader, PocketBook's and other readers browse: the newest books,
-  every book by title, the authors, series, tags, publishers and languages,
-  each leading to its books, and a search in Calibre's search language
-  (`tags:"=Fantasy" and not series:true`). Each book shows its cover, its
-  authors, description, rating, tags and series as Calibre's content server
-  describes them, and a download link for each of its formats;
-- a web page, at `http://ADDRESS:8090/`, for a phone's or a computer's
-  browser: a search box, then the books' covers, titles and authors, each
-  format a link to download it, the newest first.
-
-The Network section lists the addresses, one per network the computer is
-on, each with a QR code that a phone's camera opens and a Copy button; Look
-again finds them after joining another network. The port is 8090 unless
-changed, so that Calibre's content server, on 8080, can run beside it. A
-password, when set, is asked for by every reader and browser (any user name
-goes); without one, anyone on the network can download the books. The
-setting is remembered: Cousoir shares the library again when it opens, and
-the status bar shows it, a click away from the Network section, whenever
-the library is shared.
-Files are named as Calibre's content server names them, `Title - Authors_ID.epub`.
-
-`cousoir-cli serve` shares a library the same way without the application,
-on a server or a NAS for instance; it reads the library again when Calibre
-changes it.
-
-Cousoir departs from Calibre's content server here: it reads and nothing
-else (no editing, no reading in the browser, no users with their own
-rights), serves the one library open, and speaks HTTP only, for the local
-network: to reach it from elsewhere, put it behind a proxy with HTTPS at
-the root of a host name, as its links start at `/`.
-
 ## Settings
 
-Settings has four sections. Appearance picks the theme and the text size, as
+Settings has three sections. Appearance picks the theme and the text size, as
 in JolieBulle. Library shows the library folder, lets you pick another one
 (Cousoir remembers it) or go back to the library Calibre opens; says whether
 the library can be written now, on which rules, and where the backups go;
@@ -808,9 +770,7 @@ language on the computers sharing the library; and lists the conflict copies
 found beside `metadata.db`: Dropbox's, Syncthing's, Nextcloud's and
 ownCloud's. A conflict copy of the database keeps the library read-only until
 you have checked in Calibre that no change is missing and pressed Ignore;
-another copy, or this one changed, counts again. Network shares the library
-on the local network (see [Sharing on the network](#sharing-on-the-network)).
-About shows Cousoir's version, its credits, Calibre's first, and
+another copy, or this one changed, counts again. About shows Cousoir's version, its credits, Calibre's first, and
 its license.
 
 ## The library
@@ -866,13 +826,7 @@ cousoir-cli read FILE…
 cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
 cousoir-cli download [--library PATH] [--covers] BOOK_ID
-cousoir-cli kepubify BOOK.epub BOOK.kepub
-cousoir-cli serve [--library PATH] [--port 8090] [--password PASSWORD]
 ```
-
-`serve` shares the library on the local network until stopped, as the
-application's Network settings do: it prints its addresses, then each
-request answered, and reads the library again when Calibre changes it.
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
 all` does, byte for byte. `search` prints the ids of the books an
@@ -1237,13 +1191,6 @@ The tests check the port against Calibre itself:
   reader: pages turned, the position written to the library and found
   again, a newer one of Calibre's viewer taken, a highlight made, kept as
   the viewer keeps it, shown again and removed; and a PDF.
-- `library_server_tests` serves the fixture library on a port of
-  127.0.0.1 and reads it as a reader would: the catalog's feeds followed
-  link by link, searches, categories, files, covers and thumbnails, the
-  password, the web page with what was searched escaped, and long feeds in
-  pages. `qr_code_tests` compares Cousoir's QR codes, module by module,
-  with libqrencode's (`tools/make_qr_fixtures.sh` made them), and reads
-  them back with `zbarimg` when it is installed.
 - `mobi_metadata_tests` writes metadata into MOBI and AZW3 books, Calibre's
   conversions and two it never makes, and compares them byte for byte with
   what Calibre's own writer made of them (`tools/oracle/mobi_oracle.py`),
@@ -1254,8 +1201,7 @@ The tests check the port against Calibre itself:
   Open Library on 127.0.0.1, a search by ISBN, its fallback to the title,
   covers, and a site that cannot be reached.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%
-  scale, against a copy of the fixture library; the share listens on
-  127.0.0.1 only (`COUSOIR_SHARE_LOCALHOST`).
+  scale, against a copy of the fixture library.
 
 ### Measuring
 

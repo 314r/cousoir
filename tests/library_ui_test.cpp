@@ -6,15 +6,12 @@
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QTcpServer>
 #include <QTemporaryDir>
 #include <QtQuickTest/quicktest.h>
 
@@ -29,7 +26,6 @@
 #include "metadata_downloader.h"
 #include "device_library.h"
 #include "highlight_browser.h"
-#include "library_share.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
@@ -97,7 +93,6 @@ private slots:
     void showsWriteState();
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
-    void sharesOnTheNetwork();
     void readsInCousoir();
     void readsPdfs();
     void usesOmarchyColorsByDefault();
@@ -169,7 +164,6 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
-    qmlRegisterType<LibraryShare>("Cousoir", 1, 0, "LibraryShare");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
@@ -177,7 +171,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
                               "BooksPage", "BulkEditPane", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
-                              "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "NetworkSettingsPage", "SearchField",
+                              "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
                               "SettingsWindow", "Sidebar", "SidebarItem", "ThemedWindow", "ThinScrollBar", "TrashPage" }) {
         qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
                         "Cousoir", 1, 0, type);
@@ -670,7 +664,7 @@ void LibraryUiTest::creditsCalibreInSettings()
     QQuickWindow *settings = m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
     QTRY_VERIFY(settings && settings->isVisible());
     QMetaObject::invokeMethod(settings, "showSection", Q_ARG(QVariant, QStringLiteral("about")));
-    QCOMPARE(settings->property("currentSectionIndex").toInt(), 3);
+    QCOMPARE(settings->property("currentSectionIndex").toInt(), 2);
 
     const QList<QQuickItem *> credit = visualDescendants(settings->contentItem(), QStringLiteral("calibreCreditLabel"));
     QCOMPARE(credit.size(), 1);
@@ -682,56 +676,6 @@ void LibraryUiTest::creditsCalibreInSettings()
     QCOMPARE(version.size(), 1);
     QVERIFY(version.constFirst()->property("text").toString().contains(QStringLiteral(COUSOIR_VERSION)));
     settings->close();
-}
-
-void LibraryUiTest::sharesOnTheNetwork()
-{
-    // Only this computer reaches it, on a free port.
-    qputenv("COUSOIR_SHARE_LOCALHOST", "1");
-    QTcpServer probe;
-    QVERIFY(probe.listen(QHostAddress::LocalHost));
-    const quint16 port = probe.serverPort();
-    probe.close();
-
-    click("settingsButton");
-    QQuickWindow *settings = m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
-    QTRY_VERIFY(settings && settings->isVisible());
-    QMetaObject::invokeMethod(settings, "showSection", Q_ARG(QVariant, QStringLiteral("network")));
-    auto *sharingSettings = settings->property("sharingSettings").value<QObject *>();
-    QVERIFY(sharingSettings);
-    sharingSettings->setProperty("port", int(port));
-    auto *share = settings->property("share").value<LibraryShare *>();
-    QVERIFY(share);
-    QVERIFY(!share->running());
-
-    const QList<QQuickItem *> button = visualDescendants(settings->contentItem(), QStringLiteral("networkShareButton"));
-    QCOMPARE(button.size(), 1);
-    QTest::mouseClick(settings, Qt::LeftButton, Qt::NoModifier, button.constFirst()->mapToScene(
-        QPointF(button.constFirst()->width() / 2, button.constFirst()->height() / 2)).toPoint());
-    QTRY_VERIFY(share->running());
-    QCOMPARE(share->error(), QString());
-    // Never on unnoticed: the status bar says so.
-    QQuickItem *indicator = m_window->findChild<QQuickItem *>(QStringLiteral("sharingState"));
-    QVERIFY(indicator);
-    QTRY_VERIFY(indicator->isVisible());
-    QTRY_VERIFY(QSettings().value(QStringLiteral("Sharing/enabled")).toBool());
-
-    // The catalog of the library open.
-    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
-    QNetworkAccessManager network;
-    QNetworkReply *reply = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/opds/books").arg(port))));
-    QSignalSpy finished(reply, &QNetworkReply::finished);
-    QVERIFY(finished.wait(10000));
-    QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200);
-    QVERIFY(reply->readAll().contains("Shadows Linger"));
-    reply->deleteLater();
-
-    QTest::mouseClick(settings, Qt::LeftButton, Qt::NoModifier, button.constFirst()->mapToScene(
-        QPointF(button.constFirst()->width() / 2, button.constFirst()->height() / 2)).toPoint());
-    QTRY_VERIFY(!share->running());
-    QTRY_VERIFY(!indicator->isVisible());
-    settings->close();
-    qunsetenv("COUSOIR_SHARE_LOCALHOST");
 }
 
 // A book read in Cousoir's reader: its pages turned, where reading stopped

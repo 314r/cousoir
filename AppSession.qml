@@ -2,8 +2,7 @@ import QtQuick
 import Cousoir
 
 // One session per window: owns the library, the guard that says whether it
-// may be written, the conversions, the devices, the metadata downloads and
-// the sharing on the network, and pushes the system
+// may be written, the conversions, the devices and the metadata downloads, and pushes the system
 // appearance into the Theme singleton.
 QtObject {
     id: session
@@ -12,10 +11,6 @@ QtObject {
     property string libraryPath: ""
     // Calibre's interface language set in the settings; empty for Calibre's.
     property string calibreLanguage: ""
-    // The library shared on the local network, as set in the settings.
-    property bool sharing: false
-    property int sharingPort: 8090
-    property string sharingPassword: ""
     readonly property BookLibrary library: BookLibrary {
         libraryPath: session.libraryPath
         calibreLanguage: session.calibreLanguage
@@ -33,12 +28,6 @@ QtObject {
     }
     readonly property MetadataDownloader downloads: MetadataDownloader {
         library: session.library
-    }
-    readonly property LibraryShare share: LibraryShare {
-        library: session.library
-        enabled: session.sharing
-        port: session.sharingPort
-        password: session.sharingPassword
     }
     readonly property ConcurrencyGuard guard: ConcurrencyGuard {
         libraryPath: session.library.libraryPath

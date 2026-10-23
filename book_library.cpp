@@ -44,7 +44,6 @@
 #include "conversion.h"
 #include "cover_cache.h"
 #include "field_writers.h"
-#include "library_server.h"
 #include "cousoir_paths.h"
 #include "description.h"
 #include "palette.h"
@@ -1171,11 +1170,6 @@ bool BookLibrary::inFilter(const Book &book) const
     if (m_filterKind == QLatin1String("publishers"))
         return book.publisherId == m_filterId;
     return true;
-}
-
-QList<qsizetype> BookLibrary::findRows(const QString &query, const QList<BookSort::Level> &sort, QString *error) const
-{
-    return LibraryServer::findBooks(m_data, m_index.search, m_index.sorter.get(), query, sort, error);
 }
 
 const QList<qsizetype> &BookLibrary::sortedBooks()

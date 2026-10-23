@@ -36,7 +36,6 @@
 #include "kobo.h"
 #include "kobo_send.h"
 #include "library_check.h"
-#include "library_server.h"
 #include "metadata_download.h"
 #include "mtp.h"
 #include "open_library.h"
@@ -110,79 +109,6 @@ int search(const QString &libraryPath, const QString &query, int limit)
     out() << ids.join(u',');
     out().flush();
     return 0;
-}
-
-// Serves the library on the network, as the application shares it, until
-// stopped; the books are read again when Calibre changes them.
-int serve(const QString &libraryPath, int port, const QString &password)
-{
-    struct Loaded
-    {
-        LibraryData data;
-        std::unique_ptr<CalibreSearch::Index> index;
-        std::unique_ptr<BookSort::Sorter> sorter;
-    };
-    const auto read = [&libraryPath]() -> std::unique_ptr<Loaded> {
-        auto loaded = std::make_unique<Loaded>();
-        if (!load(libraryPath, &loaded->data))
-            return {};
-        const CalibreConfig config = CalibreConfig::load();
-        loaded->index = std::make_unique<CalibreSearch::Index>(
-            loaded->data, CalibreSearch::Preferences::fromRows(loaded->data.preferences), config.tweaks,
-            config.interfaceLanguage);
-        loaded->sorter = std::make_unique<BookSort::Sorter>(loaded->data, config);
-        return loaded;
-    };
-    std::unique_ptr<Loaded> library = read();
-    if (!library)
-        return 2;
-
-    LibraryServer server;
-    const auto publish = [&] {
-        LibraryServer::Catalog catalog;
-        catalog.data = &library->data;
-        catalog.find = [&library](const QString &query, const QList<BookSort::Level> &sort, QString *error) {
-            return LibraryServer::findBooks(library->data, *library->index, library->sorter.get(), query, sort, error);
-        };
-        catalog.name = QDir(libraryPath).dirName();
-        catalog.interfaceLanguage = CalibreConfig::load().interfaceLanguage;
-        server.setCatalog(catalog);
-    };
-    publish();
-    server.setPassword(password);
-    const QString error = server.listen(quint16(port));
-    if (!error.isEmpty()) {
-        err() << error << Qt::endl;
-        return 1;
-    }
-    out() << QStringLiteral("Serving %1 (%2 books), until stopped, at:")
-                 .arg(QDir::toNativeSeparators(libraryPath))
-                 .arg(library->data.books.size())
-          << Qt::endl;
-    QStringList addresses = LibraryServer::addresses(server.port());
-    addresses.prepend(QStringLiteral("http://localhost:%1/").arg(server.port()));
-    for (const QString &address : std::as_const(addresses))
-        out() << QStringLiteral("  %1  (the catalog for readers: %1opds)").arg(address) << Qt::endl;
-    QObject::connect(&server, &LibraryServer::served, [](const QString &request, int status) {
-        err() << status << u' ' << request << Qt::endl;
-    });
-
-    // Calibre's changes, seen in metadata.db.
-    QTimer watch;
-    watch.setInterval(2000);
-    QObject::connect(&watch, &QTimer::timeout, [&] {
-        const QString database = QDir(libraryPath).filePath(QStringLiteral("metadata.db"));
-        if (CalibreDb::identify(database) == library->data.source)
-            return;
-        if (std::unique_ptr<Loaded> again = read()) {
-            library = std::move(again);
-            publish();
-            err() << QStringLiteral("Read the library again: %1 books.").arg(library->data.books.size())
-                  << Qt::endl;
-        }
-    });
-    watch.start();
-    return QCoreApplication::exec();
 }
 
 QString ago(qint64 seconds)
@@ -1151,9 +1077,7 @@ int main(int argc, char *argv[])
         "          book of the id given, and what it would change; --covers adds the\n"
         "          covers found. Without Calibre, Open Library is asked.\n"
         "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
-        "          kepubify BOOK.epub BOOK.kepub\n"
-        "  serve   Share the library on the local network until stopped: an OPDS\n"
-        "          catalog for e-readers and reading apps, a web page for browsers.\n\n"
+        "          kepubify BOOK.epub BOOK.kepub\n\n"
         "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
         "Goyal and the Calibre contributors, https://calibre-ebook.com. GPL v3."));
     parser.addHelpOption();
@@ -1172,15 +1096,8 @@ int main(int argc, char *argv[])
     parser.addOption(limitOption);
     const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
     parser.addOption(coversOption);
-    const QCommandLineOption portOption(QStringLiteral("port"), QStringLiteral("serve: the port, 8090 by default."),
-                                        QStringLiteral("port"), QStringLiteral("8090"));
-    parser.addOption(portOption);
-    const QCommandLineOption passwordOption(QStringLiteral("password"),
-                                            QStringLiteral("serve: a password to ask for, any user name."),
-                                            QStringLiteral("password"));
-    parser.addOption(passwordOption);
     parser.addPositionalArgument(QStringLiteral("command"),
-                                 QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify or serve"));
+                                 QStringLiteral("list, search, doctor, apply, read, device, template or download"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1224,8 +1141,6 @@ int main(int argc, char *argv[])
         return list(libraryPath);
     if (arguments.first() == QLatin1String("doctor"))
         return doctor(libraryPath);
-    if (arguments.first() == QLatin1String("serve"))
-        return serve(libraryPath, parser.value(portOption).toInt(), parser.value(passwordOption));
     if (arguments.first() == QLatin1String("apply"))
         return apply(libraryPath, arguments.at(1), parser.isSet(forceOption));
     if (arguments.first() == QLatin1String("device"))

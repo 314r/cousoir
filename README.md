@@ -67,11 +67,6 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   exactly where Calibre puts them, and each app recognises the books the other
   sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and writes a
   Kindle book's metadata itself.
-- 📡 **Your library on your phone and e-reader.** Share it on the local
-  network in a click: KOReader and other reading apps browse it as an OPDS
-  catalog, and a phone's camera opens its web page from a QR code, to
-  search the books and download them. No Calibre needed, and
-  `cousoir-cli serve` does it on a server.
 - 📖 **Read in Cousoir.** EPUBs a page at a time in your theme, with their
   table of contents, and PDFs. Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
@@ -94,7 +89,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   tag, section or action by a few letters.
 - 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
   exactly as `calibredb list` and `calibredb search` do, checks its health,
-  applies changes from a JSON file, and shares the library on the network.
+  and applies changes from a JSON file.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 

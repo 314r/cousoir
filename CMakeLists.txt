@@ -131,8 +131,6 @@ qt_add_library(cousoir_core STATIC
     kobo_send.h
     library_check.cpp
     library_check.h
-    library_server.cpp
-    library_server.h
     metadata_download.cpp
     metadata_download.h
     mobi_metadata.cpp
@@ -143,8 +141,6 @@ qt_add_library(cousoir_core STATIC
     native_send.h
     open_library.cpp
     open_library.h
-    opds.cpp
-    opds.h
     opf.cpp
     opf.h
     opf_reader.cpp
@@ -155,8 +151,6 @@ qt_add_library(cousoir_core STATIC
     pdf_reader.h
     python_json.cpp
     python_json.h
-    qr_code.cpp
-    qr_code.h
     reading_log.cpp
     reading_log.h
     send_job.cpp
@@ -193,8 +187,6 @@ qt_add_library(cousoir_models STATIC
     device_library.h
     highlight_browser.cpp
     highlight_browser.h
-    library_share.cpp
-    library_share.h
     metadata_downloader.cpp
     metadata_downloader.h
     omarchy_theme.cpp
@@ -242,7 +234,6 @@ set(COUSOIR_QML_FILES
     MetadataDownloadDialog.qml
     NotePanel.qml
     SearchField.qml
-    NetworkSettingsPage.qml
     SettingsWindow.qml
     Sidebar.qml
     SidebarItem.qml
@@ -292,7 +283,6 @@ set(COUSOIR_ICON_FILES
     assets/icons/theme-system.svg
     assets/icons/trash.svg
     assets/icons/user.svg
-    assets/icons/wifi.svg
     assets/icons/hicolor/cousoir-256.png
     assets/reader/reader.js
 )
@@ -420,7 +410,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check library_server metadata_web mobi_metadata qr_code epub_book calibre_fts calibre_notes annotation_search test_tool)
+                          kindle library_check metadata_web mobi_metadata epub_book calibre_fts calibre_notes annotation_search test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)

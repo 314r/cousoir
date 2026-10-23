@@ -187,10 +187,6 @@ public:
     void setCurrentBookId(int bookId);
     QVariantMap currentBook() const;
     const LibraryData &data() const;
-    // The rows of the books `query` finds, Calibre's search language, all
-    // for an empty one, sorted by `sort`; `error` says why a query could not
-    // run. For the library's server.
-    QList<qsizetype> findRows(const QString &query, const QList<BookSort::Level> &sort, QString *error = nullptr) const;
     // update_from_mi() of Calibre's Edit metadata dialog: what a book found
     // by a download changes of `bookId`, for the fields chosen, as
     // updateBook() takes it; empty for a book that is gone.
