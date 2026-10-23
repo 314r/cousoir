@@ -22,7 +22,6 @@
 #include "calibre_template.h"
 #include "calibre_text.h"
 #include "device_books.h"
-#include "epub_metadata.h"
 #include "kepub.h"
 #include "native_send.h"
 #include "opf.h"
@@ -290,11 +289,6 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, const K
             metadata.identifiers = book->identifiers;
             options.metadata = metadata;
             if (!Kepub::kepubify(source, target, options, error))
-                return false;
-        } else if (epub) {
-            // The library's metadata and cover in the EPUB, as Calibre's send
-            // writes them into the copy.
-            if (!EpubMetadata::write(source, target, EpubMetadata::fromBook(data, *book, interfaceLanguage), error))
                 return false;
         } else if (!SendJob::copyInto(source, target, error)) {
             return false;

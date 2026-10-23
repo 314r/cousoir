@@ -5,10 +5,8 @@
 #   calibre-debug -e tools/oracle/send_books.py -- <library> <device> <product> <ops.json>
 #
 # <device> is a folder made to look like a mounted Kobo, with .kobo/version
-# and .kobo/KoboReader.sqlite, "mtpdir:FOLDER", a folder that stands for a
-# Kindle reached over MTP, or "wireless:PORT", Calibre's wireless device
-# server listening on PORT, to which a reader app connects
-# (tests/wireless/fake_koreader.py); <product> its USB product id. A Kobo's connection
+# and .kobo/KoboReader.sqlite, or "mtpdir:FOLDER", a folder that stands for a
+# Kindle reached over MTP; <product> its USB product id. A Kobo's connection
 # is DeviceManager's open and post_open_callback(), a Kindle's the MTP
 # driver's open() with libmtp's calls done on the folder; then the GUI's
 # info_read() and metadata_downloaded(): driveinfo.calibre, the books the
@@ -42,7 +40,6 @@ library, device, product, ops_path = sys.argv[-4:]
 with open(ops_path, encoding='utf-8') as f:
     ops = json.load(f)
 mtp = device.startswith('mtpdir:')
-wireless = device.startswith('wireless:')
 
 db = open_library(library)
 
@@ -194,39 +191,8 @@ def kindle(root):
     return dev
 
 
-def wireless_device(port):
-    # The wireless driver started as "Start wireless device connection"
-    # does, on a fixed port, then what the device manager does once a
-    # reader connects: open() and the global preferences it asks for, the
-    # metadata sent on connect among them.
-    import time
-
-    from calibre.devices.smart_device_app.driver import SMART_DEVICE_APP
-    from calibre.utils.config import device_prefs
-
-    dev = SMART_DEVICE_APP(None)
-    dev.startup()
-    dev.set_option('use_fixed_port', True)
-    dev.set_option('port_number', port)
-    message = dev.start_plugin()
-    if message:
-        raise SystemExit(message)
-    deadline = time.monotonic() + 60
-    while dev.detect_managed_devices([]) is None:
-        if time.monotonic() > deadline:
-            raise SystemExit('no reader connected')
-        time.sleep(0.1)
-    dev.reset(detected_device=None, report_progress=None)
-    if not dev.open(None, db.library_id):
-        raise SystemExit('the reader did not open')
-    dev.specialize_global_preferences(device_prefs)
-    return dev
-
-
 if mtp:
     dev = kindle(os.path.abspath(device[7:]))
-elif wireless:
-    dev = wireless_device(device.partition(':')[2])
 else:
     dev = KOBOTOUCH(None)
     dev.startup()
@@ -336,9 +302,9 @@ for op in ops:
         for job in gui.uploads:
             gui.books_uploaded(job)
     elif 'remove' in op:
-        if mtp or wireless:
+        if mtp:
             removed = {lpath.lower() for lpath in op['remove']}
-            paths = [book.path for book in gui.lists[0] if book.lpath.lower() in removed or book.lpath in op['remove']]
+            paths = [book.path for book in gui.lists[0] if book.lpath.lower() in removed]
         else:
             paths = [dev._main_prefix + lpath for lpath in op['remove']]
         job = gui.remove_paths(paths)
@@ -348,6 +314,3 @@ for op in ops:
         with open(op['matches'], 'w', encoding='utf-8') as f:
             json.dump(sorted([book.lpath, book.in_library, book.application_id] for book in gui.lists[0]), f, indent=1)
 db.close()
-if wireless:
-    dev.eject()
-    dev.stop_plugin()

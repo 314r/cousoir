@@ -67,10 +67,6 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   exactly where Calibre puts them, and each app recognises the books the other
   sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and writes a
   Kindle book's metadata itself.
-- 📶 **KOReader and Calibre Companion, over Wi-Fi.** Apps that connect to
-  Calibre's wireless device server connect to Cousoir the same way: their
-  books show among your readers, and books go to them with their metadata
-  and covers, and later the metadata you change.
 - 📡 **Your library on your phone and e-reader.** Share it on the local
   network in a click: KOReader and other reading apps browse it as an OPDS
   catalog, and a phone's camera opens its web page from a QR code, to
@@ -254,9 +250,7 @@ Python to C++:
   the `metadata.opf` writer;
 - 📲 **how books on a Kobo or a Kindle are found** and matched with the
   library, from Calibre's device drivers. The Kobo driver is the work of
-  Timothy Legge, Kovid Goyal and David Forrester;
-- 📶 **the wireless device connection** apps speak, from Calibre's driver
-  by Charles Haley and Kovid Goyal.
+  Timothy Legge, Kovid Goyal and David Forrester.
 
 And when Cousoir converts a book or sends it to a reader, Calibre itself does
 the work. [CREDITS.md](CREDITS.md) lists every piece of Calibre in Cousoir,

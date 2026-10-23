@@ -20,8 +20,6 @@
 #include "reading_log.h"
 
 class BookLibrary;
-class WirelessConnection;
-class WirelessServer;
 
 // A mounted volume: its folder and its block device.
 struct Volume
@@ -47,16 +45,13 @@ struct KindleSlot
 // change Cousoir makes. Sending goes through Calibre as KoboSend and
 // KindleSend describe, one batch at a time. While Calibre runs on this
 // computer it handles the readers itself, which Cousoir then leaves alone.
-// Reader apps, KOReader or Calibre Companion, connect over the network as
-// to Calibre's wireless device server, when it is on (WirelessServer).
 class DeviceLibrary : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
     // The readers: { root, name, kind, ejectable, free }, with root naming
-    // the reader here: the folder a Kobo is mounted on, "mtp:BUS:NUMBER"
-    // for a Kindle, "wireless:UUID" for an app connected over the network;
-    // kind "kobo", "kindle" or "wireless"; free the room left as text.
+    // the reader here: the folder a Kobo is mounted on, or "mtp:BUS:NUMBER"
+    // for a Kindle; kind "kobo" or "kindle"; free the room left as text.
     Q_PROPERTY(QVariantList devices READ devices NOTIFY devicesChanged)
     // The reader the device page shows, by its root.
     Q_PROPERTY(QString currentRoot READ currentRoot WRITE setCurrentRoot NOTIFY currentChanged)
@@ -81,16 +76,6 @@ class DeviceLibrary : public QObject
     // root, running, progress } with progress from 0 to 1.
     Q_PROPERTY(QVariantList jobs READ jobs NOTIFY jobsChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY jobsChanged)
-    // Calibre's wireless device server: whether it is on, its port (0 for
-    // Calibre's choice, 9090 or another free one) and password, as kept in
-    // the settings; whether it listens, on which addresses ("192.168.1.20
-    // port 9090"), or why it could not.
-    Q_PROPERTY(bool wirelessEnabled READ wirelessEnabled NOTIFY wirelessChanged)
-    Q_PROPERTY(int wirelessPort READ wirelessPort NOTIFY wirelessChanged)
-    Q_PROPERTY(QString wirelessPassword READ wirelessPassword NOTIFY wirelessChanged)
-    Q_PROPERTY(bool wirelessListening READ wirelessListening NOTIFY wirelessChanged)
-    Q_PROPERTY(QStringList wirelessAddresses READ wirelessAddresses NOTIFY wirelessChanged)
-    Q_PROPERTY(QString wirelessError READ wirelessError NOTIFY wirelessChanged)
 
 public:
     using VolumeProvider = std::function<QList<Volume>()>;
@@ -117,17 +102,6 @@ public:
     QString readOnlyReason() const;
     QVariantList jobs() const;
     bool busy() const;
-    bool wirelessEnabled() const;
-    int wirelessPort() const;
-    QString wirelessPassword() const;
-    bool wirelessListening() const;
-    QStringList wirelessAddresses() const;
-    QString wirelessError() const;
-
-    // Turns the wireless device server on or off, on `port`, 0 for
-    // Calibre's choice, apps giving `password` when it is set; kept in the
-    // settings.
-    Q_INVOKABLE void setWireless(bool enabled, int port, const QString &password);
 
     // The format of the book Calibre would send to the reader on `root`,
     // empty for none.
@@ -141,8 +115,7 @@ public:
     // Removes books from the current reader, by lpath; a Kobo's bought ones
     // stay.
     Q_INVOKABLE QString remove(const QStringList &lpaths);
-    // Unmounts a Kobo and powers it off, so it can be unplugged; lets an
-    // app connected over the network go.
+    // Unmounts a Kobo and powers it off, so it can be unplugged.
     Q_INVOKABLE QString eject(const QString &root);
     // Stops the batches with the book in them, or all of them for 0: those
     // waiting and Calibre's work on the running one; its copy to the reader,
@@ -184,14 +157,13 @@ signals:
     void availableChanged();
     void writableChanged();
     void jobsChanged();
-    void wirelessChanged();
     // Books arrived on a reader.
     void sent(const QStringList &titles, const QString &deviceName);
     void ejected(const QString &deviceName);
     void failed(const QString &message);
 
 private:
-    enum class Kind { Kobo, Kindle, Wireless };
+    enum class Kind { Kobo, Kindle };
 
     struct Connected
     {
@@ -210,8 +182,6 @@ private:
         QList<DeviceBook> allClippings;
         QString error;
         bool loading = false;
-        // An app's connection.
-        QPointer<WirelessConnection> wireless;
     };
 
     // A Kindle's MTP connection, from its listing to the end of a send.
@@ -253,11 +223,6 @@ private:
     bool sendsNatively() const;
     void finishCopy(bool ok, const QString &error);
     void stopProcess();
-    void startWireless();
-    // An app connected: listed, given the metadata the library changed.
-    void addWireless(WirelessConnection *connection);
-    void updateWireless(const QString &root);
-    void sendWireless(const Job &job, const Connected &connected);
 
     QPointer<BookLibrary> m_library;
     VolumeProvider m_volumes;
@@ -281,9 +246,4 @@ private:
     QStringList m_ejected;
     // MTP, one thing at a time.
     QThreadPool m_kindlePool;
-    WirelessServer *m_wireless = nullptr;
-    QString m_wirelessError;
-    // A batch going to an app.
-    bool m_wirelessSending = false;
-    bool m_destroying = false;
 };

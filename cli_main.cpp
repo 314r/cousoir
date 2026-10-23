@@ -10,7 +10,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
-#include <QPointer>
 #include <QStorageInfo>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -42,8 +41,6 @@
 #include "mtp.h"
 #include "open_library.h"
 #include "cousoir_paths.h"
-#include "wireless.h"
-#include "wireless_send.h"
 
 namespace {
 
@@ -185,137 +182,6 @@ int serve(const QString &libraryPath, int port, const QString &password)
         }
     });
     watch.start();
-    return QCoreApplication::exec();
-}
-
-// Calibre's wireless device server for the library: an app that connects is
-// listed and given the metadata the library changed since, as Calibre does
-// on connect; then the operations of `opsPath`, if any, are done in order,
-// and the app is let go. Without operations, it serves until stopped.
-//   [{ "send": [1, 2] }, { "remove": ["Title - Author (1).epub"] }]
-int wireless(const QString &libraryPath, int port, const QString &password, const QString &opsPath, int waitSeconds)
-{
-    LibraryData data;
-    if (!load(libraryPath, &data))
-        return 2;
-    QJsonArray ops;
-    if (!opsPath.isEmpty()) {
-        QFile file(opsPath);
-        QJsonParseError parseError;
-        const QJsonDocument document = file.open(QIODevice::ReadOnly) ? QJsonDocument::fromJson(file.readAll(), &parseError)
-                                                                       : QJsonDocument();
-        if (!document.isArray()) {
-            err() << QStringLiteral("Cannot read %1 as a JSON array.").arg(opsPath) << Qt::endl;
-            return 2;
-        }
-        ops = document.array();
-    }
-    const CalibreConfig config = CalibreConfig::load();
-    WirelessServer server;
-    WirelessServer::Settings settings;
-    settings.port = quint16(port);
-    settings.contentServerPort = 8090;
-    settings.connection.password = password;
-    settings.connection.libraryName = QDir(libraryPath).dirName();
-    settings.connection.libraryUuid = data.uuid;
-    settings.connection.interfaceLanguage = config.interfaceLanguage;
-    settings.connection.cacheFolder = QDir(CousoirPaths::cacheFolder(libraryPath)).filePath(QStringLiteral("wireless"));
-    QString error;
-    if (!server.start(settings, &error)) {
-        err() << error << Qt::endl;
-        return 1;
-    }
-    err() << QStringLiteral("Waiting for a reader app on port %1 (datagrams on %2).")
-                 .arg(server.port())
-                 .arg(server.broadcastPort())
-          << Qt::endl;
-
-    // With operations, one app and done; without, serving until stopped.
-    const bool once = !opsPath.isEmpty();
-    int status = 0;
-    qsizetype step = 0;
-    QPointer<WirelessConnection> connection;
-    // The copies sent, with the library's metadata in them.
-    QTemporaryDir copies;
-    std::function<void()> nextStep;
-    nextStep = [&] {
-        if (!connection)
-            return;
-        if (step >= ops.size()) {
-            if (once)
-                connection->eject();
-            return;
-        }
-        const QJsonObject op = ops.at(step++).toObject();
-        if (op.contains(QLatin1String("send"))) {
-            QList<Wireless::Outgoing> books;
-            for (const QJsonValue &id : op.value(QLatin1String("send")).toArray()) {
-                const Book *book = data.book(id.toInt());
-                const QString format = book ? WirelessSend::format(*book, connection->app()) : QString();
-                if (format.isEmpty()) {
-                    err() << QStringLiteral("Book %1: nothing the reader takes.").arg(id.toInt()) << Qt::endl;
-                    status = 1;
-                    continue;
-                }
-                const QString extension = u'.' + format.toLower();
-                const QString file = copies.filePath(QString::number(book->id) + extension);
-                QString copyError;
-                if (!WirelessSend::prepareFile(data, *book, format, file, config.interfaceLanguage,
-                                               CalibreConfig::configDirectory(), &copyError)) {
-                    err() << copyError << Qt::endl;
-                    status = 1;
-                    continue;
-                }
-                QString lpath = connection->lpathOfUuid(book->uuid, extension);
-                if (lpath.isEmpty())
-                    lpath = WirelessSend::uploadPath(data, *book, extension, connection->app(), config.interfaceLanguage);
-                books.append({ lpath,
-                               WirelessSend::metadata(data, *book, lpath, QFileInfo(file).size(), connection->app(),
-                                                      config.interfaceLanguage),
-                               file });
-            }
-            connection->send(books);
-        } else if (op.contains(QLatin1String("remove"))) {
-            QStringList lpaths;
-            for (const QJsonValue &lpath : op.value(QLatin1String("remove")).toArray())
-                lpaths.append(lpath.toString());
-            connection->remove(lpaths);
-        } else {
-            nextStep();
-        }
-    };
-    QTimer giveUp;
-    giveUp.setSingleShot(true);
-    QObject::connect(&giveUp, &QTimer::timeout, [&] {
-        err() << QStringLiteral("No reader app connected.") << Qt::endl;
-        QCoreApplication::exit(1);
-    });
-    if (once)
-        giveUp.start(waitSeconds * 1000);
-    QObject::connect(&server, &WirelessServer::connected, [&](WirelessConnection *opened) {
-        giveUp.stop();
-        connection = opened;
-        out() << QStringLiteral("%1 connected: %2 books.").arg(opened->name()).arg(opened->books().size()) << Qt::endl;
-        for (const DeviceBook &book : WirelessSend::deviceBooks(opened->books(), data))
-            out() << QStringLiteral("  %1  %2").arg(book.lpath, book.bookId ? QStringLiteral("(book %1)").arg(book.bookId)
-                                                                            : QString())
-                  << Qt::endl;
-        QObject::connect(opened, &WirelessConnection::finished, [&](bool ok, const QString &message) {
-            if (!ok) {
-                err() << message << Qt::endl;
-                status = 1;
-            }
-            nextStep();
-        });
-        // As Calibre on connect: the metadata the library changed since.
-        opened->updateMetadata(
-            WirelessSend::changedMetadata(opened->books(), data, opened->app(), config.interfaceLanguage));
-    });
-    QObject::connect(&server, &WirelessServer::disconnected, [&](const QString &reason) {
-        out() << reason << Qt::endl;
-        if (once)
-            QCoreApplication::exit(status);
-    });
     return QCoreApplication::exec();
 }
 
@@ -1286,9 +1152,6 @@ int main(int argc, char *argv[])
         "          covers found. Without Calibre, Open Library is asked.\n"
         "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
         "          kepubify BOOK.epub BOOK.kepub\n"
-        "  wireless  Let reader apps (KOReader, Calibre Companion) connect as to\n"
-        "          Calibre's wireless device server; with a JSON file of operations,\n"
-        "          send or remove books once one connects, then let it go.\n"
         "  serve   Share the library on the local network until stopped: an OPDS\n"
         "          catalog for e-readers and reading apps, a web page for browsers.\n\n"
         "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
@@ -1316,12 +1179,8 @@ int main(int argc, char *argv[])
                                             QStringLiteral("serve: a password to ask for, any user name."),
                                             QStringLiteral("password"));
     parser.addOption(passwordOption);
-    const QCommandLineOption waitOption(QStringLiteral("wait"),
-                                        QStringLiteral("wireless: seconds to wait for an app, 60 by default."),
-                                        QStringLiteral("seconds"), QStringLiteral("60"));
-    parser.addOption(waitOption);
     parser.addPositionalArgument(QStringLiteral("command"),
-                                 QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify, wireless or serve"));
+                                 QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify or serve"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1350,16 +1209,6 @@ int main(int argc, char *argv[])
             return 1;
         }
         return 0;
-    }
-    if (arguments.value(0) == QLatin1String("wireless") && arguments.size() <= 2) {
-        const QString path = parser.isSet(libraryOption) ? parser.value(libraryOption)
-                                                         : CalibreConfig::defaultLibraryPath();
-        if (path.isEmpty()) {
-            err() << QStringLiteral("Calibre has no library on this computer; pass --library.") << Qt::endl;
-            return 2;
-        }
-        return wireless(path, parser.isSet(portOption) ? parser.value(portOption).toInt() : 0,
-                        parser.value(passwordOption), arguments.value(1), parser.value(waitOption).toInt());
     }
     const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device")
         || arguments.value(0) == QLatin1String("template") || arguments.value(0) == QLatin1String("download");
