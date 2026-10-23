@@ -543,6 +543,27 @@ std::optional<QByteArray> kepubifyPage(const QByteArray &xhtml, const QString &s
     return serialize(*root);
 }
 
+QHash<QString, SpanStart> spanStarts(const Node &page)
+{
+    QHash<QString, SpanStart> starts;
+    // The page's markup made on a copy that knows where its texts come from.
+    const std::unique_ptr<Node> copy = clone(page, true);
+    if (!documentElement(copy.get()))
+        return starts;
+    addKoboMarkup(copy.get(), QStringLiteral("kobo.js"));
+    for (const Node *span : findAll(copy.get(), [](const Node &n) {
+             return n.isElement("span") && n.attribute(QStringLiteral("class")) == koboSpanClass
+                 && n.attribute(QStringLiteral("id")).startsWith(QLatin1String("kobo."));
+         })) {
+        if (span->children.size() != 1)
+            continue;
+        const Node &text = *span->children.front();
+        if (text.kind == Node::Kind::Text && text.origin)
+            starts.insert(span->attribute(QStringLiteral("id")), { text.origin, text.originOffset, text.text.size() });
+    }
+    return starts;
+}
+
 bool kepubify(const QString &epub, const QString &kepub, const Options &options, QString *error)
 {
     Zip zip;

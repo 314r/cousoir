@@ -28,6 +28,8 @@
 #include "epub_book.h"
 #include "epub_cfi.h"
 #include "highlight_browser.h"
+#include "kobo_highlights.h"
+#include "kobo_placement.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
@@ -97,6 +99,7 @@ private slots:
     void creditsCalibreInSettings();
     void readsInCousoir();
     void encodesCfisAsTheReader();
+    void placesKoboHighlightsAsTheReader();
     void readsPdfs();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
@@ -143,6 +146,9 @@ private:
     void makeWritable();
     // Makes the copy writable and opens `bookId`.
     void openWritable(int bookId);
+    // Adds the book at `path`, titled `title`, and opens it in the reader;
+    // null when it cannot.
+    QQuickWindow *readNewBook(const QString &path, const QString &title);
     // Clicks a field of the details pane and types over its text.
     void retype(const char *field, const QString &text);
     void waitForSave();
@@ -276,6 +282,33 @@ void LibraryUiTest::openWritable(int bookId)
     library()->setProperty("currentBookId", bookId);
     QTRY_VERIFY(control("bookFields") && control("bookFields")->isVisible());
     QVERIFY(QQuickTest::qWaitForPolish(m_window));
+}
+
+QQuickWindow *LibraryUiTest::readNewBook(const QString &path, const QString &title)
+{
+    makeWritable();
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(path) }));
+    if (!error.isEmpty())
+        return nullptr;
+    waitForSave();
+    int bookId = 0;
+    const bool added = QTest::qWaitFor([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == title)
+                bookId = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return bookId > 0;
+    }, 15000);
+    if (!added)
+        return nullptr;
+    library()->setProperty("currentBookId", bookId);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QQuickWindow *reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    if (!reader || !QTest::qWaitFor([reader] { return !reader->property("position").toString().isEmpty(); }, 20000))
+        return nullptr;
+    return reader;
 }
 
 void LibraryUiTest::retype(const char *field, const QString &text)
@@ -836,29 +869,13 @@ void LibraryUiTest::encodesCfisAsTheReader()
 #ifndef COUSOIR_READER
     QSKIP("Built without Qt WebEngine");
 #else
-    makeWritable();
     const QString path = QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/cfi.epub");
-    QString error;
-    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
-                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(path) }));
-    QCOMPARE(error, QString());
-    waitForSave();
-    int bookId = 0;
-    QTRY_VERIFY_WITH_TIMEOUT([&] {
-        for (const QVariant &row : bookRows()) {
-            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("The Odd Pages"))
-                bookId = row.toMap().value(QStringLiteral("id")).toInt();
-        }
-        return bookId > 0;
-    }(), 15000);
-    library()->setProperty("currentBookId", bookId);
-    QMetaObject::invokeMethod(m_window, "readBook");
-    QQuickWindow *reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    QQuickWindow *reader = readNewBook(path, QStringLiteral("The Odd Pages"));
     QVERIFY(reader);
-    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty(), 20000);
     QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
     QVERIFY(view);
 
+    QString error;
     const std::unique_ptr<EpubBook> book = EpubBook::open(path, &error);
     QVERIFY2(book, qPrintable(error));
     for (int index = 0; index < book->spine().size(); ++index) {
@@ -933,6 +950,74 @@ void LibraryUiTest::encodesCfisAsTheReader()
         })(%1, %2))").arg(QString::fromUtf8(QJsonDocument(table).toJson(QJsonDocument::Compact))).arg(total);
         QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, script)));
         QTRY_COMPARE_WITH_TIMEOUT(view->property("title").toString(), QStringLiteral("cfi-ok %1").arg(table.size()), 20000);
+    }
+    reader->close();
+#endif
+}
+
+// The places worked out for a Kobo's highlights hold, in the reader's own
+// document, the text the Kobo highlighted.
+void LibraryUiTest::placesKoboHighlightsAsTheReader()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    const QString path = QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub");
+    QTemporaryDir kobo;
+    QString error;
+    QVERIFY2(makeKobo(kobo.path(), &error), qPrintable(error));
+    QList<KoboHighlights::Book> books;
+    {
+        SqliteDb db;
+        QVERIFY2(db.open(QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite")), SqliteDb::Mode::ReadWrite,
+                         &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-highlights.sql"))), &error),
+                 qPrintable(error));
+        books = KoboHighlights::read(db, &error);
+    }
+    const std::unique_ptr<KoboPlacement::PlacementBook> placing =
+        KoboPlacement::PlacementBook::open(path, QStringLiteral("EPUB"), &error);
+    QVERIFY2(placing, qPrintable(error));
+    // By spine item: the places and the Kobo's text.
+    QMap<int, QJsonArray> tables;
+    for (const KoboHighlights::Book &book : std::as_const(books)) {
+        if (book.title != QLatin1String("The Voyage"))
+            continue;
+        for (const KoboHighlights::Highlight &highlight : book.highlights) {
+            const KoboPlacement::Placement placement = placing->place(highlight);
+            if (placement.method != KoboPlacement::Method::None)
+                tables[placement.spineIndex].append(
+                    QJsonArray{ placement.startCfi, placement.endCfi, KoboPlacement::folded(highlight.text) });
+        }
+    }
+    QCOMPARE(tables.size(), 3);
+
+    QQuickWindow *reader = readNewBook(path, QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+    for (auto it = tables.cbegin(); it != tables.cend(); ++it) {
+        QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, it.key()), Q_ARG(QVariant, QStringLiteral("start")));
+        QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == it.key()
+                                     && reader->property("position").toString().startsWith(
+                                         QStringLiteral("epubcfi(/%1/").arg(2 * (it.key() + 1))),
+                                 20000);
+        const QString script = QStringLiteral(R"((function (table) {
+            const fold = text => text.replace(/[­​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+            let result = 'ranges-ok ' + table.length;
+            for (const [start, end, expected] of table) {
+                const got = window.cousoir.rangeText(start, end);
+                if (got === null || fold(got) !== expected) {
+                    result = 'ranges-differ ' + start + ' ' + JSON.stringify(got);
+                    break;
+                }
+            }
+            document.title = result;
+        })(%1))").arg(QString::fromUtf8(QJsonDocument(it.value()).toJson(QJsonDocument::Compact)));
+        QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, script)));
+        QTRY_COMPARE_WITH_TIMEOUT(view->property("title").toString(), QStringLiteral("ranges-ok %1").arg(it.value().size()),
+                                  20000);
     }
     reader->close();
 #endif

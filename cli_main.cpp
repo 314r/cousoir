@@ -35,6 +35,7 @@
 #include "kindle_send.h"
 #include "kobo.h"
 #include "kobo_highlights.h"
+#include "kobo_placement.h"
 #include "kobo_send.h"
 #include "sqlite_db.h"
 #include "library_check.h"
@@ -577,7 +578,8 @@ int device(const QString &libraryPath, const QString &spec)
 
 // The highlights and notes of a Kobo, by the folder it is mounted on, or of
 // a Kobo's database file: each book, the library's book it is, and each
-// highlight as the Kobo keeps it. Neither is written.
+// highlight as the Kobo keeps it and where it is in the library's copy.
+// Neither is written.
 int koboHighlights(const QString &libraryPath, const QString &spec)
 {
     LibraryData data;
@@ -609,13 +611,57 @@ int koboHighlights(const QString &libraryPath, const QString &spec)
     }
     const QList<int> ids = KoboHighlights::match(books, data);
     QJsonArray list = KoboHighlights::toJson(books);
+    QHash<QString, int> counts;
     for (qsizetype i = 0; i < list.size(); ++i) {
         QJsonObject book = list.at(i).toObject();
         book.insert(QStringLiteral("book"), ids.at(i));
+        const Book *libraryBook = data.book(ids.at(i));
+        const QString format = libraryBook ? KoboPlacement::targetFormat(*libraryBook) : QString();
+        std::unique_ptr<KoboPlacement::PlacementBook> placing;
+        QString reason = !libraryBook ? QStringLiteral("not in the library")
+            : format.isEmpty()        ? QStringLiteral("no EPUB in the library")
+                                      : QString();
+        if (reason.isEmpty()) {
+            for (const BookFormat &file : libraryBook->formats) {
+                if (file.format == format)
+                    placing = KoboPlacement::PlacementBook::open(file.file, format, &reason);
+            }
+        }
+        book.insert(QStringLiteral("library_format"), format);
+        QJsonArray highlights = book.value(QLatin1String("highlights")).toArray();
+        for (qsizetype h = 0; h < highlights.size(); ++h) {
+            const KoboHighlights::Highlight &highlight = books.at(i).highlights.at(h);
+            QJsonObject entry = highlights.at(h).toObject();
+            if (!libraryBook) {
+                ++counts[QStringLiteral("not_in_library")];
+            } else if (!placing) {
+                entry.insert(QStringLiteral("placement"), QJsonObject{ { QStringLiteral("method"), QStringLiteral("none") },
+                                                                       { QStringLiteral("reason"), reason } });
+                ++counts[QStringLiteral("none")];
+            } else {
+                const KoboPlacement::Placement placement = placing->place(highlight);
+                entry.insert(QStringLiteral("placement"),
+                             QJsonObject{ { QStringLiteral("method"), KoboPlacement::methodName(placement.method) },
+                                          { QStringLiteral("spine_index"), placement.spineIndex },
+                                          { QStringLiteral("spine_name"), placement.spineName },
+                                          { QStringLiteral("start_cfi"), placement.startCfi },
+                                          { QStringLiteral("end_cfi"), placement.endCfi },
+                                          { QStringLiteral("toc_family_titles"), QJsonArray::fromStringList(placement.tocFamily) },
+                                          { QStringLiteral("reason"), placement.reason } });
+                ++counts[KoboPlacement::methodName(placement.method)];
+            }
+            highlights[h] = entry;
+        }
+        book.insert(QStringLiteral("highlights"), highlights);
         list[i] = book;
     }
+    QJsonObject summary;
+    for (const QString &key : { QStringLiteral("spans"), QStringLiteral("text"), QStringLiteral("book"), QStringLiteral("none"),
+                                QStringLiteral("not_in_library") })
+        summary.insert(key, counts.value(key));
     out() << QJsonDocument(QJsonObject{ { QStringLiteral("serial"), identity.serial },
                                          { QStringLiteral("name"), identity.name },
+                                         { QStringLiteral("summary"), summary },
                                          { QStringLiteral("books"), list } })
                  .toJson();
     return 0;

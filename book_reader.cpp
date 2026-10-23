@@ -22,6 +22,7 @@
 #include "book_library.h"
 #include "cousoir_paths.h"
 #include "epub_book.h"
+#include "highlight_json.h"
 
 namespace {
 
@@ -208,27 +209,6 @@ QVariantList BookReader::highlights() const
     return list;
 }
 
-namespace {
-
-// annot_db_data(): the text a search finds a highlight by, its notes after
-// a separator, NFKC.
-QString searchableText(const QJsonObject &highlight)
-{
-    QString text = highlight.value(QLatin1String("highlighted_text")).toString();
-    const QString notes = highlight.value(QLatin1String("notes")).toString();
-    if (!notes.isEmpty())
-        text += QStringLiteral("\n\x1f\n") + notes;
-    return text.normalized(QString::NormalizationForm_KC);
-}
-
-// The viewer's timestamps: ISO 8601 in UTC, with milliseconds and a Z.
-QString isoNow()
-{
-    return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-}
-
-} // namespace
-
 QString BookReader::addHighlight(int spineIndex, const QString &start, const QString &end, const QString &text,
                                  const QString &which)
 {
@@ -237,33 +217,13 @@ QString BookReader::addHighlight(int spineIndex, const QString &start, const QSt
     const QString uuid = QUuid::createUuid().toString(QUuid::Id128);
     // The table of contents entries the highlight is under, as the viewer
     // notes them.
-    QJsonArray family;
-    for (const EpubBook::TocEntry &entry : m_book->toc()) {
-        if (m_book->spineIndex(entry.name) >= 0 && m_book->spineIndex(entry.name) <= spineIndex) {
-            while (family.size() > entry.depth)
-                family.removeLast();
-            family.append(entry.title);
-        }
-    }
-    QJsonObject highlight{
-        { QStringLiteral("type"), QStringLiteral("highlight") },
-        { QStringLiteral("timestamp"), isoNow() },
-        { QStringLiteral("uuid"), uuid },
-        { QStringLiteral("highlighted_text"), text },
-        { QStringLiteral("start_cfi"), start },
-        { QStringLiteral("end_cfi"), end },
-        { QStringLiteral("style"), QJsonObject{ { QStringLiteral("type"), QStringLiteral("builtin") },
-                                                { QStringLiteral("kind"), QStringLiteral("color") },
-                                                { QStringLiteral("which"), which } } },
-        { QStringLiteral("spine_name"), m_book->spine().at(spineIndex).name },
-        { QStringLiteral("spine_index"), spineIndex },
-    };
-    if (!family.isEmpty())
-        highlight.insert(QStringLiteral("toc_family_titles"), family);
+    const QJsonObject highlight = HighlightJson::highlight(
+        uuid, HighlightJson::isoTimestamp(QDateTime::currentDateTimeUtc()), text, start, end, which,
+        m_book->spine().at(spineIndex).name, spineIndex, HighlightJson::tocFamily(*m_book, spineIndex));
     m_highlights.insert(uuid, highlight);
     emit highlightsChanged();
     queueAnnotation({ m_format, QStringLiteral("highlight"), uuid, double(QDateTime::currentMSecsSinceEpoch()) / 1000,
-                      QJsonDocument(highlight).toJson(QJsonDocument::Compact), searchableText(highlight) });
+                      QJsonDocument(highlight).toJson(QJsonDocument::Compact), HighlightJson::searchableText(highlight) });
     return uuid;
 }
 
@@ -272,12 +232,7 @@ void BookReader::removeHighlight(const QString &uuid)
     if (!m_highlights.contains(uuid))
         return;
     // remove_highlight() of the viewer: the id and type kept, removed.
-    const QJsonObject removed{
-        { QStringLiteral("type"), QStringLiteral("highlight") },
-        { QStringLiteral("timestamp"), isoNow() },
-        { QStringLiteral("uuid"), uuid },
-        { QStringLiteral("removed"), true },
-    };
+    const QJsonObject removed = HighlightJson::removed(uuid, HighlightJson::isoTimestamp(QDateTime::currentDateTimeUtc()));
     m_highlights.remove(uuid);
     emit highlightsChanged();
     queueAnnotation({ m_format, QStringLiteral("highlight"), uuid, double(QDateTime::currentMSecsSinceEpoch()) / 1000,
