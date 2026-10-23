@@ -38,6 +38,15 @@ std::optional<QStringList> listValue(const QVariant &value, QChar separator)
     return std::nullopt;
 }
 
+// A number from QML or JSON, with a comma for its decimal point: false for
+// anything else, infinity and NaN included.
+bool numberValue(const QVariant &value, double *number)
+{
+    bool ok = false;
+    *number = value.toString().trimmed().replace(u',', u'.').toDouble(&ok);
+    return ok && qIsFinite(*number);
+}
+
 } // namespace
 
 bool BookEdit::isEmpty() const
@@ -76,9 +85,8 @@ bool BookEdit::fromVariantMap(int bookId, const QVariantMap &changes, BookEdit *
         } else if (key == QLatin1String("series")) {
             result.series = value.toString();
         } else if (key == QLatin1String("seriesIndex")) {
-            bool ok = false;
-            const double index = value.toString().trimmed().replace(u',', u'.').toDouble(&ok);
-            if (!ok || !qIsFinite(index) || index < 0)
+            double index = 0;
+            if (!numberValue(value, &index) || index < 0)
                 return fail(QObject::tr("“%1” is not a series number.").arg(value.toString()));
             result.seriesIndex = index;
         } else if (key == QLatin1String("tags")) {
@@ -152,11 +160,6 @@ bool BulkEdit::fromVariantMap(const QVariantMap &changes, BulkEdit *edit, QStrin
             *error = message;
         return false;
     };
-    const auto number = [](const QVariant &value, double *out) {
-        bool ok = false;
-        *out = value.toString().trimmed().replace(u',', u'.').toDouble(&ok);
-        return ok && qIsFinite(*out);
-    };
     for (auto it = changes.constBegin(); it != changes.constEnd(); ++it) {
         const QString &key = it.key();
         const QVariant &value = it.value();
@@ -181,11 +184,11 @@ bool BulkEdit::fromVariantMap(const QVariantMap &changes, BulkEdit *edit, QStrin
             result.numberSeries = value.toBool();
         } else if (key == QLatin1String("seriesStart")) {
             double start = 0;
-            if (!number(value, &start) || start < 0)
+            if (!numberValue(value, &start) || start < 0)
                 return fail(QObject::tr("“%1” is not a series number.").arg(value.toString()));
             result.seriesStart = start;
         } else if (key == QLatin1String("seriesIncrement")) {
-            if (!number(value, &result.seriesIncrement) || result.seriesIncrement < 0)
+            if (!numberValue(value, &result.seriesIncrement) || result.seriesIncrement < 0)
                 return fail(QObject::tr("“%1” is not a series number.").arg(value.toString()));
         } else if (key == QLatin1String("languages")) {
             result.languages = listValue(value, u',');

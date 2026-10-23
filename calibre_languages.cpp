@@ -401,11 +401,6 @@ QString Names::codeOfName(const QString &name) const
     return m_codesByName.value(name);
 }
 
-bool Names::fromCalibre() const
-{
-    return bool(m_iso639);
-}
-
 QString Names::translate(const QString &message) const
 {
     if (m_catalogs.isEmpty())

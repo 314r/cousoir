@@ -31,13 +31,6 @@ QStringList tree(const QString &folder)
     return entries;
 }
 
-CalibreConfig frenchConfig()
-{
-    CalibreConfig config;
-    config.interfaceLanguage = QStringLiteral("fr");
-    return config;
-}
-
 } // namespace
 
 class CalibreDbTest : public QObject

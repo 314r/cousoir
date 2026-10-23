@@ -9,8 +9,6 @@ QtObject {
     id: theme
 
     property string mode: "system"
-    property bool systemDark: false
-    property bool omarchyDark: true
     property bool omarchyAvailable: false
 
     property var systemPalette: ({
@@ -53,9 +51,6 @@ QtObject {
     readonly property string effectiveMode: mode === "omarchy" && !omarchyAvailable ? "system" : mode
     readonly property bool systemMode: effectiveMode === "system"
     readonly property bool omarchyMode: effectiveMode === "omarchy"
-    readonly property bool darkMode: effectiveMode === "dark"
-        || (systemMode && systemDark)
-        || (omarchyMode && omarchyDark)
 
     function paletteBase(palette) {
         return {
@@ -69,7 +64,7 @@ QtObject {
 
     readonly property var base: systemMode ? paletteBase(systemPalette)
         : omarchyMode ? paletteBase(omarchyPalette)
-        : darkMode ? darkBase : lightBase
+        : effectiveMode === "dark" ? darkBase : lightBase
 
     function withAlpha(value: color, alpha: real): color {
         return Qt.rgba(value.r, value.g, value.b, alpha)
@@ -103,13 +98,12 @@ QtObject {
     readonly property int effectiveTextScalePercent: Math.max(80, Math.min(200, textScalePercent))
     readonly property real effectiveFontPointSize: Math.max(1, systemFontPointSize)
         * effectiveTextScalePercent / 100
-    // 12/11/10/14/16 px at the default size: body, secondary text, uppercase
-    // headings, titles and the largest numbers.
+    // 12/11/10/14 px at the default size: body, secondary text, uppercase
+    // headings and titles.
     readonly property real fontPointSizeBody: effectiveFontPointSize
     readonly property real fontPointSizeCaption: effectiveFontPointSize * 11 / 12
     readonly property real fontPointSizeLabel: effectiveFontPointSize * 10 / 12
     readonly property real fontPointSizeTitle: effectiveFontPointSize * 14 / 12
-    readonly property real fontPointSizeDisplay: effectiveFontPointSize * 16 / 12
 
     // Rows, fields and buttons share one height: a line plus 6 px above and
     // below. Spacing follows the user's text size, not the font.

@@ -67,15 +67,6 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   exactly where Calibre puts them, and each app recognises the books the other
   sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and writes a
   Kindle book's metadata itself.
-- 📶 **KOReader and Calibre Companion, over Wi-Fi.** Apps that connect to
-  Calibre's wireless device server connect to Cousoir the same way: their
-  books show among your readers, and books go to them with their metadata
-  and covers, and later the metadata you change.
-- 📡 **Your library on your phone and e-reader.** Share it on the local
-  network in a click: KOReader and other reading apps browse it as an OPDS
-  catalog, and a phone's camera opens its web page from a QR code, to
-  search the books and download them. No Calibre needed, and
-  `cousoir-cli serve` does it on a server.
 - 📖 **Read in Cousoir.** EPUBs a page at a time in your theme, with their
   table of contents, and PDFs. Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
@@ -98,7 +89,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   tag, section or action by a few letters.
 - 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
   exactly as `calibredb list` and `calibredb search` do, checks its health,
-  applies changes from a JSON file, and shares the library on the network.
+  and applies changes from a JSON file.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -119,8 +110,8 @@ On other distributions, you need Qt 6.9 or later, SQLite, libzip, ICU, Snowball'
 or later and a C++20 compiler; libmtp for a Kindle; Qt WebEngine for the
 reader. [DOC.md](DOC.md) has the details.
 
-> **About Calibre:** Cousoir browses, edits and shares a library, sends to a
-> Kobo or a Kindle, downloads metadata and reads books on its own. Calibre
+> **About Calibre:** Cousoir browses and edits a library, sends to a Kobo
+> or a Kindle, downloads metadata and reads books on its own. Calibre
 > itself converts to AZW3, downloads metadata from its own sources, and reads
 > the metadata of formats other than EPUB, KEPUB, MOBI, AZW3 and PDF: install
 > it too if you need those.
@@ -218,8 +209,8 @@ The few places where Cousoir departs from Calibre on purpose are listed in
   library settings. A library only this computer changes is ready as soon as
   Calibre closes.
 - **Hands off your Kobo's database.** Cousoir only reads it.
-- **Nothing leaves your computer.** No accounts, no telemetry, no internet
-  access.
+- **Nothing leaves your computer.** No accounts, no telemetry; the web only
+  when you download a book's metadata and covers.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -254,9 +245,7 @@ Python to C++:
   the `metadata.opf` writer;
 - 📲 **how books on a Kobo or a Kindle are found** and matched with the
   library, from Calibre's device drivers. The Kobo driver is the work of
-  Timothy Legge, Kovid Goyal and David Forrester;
-- 📶 **the wireless device connection** apps speak, from Calibre's driver
-  by Charles Haley and Kovid Goyal.
+  Timothy Legge, Kovid Goyal and David Forrester.
 
 And when Cousoir converts a book or sends it to a reader, Calibre itself does
 the work. [CREDITS.md](CREDITS.md) lists every piece of Calibre in Cousoir,

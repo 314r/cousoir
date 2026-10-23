@@ -372,7 +372,7 @@ int fakeSend(const QString &folder)
                 { QStringLiteral("path"), lpath },
                 { QStringLiteral("file"), local },
             });
-        for (const QString name : { QStringLiteral("driveinfo.calibre"), QStringLiteral("metadata.calibre") })
+        for (const QString &name : { QStringLiteral("driveinfo.calibre"), QStringLiteral("metadata.calibre") })
             operations.append(QJsonObject{
                 { QStringLiteral("op"), QStringLiteral("put") },
                 { QStringLiteral("path"), name },

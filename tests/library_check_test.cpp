@@ -1,6 +1,5 @@
 #include <QtTest>
 
-#include <QDirIterator>
 #include <QTemporaryDir>
 
 #include "calibre_db.h"
@@ -8,13 +7,6 @@
 #include "test_support.h"
 
 namespace {
-
-bool writeFile(const QString &path, const QByteArray &contents = "x")
-{
-    QDir().mkpath(QFileInfo(path).absolutePath());
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(contents) == contents.size();
-}
 
 LibraryCheck::Options options()
 {
@@ -278,16 +270,16 @@ void LibraryCheckTest::findsFilesOutside()
     const QDir dir(library);
     for (const char *file : { "stray.epub", "Nobody/notes.txt", "Glen Cook/Lost (99)/Lost - Glen Cook.epub",
                               "Glen Cook/The Black Company (2)/old.epub", "Glen Cook/readme.txt" })
-        QVERIFY(writeFile(dir.filePath(QString::fromUtf8(file))));
+        QVERIFY(writeAll(dir.filePath(QString::fromUtf8(file)), "x"));
     // What a library holds besides its books.
     for (const char *file : { ".stfolder/x", ".~cousoir-1-old", "Thumbs.db",
                               "metadata (Pierre's conflicted copy 2024-11-14).db",
                               "Glen Cook/The Black Company (2)/data/extra.txt",
                               "Glen Cook/The Black Company (2)/.DS_Store" })
-        QVERIFY(writeFile(dir.filePath(QString::fromUtf8(file))));
+        QVERIFY(writeAll(dir.filePath(QString::fromUtf8(file)), "x"));
     // Calibre writing, after the library was read.
     const LibraryData data = load(library);
-    QVERIFY(writeFile(dir.filePath(QStringLiteral("metadata.db-wal"))));
+    QVERIFY(writeAll(dir.filePath(QStringLiteral("metadata.db-wal")), "x"));
 
     const LibraryCheck::Findings findings = LibraryCheck::check(data, options());
     QVERIFY(findings.scanned);

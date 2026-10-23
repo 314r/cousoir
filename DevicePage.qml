@@ -6,9 +6,9 @@ import QtQuick.Layouts
 
 import Cousoir
 
-// The books on a connected Kobo: those sent to it, those copied or bought,
+// The books on a connected reader: those sent to it, those copied or bought,
 // and whether each is one of the library's. A book in the library opens
-// from here; one sent to the Kobo can be removed from it.
+// from here; one sent to the reader can be removed from it.
 Rectangle {
     id: page
 
@@ -39,7 +39,7 @@ Rectangle {
 
     // A book of the library, to open.
     signal bookRequested(int bookId)
-    // Remove from the Kobo, asked for in a row's menu or with Delete.
+    // Remove from the reader, asked for in a row's menu or with Delete.
     signal removeRequested(string lpath, string title)
 
     color: Theme.canvas

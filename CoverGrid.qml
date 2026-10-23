@@ -18,7 +18,6 @@ Item {
     // Prefix of the objectNames: <name>Grid, <name>Cell<i>.
     property string name: "cover"
     property alias currentIndex: view.currentIndex
-    property int selectionCount: 0
     property bool selectable: false
     readonly property int coverWidth: Math.round(120 * Theme.spacingScale)
     readonly property int coverHeight: Math.round(coverWidth * 1.5)

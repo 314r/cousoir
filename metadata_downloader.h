@@ -26,10 +26,8 @@ class MetadataDownloader : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
-    // Something can download: Calibre's sources, else Open Library.
-    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
-    // Who is asked: "calibre" or "openlibrary".
-    Q_PROPERTY(QString source READ source NOTIFY availableChanged)
+    // Who is asked: "calibre" for Calibre's sources, else "openlibrary".
+    Q_PROPERTY(QString source READ source NOTIFY sourceChanged)
     // "idle", "searching", "found" or "failed".
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(int bookId READ bookId NOTIFY stateChanged)
@@ -52,7 +50,6 @@ public:
 
     BookLibrary *library() const;
     void setLibrary(BookLibrary *library);
-    bool available() const;
     QString source() const;
     QString state() const;
     int bookId() const;
@@ -88,7 +85,7 @@ public:
 
 signals:
     void libraryChanged();
-    void availableChanged();
+    void sourceChanged();
     void stateChanged();
     void coversChanged();
 

@@ -99,15 +99,13 @@ private:
     QList<Folded> m_authorSorts;
     QList<Folded> m_sorts;
     QList<Folded> m_uuids;
-    // By item, in the order of the library's lists, and the row of each id.
+    // By item, in the order of the library's lists, and the row of each
+    // author's id.
     QList<Folded> m_authorNames;
     QList<Folded> m_tagNames;
     QList<Folded> m_seriesNames;
     QList<Folded> m_publisherNames;
     QHash<int, qsizetype> m_authorRows;
-    QHash<int, qsizetype> m_tagRows;
-    QHash<int, qsizetype> m_seriesRows;
-    QHash<int, qsizetype> m_publisherRows;
     // The custom columns' search terms, "#genre", and "#saga_index" for a
     // series column's numbers.
     QStringList m_customTerms;
@@ -129,10 +127,5 @@ struct Result
 Result search(const Index &index, const QString &query, const QString &restriction = {});
 // The same among `universe`, the rows a restriction found already.
 Result search(const Index &index, const QString &query, const QBitArray &universe);
-
-// The search terms the parser knows as fields, "title", "author", "#genre",
-// "vl", "search", and the library's grouped search terms and user
-// categories.
-QStringList locations(const Index &index);
 
 } // namespace CalibreSearch

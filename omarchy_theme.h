@@ -8,7 +8,6 @@ class OmarchyTheme : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QVariantMap palette READ palette NOTIFY paletteChanged)
-    Q_PROPERTY(bool dark READ dark NOTIFY paletteChanged)
     Q_PROPERTY(bool available READ available NOTIFY availableChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
 
@@ -17,7 +16,6 @@ public:
     explicit OmarchyTheme(const QString &stateRoot, QObject *parent = nullptr);
 
     QVariantMap palette() const;
-    bool dark() const;
     bool available() const;
     bool active() const;
 
@@ -32,7 +30,6 @@ signals:
 
 private:
     QVariantMap m_palette;
-    bool m_dark = true;
     bool m_available = false;
     bool m_active = false;
     QString m_stateRoot;

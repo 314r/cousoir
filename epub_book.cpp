@@ -164,7 +164,7 @@ bool EpubBook::load(QString *error)
         const QString file = hrefs.value(idref);
         if (file.isEmpty() || !contains(file))
             continue;
-        m_spine.append({ file, m_types.value(file), linear, m_sizes.value(file) });
+        m_spine.append({ file, linear, m_sizes.value(file) });
     }
     if (m_spine.isEmpty()) {
         *error = QObject::tr("%1 has nothing to read: its spine is empty.").arg(QFileInfo(m_path).fileName());
@@ -181,14 +181,12 @@ void EpubBook::readNav(const QString &name)
 {
     // EPUB 3: the nav element of type toc, its nested lists.
     QXmlStreamReader nav(read(name));
-    int navDepth = 0;
     bool inToc = false;
     int listDepth = 0;
     while (!nav.atEnd()) {
         const QXmlStreamReader::TokenType token = nav.readNext();
         if (token == QXmlStreamReader::StartElement) {
             if (nav.name() == QLatin1String("nav")) {
-                ++navDepth;
                 if (!inToc && attribute(nav, "type") == QLatin1String("toc"))
                     inToc = true;
             } else if (inToc && nav.name() == QLatin1String("ol")) {
@@ -202,7 +200,6 @@ void EpubBook::readNav(const QString &name)
             }
         } else if (token == QXmlStreamReader::EndElement) {
             if (nav.name() == QLatin1String("nav")) {
-                --navDepth;
                 if (inToc)
                     break;
             } else if (inToc && nav.name() == QLatin1String("ol")) {

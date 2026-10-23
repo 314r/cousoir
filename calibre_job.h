@@ -10,9 +10,9 @@
 
 class QProcess;
 
-// What Conversion's and SendJob's jobs share: a folder of the cache holding
-// the job, a calibre-debug that runs its Python and writes its log and
-// result.json there, and lines of progress on its output.
+// What the jobs of Conversion, SendJob and MetadataDownload share: a folder
+// of the cache holding the job, a calibre-debug that runs its Python and
+// writes its log and result.json there, and lines of progress on its output.
 namespace CalibreJob {
 
 bool writeFile(const QString &path, const QByteArray &data, QString *error);

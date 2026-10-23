@@ -15,6 +15,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <optional>
 
 #include "book.h"
 #include "calibre_languages.h"
@@ -188,15 +189,12 @@ QList<Hit> find(SqliteDb &db, const Query &query, QString *error)
     }
     statement.bind(values);
     while (statement.step()) {
-        const int bookId = int(statement.integer(1));
-        if (query.bookIds && !query.bookIds->contains(bookId))
-            continue;
         const std::optional<Value> annotation = parsedAnnotation(statement.blob(5));
         if (!annotation)
             continue;
         Hit hit;
         hit.id = int(statement.integer(0));
-        hit.bookId = bookId;
+        hit.bookId = int(statement.integer(1));
         hit.format = statement.text(2);
         hit.userType = statement.text(3);
         hit.user = statement.text(4);

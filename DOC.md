@@ -612,7 +612,8 @@ and the book written into metadata.calibre and driveinfo.calibre as Calibre
 writes them, so that Calibre, when it connects later, knows the books
 Cousoir sent. The golden test sends the same books both ways and has
 Calibre read both Kobos. A PDF goes as it is, without the library's
-metadata, which Calibre would write into it. A Kindle still needs Calibre.
+metadata, which Calibre would write into it. A Kindle, below, goes without
+Calibre too.
 
 What the Kobo knows of each book's reading shows too, read from its
 database as Calibre's Kobo driver reads it to fetch annotations: the Kobo's
@@ -700,59 +701,6 @@ Cousoir departs from Calibre here:
   its text: the second rewrite reads the file at its first length. Cousoir
   keeps it.
 
-### The metadata in the files sent
-
-What Calibre sends is a copy of the book with the library's metadata in
-it, so that a reader that reads a book's own metadata, as KOReader does,
-shows the library's title, authors, series and cover. Cousoir writes it as
-Calibre's writers do: into an EPUB, the package's metadata replaced field
-by field as Calibre 9.16's `opf3.py` replaces it for EPUB 3, or as
-`opf2.py`'s OPF class does for EPUB 2 and Calibre's own conversions, the
-package laid out again as Calibre lays it out, the cover put in place of
-the book's, or added where Calibre adds it; into an AZW3 or a MOBI file,
-as goal 18's port of its MOBI writer does. What the library does not know
-of the book stays as the book has it, and a book whose package cannot be
-read goes as it is, as when Calibre's writer fails. Sends to apps over the
-network and plain EPUBs sent to a Kobo get it.
-
-### Reader apps over the network
-
-KOReader, Calibre Companion and the other apps that connect to Calibre's
-wireless device server ("Connect/share > Start wireless device connection"
-in Calibre) connect to Cousoir the same way, once Settings > Network > Let
-apps connect is on. An app finds Cousoir by itself, as it finds Calibre, by
-a datagram on Calibre's ports; else it is given this computer's address and
-the port the settings show. Cousoir listens on Calibre's port, 9090, or
-another free one when Calibre has it, or on the port set; with a password,
-the app must give the same. One app at a time: another one that connects is
-told who has Cousoir.
-
-The app shows under Devices as a plugged-in reader does, with its books,
-which are the library's when sent from it, and the room left. Books go to
-it in the first of its formats the book has, at Calibre's path,
-`{title} - {authors} ({id})`, with their metadata and a thumbnail of their
-cover at the size the app asks for, the library's metadata and cover
-written into an EPUB, AZW3 or MOBI copy as Calibre writes them (see below); a book on the app already, sent from
-the same library book, is replaced where it is. Removing a book removes it
-from the app, and Disconnect lets the app go. When the app connects, the
-metadata the library changed since it last had it goes to it, as Calibre
-sends it when its metadata management is "on connect". Cousoir keeps, for
-each app, the metadata of the books it has, as Calibre does, so that the
-app is asked only for what it changed.
-
-It is Calibre 9.16's protocol, as its SMART_DEVICE_APP driver speaks it:
-the golden test has the same app, a stand-in for KOReader, connect to
-Calibre's server and to Cousoir's, three times, and compares every message
-each sent it and the books it kept. Cousoir departs from Calibre here:
-
-- A PDF, FB2, DOCX or other format goes as the library has it: Calibre
-  writes the library's metadata into those too.
-- A book without a cover gets a drawn one, the title and authors on a
-  colour; Calibre draws its own default cover.
-- Calibre's collections, read status columns and the books an app got
-  elsewhere, which Calibre reads back to know them, are left out; so is
-  Bonjour, by which some apps find Calibre where datagrams do not pass.
-
 ## Reading in Cousoir
 
 Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
@@ -810,46 +758,9 @@ highlights shown on the clipboard as Markdown; Export saves them as
 Markdown or plain text, as Calibre's export writes them: each book's
 title, its highlights under their chapters, each with its date and note.
 
-## Sharing on the network
-
-Settings, Network, Share the library serves the library open to the other
-devices of the local network, read only, while Cousoir is open:
-
-- an OPDS catalog, at `http://ADDRESS:8090/opds`, which KOReader, Thorium,
-  Moon+ Reader, PocketBook's and other readers browse: the newest books,
-  every book by title, the authors, series, tags, publishers and languages,
-  each leading to its books, and a search in Calibre's search language
-  (`tags:"=Fantasy" and not series:true`). Each book shows its cover, its
-  authors, description, rating, tags and series as Calibre's content server
-  describes them, and a download link for each of its formats;
-- a web page, at `http://ADDRESS:8090/`, for a phone's or a computer's
-  browser: a search box, then the books' covers, titles and authors, each
-  format a link to download it, the newest first.
-
-The Network section lists the addresses, one per network the computer is
-on, each with a QR code that a phone's camera opens and a Copy button; Look
-again finds them after joining another network. The port is 8090 unless
-changed, so that Calibre's content server, on 8080, can run beside it. A
-password, when set, is asked for by every reader and browser (any user name
-goes); without one, anyone on the network can download the books. The
-setting is remembered: Cousoir shares the library again when it opens, and
-the status bar shows it, a click away from the Network section, whenever
-the library is shared.
-Files are named as Calibre's content server names them, `Title - Authors_ID.epub`.
-
-`cousoir-cli serve` shares a library the same way without the application,
-on a server or a NAS for instance; it reads the library again when Calibre
-changes it.
-
-Cousoir departs from Calibre's content server here: it reads and nothing
-else (no editing, no reading in the browser, no users with their own
-rights), serves the one library open, and speaks HTTP only, for the local
-network: to reach it from elsewhere, put it behind a proxy with HTTPS at
-the root of a host name, as its links start at `/`.
-
 ## Settings
 
-Settings has four sections. Appearance picks the theme and the text size, as
+Settings has three sections. Appearance picks the theme and the text size, as
 in JolieBulle. Library shows the library folder, lets you pick another one
 (Cousoir remembers it) or go back to the library Calibre opens; says whether
 the library can be written now, on which rules, and where the backups go;
@@ -861,9 +772,7 @@ language on the computers sharing the library; and lists the conflict copies
 found beside `metadata.db`: Dropbox's, Syncthing's, Nextcloud's and
 ownCloud's. A conflict copy of the database keeps the library read-only until
 you have checked in Calibre that no change is missing and pressed Ignore;
-another copy, or this one changed, counts again. Network shares the library
-on the local network (see [Sharing on the network](#sharing-on-the-network)).
-About shows Cousoir's version, its credits, Calibre's first, and
+another copy, or this one changed, counts again. About shows Cousoir's version, its credits, Calibre's first, and
 its license.
 
 ## The library
@@ -920,12 +829,7 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
 cousoir-cli download [--library PATH] [--covers] BOOK_ID
 cousoir-cli kepubify BOOK.epub BOOK.kepub
-cousoir-cli serve [--library PATH] [--port 8090] [--password PASSWORD]
 ```
-
-`serve` shares the library on the local network until stopped, as the
-application's Network settings do: it prints its addresses, then each
-request answered, and reads the library again when Calibre changes it.
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
 all` does, byte for byte. `search` prints the ids of the books an
@@ -980,16 +884,6 @@ and name; an empty `html` removes it:
 ```json
 [{ "note": { "field": "tags", "item": 3, "name": "Fantasy",
              "html": "<p>Other worlds.</p>", "text": "Other worlds." } }]
-```
-
-`cousoir-cli wireless` lets reader apps connect as to Calibre's wireless
-device server, `--port` and `--password` as in the settings. With a JSON
-file of operations, it waits `--wait` seconds for an app, gives it the
-metadata the library changed, sends and removes books in order, then lets
-it go:
-
-```json
-[{ "send": [1, 2] }, { "remove": ["Ecume des jours, L' - Boris Vian (1).epub"] }]
 ```
 
 Conversions run first, on the books as the
@@ -1240,14 +1134,7 @@ The tests check the port against Calibre itself:
   JSON, without the times, random ids and temporary paths in them
   (`cousoir-test-tool compare-devices`); then Calibre connects to both, which
   must end alike, and each program must recognise the books the other sent.
-  With `COUSOIR_GOLDEN_REAL=1`, books of the real library go too. Then a
-  stand-in for KOReader (`tests/wireless/fake_koreader.py`) connects three
-  times to Calibre's wireless device server (`send_books.py` with
-  `wireless:PORT`) and to `cousoir-cli wireless`, which send, change,
-  remove and send books: every message each told it and the books it kept
-  must be alike (`tests/wireless/compare.py`), the books' files entry by
-  entry, with the metadata Calibre writes into them, a PDF by its name.
-  Last, it
+  With `COUSOIR_GOLDEN_REAL=1`, books of the real library go too. Last, it
   reads a fake Kobo whose database has books being read, finished and
   bought, with highlights, notes and bookmarks
   (`tests/data/kobo-reading.sql`), with Calibre's Kobo `Bookmark`
@@ -1301,33 +1188,12 @@ The tests check the port against Calibre itself:
   stemmed or not, phrases, prefixes, by kind, must find what Calibre's
   browser finds, in its order, with its snippets; and the export is
   Calibre's. The UI tests browse, search and filter them and open one.
-- `epub_metadata_tests` writes the library's metadata into nine EPUB
-  packages, EPUB 3 and EPUB 2, one as Calibre's conversions write it, one
-  as Project Gutenberg does, with three sets of metadata each, and
-  compares them byte for byte with what Calibre's writer makes of them
-  (`tools/oracle/epub_meta_oracle.py`, `tests/data/epubmeta`): refined
-  titles and authors, identifiers of every form, languages with countries,
-  covers found or added, prefixed namespaces, comments, custom columns.
-  And a whole book: its cover where Calibre puts it.
-- `wireless_tests` has an app that answers as KOReader does connect to
-  Cousoir's wireless device server: the messages as Calibre frames them,
-  the datagrams answered, books sent, listed from the metadata cache on
-  connecting again, removed, metadata sent only where it changed, a book
-  the app refuses, a wrong password, and a second app turned away. The UI
-  tests send a book to such an app and remove it.
 - `epub_book_tests` reads EPUB 3 and EPUB 2 books: their spine, their table
   of contents from nav or NCX, nested, and paths resolved. The UI tests read
   `tests/data/reader/voyage.epub` (`tools/make_reader_fixture.py`) in the
   reader: pages turned, the position written to the library and found
   again, a newer one of Calibre's viewer taken, a highlight made, kept as
   the viewer keeps it, shown again and removed; and a PDF.
-- `library_server_tests` serves the fixture library on a port of
-  127.0.0.1 and reads it as a reader would: the catalog's feeds followed
-  link by link, searches, categories, files, covers and thumbnails, the
-  password, the web page with what was searched escaped, and long feeds in
-  pages. `qr_code_tests` compares Cousoir's QR codes, module by module,
-  with libqrencode's (`tools/make_qr_fixtures.sh` made them), and reads
-  them back with `zbarimg` when it is installed.
 - `mobi_metadata_tests` writes metadata into MOBI and AZW3 books, Calibre's
   conversions and two it never makes, and compares them byte for byte with
   what Calibre's own writer made of them (`tools/oracle/mobi_oracle.py`),
@@ -1338,8 +1204,7 @@ The tests check the port against Calibre itself:
   Open Library on 127.0.0.1, a search by ISBN, its fallback to the title,
   covers, and a site that cannot be reached.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%
-  scale, against a copy of the fixture library; the share listens on
-  127.0.0.1 only (`COUSOIR_SHARE_LOCALHOST`).
+  scale, against a copy of the fixture library.
 
 ### Measuring
 

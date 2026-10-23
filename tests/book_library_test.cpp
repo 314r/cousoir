@@ -1,7 +1,6 @@
 #include <QtTest>
 
 #include <QDesktopServices>
-#include <QDirIterator>
 #include <QGuiApplication>
 #include <QImageReader>
 #include <QJsonDocument>
@@ -22,13 +21,6 @@
 #include "test_support.h"
 
 namespace {
-
-CalibreConfig frenchConfig()
-{
-    CalibreConfig config;
-    config.interfaceLanguage = QStringLiteral("fr");
-    return config;
-}
 
 // The rows the book list shows, as maps.
 QVariantList bookRows(BookLibrary &library)
@@ -420,7 +412,6 @@ void BookLibraryTest::describesCurrentBook()
     QCOMPARE(formats.size(), 1);
     QCOMPARE(formats.first().toMap().value(QStringLiteral("format")).toString(), QStringLiteral("EPUB"));
     QVERIFY(!formats.first().toMap().value(QStringLiteral("missing")).toBool());
-    QCOMPARE(book.value(QStringLiteral("missingFiles")).toInt(), 0);
 
     library->setCurrentBookId(4);
     book = library->currentBook();
@@ -817,14 +808,6 @@ QString importFile(const QString &name)
     return QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/") + name;
 }
 
-QStringList formatsOf(const QVariantMap &book)
-{
-    QStringList formats;
-    for (const QVariant &format : book.value(QStringLiteral("formats")).toList())
-        formats.append(format.toMap().value(QStringLiteral("format")).toString());
-    return formats;
-}
-
 QStringList trashKeys(BookLibrary *library)
 {
     QStringList keys;
@@ -960,7 +943,6 @@ void BookLibraryTest::convertsBooks()
     ConversionService service;
     service.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
     service.setLibrary(library.get());
-    QVERIFY(service.available());
     QCOMPARE(service.formatsFor(1), (QStringList{ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
     QVERIFY(service.formatsFor(6).isEmpty());
     // Read-only, nothing is converted.
@@ -1036,7 +1018,6 @@ void BookLibraryTest::downloadsFromOpenLibrary()
     downloader.setNative(true);
     downloader.setSite({ server.url(), server.url() });
     downloader.setLibrary(library.get());
-    QVERIFY(downloader.available());
     QCOMPARE(downloader.source(), QStringLiteral("openlibrary"));
     library->setCurrentBookId(3);
     QCOMPARE(downloader.search(3), QString());
@@ -1079,7 +1060,6 @@ void BookLibraryTest::downloadsMetadata()
     MetadataDownloader downloader;
     downloader.setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
     downloader.setLibrary(library.get());
-    QVERIFY(downloader.available());
     QVERIFY(!downloader.search(99).isEmpty());
     library->setCurrentBookId(2);
     QCOMPARE(downloader.search(2), QString());
@@ -1229,7 +1209,6 @@ void BookLibraryTest::convertsWithoutCalibre()
     ConversionService service;
     service.setNative(true);
     service.setLibrary(library.get());
-    QVERIFY(service.available());
     QVERIFY(!service.calibre());
     QCOMPARE(service.formatsFor(1), QStringList{ QStringLiteral("KEPUB") });
     // A PDF alone, nothing.
@@ -1313,7 +1292,6 @@ void BookLibraryTest::sendsToKobos()
     devices.setVolumeProvider([&volumes] { return volumes; }, 20);
     devices.setLibrary(library.get());
     QVERIFY(devices.devices().isEmpty());
-    QVERIFY(devices.available());
     QVERIFY(devices.writable());
 
     // Any folder with a .kobo in it.

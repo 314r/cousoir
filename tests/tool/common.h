@@ -85,8 +85,10 @@ int makeLibrary(const QStringList &arguments);
 
 // search.cpp
 int searchBooks(const QStringList &arguments);
+int compareSearches(const QStringList &arguments);
+
+// sort.cpp
 int sortBooks(const QStringList &arguments);
 int compareSorts(const QStringList &arguments);
-int compareSearches(const QStringList &arguments);
 
 } // namespace Tool

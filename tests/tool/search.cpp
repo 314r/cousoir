@@ -1,7 +1,6 @@
 // The searches of the golden test: Cousoir's run on a library as
 // tools/oracle/search_books.py runs Calibre's, and both compared.
 
-#include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>

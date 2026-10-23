@@ -2,36 +2,29 @@
 
 #include <QClipboard>
 #include <QDesktopServices>
-#include <QDirIterator>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QTcpServer>
 #include <QTemporaryDir>
 #include <QtQuickTest/quicktest.h>
 
 #include <memory>
 
-#include "book_zip.h"
 #include "calibre_db.h"
 #include "calibre_fts.h"
 #include "calibre_languages.h"
-#include "fake_wireless_app.h"
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
 #include "metadata_downloader.h"
 #include "device_library.h"
 #include "highlight_browser.h"
-#include "library_share.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
@@ -99,7 +92,6 @@ private slots:
     void showsWriteState();
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
-    void sharesOnTheNetwork();
     void readsInCousoir();
     void readsPdfs();
     void usesOmarchyColorsByDefault();
@@ -112,7 +104,6 @@ private slots:
     void changesRating();
     void editsDescription();
     void keepsNotes();
-    void sendsToWirelessApps();
     void browsesHighlights();
     void editsCustomColumns();
     void changesCovers();
@@ -172,7 +163,6 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
-    qmlRegisterType<LibraryShare>("Cousoir", 1, 0, "LibraryShare");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
@@ -180,7 +170,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
     for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
                               "BooksPage", "BulkEditPane", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
-                              "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "NetworkSettingsPage", "SearchField",
+                              "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
                               "SettingsWindow", "Sidebar", "SidebarItem", "ThemedWindow", "ThinScrollBar", "TrashPage" }) {
         qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
                         "Cousoir", 1, 0, type);
@@ -673,7 +663,7 @@ void LibraryUiTest::creditsCalibreInSettings()
     QQuickWindow *settings = m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
     QTRY_VERIFY(settings && settings->isVisible());
     QMetaObject::invokeMethod(settings, "showSection", Q_ARG(QVariant, QStringLiteral("about")));
-    QCOMPARE(settings->property("currentSectionIndex").toInt(), 3);
+    QCOMPARE(settings->property("currentSectionIndex").toInt(), 2);
 
     const QList<QQuickItem *> credit = visualDescendants(settings->contentItem(), QStringLiteral("calibreCreditLabel"));
     QCOMPARE(credit.size(), 1);
@@ -685,58 +675,6 @@ void LibraryUiTest::creditsCalibreInSettings()
     QCOMPARE(version.size(), 1);
     QVERIFY(version.constFirst()->property("text").toString().contains(QStringLiteral(COUSOIR_VERSION)));
     settings->close();
-}
-
-void LibraryUiTest::sharesOnTheNetwork()
-{
-    // Only this computer reaches it, on a free port.
-    qputenv("COUSOIR_SHARE_LOCALHOST", "1");
-    QTcpServer probe;
-    QVERIFY(probe.listen(QHostAddress::LocalHost));
-    const quint16 port = probe.serverPort();
-    probe.close();
-
-    click("settingsButton");
-    QQuickWindow *settings = m_window->findChild<QQuickWindow *>(QStringLiteral("settingsWindow"));
-    QTRY_VERIFY(settings && settings->isVisible());
-    QMetaObject::invokeMethod(settings, "showSection", Q_ARG(QVariant, QStringLiteral("network")));
-    auto *sharingSettings = settings->property("sharingSettings").value<QObject *>();
-    QVERIFY(sharingSettings);
-    sharingSettings->setProperty("port", int(port));
-    auto *share = settings->property("share").value<LibraryShare *>();
-    QVERIFY(share);
-    QVERIFY(!share->running());
-
-    // The page laid out: its button where it stays.
-    QVERIFY(QQuickTest::qWaitForPolish(settings));
-    const QList<QQuickItem *> button = visualDescendants(settings->contentItem(), QStringLiteral("networkShareButton"));
-    QCOMPARE(button.size(), 1);
-    QTest::mouseClick(settings, Qt::LeftButton, Qt::NoModifier, button.constFirst()->mapToScene(
-        QPointF(button.constFirst()->width() / 2, button.constFirst()->height() / 2)).toPoint());
-    QTRY_VERIFY(share->running());
-    QCOMPARE(share->error(), QString());
-    // Never on unnoticed: the status bar says so.
-    QQuickItem *indicator = m_window->findChild<QQuickItem *>(QStringLiteral("sharingState"));
-    QVERIFY(indicator);
-    QTRY_VERIFY(indicator->isVisible());
-    QTRY_VERIFY(QSettings().value(QStringLiteral("Sharing/enabled")).toBool());
-
-    // The catalog of the library open.
-    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
-    QNetworkAccessManager network;
-    QNetworkReply *reply = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/opds/books").arg(port))));
-    QSignalSpy finished(reply, &QNetworkReply::finished);
-    QVERIFY(finished.wait(10000));
-    QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200);
-    QVERIFY(reply->readAll().contains("Shadows Linger"));
-    reply->deleteLater();
-
-    QTest::mouseClick(settings, Qt::LeftButton, Qt::NoModifier, button.constFirst()->mapToScene(
-        QPointF(button.constFirst()->width() / 2, button.constFirst()->height() / 2)).toPoint());
-    QTRY_VERIFY(!share->running());
-    QTRY_VERIFY(!indicator->isVisible());
-    settings->close();
-    qunsetenv("COUSOIR_SHARE_LOCALHOST");
 }
 
 // A book read in Cousoir's reader: its pages turned, where reading stopped
@@ -1279,71 +1217,6 @@ void LibraryUiTest::keepsNotes()
     QTRY_VERIFY(!control("notePane")->isVisible());
 }
 
-void LibraryUiTest::sendsToWirelessApps()
-{
-    // Calibre's wireless device server, on a port of the test's.
-    QTcpServer spare;
-    QVERIFY(spare.listen(QHostAddress::LocalHost));
-    const int port = spare.serverPort();
-    spare.close();
-    auto *devices = qobject_cast<DeviceLibrary *>(m_window->property("devices").value<QObject *>());
-    QVERIFY(devices);
-    devices->setWireless(true, port, QString());
-    QTRY_VERIFY(devices->wirelessListening());
-    QCOMPARE(devices->wirelessPort(), port);
-
-    // An app connects: a reader among the others.
-    FakeWireless::FakeApp app;
-    app.connectTo(quint16(port));
-    QTRY_COMPARE(devices->devices().size(), 1);
-    const QVariantMap device = devices->devices().constFirst().toMap();
-    QCOMPARE(device.value(QStringLiteral("kind")).toString(), QStringLiteral("wireless"));
-    QCOMPARE(device.value(QStringLiteral("name")).toString(), QStringLiteral("KOReader (Kobo_Libra2)"));
-    const QString root = device.value(QStringLiteral("root")).toString();
-    QTRY_VERIFY(control(QStringLiteral("sidebar_device:") + root));
-    // Told which library it is.
-    const QString uuid = qobject_cast<BookLibrary *>(library())->data().uuid;
-    QVERIFY(!uuid.isEmpty());
-    QCOMPARE(app.last(Wireless::GetInitializationInfo)->text(QStringLiteral("currentLibraryUUID")), uuid);
-    QCOMPARE(app.last(Wireless::SetLibraryInfo)->text(QStringLiteral("libraryUuid")), uuid);
-
-    // A book goes, with its metadata in it and beside it, under Calibre's
-    // name for it.
-    QSignalSpy sent(devices, &DeviceLibrary::sent);
-    QCOMPARE(devices->send({ 1 }, root), QString());
-    QTRY_COMPARE(sent.size(), 1);
-    QCOMPARE(app.books.size(), 1);
-    QTemporaryDir received;
-    const QString copy = received.filePath(QStringLiteral("sent.epub"));
-    QFile file(copy);
-    QVERIFY(file.open(QIODevice::WriteOnly));
-    file.write(app.books.constFirst().data);
-    file.close();
-    BookZip::Zip zip;
-    QString zipError;
-    QVERIFY2(BookZip::readZip(copy, &zip, &zipError), qPrintable(zipError));
-    bool identified = false;
-    for (const QString &name : std::as_const(zip.names))
-        identified = identified || zip.data.value(name).contains("<dc:identifier>calibre:1</dc:identifier>");
-    QVERIFY(identified);
-    QCOMPARE(app.books.constFirst().metadata.text(QStringLiteral("lpath")), QStringLiteral("Ecume des jours, L' - Boris Vian (1).epub"));
-    QCOMPARE(app.books.constFirst().metadata.text(QStringLiteral("title")), QStringLiteral("L'Écume des jours"));
-
-    // Listed on its page, as the library's book; removed from there.
-    click(QStringLiteral("sidebar_device:%1").arg(root).toUtf8().constData());
-    QTRY_COMPARE(devices->rows().size(), 1);
-    QCOMPARE(devices->rows().constFirst().toMap().value(QStringLiteral("bookId")).toInt(), 1);
-    QCOMPARE(devices->remove({ QStringLiteral("Ecume des jours, L' - Boris Vian (1).epub") }), QString());
-    QTRY_VERIFY(app.books.isEmpty());
-    QTRY_VERIFY(devices->rows().isEmpty());
-
-    // Let go, it leaves the readers.
-    QCOMPARE(devices->eject(root), QString());
-    QTRY_VERIFY(devices->devices().isEmpty());
-    devices->setWireless(false, 0, QString());
-    QVERIFY(!devices->wirelessListening());
-}
-
 void LibraryUiTest::browsesHighlights()
 {
     // The library with the highlights and bookmarks Calibre saved
@@ -1632,19 +1505,6 @@ int main(int argc, char **argv)
     LibraryUiTest test;
     return QTest::qExec(&test, argc, argv);
 }
-
-
-namespace {
-
-QStringList formatsOf(const QVariantMap &book)
-{
-    QStringList formats;
-    for (const QVariant &format : book.value(QStringLiteral("formats")).toList())
-        formats.append(format.toMap().value(QStringLiteral("format")).toString());
-    return formats;
-}
-
-} // namespace
 
 void LibraryUiTest::movesBooksToTrashAndBack()
 {

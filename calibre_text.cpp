@@ -550,8 +550,8 @@ QByteArray mobiLanguageCode(const QString &language)
 
 QString seriesIndexText(double index)
 {
-    if (!std::isfinite(index) || index == std::floor(index))
-        return QString::number(qint64(std::isfinite(index) ? index : 0));
+    if (index == std::floor(index))
+        return QString::number(qint64(index));
     QString text = QString::number(index, 'f', 2);
     while (text.endsWith(u'0'))
         text.chop(1);

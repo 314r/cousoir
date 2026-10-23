@@ -41,8 +41,6 @@ public:
     // The code of a language by its name in the interface language, as
     // typed in lower case; empty for none (reverse lang_map()).
     QString codeOfName(const QString &name) const;
-    // Whether Calibre's table was read.
-    bool fromCalibre() const;
     // A message of Calibre's in the interface language, as its _() gives
     // it; the message itself when Calibre has no translation.
     QString translate(const QString &message) const;

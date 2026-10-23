@@ -39,7 +39,6 @@ struct PyValue
     QDateTime date;
     int microsecond = 0;
 
-    static PyValue none() { return {}; }
     static PyValue from(bool value);
     static PyValue from(qint64 value);
     static PyValue from(int value) { return from(qint64(value)); }

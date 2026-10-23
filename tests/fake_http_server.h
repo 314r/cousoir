@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QByteArray>
-#include <QHash>
 #include <QHostAddress>
 #include <QObject>
 #include <QStringList>

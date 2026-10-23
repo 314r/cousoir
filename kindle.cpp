@@ -169,7 +169,6 @@ QList<DeviceBook> books(DeviceFiles &files, QString *error)
             book.title = known->value(QLatin1String("title")).toString();
             for (const QJsonValue &author : known->value(QLatin1String("authors")).toArray())
                 book.authors.append(author.toString());
-            book.authorSort = known->value(QLatin1String("author_sort")).toString();
             book.uuid = known->value(QLatin1String("uuid")).toString();
             book.applicationId = known->value(QLatin1String("application_id")).toInt();
         } else {
@@ -196,7 +195,6 @@ QList<DeviceBook> clippings(DeviceFiles &files, QString *error)
         book.lpath = path;
         book.title = clipped.title;
         book.authors = clipped.authors;
-        book.authorSort = clipped.authorSort;
         // Highlighted, so begun; how far, the Kindle does not write there.
         book.reading.status = 1;
         book.reading.notes = clipped.notes;

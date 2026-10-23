@@ -461,20 +461,11 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
         const Book *book = data.book(bookId);
         if (!book)
             continue;
-        QStringList formats;
-        for (const BookFormat &format : book->formats) {
-            if (!format.file.isEmpty())
-                formats.append(format.format);
-        }
-        const QString format = DeviceBooks::sendFormat(formats, formatMap);
+        QString source;
+        const QString format = NativeSend::sendFormat(*book, formatMap, &source);
         if (format.isEmpty()) {
             unsendable.append(book->title);
             continue;
-        }
-        QString source;
-        for (const BookFormat &bookFormat : book->formats) {
-            if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
-                source = bookFormat.file;
         }
         // Only a MOBI is read whole, to write the metadata into it; other
         // files are copied as they are.

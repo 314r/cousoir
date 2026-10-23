@@ -21,6 +21,7 @@
 #include "calibre_db.h"
 #include "calibre_template.h"
 #include "calibre_text.h"
+#include "device_books.h"
 #include "opf.h"
 
 namespace NativeSend {
@@ -83,9 +84,21 @@ QStringList shortenComponentsTo(qsizetype length, QStringList components, bool l
 
 } // namespace
 
-QStringList shortenComponents(qsizetype length, const QStringList &components, bool lastHasExtension)
+QString sendFormat(const Book &book, const QStringList &formatMap, QString *file)
 {
-    return shortenComponentsTo(length, components, lastHasExtension);
+    QStringList formats;
+    for (const BookFormat &format : book.formats) {
+        if (!format.file.isEmpty())
+            formats.append(format.format);
+    }
+    const QString format = DeviceBooks::sendFormat(formats, formatMap);
+    if (format.isEmpty())
+        return {};
+    for (const BookFormat &bookFormat : book.formats) {
+        if (bookFormat.format.compare(format, Qt::CaseInsensitive) == 0)
+            *file = bookFormat.file;
+    }
+    return format;
 }
 
 QString uploadPath(const LibraryData &data, const Book &book, const QString &extension, const UploadOptions &options,
@@ -239,7 +252,6 @@ PythonJson::Value bookEntry(const LibraryData &data, const Book &book, const QSt
     entry.insert(QStringLiteral("title_sort"), Value::from(book.sort));
     return entry;
 }
-
 
 QByteArray entryText(const PythonJson::Value &entry)
 {

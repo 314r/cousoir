@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QCollator>
-#include <QCollatorSortKey>
 #include <QFileSystemWatcher>
 #include <QFutureWatcher>
 #include <QHash>
@@ -75,9 +74,9 @@ class BookLibrary : public QObject
     Q_PROPERTY(QString virtualLibraryError READ virtualLibraryError NOTIFY virtualLibraryChanged)
     // Why the saved search the section lists cannot run; empty when it can.
     Q_PROPERTY(QString sectionError READ sectionError NOTIFY rowsChanged)
-    // The saved searches of the library, { name, query, count, error }, by
-    // name, the count empty when the search cannot run;
-    // the section "search:<name>" lists a saved search's books.
+    // The saved searches of the library, { name, count, error }, by name, the
+    // count empty when the search cannot run; the section "search:<name>"
+    // lists a saved search's books.
     Q_PROPERTY(QVariantList savedSearches READ savedSearches NOTIFY savedSearchesChanged)
     // The list's sort, as its first field: "title", "timestamp", "#genre"…,
     // with "Desc" for the reverse order. Earlier sorts break its ties, as
@@ -123,7 +122,7 @@ class BookLibrary : public QObject
     // What the last check found, but what the user ignored: { count,
     // checked (the time it ran), caseDuplicates, ignored, rows }. A row is
     // { kind, key } and, by kind: "duplicates" { sameTitle, isbns, books:
-    // [{ id, title, authors, formats, missing, added, cover, gains }] };
+    // [{ id, title, authors, formats, added, cover, gains }] };
     // "authors" { initials, ids, authors: [{ id, name, count }] };
     // "missing" { bookId, title, authors, formats, noFormats, folderMissing };
     // "outside" { path, folder, size, bookId }.
@@ -187,10 +186,6 @@ public:
     void setCurrentBookId(int bookId);
     QVariantMap currentBook() const;
     const LibraryData &data() const;
-    // The rows of the books `query` finds, Calibre's search language, all
-    // for an empty one, sorted by `sort`; `error` says why a query could not
-    // run. For the library's server.
-    QList<qsizetype> findRows(const QString &query, const QList<BookSort::Level> &sort, QString *error = nullptr) const;
     // update_from_mi() of Calibre's Edit metadata dialog: what a book found
     // by a download changes of `bookId`, for the fields chosen, as
     // updateBook() takes it; empty for a book that is gone.
@@ -272,12 +267,12 @@ public:
     // Puts the books of the last bulk edit back as they were before it, in
     // the fields it could change.
     Q_INVOKABLE void undoBulkEdit();
-    // Whether `text` is a date updateBook() takes for pubdate.
     // What the command palette finds for `text`: { kind, id, key, title,
     // detail }, the window's `commands`, { kind, key, title, detail }, then
     // the library's authors, series, tags, publishers and books. See
     // Palette::search().
     Q_INVOKABLE QVariantList paletteSearch(const QString &text, const QVariantList &commands, int limit = 40) const;
+    // Whether `text` is a date updateBook() takes for pubdate.
     Q_INVOKABLE bool isDate(const QString &text) const;
     // Whether a custom column takes the text as a date, as its writer reads
     // it.

@@ -5,9 +5,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QLocale>
 #include <QSaveFile>
-#include <QSettings>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTimeZone>
@@ -27,6 +25,7 @@
 
 #include "book.h"
 #include "book_library.h"
+#include "book_list_model.h"
 #include "calibre_config.h"
 #include "calibre_job.h"
 #include "calibre_lock.h"
@@ -37,10 +36,7 @@
 #include "kindle.h"
 #include "kindle_send.h"
 #include "kobo_send.h"
-#include "library_server.h"
 #include "mtp.h"
-#include "wireless.h"
-#include "wireless_send.h"
 
 namespace {
 
@@ -65,9 +61,6 @@ QList<Volume> mountedVolumes()
 #ifdef Q_OS_LINUX
 const QString udisks = QStringLiteral("org.freedesktop.UDisks2");
 
-// Unmounts the Kobo's filesystem through UDisks2, as a file manager's
-// "Safely remove" does, then powers its drive off, which takes the Kobo out
-// of its USB mode.
 // The block device's object in UDisks2, which spells "-" as "_2d".
 QString udisksBlock(const QString &node)
 {
@@ -81,6 +74,9 @@ QString udisksBlock(const QString &node)
     return QStringLiteral("/org/freedesktop/UDisks2/block_devices/") + name;
 }
 
+// Unmounts the Kobo's filesystem through UDisks2, as a file manager's
+// "Safely remove" does, then powers its drive off, which takes the Kobo out
+// of its USB mode.
 void udisksEject(const Kobo::Device &device, std::function<void(const QString &)> done)
 {
     const QString block = udisksBlock(device.node);
@@ -120,7 +116,6 @@ void udisksEject(const Kobo::Device &device, std::function<void(const QString &)
 }
 #endif
 
-// As the library shows the size of its files.
 // The notes worth showing: a highlight of nothing, which Calibre keeps, says
 // nothing.
 QList<ReaderNote> shownNotes(const ReadingState &reading)
@@ -163,11 +158,6 @@ QString durationText(qint64 seconds)
     if (minutes < 60)
         return QObject::tr("%1 min").arg(minutes);
     return QObject::tr("%1 h %2 min").arg(minutes / 60).arg(minutes % 60);
-}
-
-QString sizeText(qint64 size)
-{
-    return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
 }
 
 QStringList formatsOf(const Book &book)
@@ -262,16 +252,10 @@ DeviceLibrary::DeviceLibrary(QObject *parent)
     connect(&m_scanTimer, &QTimer::timeout, this, &DeviceLibrary::scan);
     m_scanTimer.start(2000);
     QTimer::singleShot(0, this, &DeviceLibrary::scan);
-    QTimer::singleShot(0, this, &DeviceLibrary::startWireless);
 }
 
 DeviceLibrary::~DeviceLibrary()
 {
-    // The app connected is let go while this is whole: what it was doing
-    // ends here, and is told to no one.
-    m_destroying = true;
-    delete m_wireless;
-    m_wireless = nullptr;
     stopProcess();
     if (m_copy)
         m_copy->waitForFinished();
@@ -293,18 +277,12 @@ void DeviceLibrary::setLibrary(BookLibrary *library)
     m_library = library;
     if (m_library) {
         connect(m_library, &BookLibrary::libraryChanged, this, &DeviceLibrary::rematch);
-        // The apps that connect are told the library's uuid once it is read.
-        connect(m_library, &BookLibrary::libraryChanged, this, &DeviceLibrary::startWireless);
         // A send waits for the changes before it.
         connect(m_library, &BookLibrary::savingChanged, this, &DeviceLibrary::startNext);
         connect(m_library, &BookLibrary::loadingChanged, this, &DeviceLibrary::startNext);
-        connect(m_library, &BookLibrary::libraryPathChanged, this, [this] {
-            cancel();
-            startWireless();
-        });
+        connect(m_library, &BookLibrary::libraryPathChanged, this, [this] { cancel(); });
     }
     rematch();
-    startWireless();
     emit libraryChanged();
 }
 
@@ -315,11 +293,9 @@ QVariantList DeviceLibrary::devices() const
         list.append(QVariantMap{
             { QStringLiteral("root"), connected.root },
             { QStringLiteral("name"), connected.name },
-            { QStringLiteral("kind"), connected.kind == Kind::Kobo ? QStringLiteral("kobo")
-                  : connected.kind == Kind::Kindle                 ? QStringLiteral("kindle")
-                                                                   : QStringLiteral("wireless") },
-            { QStringLiteral("ejectable"), connected.kind != Kind::Kindle },
-            { QStringLiteral("free"), sizeText(connected.freeBytes) },
+            { QStringLiteral("kind"), connected.kind == Kind::Kobo ? QStringLiteral("kobo") : QStringLiteral("kindle") },
+            { QStringLiteral("ejectable"), connected.kind == Kind::Kobo },
+            { QStringLiteral("free"), BookDisplay::fileSize(connected.freeBytes) },
         });
     }
     return list;
@@ -367,7 +343,7 @@ QVariantList DeviceLibrary::rows() const
             { QStringLiteral("title"), book.title },
             { QStringLiteral("authors"), book.authors.join(QLatin1String(" & ")) },
             { QStringLiteral("format"), book.format },
-            { QStringLiteral("size"), sizeText(book.size) },
+            { QStringLiteral("size"), BookDisplay::fileSize(book.size) },
             { QStringLiteral("bookId"), book.bookId },
             { QStringLiteral("purchased"), book.purchased },
             { QStringLiteral("reading"), book.reading.status == 2 ? QStringLiteral("✓")
@@ -545,12 +521,6 @@ int DeviceLibrary::deviceCount() const
     return int(m_devices.size());
 }
 
-bool DeviceLibrary::available() const
-{
-    // Neither a Kobo nor a Kindle needs Calibre.
-    return true;
-}
-
 bool DeviceLibrary::sendsNatively() const
 {
     return m_program.isEmpty() || m_native;
@@ -584,7 +554,7 @@ QVariantList DeviceLibrary::jobs() const
             { QStringLiteral("titles"), job.titles },
             { QStringLiteral("name"), job.name },
             { QStringLiteral("root"), job.root },
-            { QStringLiteral("running"), index == 0 && (m_process || m_copy || m_folder || m_wirelessSending) },
+            { QStringLiteral("running"), index == 0 && (m_process || m_copy || m_folder) },
             { QStringLiteral("progress"), job.progress },
         });
     }
@@ -598,15 +568,6 @@ bool DeviceLibrary::busy() const
 
 QStringList DeviceLibrary::formatMap(const Connected &connected) const
 {
-    if (connected.kind == Kind::Wireless) {
-        // The app's own list, in its order, as Calibre takes it.
-        QStringList formats;
-        if (connected.wireless) {
-            for (const QString &extension : connected.wireless->app().acceptedExtensions)
-                formats.append(extension.toUpper());
-        }
-        return formats;
-    }
     return connected.kind == Kind::Kobo ? Kobo::formatMap(m_configDirectory)
                                         : Kindle::formatMap(m_configDirectory, connected.serial);
 }
@@ -639,11 +600,9 @@ QString DeviceLibrary::send(const QVariantList &bookIds, const QString &root)
 {
     if (!m_library)
         return tr("No library is open.");
-    const Connected *connected = find(root);
-    // Calibre open here keeps the readers plugged in, not the apps
-    // connected to Cousoir.
-    if (!m_writable && !(connected && connected->kind == Kind::Wireless))
+    if (!m_writable)
         return readOnlyReason();
+    const Connected *connected = find(root);
     if (!connected)
         return tr("The device is no longer connected.");
     if (connected->kind == Kind::Kindle && connected->loading)
@@ -673,9 +632,9 @@ QString DeviceLibrary::send(const QVariantList &bookIds, const QString &root)
 
 QString DeviceLibrary::remove(const QStringList &lpaths)
 {
-    Connected *connected = find(m_currentRoot);
-    if (!m_writable && !(connected && connected->kind == Kind::Wireless))
+    if (!m_writable)
         return readOnlyReason();
+    Connected *connected = find(m_currentRoot);
     if (!connected)
         return tr("The device is no longer connected.");
     for (const Job &job : std::as_const(m_jobs)) {
@@ -696,18 +655,6 @@ QString DeviceLibrary::remove(const QStringList &lpaths)
         if (!Kobo::removeBooks(connected->kobo, books, &error))
             return error;
         load(root);
-        return {};
-    }
-    if (connected->kind == Kind::Wireless) {
-        if (!connected->wireless)
-            return tr("The device is no longer connected.");
-        QStringList removed;
-        for (const DeviceBook &book : std::as_const(books))
-            removed.append(book.lpath);
-        connected->wireless->remove(removed, [this](bool ok, const QString &error) {
-            if (!ok && !m_destroying)
-                emit failed(error);
-        });
         return {};
     }
     // Over MTP, on its thread.
@@ -741,12 +688,6 @@ QString DeviceLibrary::eject(const QString &root)
         if (job.root == root)
             return tr("Wait until the books being sent to %1 are there.").arg(connected->name);
     }
-    if (connected->kind == Kind::Wireless) {
-        // The app is told to disconnect; it goes once it has.
-        if (connected->wireless)
-            connected->wireless->eject();
-        return {};
-    }
     const Kobo::Device device = connected->kobo;
     // Out of sight at once, back if ejecting fails.
     m_ejected.append(root);
@@ -773,13 +714,6 @@ QString DeviceLibrary::eject(const QString &root)
 void DeviceLibrary::cancel(int bookId)
 {
     const auto matches = [bookId](const Job &job) { return bookId == 0 || job.bookIds.contains(bookId); };
-    // A book going to an app stops only with the connection, which the app
-    // makes again; once the batches waiting are dropped.
-    QPointer<WirelessConnection> stopped;
-    if (m_wirelessSending && matches(m_jobs.first())) {
-        if (const Connected *connected = find(m_jobs.first().root))
-            stopped = connected->wireless;
-    }
     // A copy under way ends; a batch being made ready is dropped with its
     // folder, and a Kindle's connection with it.
     if ((m_process || m_folder) && !m_copy && matches(m_jobs.first())) {
@@ -787,22 +721,18 @@ void DeviceLibrary::cancel(int bookId)
         m_folder.reset();
         m_jobs.first().link.reset();
     }
-    const qsizetype from = m_process || m_folder || m_wirelessSending ? 1 : 0;
+    const qsizetype from = m_process || m_folder ? 1 : 0;
     const qsizetype before = m_jobs.size();
     m_jobs.erase(std::remove_if(m_jobs.begin() + from, m_jobs.end(), matches), m_jobs.end());
     if (m_jobs.size() != before)
         emit jobsChanged();
-    if (stopped)
-        stopped->close(tr("Sending was stopped."));
     startNext();
 }
 
 void DeviceLibrary::refresh()
 {
-    for (const Connected &connected : std::as_const(m_devices)) {
-        if (connected.kind != Kind::Wireless)
-            load(connected.root);
-    }
+    for (const Connected &connected : std::as_const(m_devices))
+        load(connected.root);
     scan();
 }
 
@@ -821,10 +751,7 @@ void DeviceLibrary::setKindleProvider(KindleProvider provider)
 
 void DeviceLibrary::setProgram(const QString &program)
 {
-    const bool wasAvailable = available();
     m_program = program.isEmpty() ? SendJob::program() : program;
-    if (available() != wasAvailable)
-        emit availableChanged();
 }
 
 void DeviceLibrary::setEjector(Ejector ejector)
@@ -855,9 +782,7 @@ void DeviceLibrary::scan()
     // An ejected Kobo comes back once plugged in again.
     m_ejected.removeIf([&roots](const QString &root) { return !roots.contains(root); });
     const qsizetype before = m_devices.size();
-    m_devices.removeIf([&roots](const Connected &connected) {
-        return connected.kind != Kind::Wireless && !roots.contains(connected.root);
-    });
+    m_devices.removeIf([&roots](const Connected &connected) { return !roots.contains(connected.root); });
     bool changed = m_devices.size() != before;
     for (const Volume &volume : std::as_const(kobos)) {
         if (m_ejected.contains(volume.root))
@@ -904,10 +829,6 @@ void DeviceLibrary::load(const QString &root)
     Connected *connected = find(root);
     if (!connected)
         return;
-    if (connected->kind == Kind::Wireless) {
-        updateWireless(root);
-        return;
-    }
     if (connected->kind == Kind::Kobo) {
         connected->loading = true;
         const Kobo::Device device = connected->kobo;
@@ -1007,8 +928,7 @@ void DeviceLibrary::rematch()
             matchKindle(connected);
         else
             DeviceBooks::match(&connected.books, m_library->data());
-        // An app tells nothing of the reading.
-        if (!connected.loading && connected.kind != Kind::Wireless)
+        if (!connected.loading)
             recordReading(connected);
     }
     emit rowsChanged();
@@ -1044,7 +964,7 @@ DeviceLibrary::Connected *DeviceLibrary::find(const QString &root)
 
 void DeviceLibrary::startNext()
 {
-    if (m_process || m_copy || m_folder || m_wirelessSending || m_jobs.isEmpty() || !m_library || m_library->saving()
+    if (m_process || m_copy || m_folder || m_jobs.isEmpty() || !m_library || m_library->saving()
         || m_library->loading())
         return;
     const Job job = m_jobs.first();
@@ -1058,10 +978,6 @@ void DeviceLibrary::startNext()
     };
     if (!connected) {
         fail(tr("%1 is no longer connected; “%2” was not sent.").arg(job.name, job.titles.join(QLatin1String("”, “"))));
-        return;
-    }
-    if (job.kind == Kind::Wireless) {
-        sendWireless(job, *connected);
         return;
     }
     const QString base = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("sends"));
@@ -1275,226 +1191,4 @@ void DeviceLibrary::stopProcess()
     CalibreJob::stopProcessGroup(m_process);
     delete m_process;
     m_process = nullptr;
-}
-
-bool DeviceLibrary::wirelessEnabled() const
-{
-    return QSettings().value(QStringLiteral("Wireless/enabled"), false).toBool();
-}
-
-int DeviceLibrary::wirelessPort() const
-{
-    return QSettings().value(QStringLiteral("Wireless/port"), 0).toInt();
-}
-
-QString DeviceLibrary::wirelessPassword() const
-{
-    return QSettings().value(QStringLiteral("Wireless/password")).toString();
-}
-
-bool DeviceLibrary::wirelessListening() const
-{
-    return m_wireless && m_wireless->isListening();
-}
-
-QStringList DeviceLibrary::wirelessAddresses() const
-{
-    if (!wirelessListening())
-        return {};
-    // This computer's addresses on the network, as the apps type them.
-    QStringList addresses;
-    static const QRegularExpression url(QStringLiteral("^http://([^/]+):\\d+/$"));
-    for (const QString &address : LibraryServer::addresses(m_wireless->port())) {
-        const QRegularExpressionMatch match = url.match(address);
-        if (match.hasMatch())
-            addresses.append(tr("%1 port %2").arg(match.captured(1)).arg(m_wireless->port()));
-    }
-    return addresses;
-}
-
-QString DeviceLibrary::wirelessError() const
-{
-    return m_wirelessError;
-}
-
-void DeviceLibrary::setWireless(bool enabled, int port, const QString &password)
-{
-    QSettings settings;
-    settings.setValue(QStringLiteral("Wireless/enabled"), enabled);
-    settings.setValue(QStringLiteral("Wireless/port"), std::clamp(port, 0, 65535));
-    settings.setValue(QStringLiteral("Wireless/password"), password);
-    if (m_wireless) {
-        // The app connected goes; it connects again to the new server.
-        delete m_wireless;
-        m_wireless = nullptr;
-    }
-    startWireless();
-}
-
-void DeviceLibrary::startWireless()
-{
-    const bool enabled = wirelessEnabled() && m_library && !m_library->libraryPath().isEmpty();
-    if (!enabled) {
-        if (m_wireless) {
-            delete m_wireless;
-            m_wireless = nullptr;
-        }
-        m_wirelessError.clear();
-        emit wirelessChanged();
-        return;
-    }
-    WirelessServer::Settings settings;
-    settings.port = quint16(wirelessPort());
-    // Under test, no answer to the datagrams on Calibre's ports.
-    settings.discovery = !QStandardPaths::isTestModeEnabled();
-    settings.contentServerPort = QSettings().value(QStringLiteral("Sharing/port"), 8090).toInt();
-    settings.connection.password = wirelessPassword();
-    settings.connection.libraryName = QDir(m_library->libraryPath()).dirName();
-    settings.connection.libraryUuid = m_library->data().uuid;
-    settings.connection.interfaceLanguage = m_library->interfaceLanguage();
-    settings.connection.cacheFolder
-        = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("wireless"));
-    if (m_wireless && m_wireless->isListening()) {
-        // Another library: the apps connecting from now on are told so.
-        m_wireless->setLibrary(settings.connection);
-        return;
-    }
-    delete m_wireless;
-    m_wireless = new WirelessServer(this);
-    connect(m_wireless, &WirelessServer::connected, this, &DeviceLibrary::addWireless);
-    QString error;
-    if (!m_wireless->start(settings, &error)) {
-        delete m_wireless;
-        m_wireless = nullptr;
-        m_wirelessError = error;
-    } else {
-        m_wirelessError.clear();
-    }
-    emit wirelessChanged();
-}
-
-void DeviceLibrary::addWireless(WirelessConnection *connection)
-{
-    const QString root = QStringLiteral("wireless:") + connection->deviceUuid();
-    m_devices.removeIf([&root](const Connected &connected) { return connected.root == root; });
-    Connected connected;
-    connected.kind = Kind::Wireless;
-    connected.root = root;
-    connected.name = connection->name();
-    connected.wireless = connection;
-    m_devices.append(connected);
-    connect(connection, &WirelessConnection::booksChanged, this, [this, root] { updateWireless(root); });
-    connect(connection, &WirelessConnection::finished, this, [this, root] { updateWireless(root); });
-    connect(connection, &WirelessConnection::closed, this, [this, root] {
-        m_devices.removeIf([&root](const Connected &connected) { return connected.root == root; });
-        emit devicesChanged();
-        emit rowsChanged();
-        if (m_currentRoot == root)
-            emit currentChanged();
-    });
-    updateWireless(root);
-    emit devicesChanged();
-    if (!m_currentRoot.isEmpty())
-        emit currentChanged();
-    // As Calibre on connect: the metadata the library changed since.
-    if (m_library)
-        connection->updateMetadata(WirelessSend::changedMetadata(connection->books(), m_library->data(),
-                                                                 connection->app(), m_library->interfaceLanguage()));
-}
-
-void DeviceLibrary::updateWireless(const QString &root)
-{
-    Connected *connected = find(root);
-    if (!connected || !connected->wireless)
-        return;
-    const LibraryData empty;
-    connected->books = WirelessSend::deviceBooks(connected->wireless->books(), m_library ? m_library->data() : empty);
-    connected->freeBytes = connected->wireless->freeSpace();
-    emit rowsChanged();
-    emit devicesChanged();
-}
-
-void DeviceLibrary::sendWireless(const Job &job, const Connected &connected)
-{
-    const QPointer<WirelessConnection> connection = connected.wireless;
-    if (!connection || !connection->isOpen()) {
-        m_jobs.removeFirst();
-        emit jobsChanged();
-        emit failed(tr("%1 is no longer connected; “%2” was not sent.").arg(job.name, job.titles.join(QLatin1String("”, “"))));
-        startNext();
-        return;
-    }
-    m_wirelessSending = true;
-    emit jobsChanged();
-    // A book on the app already, sent from the same library book, is
-    // replaced where it is.
-    QHash<int, QString> existing;
-    const LibraryData data = m_library->data();
-    for (const int bookId : job.bookIds) {
-        const Book *book = data.book(bookId);
-        const QString format = book ? WirelessSend::format(*book, connection->app()) : QString();
-        if (!format.isEmpty())
-            existing.insert(bookId, connection->lpathOfUuid(book->uuid, u'.' + format.toLower()));
-    }
-    // The copies sent, the library's metadata written into them, and the
-    // covers' thumbnails take a moment; the copies stay until the send ends.
-    const QString base = QDir(BookLibrary::cacheFolder(m_library->libraryPath())).filePath(QStringLiteral("sends"));
-    QDir().mkpath(base);
-    const auto copies = std::make_shared<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
-    using Prepared = std::pair<QList<Wireless::Outgoing>, QString>;
-    auto *watcher = new QFutureWatcher<Prepared>(this);
-    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, connection, copies] {
-        watcher->deleteLater();
-        const auto [books, prepareError] = watcher->result();
-        const auto done = [this, copies](bool ok, const QString &error) {
-            if (m_destroying)
-                return;
-            m_wirelessSending = false;
-            if (m_jobs.isEmpty())
-                return;
-            const Job sent = m_jobs.takeFirst();
-            emit jobsChanged();
-            if (ok)
-                emit this->sent(sent.titles, sent.name);
-            else
-                emit failed(tr("“%1” was not sent to %2: %3").arg(sent.titles.join(QLatin1String("”, “")), sent.name, error));
-            startNext();
-        };
-        if (!prepareError.isEmpty()) {
-            done(false, prepareError);
-            return;
-        }
-        if (!connection) {
-            done(false, tr("The reader disconnected."));
-            return;
-        }
-        connect(connection, &WirelessConnection::progress, this, [this](double fraction) {
-            if (!m_jobs.isEmpty() && m_wirelessSending) {
-                m_jobs.first().progress = fraction;
-                emit jobsChanged();
-            }
-        });
-        connection->send(books, done);
-    });
-    watcher->setFuture(QtConcurrent::run([data, bookIds = job.bookIds, app = connection->app(), existing,
-                                          language = m_library->interfaceLanguage(), folder = copies->path(),
-                                          config = m_configDirectory] {
-        QList<Wireless::Outgoing> books;
-        for (const int bookId : bookIds) {
-            const Book *book = data.book(bookId);
-            const QString format = book ? WirelessSend::format(*book, app) : QString();
-            if (format.isEmpty())
-                continue;
-            const QString extension = u'.' + format.toLower();
-            const QString file = QDir(folder).filePath(QString::number(bookId) + extension);
-            QString error;
-            if (!WirelessSend::prepareFile(data, *book, format, file, language, config, &error))
-                return Prepared{ {}, error };
-            QString lpath = existing.value(bookId);
-            if (lpath.isEmpty())
-                lpath = WirelessSend::uploadPath(data, *book, extension, app, language);
-            books.append({ lpath, WirelessSend::metadata(data, *book, lpath, QFileInfo(file).size(), app, language), file });
-        }
-        return Prepared{ books, QString() };
-    }));
 }

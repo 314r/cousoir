@@ -22,7 +22,6 @@ ThemedWindow {
     property string position: ""
     property double fileFraction: 0
     property int page: 0
-    property int pages: 1
     property real zoom: 1
     property bool tocVisible: false
     // The sidebar's list: "toc" or "highlights".
@@ -171,14 +170,6 @@ ThemedWindow {
         view.runJavaScript("window.cousoir.removeHighlight(" + JSON.stringify(chosenHighlight) + ")")
         chosenHighlight = ""
         highlightsShown = Math.max(0, highlightsShown - 1)
-    }
-
-    function nextPage() {
-        view.runJavaScript("window.cousoir.next()")
-    }
-
-    function previousPage() {
-        view.runJavaScript("window.cousoir.previous()")
     }
 
     function save() {
@@ -397,7 +388,6 @@ ThemedWindow {
             }
 
             ListView {
-                id: tocList
                 objectName: "readerToc"
 
                 Layout.fillWidth: true
@@ -491,7 +481,6 @@ ThemedWindow {
                     readerWindow.position = "epubcfi(/" + 2 * (readerWindow.spineIndex + 1) + event.cfi + ")"
                     readerWindow.fileFraction = event.fraction
                     readerWindow.page = event.page
-                    readerWindow.pages = event.pages
                     saveTimer.restart()
                 } else if (event.event === "next") {
                     readerWindow.load(readerWindow.spineIndex + 1, "start")

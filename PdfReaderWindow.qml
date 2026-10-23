@@ -14,8 +14,6 @@ ThemedWindow {
     objectName: "pdfReaderWindow"
 
     required property BookLibrary library
-    property alias reader: bookReader
-    readonly property int page: view.currentPage
     readonly property int pages: document.pageCount
 
     signal failed(string message)

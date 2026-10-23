@@ -24,10 +24,9 @@ class ConversionService : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
-    // Books can be converted: by Calibre, or to KEPUB by Cousoir.
-    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
-    // Calibre is there to convert, to every format.
-    Q_PROPERTY(bool calibre READ calibre NOTIFY availableChanged)
+    // Calibre is there to convert, to every format; without it, Cousoir
+    // converts an EPUB to KEPUB itself.
+    Q_PROPERTY(bool calibre READ calibre NOTIFY calibreChanged)
     // The conversions, the running one first: { bookId, title, format,
     // running, progress } with progress from 0 to 1.
     Q_PROPERTY(QVariantList jobs READ jobs NOTIFY jobsChanged)
@@ -39,7 +38,6 @@ public:
 
     BookLibrary *library() const;
     void setLibrary(BookLibrary *library);
-    bool available() const;
     bool calibre() const;
     QVariantList jobs() const;
     bool busy() const;
@@ -62,7 +60,7 @@ public:
 
 signals:
     void libraryChanged();
-    void availableChanged();
+    void calibreChanged();
     void jobsChanged();
     // A conversion's file is on its way into the library.
     void converted(int bookId, const QString &title, const QString &format);

@@ -1,7 +1,6 @@
 #include "conversion_service.h"
 
 #include <QDir>
-#include <QFile>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <utility>
@@ -50,11 +49,6 @@ void ConversionService::setLibrary(BookLibrary *library)
     emit libraryChanged();
 }
 
-bool ConversionService::available() const
-{
-    return true;
-}
-
 bool ConversionService::calibre() const
 {
     return !m_program.isEmpty() && !m_native;
@@ -97,7 +91,7 @@ bool ConversionService::busy() const
 
 QStringList ConversionService::formatsFor(int bookId) const
 {
-    if (!m_library || !available())
+    if (!m_library)
         return {};
     const Book *book = m_library->data().book(bookId);
     if (!book)
@@ -154,15 +148,12 @@ void ConversionService::cancel(int bookId)
 void ConversionService::setNative(bool native)
 {
     m_native = native;
-    emit availableChanged();
+    emit calibreChanged();
 }
 
 void ConversionService::setProgram(const QString &program)
 {
-    const bool wasAvailable = available();
     m_program = program.isEmpty() ? Conversion::program() : program;
-    if (available() != wasAvailable)
-        emit availableChanged();
 }
 
 void ConversionService::startNext()
@@ -184,10 +175,9 @@ void ConversionService::startNext()
         folder = std::make_shared<QTemporaryDir>(QDir(base).filePath(QStringLiteral("XXXXXX")));
         if (!folder->isValid())
             error = tr("Cannot create a folder for the conversion in %1.").arg(base);
-        else
-            if (calibre())
-                Conversion::prepare(m_library->data(), *book, job.format, m_library->interfaceLanguage(), folder->path(),
-                                    &error);
+        else if (calibre())
+            Conversion::prepare(m_library->data(), *book, job.format, m_library->interfaceLanguage(), folder->path(),
+                                &error);
     }
     if (!error.isEmpty()) {
         m_jobs.removeFirst();
@@ -266,26 +256,7 @@ void ConversionService::startNative(const Book &book)
 {
     // What the conversion reads of the book, taken now: the library may
     // change while it runs.
-    Kepub::Options options;
-    options.language = book.languages.value(0, QStringLiteral("en"));
-    options.title = book.title;
-    options.authors = book.authors.join(QStringLiteral(" & "));
-    QFile cover(book.coverFile);
-    if (!book.coverFile.isEmpty() && cover.open(QIODevice::ReadOnly))
-        options.cover = cover.readAll();
-    Kepub::Metadata metadata;
-    metadata.title = book.title;
-    metadata.authors = book.authors;
-    metadata.authorSort = book.authorSort;
-    metadata.publisher = book.publisher;
-    metadata.languages = book.languages;
-    metadata.tags = book.tags;
-    metadata.series = book.series;
-    metadata.seriesIndex = book.seriesIndex;
-    metadata.comments = book.comments;
-    metadata.uuid = book.uuid;
-    metadata.identifiers = book.identifiers;
-    options.metadata = metadata;
+    const Kepub::Options options = Kepub::optionsFor(book);
     const QString epub = epubOf(book);
     const QString output = QDir(m_folder->path()).filePath(QStringLiteral("output.kepub"));
     m_nativeJob = new QFutureWatcher<QString>(this);

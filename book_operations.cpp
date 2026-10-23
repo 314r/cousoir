@@ -8,8 +8,8 @@
 //   author_sort_from_authors(), get_next_series_num_for(),
 //   _add_newbook_tag() and _add_default_custom_column_values()
 // - src/calibre/db/backend.py: update_path(), add_format(), remove_formats(),
-//   remove_books(), move_book_to_trash(), list_trash_entries(),
-//   get_metadata_for_trash_book() and format_abspath()
+//   remove_books(), move_book_to_trash(), list_trash_entries() and
+//   get_metadata_for_trash_book()
 // - src/calibre/db/tables.py: update_fmt()
 // - src/calibre/db/write.py: the adapters' handling of a value's kind
 //
@@ -469,20 +469,6 @@ QString pythonJson(const QString &title, const QStringList &authors)
 
 namespace BookOperations {
 
-QString formatFile(const QString &folder, const QString &name, const QString &format)
-{
-    const QString extension = u'.' + format.toLower();
-    const QString expected = QDir(folder).filePath(name + extension);
-    if (QFileInfo(expected).isFile())
-        return expected;
-    const QStringList entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
-    for (const QString &entry : entries) {
-        if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._")))
-            return QDir(folder).filePath(entry);
-    }
-    return {};
-}
-
 bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath, int bookId, const QString &unknown,
                 QString *error)
 {
@@ -533,7 +519,7 @@ bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath
         if (!changed)
             return true;
         for (const auto &format : std::as_const(formats)) {
-            const QString file = formatFile(source, format.second, format.first);
+            const QString file = CalibreDb::formatFile(source, format.second, format.first);
             const QString renamed = QDir(source).filePath(name + u'.' + format.first.toLower());
             if (!file.isEmpty() && file != renamed && !files.move(file, renamed, error))
                 return false;
@@ -556,7 +542,7 @@ bool updatePath(SqliteDb &db, FileTransaction &files, const QString &libraryPath
         // Every entry moves; the format files take the new name.
         QHash<QString, QString> renamedFormats;
         for (const auto &format : std::as_const(formats)) {
-            const QString file = formatFile(source, format.second, format.first);
+            const QString file = CalibreDb::formatFile(source, format.second, format.first);
             if (!file.isEmpty())
                 renamedFormats.insert(QFileInfo(file).fileName(), name + u'.' + format.first.toLower());
         }
@@ -670,7 +656,7 @@ bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, c
             return found;
         const QString folder = QDir(context.libraryPath).filePath(path);
         for (const QVariantList &row : db.rows(QStringLiteral("SELECT format, name FROM data WHERE book=?"), { bookId })) {
-            const QString file = formatFile(folder, row.at(1).toString(), row.at(0).toString());
+            const QString file = CalibreDb::formatFile(folder, row.at(1).toString(), row.at(0).toString());
             if (!file.isEmpty())
                 found.insert(row.at(0).toString(), file);
         }
@@ -707,7 +693,7 @@ bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &re
                                                  { bookId, format });
         if (name.isEmpty() || name.first().first().toString().isEmpty() || path.isEmpty())
             continue;
-        const QString file = formatFile(folder, name.first().first().toString(), format);
+        const QString file = CalibreDb::formatFile(folder, name.first().first().toString(), format);
         if (!file.isEmpty())
             removed.append(file);
     }
@@ -735,9 +721,8 @@ bool removeFormats(SqliteDb &db, FileTransaction &files, const FormatRemoval &re
 }
 
 bool removeBooks(SqliteDb &db, FileTransaction &files, const QList<int> &bookIds, const Context &context,
-                 Result *result, QString *error)
+                 QString *error)
 {
-    Q_UNUSED(result);
     const QList<ItemTable> tables = itemTables(db);
     // The items of the books, which go when no other book has them.
     QList<QSet<int>> items(tables.size());

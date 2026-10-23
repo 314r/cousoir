@@ -2,7 +2,6 @@
 
 #include <QTemporaryDir>
 
-#include "calibre_config.h"
 #include "calibre_db.h"
 #include "calibre_fts.h"
 #include "calibre_notes.h"

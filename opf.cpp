@@ -89,22 +89,11 @@ QString linkMaps(const LibraryData &data, const Book &book)
     return fields.isEmpty() ? QString() : u'{' + fields.join(QStringLiteral(", ")) + u'}';
 }
 
-// fmt_sidx(): "2" for a whole series index, "2.5" otherwise.
-QString seriesIndexText(double index)
-{
-    if (index == std::floor(index))
-        return QString::number(qint64(index));
-    QString text = QString::number(index, 'f', 2);
-    while (text.endsWith(u'0'))
-        text.chop(1);
-    return text;
-}
-
 // Calibre 9.16's built-in fields in a book's record, after which the custom
 // columns take their rec_index.
 constexpr int builtInFields = 23;
 
-
+// The calibre: metadata of `previous` Cousoir has no data for.
 QList<QPair<QString, QString>> keptMetadata(const QByteArray &previous)
 {
     QList<QPair<QString, QString>> kept;
@@ -215,7 +204,6 @@ QList<QPair<QString, QString>> userMetadata(const LibraryData &data, const Book 
     return result;
 }
 
-// The calibre: metadata of `previous` Cousoir has no data for.
 QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settings &settings, const QByteArray &previous,
                          const ExactDates *exact)
 {
@@ -274,7 +262,7 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
         meta(QStringLiteral("calibre:link_maps"), links);
     if (book.seriesId > 0) {
         meta(QStringLiteral("calibre:series"), book.series);
-        meta(QStringLiteral("calibre:series_index"), seriesIndexText(book.seriesIndex));
+        meta(QStringLiteral("calibre:series_index"), CalibreText::seriesIndexText(book.seriesIndex));
     }
     if (book.rating > 0)
         meta(QStringLiteral("calibre:rating"), QString::number(book.rating));

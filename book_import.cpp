@@ -594,18 +594,14 @@ QString calibreDebug()
 bool readFileMetadata(const QString &path, const CalibreConfig &config, ImportedMetadata *metadata, QString *error)
 {
     const QString format = formatOf(path).toLower();
-    bool ok;
-    if (format == QLatin1String("epub") || format == QLatin1String("kepub")) {
-        ok = readEpub(path, format == QLatin1String("kepub"), metadata, error);
-    } else if (format == QLatin1String("mobi") || format == QLatin1String("azw") || format == QLatin1String("azw3")
-               || format == QLatin1String("prc")) {
-        ok = readMobi(path, metadata, error, config);
-    } else if (format == QLatin1String("pdf")) {
-        ok = PdfReader::read(path, config.interfaceLanguage, metadata, error);
-    } else {
-        ok = readWithCalibre(path, metadata, false, error);
-    }
-    return ok;
+    if (format == QLatin1String("epub") || format == QLatin1String("kepub"))
+        return readEpub(path, format == QLatin1String("kepub"), metadata, error);
+    if (format == QLatin1String("mobi") || format == QLatin1String("azw") || format == QLatin1String("azw3")
+        || format == QLatin1String("prc"))
+        return readMobi(path, metadata, error, config);
+    if (format == QLatin1String("pdf"))
+        return PdfReader::read(path, config.interfaceLanguage, metadata, error);
+    return readWithCalibre(path, metadata, false, error);
 }
 
 ImportedMetadata metadataFromFilename(const QString &path, const CalibreConfig &config)

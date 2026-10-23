@@ -526,10 +526,6 @@ PythonJson::Value multipleSeparators(const CustomColumn &column)
     return separators;
 }
 
-// The custom columns and each book's values, as Calibre's tables read them
-// in db/tables.py: a normalized column's items by link order, a series'
-// number from its link's extra, the others one row per book. A composite's
-// values are Calibre's to compute.
 bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *error)
 {
     columns->clear();
@@ -561,6 +557,10 @@ bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *erro
     return true;
 }
 
+// The custom columns and each book's values, as Calibre's tables read them
+// in db/tables.py: a normalized column's items by link order, a series'
+// number from its link's extra, the others one row per book. A composite's
+// values are Calibre's to compute.
 template<typename BookWithId>
 bool readCustomValues(SqliteDb &db, QList<Book> &books, const BookWithId &bookWithId, QList<CustomColumn> *columns,
                       QString *error)
@@ -810,6 +810,20 @@ bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLangua
     return true;
 }
 
+QString formatFile(const QString &folder, const QString &name, const QString &format)
+{
+    const QString extension = u'.' + format.toLower();
+    const QString expected = QDir(folder).filePath(name + extension);
+    if (QFileInfo(expected).isFile())
+        return expected;
+    const QStringList entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
+    for (const QString &entry : entries) {
+        if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._")))
+            return QDir(folder).filePath(entry);
+    }
+    return {};
+}
+
 void findFiles(LibraryData *data, const QSet<int> *only)
 {
     const QDir library(data->libraryPath);
@@ -821,32 +835,8 @@ void findFiles(LibraryData *data, const QSet<int> *only)
         book.coverFile = !book.path.isEmpty() && cover.isFile() ? cover.filePath() : QString();
         book.coverModified = book.coverFile.isEmpty()
             ? 0 : cover.fileTime(QFileDevice::FileModificationTime).toMSecsSinceEpoch();
-
-        QStringList entries;
-        bool listed = false;
-        for (BookFormat &format : book.formats) {
-            const QString extension = u'.' + format.format.toLower();
-            const QString expected = QDir(folder).filePath(format.name + extension);
-            if (!book.path.isEmpty() && QFileInfo(expected).isFile()) {
-                format.file = expected;
-                continue;
-            }
-            // format_abspath() renames a file found this way; Cousoir only
-            // reads it.
-            format.file.clear();
-            if (book.path.isEmpty())
-                continue;
-            if (!listed) {
-                entries = QDir(folder).entryList(QDir::Files | QDir::Hidden, QDir::Name);
-                listed = true;
-            }
-            for (const QString &entry : std::as_const(entries)) {
-                if (entry.endsWith(extension) && !entry.startsWith(QLatin1String("._"))) {
-                    format.file = QDir(folder).filePath(entry);
-                    break;
-                }
-            }
-        }
+        for (BookFormat &format : book.formats)
+            format.file = book.path.isEmpty() ? QString() : formatFile(folder, format.name, format.format);
     }
 }
 

@@ -45,10 +45,6 @@ class ConcurrencyGuard : public QObject
     // that order.
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(QString readOnlyReason READ readOnlyReason NOTIFY stateChanged)
-    // Dropbox's word for metadata.db, like "up to date" or "syncing"; empty
-    // when the library is not in a Dropbox folder, "unavailable" when Dropbox
-    // does not answer.
-    Q_PROPERTY(QString dropboxStatus READ dropboxStatus NOTIFY stateChanged)
     // The conflict copies at the library's root: { file, size, modified,
     // database, acknowledged }.
     Q_PROPERTY(QVariantList conflicts READ conflicts NOTIFY conflictsChanged)
@@ -102,6 +98,9 @@ public:
     bool writable() const;
     QString state() const;
     QString readOnlyReason() const;
+    // Dropbox's word for metadata.db, like "up to date" or "syncing"; empty
+    // when the library is not in a Dropbox folder, "unavailable" when Dropbox
+    // does not answer.
     QString dropboxStatus() const;
     QVariantList conflicts() const;
     QString syncService() const;

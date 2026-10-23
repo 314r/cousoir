@@ -9,7 +9,7 @@ import Cousoir
 // The library's books, or those of the author, series, tag, language or
 // publisher opened in a browse section: a table, or a grid of covers. A row's
 // menu (right click, Menu or Shift+F10) opens it here or in a reader,
-// converts it, sends it to a Kobo or moves it to the trash. Ctrl and Shift
+// converts it, sends it to a reader or moves it to the trash. Ctrl and Shift
 // with a click or the moving keys, and Ctrl+A, select several books: the
 // menu, Del, Ctrl+D and the conversions then act on all of them, and a pane
 // beside the list edits them together.
@@ -56,8 +56,8 @@ Rectangle {
     }
     property ConversionService conversions: null
     property DeviceLibrary devices: null
-    readonly property bool canConvert: library.writable && conversions !== null && conversions.available
-    readonly property bool canSend: devices !== null && devices.available && devices.writable
+    readonly property bool canConvert: library.writable && conversions !== null
+    readonly property bool canSend: devices !== null && devices.writable
     readonly property int selectedCount: library.books.selectedCount
     // The menu's actions: on its book, or on every book selected when they
     // are several; both kept as the menu opens, should the list change
@@ -80,7 +80,8 @@ Rectangle {
     }))).concat([
         { key: "trash", title: menuOnSelection ? qsTr("Move %1 books to Trash").arg(selectedCount) : qsTr("Move to Trash") }
     ]).filter(action => action.key === "trash" ? page.library.writable
-                        : action.key.startsWith("convert:") ? page.canConvert : true)
+                        : action.key === "convert:AZW3" ? page.canConvert && page.conversions.calibre
+                        : action.key === "convert:KEPUB" ? page.canConvert : true)
     // The pane that edits the books selected together, beside the list.
     property bool paneShown: true
     readonly property var view: gridMode ? coverGrid : bookTable
@@ -333,7 +334,6 @@ Rectangle {
                 visible: page.gridMode
                 name: "cover"
                 rows: page.library.books
-                selectionCount: page.selectedCount
                 selectable: true
                 Accessible.name: qsTr("Book covers")
                 onActivated: function(index) { page.activate(index) }

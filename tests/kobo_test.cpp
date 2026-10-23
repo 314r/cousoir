@@ -1,12 +1,9 @@
 #include <QtTest>
 
-#include <QDirIterator>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
-
-#include <zip.h>
 
 #include "calibre_db.h"
 #include "calibre_job.h"
@@ -86,40 +83,6 @@ const DeviceBook *withPath(const QList<DeviceBook> &books, const QString &lpath)
     return nullptr;
 }
 
-QStringList filesUnder(const QString &root)
-{
-    QStringList files;
-    QDirIterator it(root, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext())
-        files.append(QDir(root).relativeFilePath(it.next()));
-    files.sort();
-    return files;
-}
-
-// The text of every HTML file of an EPUB.
-QByteArray epubText(const QString &path)
-{
-    int error = 0;
-    zip_t *archive = zip_open(QFile::encodeName(path).constData(), ZIP_RDONLY, &error);
-    if (!archive)
-        return {};
-    QByteArray text;
-    for (zip_int64_t index = 0; index < zip_get_num_entries(archive, 0); ++index) {
-        const QString name = QString::fromUtf8(zip_get_name(archive, index, 0));
-        zip_stat_t stat;
-        if (!name.contains(QStringLiteral("htm")) || zip_stat_index(archive, index, 0, &stat) != 0)
-            continue;
-        zip_file_t *file = zip_fopen_index(archive, index, 0);
-        QByteArray data(qsizetype(stat.size), Qt::Uninitialized);
-        if (file && zip_fread(file, data.data(), stat.size) == zip_int64_t(stat.size))
-            text += data;
-        if (file)
-            zip_fclose(file);
-    }
-    zip_close(archive);
-    return text;
-}
-
 const QString vian = QStringLiteral("Vian, Boris/Ecume des jours, L_ - Boris Vian.kepub.epub");
 
 } // namespace
@@ -170,7 +133,6 @@ private slots:
         QCOMPARE(device.firmware, QStringLiteral("4.38.21908"));
         QCOMPARE(device.modelId, QStringLiteral("00000000-0000-0000-0000-000000000390"));
         QCOMPARE(Kobo::firmwareVersion(device), (QList<int>{ 4, 38, 21908 }));
-        QVERIFY(device.totalBytes > 0);
 
         QVERIFY(writeAll(QDir(root.path()).filePath(QStringLiteral("driveinfo.calibre")),
                          "{\"device_name\": \"Liseuse\", \"location_code\": \"main\"}"));

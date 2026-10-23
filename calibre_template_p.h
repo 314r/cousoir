@@ -10,7 +10,6 @@
 #include <QStringList>
 
 #include <functional>
-#include <memory>
 #include <optional>
 
 #include "calibre_template.h"
@@ -74,7 +73,6 @@ class Formatter
 {
 public:
     explicit Formatter(const Library &library);
-    ~Formatter();
 
     const Library &library;
     // The book being formatted.
@@ -101,11 +99,6 @@ public:
     QString evalProgram(const std::optional<QString> &value, const QString &program);
     // The interface language's collator, as Calibre's sort collator compares.
     int compare(const QString &a, const QString &b) const;
-
-private:
-    struct Private;
-    std::unique_ptr<Private> d;
-    friend struct Interpreter;
 };
 
 // format_date(): a date, here in local time, with Qt's codes as Calibre
@@ -142,7 +135,7 @@ QRegularExpression regex(const QString &pattern, bool ignoreCase);
 QString sub(const QRegularExpression &regex, const QString &replacement, const QString &text);
 // repr(text).
 QString repr(const QString &text);
-// str.strip(), lower(), upper() as Python's.
+// str.strip().
 QString strip(const QString &text);
 // human_readable() of calibre/__init__.py: "1.5 MB".
 QString humanReadable(double size, const QString &separator = QStringLiteral(" "));

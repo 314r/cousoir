@@ -23,7 +23,6 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QRegularExpression>
-#include <QTimeZone>
 
 #include <algorithm>
 #include <cmath>
@@ -782,17 +781,17 @@ Index::Index(const LibraryData &data, const Preferences &preferences, const Cali
         m_sorts.append(fold(book.sort));
         m_uuids.append(fold(book.uuid));
     }
-    const auto items = [](const QList<FacetItem> &list, QList<Folded> *names, QHash<int, qsizetype> *rows) {
+    const auto items = [](const QList<FacetItem> &list, QList<Folded> *names) {
         names->reserve(list.size());
-        for (qsizetype row = 0; row < list.size(); ++row) {
-            names->append(fold(list.at(row).name));
-            rows->insert(list.at(row).id, row);
-        }
+        for (const FacetItem &item : list)
+            names->append(fold(item.name));
     };
-    items(data.authors, &m_authorNames, &m_authorRows);
-    items(data.tags, &m_tagNames, &m_tagRows);
-    items(data.series, &m_seriesNames, &m_seriesRows);
-    items(data.publishers, &m_publisherNames, &m_publisherRows);
+    items(data.authors, &m_authorNames);
+    items(data.tags, &m_tagNames);
+    items(data.series, &m_seriesNames);
+    items(data.publishers, &m_publisherNames);
+    for (qsizetype row = 0; row < data.authors.size(); ++row)
+        m_authorRows.insert(data.authors.at(row).id, row);
     for (const CustomColumn &column : data.customColumns) {
         m_customTerms.append(u'#' + column.label);
         if (column.datatype == QLatin1String("series"))
@@ -830,7 +829,6 @@ public:
     }
 
     QString error() const { return m_error; }
-    const QSet<QString> &locations() const { return m_locations; }
 
     // SearchQueryParser.parse(): the books matching `query` in the universe.
     QBitArray parse(const QString &query)
@@ -1947,14 +1945,6 @@ Result search(const Index &index, const QString &query, const QBitArray &univers
     result.error = search.error();
     if (!result.ok())
         result.rows = QBitArray(index.size());
-    return result;
-}
-
-QStringList locations(const Index &index)
-{
-    Search search(index, QBitArray(index.size()));
-    QStringList result = search.locations().values();
-    result.sort();
     return result;
 }
 

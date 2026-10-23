@@ -58,7 +58,6 @@ struct DeviceBook
     QString lpath;
     QString title;
     QStringList authors;
-    QString authorSort;
     // From metadata.calibre: the library book it was sent from.
     QString uuid;
     int applicationId = 0;

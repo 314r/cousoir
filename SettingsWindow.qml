@@ -17,17 +17,11 @@ ThemedWindow {
     required property ConcurrencyGuard guard
     property string customLibraryPath: ""
     property string calibreLanguage: ""
-    required property LibraryShare share
-    // Where the sharing's settings are kept: enabled, port and password.
-    required property QtObject sharingSettings
-    // The readers, for the wireless device server's settings.
-    property DeviceLibrary devices: null
 
     property int currentSectionIndex: 0
     readonly property var sections: [
         { key: "appearance", title: qsTr("Appearance"), icon: "assets/icons/settings-appearance.svg" },
         { key: "library", title: qsTr("Library"), icon: "assets/icons/folder.svg" },
-        { key: "network", title: qsTr("Network"), icon: "assets/icons/wifi.svg" },
         { key: "about", title: qsTr("About"), icon: "assets/icons/info.svg" }
     ]
 
@@ -206,28 +200,6 @@ ThemedWindow {
                         x: libraryScroll.width - width
                         y: libraryScroll.topPadding
                         height: libraryScroll.availableHeight
-                    }
-                }
-
-                ScrollView {
-                    id: networkScroll
-
-                    clip: true
-                    contentWidth: availableWidth
-
-                    NetworkSettingsPage {
-                        width: networkScroll.availableWidth
-                        height: Math.max(implicitHeight, networkScroll.availableHeight)
-                        share: settingsWindow.share
-                        settings: settingsWindow.sharingSettings
-                        devices: settingsWindow.devices
-                    }
-
-                    ScrollBar.vertical: ThinScrollBar {
-                        parent: networkScroll
-                        x: networkScroll.width - width
-                        y: networkScroll.topPadding
-                        height: networkScroll.availableHeight
                     }
                 }
 

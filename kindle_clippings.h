@@ -42,8 +42,6 @@ struct Book
 {
     QString title;
     QStringList authors;
-    // "Vian, Boris" when the Kindle wrote the authors so.
-    QString authorSort;
     QList<ReaderNote> notes;
 };
 

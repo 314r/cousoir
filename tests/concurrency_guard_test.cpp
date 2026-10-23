@@ -9,14 +9,9 @@
 #include <unistd.h>
 
 #include "concurrency_guard.h"
+#include "test_support.h"
 
 namespace {
-
-bool writeFile(const QString &path, const QByteArray &contents)
-{
-    QFile file(path);
-    return file.open(QIODevice::WriteOnly) && file.write(contents) == contents.size();
-}
 
 void age(const QString &path, int seconds)
 {
@@ -114,11 +109,11 @@ void ConcurrencyGuardTest::init()
     // A library inside a Dropbox folder, older than the cool-down.
     m_library = m_root->filePath(QStringLiteral("Dropbox/Calibre"));
     QVERIFY(QDir().mkpath(m_library));
-    QVERIFY(writeFile(QDir(m_library).filePath(QStringLiteral("metadata.db")), "db"));
+    QVERIFY(writeAll(QDir(m_library).filePath(QStringLiteral("metadata.db")), "db"));
     age(QDir(m_library).filePath(QStringLiteral("metadata.db")), 600);
-    QVERIFY(writeFile(m_root->filePath(QStringLiteral("info.json")),
-                      "{\"personal\": {\"path\": \"" + m_root->filePath(QStringLiteral("Dropbox")).toUtf8() + "\"}}"));
-    QVERIFY(writeFile(m_root->filePath(QStringLiteral("unix")), "Num RefCount Protocol Flags Type St Inode Path\n"));
+    QVERIFY(writeAll(m_root->filePath(QStringLiteral("info.json")),
+                     "{\"personal\": {\"path\": \"" + m_root->filePath(QStringLiteral("Dropbox")).toUtf8() + "\"}}"));
+    QVERIFY(writeAll(m_root->filePath(QStringLiteral("unix")), "Num RefCount Protocol Flags Type St Inode Path\n"));
 }
 
 ConcurrencyGuard::Environment ConcurrencyGuardTest::environment() const
@@ -155,7 +150,7 @@ void ConcurrencyGuardTest::makeLibrary(const QString &relative, int seconds)
 {
     m_library = m_root->filePath(relative);
     QVERIFY(QDir().mkpath(m_library));
-    QVERIFY(writeFile(QDir(m_library).filePath(QStringLiteral("metadata.db")), "db"));
+    QVERIFY(writeAll(QDir(m_library).filePath(QStringLiteral("metadata.db")), "db"));
     age(QDir(m_library).filePath(QStringLiteral("metadata.db")), seconds);
 }
 
@@ -164,7 +159,7 @@ void ConcurrencyGuardTest::makeMarker(const QString &marker)
     if (marker.endsWith(u'/'))
         QVERIFY(QDir().mkpath(m_root->filePath(marker)));
     else if (!marker.isEmpty())
-        QVERIFY(writeFile(m_root->filePath(marker), "x"));
+        QVERIFY(writeAll(m_root->filePath(marker), "x"));
 }
 
 void ConcurrencyGuardTest::detectsCalibre()
@@ -172,13 +167,13 @@ void ConcurrencyGuardTest::detectsCalibre()
     const QString path = m_root->filePath(QStringLiteral("unix"));
     QVERIFY(!ConcurrencyGuard::calibreRunning(path, 1000));
     // The GUI's lock alone is not the database lock; another user's is not ours.
-    QVERIFY(writeFile(path, "Num RefCount Protocol Flags Type St Inode Path\n"
-                            "0000: 00000002 00000000 00010000 0001 01 4242 @calibre-singleinstance-1000-GUI\n"
-                            "0000: 00000002 00000000 00010000 0001 01 4243 @calibre-singleinstance-1001-db\n"
-                            "0000: 00000002 00000000 00010000 0001 01 4244 @xcalibre-singleinstance-1000-db\n"));
+    QVERIFY(writeAll(path, "Num RefCount Protocol Flags Type St Inode Path\n"
+                           "0000: 00000002 00000000 00010000 0001 01 4242 @calibre-singleinstance-1000-GUI\n"
+                           "0000: 00000002 00000000 00010000 0001 01 4243 @calibre-singleinstance-1001-db\n"
+                           "0000: 00000002 00000000 00010000 0001 01 4244 @xcalibre-singleinstance-1000-db\n"));
     QVERIFY(!ConcurrencyGuard::calibreRunning(path, 1000));
-    QVERIFY(writeFile(path, "Num RefCount Protocol Flags Type St Inode Path\n"
-                            "0000: 00000002 00000000 00010000 0001 01 4245 @calibre-singleinstance-1000-db\n"));
+    QVERIFY(writeAll(path, "Num RefCount Protocol Flags Type St Inode Path\n"
+                           "0000: 00000002 00000000 00010000 0001 01 4245 @calibre-singleinstance-1000-db\n"));
     QVERIFY(ConcurrencyGuard::calibreRunning(path, 1000));
     QVERIFY(!ConcurrencyGuard::calibreRunning(m_root->filePath(QStringLiteral("missing")), 1000));
 }
@@ -194,7 +189,7 @@ void ConcurrencyGuardTest::findsConflictCopies()
                               "metadata_conflict-20241114-101500.db",
                               "notes (Case Conflict).txt", "metadata.db", "metadata_db_prefs_backup.json",
                               "Conflict (2024).epub" }) {
-        QVERIFY(writeFile(QDir(m_library).filePath(QString::fromUtf8(name)), "x"));
+        QVERIFY(writeAll(QDir(m_library).filePath(QString::fromUtf8(name)), "x"));
     }
     QCOMPARE(ConcurrencyGuard::conflictCopies(m_library),
              (QStringList{ QStringLiteral("metadata (Copie en conflit de Pierre 2024-11-14).db"),
@@ -298,9 +293,9 @@ void ConcurrencyGuardTest::readOnlyUntilLoadedAndKnown()
 void ConcurrencyGuardTest::readOnlyWhileCalibreRuns()
 {
     FakeDropbox dropbox(environment().dropboxSocket);
-    QVERIFY(writeFile(m_root->filePath(QStringLiteral("unix")),
-                      "Num RefCount Protocol Flags Type St Inode Path\n0000: 00000002 00000000 00010000 0001 01 1 "
-                      "@calibre-singleinstance-" + QByteArray::number(::getuid()) + "-db\n"));
+    QVERIFY(writeAll(m_root->filePath(QStringLiteral("unix")),
+                     "Num RefCount Protocol Flags Type St Inode Path\n0000: 00000002 00000000 00010000 0001 01 1 "
+                     "@calibre-singleinstance-" + QByteArray::number(::getuid()) + "-db\n"));
     auto checks = guard();
     QCOMPARE(checks->state(), QStringLiteral("calibre"));
     QCOMPARE(checks->readOnlyReason(), QStringLiteral("Read-only: Calibre is open on this computer"));
@@ -309,7 +304,7 @@ void ConcurrencyGuardTest::readOnlyWhileCalibreRuns()
 void ConcurrencyGuardTest::readOnlyWithJournal()
 {
     FakeDropbox dropbox(environment().dropboxSocket);
-    QVERIFY(writeFile(QDir(m_library).filePath(QStringLiteral("metadata.db-journal")), ""));
+    QVERIFY(writeAll(QDir(m_library).filePath(QStringLiteral("metadata.db-journal")), ""));
     auto checks = guard();
     QCOMPARE(checks->state(), QStringLiteral("journal"));
 }
@@ -340,7 +335,7 @@ void ConcurrencyGuardTest::readOnlyWithoutDropbox()
     // Outside of one, Dropbox does not matter.
     m_library = m_root->filePath(QStringLiteral("Local"));
     QVERIFY(QDir().mkpath(m_library));
-    QVERIFY(writeFile(QDir(m_library).filePath(QStringLiteral("metadata.db")), "db"));
+    QVERIFY(writeAll(QDir(m_library).filePath(QStringLiteral("metadata.db")), "db"));
     age(QDir(m_library).filePath(QStringLiteral("metadata.db")), 600);
     checks->setLibraryPath(m_library);
     QCOMPARE(checks->state(), QStringLiteral("writable"));
@@ -453,9 +448,9 @@ void ConcurrencyGuardTest::readOnlyUntilConflictSeen()
 {
     FakeDropbox dropbox(environment().dropboxSocket);
     const QString copy = QStringLiteral("metadata (conflicted copy 2024-11-14).db");
-    QVERIFY(writeFile(QDir(m_library).filePath(copy), "old"));
+    QVERIFY(writeAll(QDir(m_library).filePath(copy), "old"));
     // A conflict copy of another file is listed but does not block.
-    QVERIFY(writeFile(QDir(m_library).filePath(QStringLiteral("notes (conflicted copy).txt")), "x"));
+    QVERIFY(writeAll(QDir(m_library).filePath(QStringLiteral("notes (conflicted copy).txt")), "x"));
     auto checks = guard();
     QTRY_COMPARE(checks->state(), QStringLiteral("conflict"));
     QCOMPARE(checks->readOnlyReason(), QStringLiteral("Read-only: conflict copy of the database"));
@@ -466,7 +461,7 @@ void ConcurrencyGuardTest::readOnlyUntilConflictSeen()
     QVERIFY(checks->conflicts().first().toMap().value(QStringLiteral("acknowledged")).toBool());
 
     // The same name with other contents is a new conflict.
-    QVERIFY(writeFile(QDir(m_library).filePath(copy), "newer"));
+    QVERIFY(writeAll(QDir(m_library).filePath(copy), "newer"));
     checks->refresh();
     QCOMPARE(checks->state(), QStringLiteral("conflict"));
 }
@@ -487,7 +482,7 @@ void ConcurrencyGuardTest::ownChangeIsNoReasonToWait()
     QTRY_COMPARE(checks->dropboxStatus(), QStringLiteral("syncing"));
     QCOMPARE(checks->state(), QStringLiteral("writable"));
     // Another change after it counts again.
-    QVERIFY(writeFile(database, "changed elsewhere"));
+    QVERIFY(writeAll(database, "changed elsewhere"));
     checks->refresh();
     QCOMPARE(checks->state(), QStringLiteral("dropbox"));
     dropbox.status = "up to date";
@@ -542,8 +537,8 @@ void ConcurrencyGuardTest::readOnlyWhileEditedElsewhere()
     QTRY_COMPARE(desktop.state(), QStringLiteral("writable"));
 
     // An old heartbeat does not count.
-    QVERIFY(writeFile(QDir(folder).filePath(QStringLiteral("desktop.json")),
-                      R"({"host":"desktop","updated":"2020-01-01T00:00:00Z","lastWrite":"2020-01-01T00:00:00Z"})"));
+    QVERIFY(writeAll(QDir(folder).filePath(QStringLiteral("desktop.json")),
+                     R"({"host":"desktop","updated":"2020-01-01T00:00:00Z","lastWrite":"2020-01-01T00:00:00Z"})"));
     laptop.refresh();
     QCOMPARE(laptop.state(), QStringLiteral("writable"));
 }

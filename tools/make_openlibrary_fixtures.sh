@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Writes tests/data/openlibrary: Open Library's answers to the searches
 # Cousoir makes for two books of the fixture library, and the works they
-# found, which tests/metadata_web_test.cpp serves from a fake server. Run
-# by hand; the tests never reach the network.
+# found, which the tests serve from a fake server (tests/fake_open_library.h).
+# Run by hand; the tests never reach the network.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 out="$root/tests/data/openlibrary"

@@ -7,14 +7,14 @@ import QtQuick.Layouts
 
 import Cousoir
 
-// Download metadata: what Calibre's sources find on the web for the open
-// book. The books found on the left; the one picked beside the book's own
-// values, each field ticked to take it, the ones that differ ticked first.
-// Covers shows the covers found, the book's own first and kept unless
-// another is picked; Save takes the fields ticked and the cover picked as
-// one change, which Revert undoes. Space ticks a field, the arrows pick a
-// cover, Enter saves or presses the button it is on; Esc closes and stops
-// the download.
+// Download metadata: what Calibre's sources, or Open Library, find on the
+// web for the open book. The books found on the left; the one picked beside
+// the book's own values, each field ticked to take it, the ones that differ
+// ticked first. Covers shows the covers found, the book's own first and kept
+// unless another is picked; Save takes the fields ticked and the cover
+// picked as one change, which Revert undoes. Space ticks a field, the arrows
+// pick a cover, Enter saves or presses the button it is on; Esc closes and
+// stops the download.
 Popup {
     id: dialog
 

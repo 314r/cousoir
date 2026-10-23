@@ -19,14 +19,6 @@ QString mobiData(const QString &name = {})
 // tools/oracle/mobi_oracle.py fixed Calibre's random ASIN so.
 const QString fixedUuid = QStringLiteral("00000000-0000-4000-8000-000000000001");
 
-QStringList strings(const QJsonValue &value)
-{
-    QStringList result;
-    for (const QJsonValue &item : value.toArray())
-        result.append(item.toString());
-    return result;
-}
-
 std::pair<MobiMetadata::Metadata, MobiMetadata::Options> readCase(const QJsonObject &values)
 {
     MobiMetadata::Metadata metadata;

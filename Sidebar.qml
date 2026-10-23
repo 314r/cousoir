@@ -39,7 +39,7 @@ Item {
         })) }
     ] : []).concat(devices.length > 0 ? [
         { title: qsTr("Devices"), items: devices.map(device => ({
-            key: "device:" + device.root, title: device.name, icon: device.kind === "wireless" ? "wifi" : "ereader"
+            key: "device:" + device.root, title: device.name, icon: "ereader"
         })) }
     ] : [])
     readonly property var items: groups.reduce((all, group) => all.concat(group.items), [])
