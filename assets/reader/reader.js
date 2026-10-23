@@ -603,5 +603,12 @@
         removeHighlight: removeHighlight,
         selection: selection,
         clearSelection() { window.getSelection().removeAllRanges(); },
+        // The CFI of a place, and the text between two CFIs: what Cousoir
+        // works out from a page's XML is checked against them.
+        encode(node, offset) { return encode(document, node, offset); },
+        rangeText(start, end) {
+            const range = rangeOf(start, end);
+            return range ? range.toString() : null;
+        },
     };
 })();

@@ -160,6 +160,8 @@ qt_add_library(cousoir_core STATIC
     sqlite_db.h
     annotation_search.cpp
     annotation_search.h
+    epub_cfi.cpp
+    epub_cfi.h
     xml_tree.cpp
     xml_tree.h
 )
@@ -412,7 +414,8 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check metadata_web mobi_metadata epub_book calibre_fts calibre_notes annotation_search test_tool)
+                          kindle library_check metadata_web mobi_metadata epub_book epub_cfi calibre_fts calibre_notes annotation_search
+                          test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)

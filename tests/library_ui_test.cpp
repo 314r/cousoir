@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
@@ -24,6 +25,8 @@
 #include "conversion_service.h"
 #include "metadata_downloader.h"
 #include "device_library.h"
+#include "epub_book.h"
+#include "epub_cfi.h"
 #include "highlight_browser.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
@@ -93,6 +96,7 @@ private slots:
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
     void readsInCousoir();
+    void encodesCfisAsTheReader();
     void readsPdfs();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
@@ -822,6 +826,115 @@ void LibraryUiTest::readsInCousoir()
         db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE book=%1").arg(bookId)).toString().toUtf8()).object();
     db.close();
     QVERIFY(removed.value(QLatin1String("removed")).toBool());
+#endif
+}
+
+// The CFIs Cousoir works out from a page's XML are those the reader's own
+// document gives, for the places of every text of pages made to differ.
+void LibraryUiTest::encodesCfisAsTheReader()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    const QString path = QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/cfi.epub");
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(path) }));
+    QCOMPARE(error, QString());
+    waitForSave();
+    int bookId = 0;
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("The Odd Pages"))
+                bookId = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return bookId > 0;
+    }(), 15000);
+    library()->setProperty("currentBookId", bookId);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QQuickWindow *reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    QVERIFY(reader);
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty(), 20000);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+
+    const std::unique_ptr<EpubBook> book = EpubBook::open(path, &error);
+    QVERIFY2(book, qPrintable(error));
+    for (int index = 0; index < book->spine().size(); ++index) {
+        QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, index), Q_ARG(QVariant, QStringLiteral("start")));
+        QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == index
+                                     && reader->property("position").toString().startsWith(
+                                         QStringLiteral("epubcfi(/%1/").arg(2 * (index + 1))),
+                                 20000);
+        const std::unique_ptr<XmlTree::Node> root = XmlTree::parse(book->read(book->spine().at(index).name));
+        QVERIFY(root);
+        const EpubCfi::Document document(*root);
+        const XmlTree::Node *body = XmlTree::childElement(XmlTree::documentElement(root.get()), "body");
+        QVERIFY(body);
+        // The texts under the body, as one: a place is an offset in it, the
+        // text it is in the first that holds it, however each side splits
+        // its texts.
+        QList<const XmlTree::Node *> texts;
+        const std::function<void(const XmlTree::Node &)> walk = [&](const XmlTree::Node &node) {
+            for (const auto &child : node.children) {
+                if (child->kind == XmlTree::Node::Kind::Text || child->kind == XmlTree::Node::Kind::Cdata)
+                    texts.append(child.get());
+                else
+                    walk(*child);
+            }
+        };
+        walk(*body);
+        QList<qsizetype> starts;
+        qsizetype total = 0;
+        for (const XmlTree::Node *text : std::as_const(texts)) {
+            starts.append(total);
+            total += text->text.size();
+        }
+        QJsonArray table;
+        for (qsizetype i = 0; i < texts.size(); ++i) {
+            const qsizetype size = texts.at(i)->text.size();
+            for (const qsizetype offset : { qsizetype(0), qMin<qsizetype>(1, size), size / 2, size }) {
+                const qsizetype at = starts.at(i) + offset;
+                qsizetype k = 0;
+                while (!(starts.at(k) <= at && at <= starts.at(k) + texts.at(k)->text.size()))
+                    ++k;
+                table.append(QJsonArray{ double(at), document.encode(*texts.at(k), at - starts.at(k)) });
+            }
+        }
+        const QString script = QStringLiteral(R"((function (table, total) {
+            const texts = [];
+            (function walk(node) {
+                for (let child = node.firstChild; child; child = child.nextSibling) {
+                    if (child.nodeType === Node.TEXT_NODE || child.nodeType === Node.CDATA_SECTION_NODE)
+                        texts.push(child);
+                    else
+                        walk(child);
+                }
+            })(document.body);
+            const starts = [];
+            let length = 0;
+            for (const text of texts) {
+                starts.push(length);
+                length += text.nodeValue.length;
+            }
+            let result = length === total ? 'cfi-ok ' + table.length : 'cfi-text ' + length;
+            for (const [at, expected] of length === total ? table : []) {
+                let k = 0;
+                while (!(starts[k] <= at && at <= starts[k] + texts[k].nodeValue.length))
+                    ++k;
+                const got = window.cousoir.encode(texts[k], at - starts[k]);
+                if (got !== expected) {
+                    result = 'cfi-differs ' + at + ' ' + expected + ' ' + got;
+                    break;
+                }
+            }
+            document.title = result;
+        })(%1, %2))").arg(QString::fromUtf8(QJsonDocument(table).toJson(QJsonDocument::Compact))).arg(total);
+        QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, script)));
+        QTRY_COMPARE_WITH_TIMEOUT(view->property("title").toString(), QStringLiteral("cfi-ok %1").arg(table.size()), 20000);
+    }
+    reader->close();
 #endif
 }
 
