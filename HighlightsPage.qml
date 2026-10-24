@@ -242,7 +242,10 @@ Rectangle {
                 activeFocusOnTab: true
                 Accessible.name: qsTr("Books with highlights")
 
-                ScrollBar.vertical: ThinScrollBar { }
+                // Over the book picked, not under it.
+                ScrollBar.vertical: ThinScrollBar {
+                    solid: true
+                }
 
                 Keys.onUpPressed: page.step(-1)
                 Keys.onDownPressed: page.step(1)
