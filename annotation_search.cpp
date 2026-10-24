@@ -220,7 +220,7 @@ QList<Hit> find(SqliteDb &db, const Query &query, QString *error)
                 hit.text = annotation->text(QStringLiteral("highlighted_text"));
         }
         hits.append(hit);
-        if (text.isEmpty() && hits.size() >= browseLimit)
+        if (text.isEmpty() && !query.all && hits.size() >= browseLimit)
             break;
     }
     if (!statement.error().isEmpty()) {

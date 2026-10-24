@@ -888,6 +888,13 @@ const LibraryData &BookLibrary::data() const
     return m_data;
 }
 
+QString BookLibrary::coverUrl(int bookId) const
+{
+    const Book *book = findBook(bookId);
+    return book && !book->coverFile.isEmpty() ? CoverCache::url(coverKeyOf(m_libraryPath), book->id, book->coverModified)
+                                              : QString();
+}
+
 void BookLibrary::openFacetItem(int id)
 {
     const QList<FacetItem> *items = facetItems(m_section);

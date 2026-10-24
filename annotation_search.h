@@ -32,6 +32,8 @@ struct Query
     // when empty.
     QString userType;
     QString user;
+    // Every one, not only the newest 4096 Calibre's browser shows.
+    bool all = false;
 };
 
 struct Hit

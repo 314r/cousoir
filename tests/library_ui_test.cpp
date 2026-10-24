@@ -29,6 +29,7 @@
 #include "epub_cfi.h"
 #include "cousoir_paths.h"
 #include "highlight_browser.h"
+#include "highlight_document.h"
 #include "highlight_sync.h"
 #include "kobo_highlights.h"
 #include "kobo_placement.h"
@@ -177,6 +178,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+    qmlRegisterType<HighlightDocument>("Cousoir", 1, 0, "HighlightDocument");
     qmlRegisterType<HighlightSync>("Cousoir", 1, 0, "HighlightSync");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
@@ -1506,83 +1508,108 @@ void LibraryUiTest::browsesHighlights()
     QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
     QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("highlights")).toInt(), 8);
 
-    // By book, the books by their titles' sort.
+    // As kbextract2 lists them: the books with highlights or notes, by
+    // their titles' sort, the bookmarks left out.
     click("sidebar_highlights");
     QQuickItem *page = control("highlightsPage");
     QTRY_VERIFY(page && page->isVisible());
     auto *browser = page->property("browser").value<HighlightBrowser *>();
     QVERIFY(browser);
-    QTRY_COMPARE(browser->count(), 8);
-    QCOMPARE(browser->rows().size(), 11);
-    const QVariantMap first = browser->rows().constFirst().toMap();
-    QCOMPARE(first.value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
-    // As kbextract2 counts them: a highlight with a note is a note.
-    QCOMPARE(first.value(QStringLiteral("counts")).toString(), QStringLiteral("1 highlight · 2 notes"));
-    QCOMPARE(text("bookCount"), QStringLiteral("8 highlights"));
-
-    // A search of Calibre's index, the words found in bold; Ctrl+F goes to
-    // it.
-    QTest::keyClick(m_window, Qt::Key_F, Qt::ControlModifier);
-    QTRY_VERIFY(control("highlightSearch")->hasActiveFocus());
-    typeText(QStringLiteral("amour"));
-    QTRY_COMPARE(browser->count(), 1);
-    QVERIFY(browser->rows().value(1).toMap().value(QStringLiteral("html")).toString().startsWith(QStringLiteral("<b>L'amour</b> est")));
-    QVERIFY(browser->exportText(true).startsWith(QStringLiteral("# L'Écume des jours\n\n## Chapitre II")));
-
-    // Enter asks the reader for the book, where the highlight is.
-    QSignalSpy read(page, SIGNAL(readRequested(int,int,QString)));
-    browser->setQuery(QString());
-    browser->setType(QStringLiteral("highlight"));
     QTRY_COMPARE(browser->count(), 7);
+    const auto bookTitles = [browser] {
+        QStringList titles;
+        for (const QVariant &book : browser->books())
+            titles.append(book.toMap().value(QStringLiteral("title")).toString());
+        return titles;
+    };
+    QCOMPARE(bookTitles(), (QStringList{ QStringLiteral("The Black Company"), QStringLiteral("L'Écume des jours"),
+                                         QStringLiteral("Good Omens") }));
+    const QVariantMap first = browser->books().constFirst().toMap();
+    // A highlight with a note is a note.
+    QCOMPARE(first.value(QStringLiteral("counts")).toString(), QStringLiteral("1 highlight · 2 notes"));
+    QCOMPARE(browser->books().constLast().toMap().value(QStringLiteral("counts")).toString(),
+             QStringLiteral("1 highlight · 0 notes"));
+    // The book's cover, its letter for when it has none.
+    QVERIFY(first.value(QStringLiteral("cover")).toString().startsWith(QLatin1String("image://covers/")));
+    QCOMPARE(first.value(QStringLiteral("monogram")).toString(), QStringLiteral("T"));
+    QCOMPARE(text("bookCount"), QStringLiteral("7 highlights"));
+    // None picked yet.
+    QVERIFY(browser->current().isEmpty());
+    QTRY_VERIFY(control("noBookSelected")->isVisible());
+    QVERIFY(!control("highlightDocument")->isVisible());
+
+    // A book picked: its page, as kbextract2 typesets it.
+    click("highlightBook_2");
+    QTRY_COMPARE(browser->current(), QStringLiteral("book:2"));
+    QQuickItem *document = control("highlightDocument");
+    QTRY_VERIFY(document->isVisible());
+    const auto documentText = [document] {
+        QString text;
+        QMetaObject::invokeMethod(document, "getText", Q_RETURN_ARG(QString, text), Q_ARG(int, 0),
+                                  Q_ARG(int, document->property("length").toInt()));
+        return text.replace(QChar::ParagraphSeparator, u'\n').replace(QChar::LineSeparator, u'\n');
+    };
+    QTRY_VERIFY2(documentText().startsWith(QStringLiteral("The Black Company\nGlen Cook\n1 highlight · 2 notes\n")),
+                 qPrintable(documentText()));
+    QVERIFY2(documentText().contains(QLatin1String("Chapter Three\nThe Annals are the memory of the Company.\nNote\nRead on the Kobo.")),
+             qPrintable(documentText()));
+    // The quote bars, the note cards and the rule under the text.
+    QObject *builder = page->property("builder").value<QObject *>();
+    QStringList kinds;
+    for (const QVariant &block : builder->property("blocks").toList())
+        kinds.append(block.toMap().value(QStringLiteral("kind")).toString());
+    QCOMPARE(kinds, (QStringList{ QStringLiteral("rule"), QStringLiteral("quote"), QStringLiteral("note"), QStringLiteral("quote"),
+                                  QStringLiteral("note"), QStringLiteral("quote") }));
+    QTRY_VERIFY(control("highlightDecoration_note") && control("highlightDecoration_note")->height() > 0);
+
+    // Up and Down go from book to book; Enter to the page, Esc back.
     QMetaObject::invokeMethod(page, "focusList");
-    QTRY_VERIFY(control("highlightList")->hasActiveFocus());
+    QTRY_VERIFY(control("highlightBooks")->hasActiveFocus());
     QTest::keyClick(m_window, Qt::Key_Down);
+    QTRY_COMPARE(browser->current(), QStringLiteral("book:1"));
+    QTest::keyClick(m_window, Qt::Key_Up);
+    QTRY_COMPARE(browser->current(), QStringLiteral("book:2"));
     QTest::keyClick(m_window, Qt::Key_Return);
-    QTRY_COMPARE(read.size(), 1);
-    QCOMPARE(read.constFirst().at(0).toInt(), 2);
-    QCOMPARE(read.constFirst().at(1).toInt(), 2);
-    QCOMPARE(read.constFirst().at(2).toString(), QStringLiteral("/4/2/4/1:0"));
-
-    browser->setType(QStringLiteral("bookmark"));
-    QTRY_COMPARE(browser->count(), 1);
-    browser->setType(QString());
-
-    // Whose they are: the viewer's, or a Kobo's, which says so.
-    QStringList sources;
-    for (const QVariant &source : browser->sources())
-        sources.append(source.toMap().value(QStringLiteral("key")).toString());
-    QCOMPARE(sources, (QStringList{ QString(), QStringLiteral("local:viewer"), QStringLiteral("kobo:N418000000000") }));
-    browser->setSource(QStringLiteral("kobo:N418000000000"));
-    QTRY_COMPARE(browser->count(), 1);
-    const QVariantMap kobo = browser->rows().value(1).toMap();
-    QCOMPARE(kobo.value(QStringLiteral("source")).toString(), QStringLiteral("kobo:N418000000000"));
-    QCOMPARE(kobo.value(QStringLiteral("newChapter")).toString(), QStringLiteral("Chapter Three"));
-
-    // The reader Enter opened, closed.
-    if (auto *reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow")))
-        reader->close();
-    m_window->requestActivate();
-    QTRY_VERIFY(m_window->isActive());
+    QTRY_VERIFY(document->hasActiveFocus());
+    // The page selectable as a whole, as kbextract2's.
+    QGuiApplication::clipboard()->clear();
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(m_window, Qt::Key_C, Qt::ControlModifier);
+    QTRY_VERIFY(QGuiApplication::clipboard()->text().startsWith(QStringLiteral("The Black Company\nGlen Cook\n")));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(control("highlightBooks")->hasActiveFocus());
 
     // Ctrl+Shift+C: the book's highlights as kbextract2 copies them.
-    const QString markdown = QStringLiteral("## Chapter Three\n\n> The Annals are the memory of the Company.\n\nRead on the Kobo.");
-    QMetaObject::invokeMethod(page, "focusList");
-    QTRY_VERIFY(control("highlightList")->hasActiveFocus());
+    const QString kobo = QStringLiteral("## Chapter Three\n\n> The Annals are the memory of the Company.\n\nRead on the Kobo.");
     QGuiApplication::clipboard()->clear();
     QTest::keyClick(m_window, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
-    QTRY_COMPARE(QGuiApplication::clipboard()->text(), markdown);
-    QCOMPARE(browser->formatted(QStringLiteral("obsidian"), QStringLiteral("book:2")),
-             QStringLiteral("## Chapter Three\n\n> [!quote]\n> The Annals are the memory of the Company.\n\nRead on the Kobo."));
-    // Ctrl+U: shown as that Markdown, and back.
+    QTRY_COMPARE(QGuiApplication::clipboard()->text(), browser->formatted(QStringLiteral("markdown")));
+    QVERIFY(QGuiApplication::clipboard()->text().contains(kobo));
+    QTRY_COMPARE(text("copyHighlights"), QStringLiteral("Copied"));
+    QVERIFY(browser->formatted(QStringLiteral("obsidian"))
+                .contains(QStringLiteral("## Chapter Three\n\n> [!quote]\n> The Annals are the memory of the Company.\n\nRead on the Kobo.")));
+    // Ctrl+U: the page as that Markdown, and back.
     QTest::keyClick(m_window, Qt::Key_U, Qt::ControlModifier);
-    QTRY_VERIFY(control("highlightMarkdown")->isVisible());
-    QCOMPARE(control("highlightMarkdown")->property("text").toString(), markdown);
+    QTRY_COMPARE(documentText(), browser->formatted(QStringLiteral("markdown")));
     QTest::keyClick(m_window, Qt::Key_U, Qt::ControlModifier);
-    QTRY_VERIFY(control("highlightList")->isVisible());
-    browser->setSource(QString());
+    QTRY_VERIFY(documentText().startsWith(QLatin1String("The Black Company\n")));
+
+    // Too narrow for both: the books, then the book picked, and back.
+    const QSize size = m_window->size();
+    m_window->resize(720, size.height());
+    QTRY_VERIFY(page->property("narrow").toBool());
+    QMetaObject::invokeMethod(page, "focusList");
+    QTRY_VERIFY(control("highlightBooks")->isVisible() && !document->isVisible());
+    click("highlightBook_4");
+    QTRY_VERIFY(document->isVisible() && !control("highlightBooks")->isVisible());
+    QCOMPARE(browser->current(), QStringLiteral("book:4"));
+    click("highlightsBack");
+    QTRY_VERIFY(control("highlightBooks")->isVisible() && !document->isVisible());
+    m_window->resize(size);
+    QTRY_VERIFY(!page->property("narrow").toBool());
 
     // A Kobo's database opened as a file: its books the library has not,
-    // shown after the library's.
+    // after the library's, under its name.
     QDir(CousoirPaths::koboFolder()).removeRecursively();
     QTemporaryDir backup;
     const QString file = QDir(backup.path()).filePath(QStringLiteral("Kobo backup/KoboReader.sqlite"));
@@ -1598,23 +1625,25 @@ void LibraryUiTest::browsesHighlights()
     auto *sync = page->property("sync").value<HighlightSync *>();
     QVERIFY(sync);
     QCOMPARE(sync->importDatabase(QUrl::fromLocalFile(file)), QString());
-    QTRY_VERIFY_WITH_TIMEOUT([&] {
-        for (const QVariant &row : browser->rows()) {
-            if (row.toMap().value(QStringLiteral("kind")).toString() == QLatin1String("heading")
-                && row.toMap().value(QStringLiteral("title")).toString().endsWith(QLatin1String(", not in the library")))
-                return true;
+    const auto koboOnly = [browser] {
+        QVariantMap books;
+        for (const QVariant &book : browser->books()) {
+            if (book.toMap().value(QStringLiteral("section")).toString().endsWith(QLatin1String(", not in the library")))
+                books.insert(book.toMap().value(QStringLiteral("title")).toString(), book);
         }
-        return false;
-    }(), 15000);
-    QStringList titles;
-    for (const QVariant &row : browser->rows()) {
-        if (row.toMap().value(QStringLiteral("kind")).toString() == QLatin1String("book") && row.toMap().value(QStringLiteral("bookId")).toInt() == 0)
-            titles.append(row.toMap().value(QStringLiteral("title")).toString());
-    }
-    QVERIFY2(titles.contains(QStringLiteral("Bought Elsewhere")) && titles.contains(QStringLiteral("The Voyage")),
-             qPrintable(titles.join(u',')));
-    // Copied all the same, under their titles.
-    QVERIFY(browser->formatted(QStringLiteral("markdown")).contains(QStringLiteral("# Bought Elsewhere\n\n## Opening\n\n> Bought words")));
+        return books;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(koboOnly().contains(QStringLiteral("Bought Elsewhere")), 15000);
+    QVERIFY2(koboOnly().contains(QStringLiteral("The Voyage")), qPrintable(koboOnly().keys().join(u',')));
+    const QVariantMap bought = koboOnly().value(QStringLiteral("Bought Elsewhere")).toMap();
+    QCOMPARE(bought.value(QStringLiteral("bookId")).toInt(), 0);
+    QCOMPARE(bought.value(QStringLiteral("cover")).toString(), QString());
+    QCOMPARE(bought.value(QStringLiteral("monogram")).toString(), QStringLiteral("B"));
+    QCOMPARE(bookTitles().constFirst(), QStringLiteral("The Black Company"));
+    // Shown and copied all the same.
+    browser->setCurrent(bought.value(QStringLiteral("key")).toString());
+    QVERIFY(browser->formatted(QStringLiteral("markdown")).startsWith(QStringLiteral("## Opening\n\n> Bought words")));
+    QTRY_VERIFY(documentText().startsWith(QLatin1String("Bought Elsewhere\n")));
 }
 
 void LibraryUiTest::editsCustomColumns()

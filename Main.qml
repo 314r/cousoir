@@ -148,11 +148,9 @@ ThemedWindow {
     function focusSearch() {
         if (session.bookOpen)
             closeBook()
-        // The highlights have a search of their own.
-        if (highlightsShown) {
-            highlightsPage.focusSearch()
+        // The highlights have no search, as in kbextract2.
+        if (highlightsShown)
             return
-        }
         searchField.forceActiveFocus(Qt.ShortcutFocusReason)
         searchField.selectAll()
     }
@@ -414,20 +412,6 @@ ThemedWindow {
             showNotice(qsTr("The reader cannot be opened."))
     }
 
-    // The book read in Cousoir's reader where a highlight is.
-    function readAt(bookId, spineIndex, cfi) {
-        if (!library.readerAvailable || library.readableFormat(bookId) !== "EPUB") {
-            openBook(bookId)
-            return
-        }
-        if (!readerLoader.item)
-            readerLoader.setSource("ReaderWindow.qml", { library: window.library })
-        if (readerLoader.item)
-            readerLoader.item.openAt(bookId, spineIndex, cfi)
-        else
-            showNotice(qsTr("The reader cannot be opened."))
-    }
-
     function toggleGrid() {
         layoutSettings.gridMode = !layoutSettings.gridMode
     }
@@ -483,8 +467,8 @@ ThemedWindow {
         add("syncHighlights", qsTr("Sync the Kobos' highlights"), "", "highlighter", library.loaded)
         add("importHighlights", qsTr("Import a Kobo's highlights…"), "", "highlighter", library.loaded)
         for (const format of ["markdown", "obsidian", "plain"])
-            add("copyHighlights:" + format, qsTr("Copy the highlights as %1").arg(highlightsPage.formatNames[format]),
-                format === "markdown" ? "Ctrl+Shift+C" : "", "highlighter", highlightsShown && highlightsPage.browser.count > 0)
+            add("copyHighlights:" + format, qsTr("Copy the book's highlights as %1").arg(highlightsPage.formatNames[format]),
+                format === "markdown" ? "Ctrl+Shift+C" : "", "highlighter", highlightsShown && highlightsPage.bookShown)
         add("markdownHighlights", highlightsPage.markdownShown ? qsTr("Show the highlights") : qsTr("Show the highlights as Markdown"),
             "Ctrl+U", "highlighter", highlightsShown)
         for (const source of session.highlightSync.sources)
@@ -550,7 +534,7 @@ ThemedWindow {
             section = "highlights"
             highlightsPage.importDatabase()
         } else if (hit.key.startsWith("copyHighlights:")) {
-            highlightsPage.copyFormatted(hit.key.slice(15), !highlightsPage.currentKey)
+            highlightsPage.copyFormatted(hit.key.slice(15))
         } else if (hit.key === "markdownHighlights") {
             highlightsPage.toggleMarkdown()
         } else if (hit.key.startsWith("removeHighlights:")) {
@@ -1017,8 +1001,8 @@ ThemedWindow {
     // The highlights as kbextract2 copies them, and their Markdown shown.
     Shortcut {
         sequence: "Ctrl+Shift+C"
-        enabled: window.highlightsShown && highlightsPage.browser.count > 0
-        onActivated: highlightsPage.copyFormatted("markdown", !highlightsPage.currentKey)
+        enabled: window.highlightsShown && highlightsPage.bookShown
+        onActivated: highlightsPage.copyFormatted("markdown")
     }
 
     Shortcut {
@@ -1763,8 +1747,6 @@ ThemedWindow {
                         objectName: "highlightsPage"
                         library: window.library
                         sync: session.highlightSync
-                        onReadRequested: function(bookId, spineIndex, cfi) { window.readAt(bookId, spineIndex, cfi) }
-                        onBookRequested: function(bookId) { window.openBook(bookId) }
                         onFailed: function(message) { window.showNotice(message) }
                         onNoticed: function(message) { window.showNotice(message, false) }
                     }

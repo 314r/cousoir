@@ -202,6 +202,8 @@ qt_add_library(cousoir_models STATIC
     device_library.h
     highlight_browser.cpp
     highlight_browser.h
+    highlight_document.cpp
+    highlight_document.h
     highlight_sync.cpp
     highlight_sync.h
     metadata_downloader.cpp
@@ -286,6 +288,8 @@ set(COUSOIR_ICON_FILES
     assets/icons/layers.svg
     assets/icons/list.svg
     assets/icons/lock.svg
+    assets/icons/markdown.svg
+    assets/icons/more.svg
     assets/icons/panel-right.svg
     assets/icons/plus.svg
     assets/icons/refresh.svg

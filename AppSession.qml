@@ -60,6 +60,7 @@ QtObject {
     function applySystemAppearance() {
         Theme.systemPalette = appearance.palette
         Theme.systemMonoFont = appearance.fixedFont.family
+        Theme.systemDocumentFont = appearance.uiFont.family
         Theme.systemFontPointSize = appearance.uiFontPointSize
     }
 

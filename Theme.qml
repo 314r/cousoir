@@ -20,6 +20,8 @@ QtObject {
         "red": "#a24d4d"
     })
     property string systemMonoFont: "monospace"
+    // Proportional, for the pages to read, as kbextract2's document font.
+    property string systemDocumentFont: "sans-serif"
     property real systemFontPointSize: 9
     property int textScalePercent: 100
 
@@ -95,6 +97,7 @@ QtObject {
     readonly property color textSelection: withAlpha(text, 0.35)
 
     readonly property string uiFont: systemMonoFont
+    readonly property string documentFont: systemDocumentFont
     readonly property int effectiveTextScalePercent: Math.max(80, Math.min(200, textScalePercent))
     readonly property real effectiveFontPointSize: Math.max(1, systemFontPointSize)
         * effectiveTextScalePercent / 100

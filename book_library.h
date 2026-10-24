@@ -186,6 +186,8 @@ public:
     void setCurrentBookId(int bookId);
     QVariantMap currentBook() const;
     const LibraryData &data() const;
+    // The book's cover as CoverCache serves it; empty when it has none.
+    QString coverUrl(int bookId) const;
     // update_from_mi() of Calibre's Edit metadata dialog: what a book found
     // by a download changes of `bookId`, for the fields chosen, as
     // updateBook() takes it; empty for a book that is gone.
