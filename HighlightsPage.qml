@@ -241,8 +241,13 @@ Rectangle {
                 boundsBehavior: Flickable.StopAtBounds
                 activeFocusOnTab: true
                 Accessible.name: qsTr("Books with highlights")
+                // The scroll bar's lane, right of the rows while it shows,
+                // as ListTable keeps it.
+                readonly property real scrollRoom: bookScrollBar.size < 1.0 ? bookScrollBar.width : 0
 
-                ScrollBar.vertical: ThinScrollBar { }
+                ScrollBar.vertical: ThinScrollBar {
+                    id: bookScrollBar
+                }
 
                 Keys.onUpPressed: page.step(-1)
                 Keys.onDownPressed: page.step(1)
@@ -255,7 +260,7 @@ Rectangle {
                 section.delegate: HeadingLabel {
                     required property string section
 
-                    width: ListView.view.width
+                    width: ListView.view.width - bookList.scrollRoom
                     visible: section !== ""
                     height: visible ? implicitHeight + 2 * Theme.gutter : 0
                     leftPadding: Theme.panePadding
@@ -274,7 +279,7 @@ Rectangle {
                     readonly property int tileWidth: Math.round(36 * Theme.spacingScale)
 
                     objectName: "highlightBook_" + (modelData.bookId || modelData.key)
-                    width: ListView.view.width
+                    width: ListView.view.width - bookList.scrollRoom
                     implicitHeight: Math.max(tile.height, texts.implicitHeight) + 2 * Theme.gutter
                     color: current ? (bookList.activeFocus ? Theme.selected : Theme.hover)
                         : hover.hovered ? Theme.hover : "transparent"
