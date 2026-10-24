@@ -6,6 +6,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include "cousoir_paths.h"
 #include "highlight_formats.h"
 #include "kobo.h"
 #include "kobo_highlights.h"
@@ -72,6 +73,7 @@ private slots:
     void formatsAsKbextract();
     void groupsSplitFilesUnderTheirChapter();
     void cleansText();
+    void groupsByChapter();
     void readsWhereTheyAre();
     void keepsSnapshots();
     void tellsWhoseDatabase();
@@ -214,6 +216,27 @@ void KoboHighlightsTest::cleansText()
     QCOMPARE(KoboHighlights::calibreColor(3), QStringLiteral("green"));
 }
 
+// The chapters the Highlights section shows a book by, as render() writes
+// them: in their order, those without one last, blank entries left out.
+void KoboHighlightsTest::groupsByChapter()
+{
+    const QList<HighlightFormats::Chapter> chapters = HighlightFormats::chapters(
+        { { QStringLiteral("a"), QStringLiteral("unordered"), {}, QStringLiteral("x"), {}, std::nullopt },
+          { QStringLiteral("b"), QStringLiteral("second"), {}, QStringLiteral("y"), QStringLiteral("Y"), 2 },
+          { QStringLiteral("c"), {}, {}, QStringLiteral("w"), QStringLiteral("W"), 0 },
+          { QStringLiteral("d"), QStringLiteral("first"), QStringLiteral("a note"), QStringLiteral("z"), QStringLiteral("Z"), 1 },
+          { QStringLiteral("e"), {}, QStringLiteral("then"), QStringLiteral("y"), QStringLiteral("Y"), 2 } });
+    QStringList titles;
+    QStringList ids;
+    for (const HighlightFormats::Chapter &chapter : chapters) {
+        titles.append(chapter.title);
+        for (const HighlightFormats::Entry &entry : chapter.entries)
+            ids.append(entry.id);
+    }
+    QCOMPARE(titles, (QStringList{ QStringLiteral("Z"), QStringLiteral("Y"), QString() }));
+    QCOMPARE(ids, (QStringList{ QStringLiteral("d"), QStringLiteral("b"), QStringLiteral("e"), QStringLiteral("a") }));
+}
+
 // Cousoir's own Kobo: where each highlight starts and ends, when it was
 // made, hidden ones kept, corners and blank rows left out, and the books it
 // still has.
@@ -320,7 +343,8 @@ void KoboHighlightsTest::keepsSnapshots()
     QCOMPARE(back->digest(), snapshot.digest());
     QCOMPARE(KoboHighlights::toJson(*back), KoboHighlights::toJson(snapshot));
 
-    // Kept per Kobo, found again.
+    // Kept per Kobo, found again; none left by another test's run.
+    QDir(CousoirPaths::koboFolder()).removeRecursively();
     QVERIFY2(KoboHighlights::writeSnapshot(snapshot, &error), qPrintable(error));
     QCOMPARE(KoboHighlights::readSnapshot(snapshot.device)->digest(), snapshot.digest());
     QVERIFY(!KoboHighlights::readSnapshot(QStringLiteral("another")));

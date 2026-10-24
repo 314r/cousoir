@@ -31,8 +31,20 @@ struct Book
     QList<Entry> entries;
 };
 
+// A book's chapters as render() writes them: in their order, those without
+// one after, as they come; each with its entries in the order given.
+struct Chapter
+{
+    QString title;
+    QList<Entry> entries;
+};
+
 // "markdown", "obsidian" or "plain"; Markdown for any other.
 Format formatNamed(const QString &name);
+
+// The entries with a highlight or a note, by chapter; an untitled chapter's
+// title empty.
+QList<Chapter> chapters(const QList<Entry> &entries);
 
 // A book's entries: no title, a heading by chapter.
 QString render(const QList<Entry> &entries, Format format);

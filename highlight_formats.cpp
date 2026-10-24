@@ -22,14 +22,6 @@ QString highlightBlock(const QString &text)
     return lines.join(u'\n');
 }
 
-struct Chapter
-{
-    QString title;
-    QStringList blocks;
-    std::optional<qint64> order;
-    int firstSeen = 0;
-};
-
 } // namespace
 
 Format formatNamed(const QString &name)
@@ -75,53 +67,72 @@ QString reflowedHighlight(const QString &text)
     return paragraphs.join(QStringLiteral("\n\n"));
 }
 
-QString render(const QList<Entry> &entries, Format format)
+QList<Chapter> chapters(const QList<Entry> &entries)
 {
-    QList<Chapter> chapters;
+    struct Found
+    {
+        Chapter chapter;
+        std::optional<qint64> order;
+        int firstSeen = 0;
+    };
+    QList<Found> found;
     QHash<QString, int> indexes;
     int anonymous = 0;
     for (const Entry &entry : entries) {
-        QStringList parts;
-        if (!entry.highlight.isEmpty()) {
-            if (format == Format::Plain)
-                parts.append(reflowedHighlight(entry.highlight));
-            else if (format == Format::Obsidian)
-                parts.append(QStringLiteral("> [!quote]\n") + highlightBlock(entry.highlight));
-            else
-                parts.append(highlightBlock(entry.highlight));
-        }
-        if (!entry.note.isEmpty())
-            parts.append(normalizedText(entry.note));
-        if (parts.isEmpty())
+        if (entry.highlight.isEmpty() && entry.note.isEmpty())
             continue;
         const QString key = !entry.chapterKey.isEmpty() ? QStringLiteral("chapter:") + entry.chapterKey
             : !entry.id.isEmpty()                       ? QStringLiteral("bookmark:") + entry.id
                                                         : QStringLiteral("anonymous:%1").arg(anonymous++);
-        auto found = indexes.constFind(key);
-        if (found == indexes.cend()) {
-            found = indexes.insert(key, int(chapters.size()));
-            chapters.append({ entry.chapterTitle, {}, entry.chapterOrder, int(chapters.size()) });
+        auto index = indexes.constFind(key);
+        if (index == indexes.cend()) {
+            index = indexes.insert(key, int(found.size()));
+            found.append({ { entry.chapterTitle, {} }, entry.chapterOrder, int(found.size()) });
         } else {
-            Chapter &chapter = chapters[*found];
-            if (chapter.title.isEmpty())
-                chapter.title = entry.chapterTitle;
+            Found &chapter = found[*index];
+            if (chapter.chapter.title.isEmpty())
+                chapter.chapter.title = entry.chapterTitle;
             if (!chapter.order)
                 chapter.order = entry.chapterOrder;
         }
-        chapters[*found].blocks.append(parts.join(QStringLiteral("\n\n")));
+        found[*index].chapter.entries.append(entry);
     }
-    std::stable_sort(chapters.begin(), chapters.end(), [](const Chapter &left, const Chapter &right) {
+    std::stable_sort(found.begin(), found.end(), [](const Found &left, const Found &right) {
         if (left.order && right.order && *left.order != *right.order)
             return *left.order < *right.order;
         if (left.order.has_value() != right.order.has_value())
             return left.order.has_value();
         return left.firstSeen < right.firstSeen;
     });
+    QList<Chapter> result;
+    result.reserve(found.size());
+    for (Found &chapter : found)
+        result.append(std::move(chapter.chapter));
+    return result;
+}
+
+QString render(const QList<Entry> &entries, Format format)
+{
     QStringList sections;
-    for (const Chapter &chapter : std::as_const(chapters)) {
+    for (const Chapter &chapter : chapters(entries)) {
+        QStringList blocks;
+        for (const Entry &entry : chapter.entries) {
+            QStringList parts;
+            if (!entry.highlight.isEmpty()) {
+                if (format == Format::Plain)
+                    parts.append(reflowedHighlight(entry.highlight));
+                else if (format == Format::Obsidian)
+                    parts.append(QStringLiteral("> [!quote]\n") + highlightBlock(entry.highlight));
+                else
+                    parts.append(highlightBlock(entry.highlight));
+            }
+            if (!entry.note.isEmpty())
+                parts.append(normalizedText(entry.note));
+            blocks.append(parts.join(QStringLiteral("\n\n")));
+        }
         const QString title = chapter.title.isEmpty() ? QStringLiteral("Untitled chapter") : chapter.title;
         const QString heading = format == Format::Plain ? title : QStringLiteral("## ") + title;
-        sections.append(heading + QStringLiteral("\n\n") + chapter.blocks.join(QStringLiteral("\n\n\n")));
+        sections.append(heading + QStringLiteral("\n\n") + blocks.join(QStringLiteral("\n\n\n")));
     }
     return sections.join(QStringLiteral("\n\n\n"));
 }
