@@ -784,43 +784,56 @@ writing failed.
 
 ## Highlights
 
-Highlights, under Library in the sidebar, lists every highlight and
-bookmark the library keeps, those made in Cousoir's reader and in
-Calibre's E-book viewer and those of the Kobos, as Calibre's "Browse
-annotations" lists them: by book, the books by their titles' sort, with
-how many highlights and notes each has (a highlight with a note counts as
-a note, as kbextract2 counts them), each one's in their order in the book,
-under its chapter, with the highlight's colour, its note in a card, whose
-it is when not the viewer's, and when it was made. The source box keeps
-to one: Cousoir and Calibre's viewer, or a Kobo, as Calibre's browser does.
-After the library's books come what a Kobo has that the library cannot
-hold: under their book, the highlights not found in its copy, saying so;
-then, under "On <Kobo>, not in the library", the books it has not. Its search, which Ctrl+F reaches, is Calibre's: SQLite's full text
-query language on Calibre's index of them, words found by their stems
-unless Word stems is off ("read" finds "reading"), quoted phrases, `*`
-for a prefix, the words found in bold in a snippet, the best first. The
-kind shows highlights, bookmarks or both. Enter, a double click or Read
-opens the book in Cousoir's reader where the highlight is.
+Highlights, under Library in the sidebar, shows the highlights and notes
+the library keeps as kbextract2 shows a Kobo's: those made in Cousoir's
+reader and in Calibre's E-book viewer, and those of the Kobos.
 
-Copy, or Ctrl+Shift+C, puts the highlights of the book picked, or all those
-shown, on the clipboard as kbextract2 writes them, for notes: a heading by
-chapter, each highlight a quote, its lines joined, its note after it; as
-Markdown, as Obsidian's Markdown, whose quotes are `[!quote]` callouts, or
-as plain text, chosen in the menu beside it and kept for the next time.
-Ctrl+U shows that Markdown in place of the list, and the list again.
-Export saves the highlights shown as Calibre's export writes them, as
-Markdown or plain text: each book's title, its highlights under their
-chapters, each with its date and note.
+On the left are the books that have some, by their titles' sort. Each shows
+its cover, or kbextract2's tile when it has none: the title's first letter
+or digit on one of six colours, always the same for the same title. Under
+the title are the authors and how many highlights and notes the book has,
+a highlight with a note counting as a note, as kbextract2 counts them.
+After the library's books, under "On <Kobo>, not in the library", come the
+books a Kobo has that the library has not. The highlights a Kobo has that
+were not found in the library's copy of a book show with that book.
 
-The Kobo menu, and Ctrl+K, sync the Kobos again, import a Kobo's
+A click, or Up and Down, picks a book. Nothing is picked at first, as in
+kbextract2. The book picked shows on the right as kbextract2 typesets it:
+
+- its title, its authors and its counts over a rule;
+- by chapter, in the book's order, each highlight a quote with a bar in the
+  accent colour, its paragraphs kept and its lines joined;
+- each note in a card under its highlight.
+
+It is one page of text in the interface's own font, no wider than about 70
+characters, and selectable as a whole: Ctrl+A and Ctrl+C copy what is
+selected. Enter or Right goes to the page, and Esc or Left back to the
+books. Once the page's title scrolls away, the header shows it. Ctrl+= and
+Ctrl+− make the text bigger or smaller, as everywhere in Cousoir.
+
+Copy, or Ctrl+Shift+C, puts the book's highlights on the clipboard as
+kbextract2 writes them, for notes: a heading by chapter, each highlight a
+quote and its note after it. The menu beside Copy gives the other formats:
+Obsidian's Markdown, whose quotes are `[!quote]` callouts, and plain text.
+The button says Copied for a moment. Ctrl+U, or the M↓ button, shows the
+page as that Markdown, in the fixed font with its marks dimmed, and the page
+again.
+
+When the window is too narrow for both, the books show alone. A book opens
+in their place, and the back arrow, Esc or Left returns to the books.
+
+The ⋯ menu, and Ctrl+K, sync the Kobos again, import a Kobo's
 `KoboReader.sqlite` (a backup, a Kobo's database copied elsewhere), whose
 highlights go into the library as the Kobo's, adding and changing but never
 removing, an old copy being no reason to; and take a Kobo's highlights out
 of the library, which Cousoir then leaves out until the next Sync
 highlights. A database found in a Kobo's `.kobo` folder is that Kobo's;
 else one whose highlights a Kobo met already has, and otherwise its
-folder's. The search finds a Kobo's highlights the library cannot hold by
-their words, each anywhere, case and accents aside: they are in no index.
+folder's.
+
+Like kbextract2, the section has no search, filter or export, and leaves
+the bookmarks out. Calibre's annotations browser still searches them all,
+and Cousoir's reader lists a book's highlights beside its page.
 
 ## Settings
 
@@ -1041,8 +1054,8 @@ neither in the library nor on the Kobo.
 | Enter, Esc | Revert the book's changes or keep them, once asked |
 | Enter | Restore the selected entry of the trash |
 | Enter, Menu, Shift+F10 | A finding's actions, in the check |
-| Ctrl+Shift+C | Copy the highlights of the book picked, or all shown, as Markdown, in Highlights |
-| Ctrl+U | Show the highlights as Markdown, or the list again, in Highlights |
+| Ctrl+Shift+C | Copy the book's highlights as Markdown, in Highlights |
+| Ctrl+U | Show the book's highlights as Markdown, or as a page again, in Highlights |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
 
 ## Requirements
