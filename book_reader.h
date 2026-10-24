@@ -40,8 +40,9 @@ class BookReader : public QObject
     Q_PROPERTY(QUrl fileUrl READ fileUrl NOTIFY bookChanged)
     // The script that pages a document and finds positions in it.
     Q_PROPERTY(QString script READ script CONSTANT)
-    // The highlights of Calibre's viewer and Cousoir's in the book: { uuid,
-    // spineIndex, start, end, text, notes, which, timestamp }, in the book's
+    // The highlights of Calibre's viewer and Cousoir's in the book, and the
+    // Kobos': { uuid, spineIndex, start, end, text, notes, which, timestamp,
+    // source, sourceName }, source "kobo:SERIAL" for a Kobo's, in the book's
     // order.
     Q_PROPERTY(QVariantList highlights READ highlights NOTIFY highlightsChanged)
 
@@ -99,6 +100,11 @@ private:
     void writePositions(const QJsonObject &positions) const;
     void queueAnnotation(const Annotation &annotation);
     void keepPending() const;
+    // The highlights of the book `uuid` still to be in the library.
+    void keepPending(const QString &uuid) const;
+    // A change on its way went in, or did not: what it wrote waits no more,
+    // or waits still.
+    void finishSave(int id, bool saved);
     // Writes the pending highlights to the library, with the position when
     // `withPosition`.
     void flush(bool withPosition);
@@ -114,11 +120,18 @@ private:
     QVariantMap m_start;
     QString m_lastCfi;
     double m_lastFraction = 0;
-    // By uuid, as Calibre's viewer keeps them.
+    // By uuid, as Calibre's viewer keeps them, and whose: the viewer's,
+    // "local" and "viewer", or a Kobo's, "kobo" and its serial.
     QMap<QString, QJsonObject> m_highlights;
+    QHash<QString, QPair<QString, QString>> m_owners;
+    // The Kobos' names, by serial.
+    QHash<QString, QString> m_koboNames;
     // Those made or removed and not yet in the library, written together a
     // while after the last, or when the book closes; kept with the
-    // positions meanwhile, should the library not be writable.
+    // positions meanwhile, should the library not be writable, until the
+    // library says they are in it.
     QList<Annotation> m_pending;
+    // By change on its way to the library: the book and what it writes.
+    QHash<int, QPair<QString, QList<Annotation>>> m_saving;
     QTimer m_flushTimer;
 };

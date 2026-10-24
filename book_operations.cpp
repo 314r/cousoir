@@ -25,6 +25,8 @@
 #include <QJsonObject>
 #include <QMap>
 #include <QObject>
+#include <QSet>
+#include <QTimeZone>
 
 #include <algorithm>
 
@@ -34,6 +36,7 @@
 #include "calibre_text.h"
 #include "commit_engine.h"
 #include "file_transaction.h"
+#include "highlight_json.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -629,14 +632,111 @@ bool setAnnotation(SqliteDb &db, int bookId, const Annotation &annotation, QStri
     // Deleted, then inserted, as Calibre does: a REPLACE would delete the old
     // row without its trigger, leaving its words in the search index.
     return db.run(QStringLiteral("INSERT OR IGNORE INTO annotations_dirtied (book) VALUES (?)"), { bookId }, error)
-        && db.run(QStringLiteral("DELETE FROM annotations WHERE book=? AND format=? AND user_type='local' AND user='viewer' "
+        && db.run(QStringLiteral("DELETE FROM annotations WHERE book=? AND format=? AND user_type=? AND user=? "
                                  "AND annot_type=? AND annot_id=?"),
-                  { bookId, annotation.format.toUpper(), annotation.type, annotation.id }, error)
+                  { bookId, annotation.format.toUpper(), annotation.userType, annotation.user, annotation.type, annotation.id },
+                  error)
         && db.run(QStringLiteral("INSERT INTO annotations(book,format,user_type,user,timestamp,annot_id,annot_type,"
-                                 "annot_data,searchable_text) VALUES (?,?,'local','viewer',?,?,?,?,?)"),
-                  { bookId, annotation.format.toUpper(), annotation.timestamp, annotation.id, annotation.type,
-                    QString::fromUtf8(annotation.data), annotation.searchable },
+                                 "annot_data,searchable_text) VALUES (?,?,?,?,?,?,?,?,?)"),
+                  { bookId, annotation.format.toUpper(), annotation.userType, annotation.user, annotation.timestamp,
+                    annotation.id, annotation.type, QString::fromUtf8(annotation.data), annotation.searchable },
                   error);
+}
+
+QList<Annotation> mergeSteps(const QList<Annotation> &rows, const DeviceAnnotations &set, double now)
+{
+    const auto parsed = [](const Annotation &annotation) {
+        return QJsonDocument::fromJson(annotation.data).object();
+    };
+    // What it says, its time aside.
+    const auto content = [&parsed](const Annotation &annotation) {
+        QJsonObject object = parsed(annotation);
+        object.remove(QStringLiteral("timestamp"));
+        return object;
+    };
+    const auto removedLike = [&set](const Annotation &row, double at) {
+        Annotation removed = row;
+        removed.format = set.format.toUpper();
+        removed.timestamp = at;
+        removed.data = QJsonDocument(HighlightJson::removed(row.id, HighlightJson::isoTimestamp(
+                                                                QDateTime::fromMSecsSinceEpoch(qint64(at * 1000), QTimeZone::UTC))))
+                           .toJson(QJsonDocument::Compact);
+        removed.searchable.clear();
+        return removed;
+    };
+    QHash<QString, const Annotation *> library;
+    for (const Annotation &row : rows)
+        library.insert(row.id, &row);
+    QList<Annotation> steps;
+    QSet<QString> seen;
+    for (const Annotation &annotation : set.annotations) {
+        seen.insert(annotation.id);
+        const Annotation *row = library.value(annotation.id);
+        const bool removedThere = parsed(annotation).value(QLatin1String("removed")).toBool();
+        if (!row) {
+            if (!removedThere)
+                steps.append(annotation);
+            continue;
+        }
+        // Removed in the library: it stays so.
+        if (parsed(*row).value(QLatin1String("removed")).toBool())
+            continue;
+        if (removedThere) {
+            steps.append(removedLike(*row, annotation.timestamp));
+            continue;
+        }
+        if (annotation.timestamp >= row->timestamp
+            && (content(annotation) != content(*row) || annotation.format.toUpper() != row->format.toUpper()))
+            steps.append(annotation);
+    }
+    if (set.present) {
+        const QSet<QString> present(set.present->cbegin(), set.present->cend());
+        for (const Annotation &row : rows) {
+            if (!seen.contains(row.id) && !present.contains(row.id) && !parsed(row).value(QLatin1String("removed")).toBool())
+                steps.append(removedLike(row, now));
+        }
+    }
+    for (Annotation &step : steps) {
+        step.userType = set.userType;
+        step.user = set.user;
+    }
+    return steps;
+}
+
+bool mergeDeviceAnnotations(SqliteDb &db, const DeviceAnnotations &set, double now, int *changed, QString *error)
+{
+    if (!bookExists(db, set.bookId))
+        return fail(error, QObject::tr("Book %1 is no longer in the library.").arg(set.bookId));
+    QList<Annotation> rows;
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT format, annot_type, annot_id, timestamp, annot_data, "
+                                                          "searchable_text FROM annotations WHERE book=? AND user_type=? "
+                                                          "AND user=? AND annot_type='highlight'"),
+                                           { set.bookId, set.userType, set.user })) {
+        rows.append({ row.value(0).toString(), row.value(1).toString(), row.value(2).toString(), row.value(3).toDouble(),
+                      row.value(4).toString().toUtf8(), row.value(5).toString(), set.userType, set.user });
+    }
+    for (const Annotation &step : mergeSteps(rows, set, now)) {
+        // Whatever format it was kept with: the book's to read now.
+        if (!db.run(QStringLiteral("DELETE FROM annotations WHERE book=? AND user_type=? AND user=? AND annot_type=? "
+                                   "AND annot_id=?"),
+                    { set.bookId, set.userType, set.user, step.type, step.id }, error)
+            || !setAnnotation(db, set.bookId, step, error))
+            return false;
+        ++*changed;
+    }
+    return true;
+}
+
+bool removeAnnotationUser(SqliteDb &db, const QString &userType, const QString &user, int *changed, QString *error)
+{
+    *changed += int(db.rows(QStringLiteral("SELECT count(*) FROM annotations WHERE user_type=? AND user=?"), { userType, user })
+                        .value(0)
+                        .value(0)
+                        .toLongLong());
+    return db.run(QStringLiteral("INSERT OR IGNORE INTO annotations_dirtied (book) "
+                                 "SELECT DISTINCT book FROM annotations WHERE user_type=? AND user=?"),
+                  { userType, user }, error)
+        && db.run(QStringLiteral("DELETE FROM annotations WHERE user_type=? AND user=?"), { userType, user }, error);
 }
 
 bool copyFormats(SqliteDb &db, FileTransaction &files, const FormatCopy &copy, const Context &context, Result *result,

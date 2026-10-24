@@ -28,6 +28,7 @@
 #include "book_list_model.h"
 #include "calibre_config.h"
 #include "calibre_job.h"
+#include "sqlite_db.h"
 #include "calibre_lock.h"
 #include "concurrency_guard.h"
 #include "cousoir_paths.h"
@@ -832,15 +833,21 @@ void DeviceLibrary::load(const QString &root)
     if (connected->kind == Kind::Kobo) {
         connected->loading = true;
         const Kobo::Device device = connected->kobo;
-        auto *watcher = new QFutureWatcher<std::pair<QList<DeviceBook>, QString>>(this);
+        struct Read
+        {
+            QList<DeviceBook> books;
+            QString error;
+            std::optional<QList<KoboHighlights::Book>> highlights;
+        };
+        auto *watcher = new QFutureWatcher<Read>(this);
         connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, root] {
             watcher->deleteLater();
             Connected *loaded = find(root);
             if (!loaded)
                 return;
-            const auto [books, error] = watcher->result();
-            loaded->books = books;
-            loaded->error = error;
+            const Read read = watcher->result();
+            loaded->books = read.books;
+            loaded->error = read.error;
             loaded->loading = false;
             loaded->freeBytes = QStorageInfo(root).bytesAvailable();
             if (m_library) {
@@ -849,11 +856,32 @@ void DeviceLibrary::load(const QString &root)
             }
             emit devicesChanged();
             emit rowsChanged();
+            if (read.highlights) {
+                KoboHighlights::Snapshot snapshot;
+                snapshot.device = deviceId(*loaded);
+                snapshot.name = loaded->name;
+                snapshot.source = QStringLiteral("usb");
+                snapshot.seen = QDateTime::currentDateTimeUtc();
+                snapshot.books = *read.highlights;
+                emit koboHighlightsRead(snapshot);
+            }
         });
         watcher->setFuture(QtConcurrent::run([device] {
+            Read read;
+            read.books = Kobo::books(device, &read.error);
+            // All its highlights, from the database it reads once more.
+            const QString database = QDir(device.root).filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
+            SqliteDb db;
+            QTemporaryDir copy;
             QString error;
-            QList<DeviceBook> books = Kobo::books(device, &error);
-            return std::pair{ books, error };
+            if (QFileInfo(database).isFile() && Kobo::openDatabase(database, &db, &copy, &error)) {
+                QList<KoboHighlights::Book> highlights = KoboHighlights::read(db, &error);
+                if (error.isEmpty()) {
+                    KoboHighlights::attach(&highlights, read.books);
+                    read.highlights = highlights;
+                }
+            }
+            return read;
         }));
         return;
     }

@@ -160,6 +160,20 @@ qt_add_library(cousoir_core STATIC
     sqlite_db.h
     annotation_search.cpp
     annotation_search.h
+    epub_cfi.cpp
+    epub_cfi.h
+    highlight_formats.cpp
+    highlight_formats.h
+    highlight_json.cpp
+    highlight_json.h
+    kobo_highlights.cpp
+    kobo_highlights.h
+    kobo_placement.cpp
+    kobo_placement.h
+    kobo_sync.cpp
+    kobo_sync.h
+    xml_tree.cpp
+    xml_tree.h
 )
 target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # Kobo's script, which a KEPUB carries.
@@ -188,6 +202,10 @@ qt_add_library(cousoir_models STATIC
     device_library.h
     highlight_browser.cpp
     highlight_browser.h
+    highlight_document.cpp
+    highlight_document.h
+    highlight_sync.cpp
+    highlight_sync.h
     metadata_downloader.cpp
     metadata_downloader.h
     omarchy_theme.cpp
@@ -270,6 +288,8 @@ set(COUSOIR_ICON_FILES
     assets/icons/layers.svg
     assets/icons/list.svg
     assets/icons/lock.svg
+    assets/icons/markdown.svg
+    assets/icons/more.svg
     assets/icons/panel-right.svg
     assets/icons/plus.svg
     assets/icons/refresh.svg
@@ -410,7 +430,8 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check metadata_web mobi_metadata epub_book calibre_fts calibre_notes annotation_search test_tool)
+                          kindle library_check metadata_web mobi_metadata epub_book epub_cfi calibre_fts calibre_notes annotation_search
+                          kobo_highlights kobo_placement test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)

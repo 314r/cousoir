@@ -22,6 +22,8 @@
 #include "book_library.h"
 #include "cousoir_paths.h"
 #include "epub_book.h"
+#include "highlight_json.h"
+#include "kobo_highlights.h"
 
 namespace {
 
@@ -119,7 +121,11 @@ void BookReader::setLibrary(BookLibrary *library)
 {
     if (m_library == library)
         return;
+    if (m_library)
+        disconnect(m_library, &BookLibrary::changeFinished, this, nullptr);
     m_library = library;
+    if (m_library)
+        connect(m_library, &BookLibrary::changeFinished, this, &BookReader::finishSave);
     emit libraryChanged();
 }
 
@@ -190,6 +196,7 @@ QVariantList BookReader::highlights() const
     QVariantList list;
     for (const QJsonObject &highlight : std::as_const(sorted)) {
         const QJsonObject style = highlight.value(QLatin1String("style")).toObject();
+        const QPair<QString, QString> owner = m_owners.value(highlight.value(QLatin1String("uuid")).toString());
         int spineIndex = highlight.value(QLatin1String("spine_index")).toInt(-1);
         const QString spineName = highlight.value(QLatin1String("spine_name")).toString();
         if (m_book && !spineName.isEmpty() && m_book->spineIndex(spineName) >= 0)
@@ -203,31 +210,12 @@ QVariantList BookReader::highlights() const
             { QStringLiteral("notes"), highlight.value(QLatin1String("notes")).toString() },
             { QStringLiteral("which"), style.value(QLatin1String("which")).toString(QStringLiteral("yellow")) },
             { QStringLiteral("timestamp"), highlight.value(QLatin1String("timestamp")).toString() },
+            { QStringLiteral("source"), owner.first == QLatin1String("kobo") ? QStringLiteral("kobo:") + owner.second : QString() },
+            { QStringLiteral("sourceName"), owner.first == QLatin1String("kobo") ? m_koboNames.value(owner.second) : QString() },
         });
     }
     return list;
 }
-
-namespace {
-
-// annot_db_data(): the text a search finds a highlight by, its notes after
-// a separator, NFKC.
-QString searchableText(const QJsonObject &highlight)
-{
-    QString text = highlight.value(QLatin1String("highlighted_text")).toString();
-    const QString notes = highlight.value(QLatin1String("notes")).toString();
-    if (!notes.isEmpty())
-        text += QStringLiteral("\n\x1f\n") + notes;
-    return text.normalized(QString::NormalizationForm_KC);
-}
-
-// The viewer's timestamps: ISO 8601 in UTC, with milliseconds and a Z.
-QString isoNow()
-{
-    return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
-}
-
-} // namespace
 
 QString BookReader::addHighlight(int spineIndex, const QString &start, const QString &end, const QString &text,
                                  const QString &which)
@@ -237,33 +225,13 @@ QString BookReader::addHighlight(int spineIndex, const QString &start, const QSt
     const QString uuid = QUuid::createUuid().toString(QUuid::Id128);
     // The table of contents entries the highlight is under, as the viewer
     // notes them.
-    QJsonArray family;
-    for (const EpubBook::TocEntry &entry : m_book->toc()) {
-        if (m_book->spineIndex(entry.name) >= 0 && m_book->spineIndex(entry.name) <= spineIndex) {
-            while (family.size() > entry.depth)
-                family.removeLast();
-            family.append(entry.title);
-        }
-    }
-    QJsonObject highlight{
-        { QStringLiteral("type"), QStringLiteral("highlight") },
-        { QStringLiteral("timestamp"), isoNow() },
-        { QStringLiteral("uuid"), uuid },
-        { QStringLiteral("highlighted_text"), text },
-        { QStringLiteral("start_cfi"), start },
-        { QStringLiteral("end_cfi"), end },
-        { QStringLiteral("style"), QJsonObject{ { QStringLiteral("type"), QStringLiteral("builtin") },
-                                                { QStringLiteral("kind"), QStringLiteral("color") },
-                                                { QStringLiteral("which"), which } } },
-        { QStringLiteral("spine_name"), m_book->spine().at(spineIndex).name },
-        { QStringLiteral("spine_index"), spineIndex },
-    };
-    if (!family.isEmpty())
-        highlight.insert(QStringLiteral("toc_family_titles"), family);
+    const QJsonObject highlight = HighlightJson::highlight(
+        uuid, HighlightJson::isoTimestamp(QDateTime::currentDateTimeUtc()), text, start, end, which,
+        m_book->spine().at(spineIndex).name, spineIndex, HighlightJson::tocFamily(*m_book, spineIndex));
     m_highlights.insert(uuid, highlight);
     emit highlightsChanged();
     queueAnnotation({ m_format, QStringLiteral("highlight"), uuid, double(QDateTime::currentMSecsSinceEpoch()) / 1000,
-                      QJsonDocument(highlight).toJson(QJsonDocument::Compact), searchableText(highlight) });
+                      QJsonDocument(highlight).toJson(QJsonDocument::Compact), HighlightJson::searchableText(highlight) });
     return uuid;
 }
 
@@ -271,17 +239,15 @@ void BookReader::removeHighlight(const QString &uuid)
 {
     if (!m_highlights.contains(uuid))
         return;
-    // remove_highlight() of the viewer: the id and type kept, removed.
-    const QJsonObject removed{
-        { QStringLiteral("type"), QStringLiteral("highlight") },
-        { QStringLiteral("timestamp"), isoNow() },
-        { QStringLiteral("uuid"), uuid },
-        { QStringLiteral("removed"), true },
-    };
+    // remove_highlight() of the viewer: the id and type kept, removed, as
+    // whose it was: a Kobo's stays out of the library when the Kobo syncs.
+    const QJsonObject removed = HighlightJson::removed(uuid, HighlightJson::isoTimestamp(QDateTime::currentDateTimeUtc()));
+    const QPair<QString, QString> owner = m_owners.value(uuid, { QStringLiteral("local"), QStringLiteral("viewer") });
     m_highlights.remove(uuid);
+    m_owners.remove(uuid);
     emit highlightsChanged();
     queueAnnotation({ m_format, QStringLiteral("highlight"), uuid, double(QDateTime::currentMSecsSinceEpoch()) / 1000,
-                      QJsonDocument(removed).toJson(QJsonDocument::Compact), QString() });
+                      QJsonDocument(removed).toJson(QJsonDocument::Compact), QString(), owner.first, owner.second });
 }
 
 void BookReader::queueAnnotation(const Annotation &annotation)
@@ -295,20 +261,43 @@ void BookReader::queueAnnotation(const Annotation &annotation)
 
 void BookReader::keepPending() const
 {
+    keepPending(m_uuid);
+}
+
+void BookReader::keepPending(const QString &uuid) const
+{
+    // Those on their way to the library, then those still to write, the
+    // last of each highlight.
+    QList<Annotation> waiting;
+    QList<int> ids = m_saving.keys();
+    std::sort(ids.begin(), ids.end());
+    for (const int id : std::as_const(ids)) {
+        if (m_saving.value(id).first == uuid)
+            waiting += m_saving.value(id).second;
+    }
+    if (uuid == m_uuid)
+        waiting += m_pending;
     QJsonArray list;
-    for (const Annotation &annotation : m_pending) {
-        list.append(QJsonObject{ { QStringLiteral("format"), annotation.format },
-                                 { QStringLiteral("type"), annotation.type },
-                                 { QStringLiteral("id"), annotation.id },
-                                 { QStringLiteral("timestamp"), annotation.timestamp },
-                                 { QStringLiteral("data"), QString::fromUtf8(annotation.data) },
-                                 { QStringLiteral("searchable"), annotation.searchable } });
+    QStringList listed;
+    for (qsizetype i = waiting.size() - 1; i >= 0; --i) {
+        const Annotation &annotation = waiting.at(i);
+        if (listed.contains(annotation.id))
+            continue;
+        listed.append(annotation.id);
+        list.prepend(QJsonObject{ { QStringLiteral("format"), annotation.format },
+                                  { QStringLiteral("type"), annotation.type },
+                                  { QStringLiteral("id"), annotation.id },
+                                  { QStringLiteral("timestamp"), annotation.timestamp },
+                                  { QStringLiteral("data"), QString::fromUtf8(annotation.data) },
+                                  { QStringLiteral("searchable"), annotation.searchable },
+                                  { QStringLiteral("user_type"), annotation.userType },
+                                  { QStringLiteral("user"), annotation.user } });
     }
     QJsonObject positions = readPositions();
     if (list.isEmpty())
-        positions.remove(QStringLiteral("pending:") + m_uuid);
+        positions.remove(QStringLiteral("pending:") + uuid);
     else
-        positions.insert(QStringLiteral("pending:") + m_uuid, list);
+        positions.insert(QStringLiteral("pending:") + uuid, list);
     writePositions(positions);
 }
 
@@ -324,11 +313,33 @@ void BookReader::flush(bool withPosition)
     if (!position && m_pending.isEmpty())
         return;
     // While the library cannot be written, the highlights wait with the
-    // positions, for the next time the book is read.
-    if (!m_library->saveReading(m_bookId, position, m_pending))
+    // positions, for the next time the book is read; and while they go, until
+    // they are in.
+    const int id = m_library->saveReading(m_bookId, position, m_pending);
+    if (id < 0)
         return;
+    if (id > 0)
+        m_saving.insert(id, { m_uuid, m_pending });
     m_pending.clear();
-    keepPending();
+}
+
+void BookReader::finishSave(int id, bool saved)
+{
+    if (!m_saving.contains(id))
+        return;
+    const auto [uuid, written] = m_saving.take(id);
+    // Not in: back with those to write, unless changed since, to write
+    // again.
+    if (!saved && uuid == m_uuid && m_book) {
+        for (const Annotation &annotation : written) {
+            if (std::none_of(m_pending.cbegin(), m_pending.cend(),
+                             [&annotation](const Annotation &pending) { return pending.id == annotation.id; }))
+                m_pending.append(annotation);
+        }
+        m_flushTimer.start();
+    }
+    // In, or waiting again: kept aside as they are now, the book open or not.
+    keepPending(uuid);
 }
 
 QString BookReader::open(int bookId)
@@ -382,12 +393,19 @@ QString BookReader::open(int bookId)
                     { QStringLiteral("device"), position.device } };
     }
     m_lastCfi.clear();
-    // Calibre's viewer's highlights, and those made here before.
+    // Calibre's viewer's highlights, those made here before, and the Kobos'.
     m_highlights.clear();
+    m_owners.clear();
     for (const Annotation &annotation : m_library->annotations(bookId, m_format)) {
         const QJsonObject highlight = QJsonDocument::fromJson(annotation.data).object();
-        if (annotation.type == QLatin1String("highlight") && !highlight.value(QLatin1String("removed")).toBool())
-            m_highlights.insert(annotation.id, highlight);
+        if (annotation.type != QLatin1String("highlight") || highlight.value(QLatin1String("removed")).toBool())
+            continue;
+        m_highlights.insert(annotation.id, highlight);
+        m_owners.insert(annotation.id, { annotation.userType, annotation.user });
+        if (annotation.userType == QLatin1String("kobo") && !m_koboNames.contains(annotation.user)) {
+            const std::optional<KoboHighlights::Snapshot> kobo = KoboHighlights::readSnapshot(annotation.user);
+            m_koboNames.insert(annotation.user, kobo && !kobo->name.isEmpty() ? kobo->name : annotation.user);
+        }
     }
     // Those made while the library could not be written, still to write.
     m_pending.clear();
@@ -398,15 +416,20 @@ QString BookReader::open(int bookId)
                                      kept.value(QLatin1String("id")).toString(),
                                      kept.value(QLatin1String("timestamp")).toDouble(),
                                      kept.value(QLatin1String("data")).toString().toUtf8(),
-                                     kept.value(QLatin1String("searchable")).toString() };
+                                     kept.value(QLatin1String("searchable")).toString(),
+                                     kept.value(QLatin1String("user_type")).toString(QStringLiteral("local")),
+                                     kept.value(QLatin1String("user")).toString(QStringLiteral("viewer")) };
         if (annotation.format != m_format)
             continue;
         m_pending.append(annotation);
         const QJsonObject highlight = QJsonDocument::fromJson(annotation.data).object();
-        if (highlight.value(QLatin1String("removed")).toBool())
+        if (highlight.value(QLatin1String("removed")).toBool()) {
             m_highlights.remove(annotation.id);
-        else
+            m_owners.remove(annotation.id);
+        } else {
             m_highlights.insert(annotation.id, highlight);
+            m_owners.insert(annotation.id, { annotation.userType, annotation.user });
+        }
     }
     if (!m_pending.isEmpty())
         m_flushTimer.start();

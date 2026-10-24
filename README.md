@@ -72,14 +72,19 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   table of contents, and PDFs. Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
   and shows the other's highlights.
-- 🔎 **All your highlights in one place.** Every highlight and bookmark
-  from Cousoir's reader and Calibre's viewer, by book, searched as
-  Calibre searches them, opened in the reader where they are, exported
-  as Markdown.
-- 🖍️ **Your reading, back from the Kobo and the Kindle.** How far you got in
-  each book on a Kobo, and your highlights and notes, by chapter on a Kobo
-  and from "My Clippings" on a Kindle, copied or saved as Markdown, still
-  there once the reader is unplugged.
+- 🔎 **All your highlights in one place.** The books you highlighted in
+  Cousoir's reader, Calibre's viewer or on your Kobo, each one's highlights
+  and notes typeset as a page by chapter, as kbextract2 shows them, and
+  copied as Markdown, Obsidian Markdown or plain text.
+- 🖍️ **Your Kobo's highlights, at their place in your books.** Plug it in:
+  its highlights and notes go into the library, each where you made it in
+  the book, for Calibre's search and Cousoir's reader, and those you delete
+  on the Kobo go too. A copy of its database will do, and the books the
+  library hasn't still show.
+- 📈 **Your reading, back from the Kobo and the Kindle.** How far you got in
+  each book on a Kobo, and a Kindle's highlights from "My Clippings", by
+  book, copied or saved as Markdown, still there once the reader is
+  unplugged.
 - 🛡️ **Safe, shared or not.** Cousoir writes only when nothing else can:
   Calibre closed and, for a library in Dropbox, Syncthing, Nextcloud or on a
   network folder, no other computer editing.
@@ -249,7 +254,8 @@ Python to C++:
 - 🔍 **the search language, the template language and the sort order**, so
   that a search, a composite column or a sorted list come out as in Calibre;
 - 🖍️ **the reading positions and highlights** of Calibre's viewer, and the
-  notes Calibre keeps on authors, series, tags and publishers;
+  CFIs it places them by, and the notes Calibre keeps on authors, series,
+  tags and publishers;
 - 📲 **how books are sent to a Kobo or a Kindle**, found there and matched
   with the library, from Calibre's device drivers, and how a KEPUB is made,
   from its kepubify. The Kobo driver is the work of Timothy Legge, Kovid
@@ -269,7 +275,9 @@ Thanks also to Hiroshi Miura and John Schember for Unihandecode, and to Sean
 M. Burke for Text::Unidecode, which it grew from; to Grant Drake, whose Find
 Duplicates plugin gave the Check section its idea; to
 [kbextract](https://github.com/314r/kbextract) and JolieBulle, where Cousoir's
-structure, theming and Settings window come from; to bjarneo's
+structure, theming and Settings window come from; to
+[kbextract2](https://github.com/314r/kbextract2), whose way with a Kobo's
+highlights Cousoir follows; to bjarneo's
 [omadji](https://github.com/bjarneo/omadji), where its Omarchy theming comes
 from; to [Omarchy](https://omarchy.org) for the look; to [Lucide](https://lucide.dev)
 for a few icons; and to Qt, SQLite, libzip, ICU, Snowball, xxHash, libmtp and
@@ -295,9 +303,9 @@ for every result.
 Cousoir is free software, released under the
 [GNU General Public License, version 3](LICENSE), because it contains code
 ported from Calibre, which is GPL v3. The theme files that come from
-kbextract, JolieBulle and omadji also keep their
-[MIT notice](LICENSES/MIT.txt), and the icons adapted from Lucide their
-[ISC notice](LICENSES/ISC-lucide.txt).
+kbextract, JolieBulle and omadji, and the Kobo highlights code that comes
+from kbextract2, also keep their [MIT notice](LICENSES/MIT.txt), and the
+icons adapted from Lucide their [ISC notice](LICENSES/ISC-lucide.txt).
 
 ---
 

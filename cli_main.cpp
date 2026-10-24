@@ -34,7 +34,11 @@
 #include "kindle.h"
 #include "kindle_send.h"
 #include "kobo.h"
+#include "kobo_highlights.h"
+#include "kobo_placement.h"
+#include "kobo_sync.h"
 #include "kobo_send.h"
+#include "sqlite_db.h"
 #include "library_check.h"
 #include "metadata_download.h"
 #include "mtp.h"
@@ -573,6 +577,111 @@ int device(const QString &libraryPath, const QString &spec)
     return 0;
 }
 
+// A Kobo's highlights and notes, by the folder it is mounted on, all of
+// them, or of a Kobo's database file, which may be old: whose they are, its
+// serial number, else a name.
+bool readKobo(const QString &spec, KoboHighlights::Snapshot *snapshot)
+{
+    const bool folder = QFileInfo(spec).isDir();
+    const QString database = folder ? QDir(spec).filePath(QStringLiteral(".kobo/KoboReader.sqlite")) : spec;
+    SqliteDb db;
+    QTemporaryDir copy;
+    QString error;
+    if (!QFileInfo(database).isFile()) {
+        err() << QStringLiteral("No Kobo database at %1.").arg(database) << Qt::endl;
+        return false;
+    }
+    if (!Kobo::openDatabase(database, &db, &copy, &error)) {
+        err() << error << Qt::endl;
+        return false;
+    }
+    snapshot->books = KoboHighlights::read(db, &error);
+    if (!error.isEmpty()) {
+        err() << error << Qt::endl;
+        return false;
+    }
+    const KoboHighlights::Identity identity = KoboHighlights::identify(database);
+    snapshot->name = identity.name;
+    snapshot->source = folder ? QStringLiteral("usb") : QStringLiteral("file");
+    snapshot->seen = QDateTime::currentDateTimeUtc();
+    if (folder) {
+        const Kobo::Device kobo = Kobo::describe(spec, {});
+        KoboHighlights::attach(&snapshot->books, Kobo::books(kobo, &error));
+        snapshot->name = kobo.name;
+    }
+    snapshot->device = identity.serial.isEmpty() ? snapshot->name : identity.serial;
+    return true;
+}
+
+// The highlights and notes of a Kobo, by the folder it is mounted on, or of
+// a Kobo's database file: each book, the library's book it is, and each
+// highlight as the Kobo keeps it and where it is in the library's copy.
+// Neither is written.
+int koboHighlights(const QString &libraryPath, const QString &spec)
+{
+    LibraryData data;
+    KoboHighlights::Snapshot snapshot;
+    if (!load(libraryPath, &data) || !readKobo(spec, &snapshot))
+        return 1;
+    const QList<KoboHighlights::Book> &books = snapshot.books;
+    const QList<int> ids = KoboHighlights::match(books, data);
+    QJsonArray list = KoboHighlights::toJson(books);
+    QHash<QString, int> counts;
+    for (qsizetype i = 0; i < list.size(); ++i) {
+        QJsonObject book = list.at(i).toObject();
+        book.insert(QStringLiteral("book"), ids.at(i));
+        const Book *libraryBook = data.book(ids.at(i));
+        const QString format = libraryBook ? KoboPlacement::targetFormat(*libraryBook) : QString();
+        std::unique_ptr<KoboPlacement::PlacementBook> placing;
+        QString reason = !libraryBook ? QStringLiteral("not in the library")
+            : format.isEmpty()        ? QStringLiteral("no EPUB in the library")
+                                      : QString();
+        if (reason.isEmpty()) {
+            for (const BookFormat &file : libraryBook->formats) {
+                if (file.format == format)
+                    placing = KoboPlacement::PlacementBook::open(file.file, format, &reason);
+            }
+        }
+        book.insert(QStringLiteral("library_format"), format);
+        QJsonArray highlights = book.value(QLatin1String("highlights")).toArray();
+        for (qsizetype h = 0; h < highlights.size(); ++h) {
+            const KoboHighlights::Highlight &highlight = books.at(i).highlights.at(h);
+            QJsonObject entry = highlights.at(h).toObject();
+            if (!libraryBook) {
+                ++counts[QStringLiteral("not_in_library")];
+            } else if (!placing) {
+                entry.insert(QStringLiteral("placement"), QJsonObject{ { QStringLiteral("method"), QStringLiteral("none") },
+                                                                       { QStringLiteral("reason"), reason } });
+                ++counts[QStringLiteral("none")];
+            } else {
+                const KoboPlacement::Placement placement = placing->place(highlight);
+                entry.insert(QStringLiteral("placement"),
+                             QJsonObject{ { QStringLiteral("method"), KoboPlacement::methodName(placement.method) },
+                                          { QStringLiteral("spine_index"), placement.spineIndex },
+                                          { QStringLiteral("spine_name"), placement.spineName },
+                                          { QStringLiteral("start_cfi"), placement.startCfi },
+                                          { QStringLiteral("end_cfi"), placement.endCfi },
+                                          { QStringLiteral("toc_family_titles"), QJsonArray::fromStringList(placement.tocFamily) },
+                                          { QStringLiteral("reason"), placement.reason } });
+                ++counts[KoboPlacement::methodName(placement.method)];
+            }
+            highlights[h] = entry;
+        }
+        book.insert(QStringLiteral("highlights"), highlights);
+        list[i] = book;
+    }
+    QJsonObject summary;
+    for (const QString &key : { QStringLiteral("spans"), QStringLiteral("text"), QStringLiteral("book"), QStringLiteral("none"),
+                                QStringLiteral("not_in_library") })
+        summary.insert(key, counts.value(key));
+    out() << QJsonDocument(QJsonObject{ { QStringLiteral("device"), snapshot.device },
+                                         { QStringLiteral("name"), snapshot.name },
+                                         { QStringLiteral("summary"), summary },
+                                         { QStringLiteral("books"), list } })
+                 .toJson();
+    return 0;
+}
+
 // What each template of a JSON array makes of each book, as
 // tools/oracle/template_oracle.py prints Calibre's: by book id, the text or
 // {"error": message}.
@@ -792,6 +901,11 @@ int commit(const QString &libraryPath, const CalibreConfig &config, CommitEngine
 //                                               removes it
 //   { "send": { "books": [1, 2], "device": "/run/media/…/KOBOeReader" } }
 //   { "removeFromDevice": { "device": …, "lpaths": ["Vian, Boris/…"] } }
+//   { "syncHighlights": { "device": "/run/media/…/KOBOeReader" } }   a
+//                                               Kobo's highlights merged
+//                                               into the library's, as its
+//                                               own user's; a database file
+//                                               adds and updates only
 // A device is a Kobo's folder, "mtp" or "mtp:SERIAL" for a Kindle, or
 // "mtpdir:FOLDER" for a folder that stands for one.
 // Files are relative to the JSON file. Edits apply first, then the other
@@ -827,6 +941,17 @@ int apply(const QString &libraryPath, const QString &opsPath, bool force)
             continue;
         }
         libraryChanges = true;
+        if (op.contains(QLatin1String("syncHighlights"))) {
+            KoboSync::Input input;
+            if (!readKobo(deviceSpec(base, op.value(QLatin1String("syncHighlights")).toObject().value(QLatin1String("device")).toString()),
+                          &input.snapshot)
+                || !load(libraryPath, &input.data))
+                return 1;
+            // The library's own database read as it is, nothing kept aside.
+            input.snapshotDb = QDir(libraryPath).filePath(QStringLiteral("metadata.db"));
+            request.deviceAnnotations += KoboSync::plan(input).changes;
+            continue;
+        }
         if (op.contains(QLatin1String("copyFormats"))) {
             const QJsonObject copy = op.value(QLatin1String("copyFormats")).toObject();
             request.formatCopies.append({ copy.value(QLatin1String("from")).toInt(), copy.value(QLatin1String("to")).toInt() });
@@ -1077,7 +1202,10 @@ int main(int argc, char *argv[])
         "          book of the id given, and what it would change; --covers adds the\n"
         "          covers found. Without Calibre, Open Library is asked.\n"
         "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
-        "          kepubify BOOK.epub BOOK.kepub\n\n"
+        "          kepubify BOOK.epub BOOK.kepub\n"
+        "  kobo-highlights  Print the highlights and notes of a Kobo, by the folder it\n"
+        "          is mounted on, or of a KoboReader.sqlite file, with the library's\n"
+        "          book each is.\n\n"
         "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
         "Goyal and the Calibre contributors, https://calibre-ebook.com. GPL v3."));
     parser.addHelpOption();
@@ -1097,7 +1225,8 @@ int main(int argc, char *argv[])
     const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
     parser.addOption(coversOption);
     parser.addPositionalArgument(QStringLiteral("command"),
-                                 QStringLiteral("list, search, doctor, apply, read, device, template, download or kepubify"));
+                                 QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify or "
+                                                "kobo-highlights"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1128,7 +1257,8 @@ int main(int argc, char *argv[])
         return 0;
     }
     const bool takesOne = arguments.value(0) == QLatin1String("apply") || arguments.value(0) == QLatin1String("device")
-        || arguments.value(0) == QLatin1String("template") || arguments.value(0) == QLatin1String("download");
+        || arguments.value(0) == QLatin1String("template") || arguments.value(0) == QLatin1String("download")
+        || arguments.value(0) == QLatin1String("kobo-highlights");
     if (arguments.isEmpty() || arguments.size() > 2 || (arguments.size() == 2) != takesOne)
         parser.showHelp(2);
     const QString libraryPath = parser.isSet(libraryOption) ? parser.value(libraryOption)
@@ -1149,6 +1279,8 @@ int main(int argc, char *argv[])
         return templates(libraryPath, arguments.at(1));
     if (arguments.first() == QLatin1String("download"))
         return download(libraryPath, arguments.at(1), parser.isSet(coversOption));
+    if (arguments.first() == QLatin1String("kobo-highlights"))
+        return koboHighlights(libraryPath, arguments.at(1));
     err() << QStringLiteral("Unknown command “%1”.").arg(arguments.first()) << Qt::endl;
     return 2;
 }

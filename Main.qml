@@ -148,11 +148,9 @@ ThemedWindow {
     function focusSearch() {
         if (session.bookOpen)
             closeBook()
-        // The highlights have a search of their own.
-        if (highlightsShown) {
-            highlightsPage.focusSearch()
+        // The highlights have no search, as in kbextract2.
+        if (highlightsShown)
             return
-        }
         searchField.forceActiveFocus(Qt.ShortcutFocusReason)
         searchField.selectAll()
     }
@@ -414,20 +412,6 @@ ThemedWindow {
             showNotice(qsTr("The reader cannot be opened."))
     }
 
-    // The book read in Cousoir's reader where a highlight is.
-    function readAt(bookId, spineIndex, cfi) {
-        if (!library.readerAvailable || library.readableFormat(bookId) !== "EPUB") {
-            openBook(bookId)
-            return
-        }
-        if (!readerLoader.item)
-            readerLoader.setSource("ReaderWindow.qml", { library: window.library })
-        if (readerLoader.item)
-            readerLoader.item.openAt(bookId, spineIndex, cfi)
-        else
-            showNotice(qsTr("The reader cannot be opened."))
-    }
-
     function toggleGrid() {
         layoutSettings.gridMode = !layoutSettings.gridMode
     }
@@ -480,6 +464,16 @@ ThemedWindow {
             add("theme:" + mode, titles[mode], "", "theme-" + mode, true)
         }
         add("backups", qsTr("Show the backups of the library"), "", "folder", library.loaded)
+        add("syncHighlights", qsTr("Sync the Kobos' highlights"), "", "highlighter", library.loaded)
+        add("importHighlights", qsTr("Import a Kobo's highlights…"), "", "highlighter", library.loaded)
+        for (const format of ["markdown", "obsidian", "plain"])
+            add("copyHighlights:" + format, qsTr("Copy the book's highlights as %1").arg(highlightsPage.formatNames[format]),
+                format === "markdown" ? "Ctrl+Shift+C" : "", "highlighter", highlightsShown && highlightsPage.bookShown)
+        add("markdownHighlights", highlightsPage.markdownShown ? qsTr("Show the highlights") : qsTr("Show the highlights as Markdown"),
+            "Ctrl+U", "highlighter", highlightsShown)
+        for (const source of session.highlightSync.sources)
+            add("removeHighlights:" + source.device, qsTr("Take %1's highlights out of the library").arg(source.name), "",
+                "trash", !source.off && library.writable)
         return commands
     }
 
@@ -534,6 +528,18 @@ ThemedWindow {
             setThemeMode(hit.key.slice(6))
         } else if (hit.key === "backups") {
             library.openBackupFolder()
+        } else if (hit.key === "syncHighlights") {
+            highlightsPage.syncNow()
+        } else if (hit.key === "importHighlights") {
+            section = "highlights"
+            highlightsPage.importDatabase()
+        } else if (hit.key.startsWith("copyHighlights:")) {
+            highlightsPage.copyFormatted(hit.key.slice(15))
+        } else if (hit.key === "markdownHighlights") {
+            highlightsPage.toggleMarkdown()
+        } else if (hit.key.startsWith("removeHighlights:")) {
+            section = "highlights"
+            highlightsPage.askRemoval(hit.key.slice(17))
         }
     }
 
@@ -990,6 +996,19 @@ ThemedWindow {
         sequence: "Ctrl+G"
         enabled: window.booksShown
         onActivated: window.toggleGrid()
+    }
+
+    // The highlights as kbextract2 copies them, and their Markdown shown.
+    Shortcut {
+        sequence: "Ctrl+Shift+C"
+        enabled: window.highlightsShown && highlightsPage.bookShown
+        onActivated: highlightsPage.copyFormatted("markdown")
+    }
+
+    Shortcut {
+        sequence: "Ctrl+U"
+        enabled: window.highlightsShown
+        onActivated: highlightsPage.toggleMarkdown()
     }
 
     Shortcut {
@@ -1727,8 +1746,7 @@ ThemedWindow {
                         id: highlightsPage
                         objectName: "highlightsPage"
                         library: window.library
-                        onReadRequested: function(bookId, spineIndex, cfi) { window.readAt(bookId, spineIndex, cfi) }
-                        onBookRequested: function(bookId) { window.openBook(bookId) }
+                        sync: session.highlightSync
                         onFailed: function(message) { window.showNotice(message) }
                         onNoticed: function(message) { window.showNotice(message, false) }
                     }

@@ -162,10 +162,17 @@ QList<Hit> find(SqliteDb &db, const Query &query, QString *error)
     if (text.isEmpty()) {
         // all_annotations(): the newest first.
         sql = QStringLiteral("SELECT id, book, format, user_type, user, annot_data FROM annotations");
+        QStringList clauses;
+        if (!query.userType.isEmpty()) {
+            clauses.append(QStringLiteral(" user_type = ? AND user = ?"));
+            values << query.userType << query.user;
+        }
         if (!query.type.isEmpty()) {
-            sql += QStringLiteral(" WHERE  annot_type = ? ");
+            clauses.append(QStringLiteral(" annot_type = ? "));
             values.append(query.type);
         }
+        if (!clauses.isEmpty())
+            sql += QStringLiteral(" WHERE ") + clauses.join(QStringLiteral(" AND "));
         sql += QStringLiteral(" ORDER BY timestamp DESC ");
     } else {
         // search_annotations(): the best first, a snippet around the words
@@ -176,6 +183,10 @@ QList<Hit> find(SqliteDb &db, const Query &query, QString *error)
                              "JOIN %1 ON annotations.id = %1.rowid WHERE %1 MATCH ?")
                   .arg(table);
         values = { QString(markStart), QString(markEnd), text };
+        if (!query.userType.isEmpty()) {
+            sql += QStringLiteral(" AND annotations.user_type = ? AND annotations.user = ?");
+            values << query.userType << query.user;
+        }
         if (!query.type.isEmpty()) {
             sql += QStringLiteral(" AND annotations.annot_type = ? ");
             values.append(query.type);
@@ -209,7 +220,7 @@ QList<Hit> find(SqliteDb &db, const Query &query, QString *error)
                 hit.text = annotation->text(QStringLiteral("highlighted_text"));
         }
         hits.append(hit);
-        if (text.isEmpty() && hits.size() >= browseLimit)
+        if (text.isEmpty() && !query.all && hits.size() >= browseLimit)
             break;
     }
     if (!statement.error().isEmpty()) {
@@ -286,6 +297,14 @@ int count(SqliteDb &db)
             ++total;
     }
     return total;
+}
+
+QList<QPair<QString, QString>> users(SqliteDb &db)
+{
+    QList<QPair<QString, QString>> found;
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT DISTINCT user_type, user FROM annotations")))
+        found.append({ row.value(0).toString(), row.value(1).toString() });
+    return found;
 }
 
 } // namespace AnnotationSearch

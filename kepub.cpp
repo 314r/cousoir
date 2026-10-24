@@ -19,22 +19,19 @@
 #include <QBuffer>
 #include <QRegularExpression>
 #include <QSet>
-#include <QStringDecoder>
 #include <QTextBoundaryFinder>
 #include <QUrl>
-#include <QXmlStreamReader>
-#include <QXmlStreamWriter>
 
-#include <functional>
 #include <memory>
-#include <vector>
 
 #include <zip.h>
 
 #include "book.h"
-#include "calibre_text.h"
+#include "xml_tree.h"
 
 namespace Kepub {
+
+using namespace XmlTree;
 
 namespace {
 
@@ -48,277 +45,6 @@ const QString innerDivId = QStringLiteral("book-inner");
 const QString koboSpanClass = QStringLiteral("koboSpan");
 const QString dummyTitlePage = QStringLiteral("kobo-title-page-generated-by-calibre");
 const QString dummyCoverImage = QStringLiteral("kobo-cover-image-generated-by-calibre");
-
-// --- A small XML tree ------------------------------------------------------
-
-struct Node
-{
-    enum class Kind { Element, Text, Comment, Instruction, Cdata, Dtd };
-    Kind kind = Kind::Element;
-    // As written: "span", "h:span", "xml:lang".
-    QString qualifiedName;
-    QString localName;
-    QString namespaceUri;
-    QXmlStreamAttributes attributes;
-    QXmlStreamNamespaceDeclarations namespaces;
-    // Text, comment, CDATA, DTD, or a processing instruction's data.
-    QString text;
-    QString target;
-    std::vector<std::unique_ptr<Node>> children;
-    Node *parent = nullptr;
-
-    QString attribute(const QString &name) const
-    {
-        for (const QXmlStreamAttribute &attribute : attributes) {
-            if (attribute.qualifiedName() == name)
-                return attribute.value().toString();
-        }
-        return {};
-    }
-    void setAttribute(const QString &name, const QString &value)
-    {
-        for (QXmlStreamAttribute &attribute : attributes) {
-            if (attribute.qualifiedName() == name) {
-                attribute = QXmlStreamAttribute(name, value);
-                return;
-            }
-        }
-        attributes.append(name, value);
-    }
-    void removeAttribute(const QString &name)
-    {
-        attributes.removeIf([&name](const QXmlStreamAttribute &attribute) { return attribute.qualifiedName() == name; });
-    }
-    bool isElement(const char *name) const
-    {
-        return kind == Kind::Element && localName.compare(QLatin1String(name), Qt::CaseInsensitive) == 0;
-    }
-    QString prefix() const
-    {
-        const qsizetype colon = qualifiedName.indexOf(u':');
-        return colon < 0 ? QString() : qualifiedName.left(colon + 1);
-    }
-    Node *append(std::unique_ptr<Node> child)
-    {
-        child->parent = this;
-        children.push_back(std::move(child));
-        return children.back().get();
-    }
-    Node *insert(size_t at, std::unique_ptr<Node> child)
-    {
-        child->parent = this;
-        return children.insert(children.begin() + qsizetype(at), std::move(child))->get();
-    }
-    size_t indexOf(const Node *child) const
-    {
-        for (size_t i = 0; i < children.size(); ++i) {
-            if (children[i].get() == child)
-                return i;
-        }
-        return children.size();
-    }
-    std::unique_ptr<Node> take(size_t at)
-    {
-        std::unique_ptr<Node> child = std::move(children[at]);
-        children.erase(children.begin() + qsizetype(at));
-        child->parent = nullptr;
-        return child;
-    }
-};
-
-std::unique_ptr<Node> element(const Node &like, const QString &localName)
-{
-    auto node = std::make_unique<Node>();
-    node->localName = localName;
-    node->qualifiedName = like.prefix() + localName;
-    node->namespaceUri = like.namespaceUri;
-    return node;
-}
-
-std::unique_ptr<Node> textNode(const QString &text)
-{
-    auto node = std::make_unique<Node>();
-    node->kind = Node::Kind::Text;
-    node->text = text;
-    return node;
-}
-
-void collect(Node *node, const std::function<bool(const Node &)> &matches, QList<Node *> *found)
-{
-    if (matches(*node))
-        found->append(node);
-    for (const auto &child : node->children)
-        collect(child.get(), matches, found);
-}
-
-QList<Node *> findAll(Node *root, const std::function<bool(const Node &)> &matches)
-{
-    QList<Node *> found;
-    collect(root, matches, &found);
-    return found;
-}
-
-// The text of a page as XML: its encoding by its byte order mark or UTF-8,
-// HTML's named entities, which XML lacks, as character references.
-QString xmlText(const QByteArray &data)
-{
-    QStringDecoder decoder = QStringDecoder::decoderForHtml(data);
-    QString text = decoder.isValid() ? decoder.decode(data) : QString::fromUtf8(data);
-    static const QRegularExpression entity(QStringLiteral("&([A-Za-z][A-Za-z0-9]*);"));
-    static const QSet<QString> xmlEntities{ QStringLiteral("amp"), QStringLiteral("lt"), QStringLiteral("gt"),
-                                            QStringLiteral("quot"), QStringLiteral("apos") };
-    QString result;
-    qsizetype last = 0;
-    QRegularExpressionMatchIterator matches = entity.globalMatch(text);
-    while (matches.hasNext()) {
-        const QRegularExpressionMatch match = matches.next();
-        if (xmlEntities.contains(match.captured(1)))
-            continue;
-        const QString decoded = CalibreText::replaceEntities(match.captured());
-        if (decoded == match.captured())
-            continue;
-        result += QStringView(text).mid(last, match.capturedStart() - last);
-        for (const char32_t code : decoded.toUcs4())
-            result += QStringLiteral("&#%1;").arg(uint(code));
-        last = match.capturedEnd();
-    }
-    return last == 0 ? text : result + QStringView(text).mid(last);
-}
-
-// A document: its top level nodes under a root that is no element of it.
-std::unique_ptr<Node> parse(const QByteArray &data)
-{
-    QXmlStreamReader reader(xmlText(data));
-    auto root = std::make_unique<Node>();
-    Node *current = root.get();
-    while (!reader.atEnd()) {
-        switch (reader.readNext()) {
-        case QXmlStreamReader::DTD: {
-            auto node = std::make_unique<Node>();
-            node->kind = Node::Kind::Dtd;
-            node->text = reader.text().toString();
-            current->append(std::move(node));
-            break;
-        }
-        case QXmlStreamReader::StartElement: {
-            auto node = std::make_unique<Node>();
-            node->qualifiedName = reader.qualifiedName().toString();
-            node->localName = reader.name().toString();
-            node->namespaceUri = reader.namespaceUri().toString();
-            node->namespaces = reader.namespaceDeclarations();
-            // The declarations are written back as they were.
-            for (const QXmlStreamAttribute &attribute : reader.attributes())
-                node->attributes.append(attribute.qualifiedName().toString(), attribute.value().toString());
-            current = current->append(std::move(node));
-            break;
-        }
-        case QXmlStreamReader::EndElement:
-            current = current->parent;
-            break;
-        case QXmlStreamReader::Characters: {
-            const Node::Kind kind = reader.isCDATA() ? Node::Kind::Cdata : Node::Kind::Text;
-            if (kind == Node::Kind::Text && !current->children.empty() && current->children.back()->kind == Node::Kind::Text) {
-                current->children.back()->text += reader.text();
-            } else {
-                auto node = std::make_unique<Node>();
-                node->kind = kind;
-                node->text = reader.text().toString();
-                current->append(std::move(node));
-            }
-            break;
-        }
-        case QXmlStreamReader::Comment: {
-            auto node = std::make_unique<Node>();
-            node->kind = Node::Kind::Comment;
-            node->text = reader.text().toString();
-            current->append(std::move(node));
-            break;
-        }
-        case QXmlStreamReader::ProcessingInstruction: {
-            auto node = std::make_unique<Node>();
-            node->kind = Node::Kind::Instruction;
-            node->target = reader.processingInstructionTarget().toString();
-            node->text = reader.processingInstructionData().toString();
-            current->append(std::move(node));
-            break;
-        }
-        default:
-            break;
-        }
-    }
-    if (reader.hasError())
-        return nullptr;
-    return root;
-}
-
-void write(QXmlStreamWriter &writer, const Node &node)
-{
-    switch (node.kind) {
-    case Node::Kind::Element:
-        writer.writeStartElement(node.qualifiedName);
-        for (const QXmlStreamNamespaceDeclaration &declaration : node.namespaces) {
-            const QString prefix = declaration.prefix().toString();
-            writer.writeAttribute(prefix.isEmpty() ? QStringLiteral("xmlns") : QStringLiteral("xmlns:") + prefix,
-                                  declaration.namespaceUri().toString());
-        }
-        for (const QXmlStreamAttribute &attribute : node.attributes)
-            writer.writeAttribute(attribute.qualifiedName().toString(), attribute.value().toString());
-        for (const auto &child : node.children)
-            write(writer, *child);
-        writer.writeEndElement();
-        break;
-    case Node::Kind::Text:
-        writer.writeCharacters(node.text);
-        break;
-    case Node::Kind::Comment:
-        writer.writeComment(node.text);
-        break;
-    case Node::Kind::Instruction:
-        writer.writeProcessingInstruction(node.target, node.text);
-        break;
-    case Node::Kind::Cdata:
-        writer.writeCDATA(node.text);
-        break;
-    case Node::Kind::Dtd:
-        writer.writeDTD(node.text);
-        break;
-    }
-}
-
-QByteArray serialize(const Node &root)
-{
-    // The document's element alone, as lxml writes it for Calibre: no
-    // DOCTYPE, a no-break space as a reference.
-    QByteArray body;
-    {
-        QXmlStreamWriter writer(&body);
-        for (const auto &child : root.children) {
-            if (child->kind == Node::Kind::Element)
-                write(writer, *child);
-        }
-    }
-    body.replace("\xc2\xa0", "&#160;");
-    // Calibre's declaration; the writer opens its array afresh.
-    return QByteArrayLiteral("<?xml version='1.0' encoding='utf-8'?>\n") + body;
-}
-
-Node *documentElement(Node *root)
-{
-    for (const auto &child : root->children) {
-        if (child->kind == Node::Kind::Element)
-            return child.get();
-    }
-    return nullptr;
-}
-
-Node *childElement(Node *parent, const char *name)
-{
-    for (const auto &child : parent->children) {
-        if (child->isElement(name))
-            return child.get();
-    }
-    return nullptr;
-}
 
 // --- Kobo's markup of a page ------------------------------------------------
 
@@ -335,6 +61,7 @@ void unwrap(Node *node)
     for (size_t i = 1; i < parent->children.size();) {
         if (parent->children[i]->kind == Node::Kind::Text && parent->children[i - 1]->kind == Node::Kind::Text) {
             parent->children[i - 1]->text += parent->children[i]->text;
+            parent->children[i - 1]->origin = nullptr;
             parent->take(i);
         } else {
             ++i;
@@ -499,19 +226,26 @@ private:
             }
             return at;
         }
-        parent->take(at);
+        const std::unique_ptr<Node> taken = parent->take(at);
+        // Each piece keeps where it was in the text it was cut from.
+        const auto piece = [&taken](qsizetype start, qsizetype length) {
+            auto node = textNode(taken->text.mid(start, length));
+            node->origin = taken->origin;
+            node->originOffset = taken->originOffset + start;
+            return node;
+        };
         QTextBoundaryFinder finder(QTextBoundaryFinder::Sentence, text);
         qsizetype start = 0;
         size_t to = at;
         for (qsizetype end = finder.toNextBoundary(); end > 0; end = finder.toNextBoundary()) {
             auto wrapper = span(*parent);
-            wrapper->append(textNode(text.mid(start, end - start)));
+            wrapper->append(piece(start, end - start));
             parent->insert(to++, std::move(wrapper));
             start = end;
         }
         if (start < text.size()) {
             auto wrapper = span(*parent);
-            wrapper->append(textNode(text.mid(start)));
+            wrapper->append(piece(start, -1));
             parent->insert(to++, std::move(wrapper));
         }
         return to - 1;
@@ -807,6 +541,27 @@ std::optional<QByteArray> kepubifyPage(const QByteArray &xhtml, const QString &s
         return std::nullopt;
     addKoboMarkup(root.get(), scriptHref);
     return serialize(*root);
+}
+
+QHash<QString, SpanStart> spanStarts(const Node &page)
+{
+    QHash<QString, SpanStart> starts;
+    // The page's markup made on a copy that knows where its texts come from.
+    const std::unique_ptr<Node> copy = clone(page, true);
+    if (!documentElement(copy.get()))
+        return starts;
+    addKoboMarkup(copy.get(), QStringLiteral("kobo.js"));
+    for (const Node *span : findAll(copy.get(), [](const Node &n) {
+             return n.isElement("span") && n.attribute(QStringLiteral("class")) == koboSpanClass
+                 && n.attribute(QStringLiteral("id")).startsWith(QLatin1String("kobo."));
+         })) {
+        if (span->children.size() != 1)
+            continue;
+        const Node &text = *span->children.front();
+        if (text.kind == Node::Kind::Text && text.origin)
+            starts.insert(span->attribute(QStringLiteral("id")), { text.origin, text.originOffset, text.text.size() });
+    }
+    return starts;
 }
 
 bool kepubify(const QString &epub, const QString &kepub, const Options &options, QString *error)

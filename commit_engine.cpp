@@ -294,11 +294,22 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         if (!BookOperations::setAnnotation(db, bookId, annotation, &error))
             return undo(error);
     }
+    // Worked out on the database as it is now, so that a change brought
+    // meanwhile is merged with too.
+    int merged = 0;
+    for (const DeviceAnnotations &set : request.deviceAnnotations) {
+        if (!BookOperations::mergeDeviceAnnotations(db, set, double(now.toMSecsSinceEpoch()) / 1000, &merged, &error))
+            return undo(error);
+    }
+    for (const auto &[userType, user] : request.removedAnnotationUsers) {
+        if (!BookOperations::removeAnnotationUser(db, userType, user, &merged, &error))
+            return undo(error);
+    }
 
     QSet<int> dirtied = state.dirtied;
     dirtied.unite(done.dirtied);
     const QSet<int> touched = done.touched - dirtied;
-    const bool operated = request.hasOperations();
+    const bool operated = request.hasOperations(false) || merged > 0;
     // Books removed are no longer there to write.
     for (const int book : request.trash)
         dirtied.remove(book);

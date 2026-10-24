@@ -51,6 +51,11 @@ QFont SystemAppearance::fixedFont() const
     return m_fixedFont;
 }
 
+QFont SystemAppearance::uiFont() const
+{
+    return m_uiFont;
+}
+
 qreal SystemAppearance::resolvedPointSize(const QFont &font)
 {
     const qreal resolved = QFontInfo(font).pointSizeF();

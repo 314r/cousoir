@@ -13,10 +13,13 @@
 #include "calibre_languages.h"
 #include "book_library.h"
 #include "calibre_db.h"
+#include "calibre_lock.h"
 #include "conversion_service.h"
 #include "metadata_downloader.h"
 #include "device_library.h"
 #include "fake_open_library.h"
+#include "highlight_sync.h"
+#include "cousoir_paths.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -101,6 +104,8 @@ private slots:
     void sendsToKobosWithoutCalibre();
     void sendsToKindles();
     void readsKindleClippings();
+    void syncsKoboHighlights();
+    void tellsWhetherChangesWentIn();
     void checksLibrary();
     void mergesAuthorVariants();
     void keepsOneCopy();
@@ -1514,6 +1519,166 @@ bool waitForCheck(BookLibrary *library)
 }
 
 } // namespace
+
+// A Kobo's highlights go into the library as the Kobo's own user's, once
+// the library can be written; read again unchanged, nothing is written;
+// hidden on the Kobo, removed; taken out, they stay out.
+void BookLibraryTest::syncsKoboHighlights()
+{
+    QVERIFY(QDir(CousoirPaths::koboFolder()).removeRecursively());
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QSignalSpy added(library.get(), &BookLibrary::booksAdded);
+    QCOMPARE(library->addBooks({ QUrl::fromLocalFile(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub")) }), QString());
+    QVERIFY(added.wait(15000));
+    const int voyage = added.first().first().toList().first().toInt();
+    QVERIFY(waitForSave(library.get()));
+    library->setWritable(false);
+
+    QTemporaryDir kobo;
+    QString error;
+    QVERIFY(makeKobo(kobo.path(), &error));
+    const QString database = QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
+    {
+        SqliteDb db;
+        QVERIFY(db.open(database, SqliteDb::Mode::ReadWrite, &error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-highlights.sql"))), &error),
+                 qPrintable(error));
+    }
+    QTemporaryDir config;
+    QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
+    DeviceLibrary devices;
+    devices.setNative(true);
+    devices.setConfigDirectory(config.path());
+    HighlightSync sync;
+    sync.setLibrary(library.get());
+    sync.setDevices(&devices);
+    devices.setVolumeProvider([&volumes] { return volumes; }, 20);
+    devices.setLibrary(library.get());
+
+    // The library cannot be written: the highlights wait.
+    QTRY_VERIFY_WITH_TIMEOUT(sync.pending(), 15000);
+    QCOMPARE(sync.sources().size(), 1);
+    QCOMPARE(sync.sources().first().toMap().value(QStringLiteral("device")).toString(), QStringLiteral("N418000000000"));
+    const auto rows = [&copy] {
+        SqliteDb db;
+        QString error;
+        QStringList found;
+        if (!db.open(copy->filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::Immutable, &error))
+            return QStringList{ error };
+        for (const QVariantList &row : db.rows(QStringLiteral("SELECT annot_id, annot_data FROM annotations "
+                                                              "WHERE user_type='kobo' AND user='N418000000000' ORDER BY annot_id"))) {
+            const QJsonObject data = QJsonDocument::fromJson(row.value(1).toString().toUtf8()).object();
+            found.append(row.value(0).toString() + (data.value(QLatin1String("removed")).toBool() ? QStringLiteral(" removed") : QString()));
+        }
+        return found;
+    };
+    QCOMPARE(rows(), QStringList());
+
+    // Writable: in it goes.
+    QSignalSpy synced(&sync, &HighlightSync::synced);
+    library->setWritable(true);
+    QVERIFY(synced.wait(15000));
+    QVERIFY(!sync.pending());
+    QCOMPARE(rows(), (QStringList{ QStringLiteral("v1"), QStringLiteral("v10"), QStringLiteral("v2"), QStringLiteral("v3"),
+                                   QStringLiteral("v4"), QStringLiteral("v5"), QStringLiteral("v9"), QStringLiteral("w1") }));
+    {
+        SqliteDb db;
+        QVERIFY(db.open(copy->filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::Immutable, &error));
+        const QJsonObject first = QJsonDocument::fromJson(
+            db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE annot_id='v1'")).toString().toUtf8()).object();
+        QCOMPARE(first.value(QLatin1String("start_cfi")).toString(), QStringLiteral("/2/4/6/1:24"));
+        QCOMPARE(db.value(QStringLiteral("SELECT book FROM annotations WHERE annot_id='v1'")).toInt(), voyage);
+        QCOMPARE(db.value(QStringLiteral("SELECT format FROM annotations WHERE annot_id='v1'")).toString(), QStringLiteral("EPUB"));
+    }
+    // Left out: the book the library has not, a note on no text, words the
+    // book has not.
+    QStringList left;
+    for (const QList<KoboSync::Left> &device : sync.left()) {
+        for (const KoboSync::Left &book : device) {
+            for (const KoboHighlights::Highlight &highlight : book.book.highlights)
+                left.append(highlight.id + u' ' + book.reasons.value(highlight.id));
+        }
+    }
+    left.sort();
+    QCOMPARE(left, (QStringList{ QStringLiteral("b1 not in the library"), QStringLiteral("v11 text not found"),
+                                 QStringLiteral("v8 note without highlighted text") }));
+
+    // Read again as it was: nothing written.
+    const QByteArray before = readAll(copy->filePath(QStringLiteral("metadata.db")));
+    QSignalSpy finished(library.get(), &BookLibrary::changeFinished);
+    devices.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(!devices.loading() && !sync.busy(), 15000);
+    QTest::qWait(200);
+    QVERIFY(!sync.busy());
+    QCOMPARE(finished.size(), 0);
+    QCOMPARE(readAll(copy->filePath(QStringLiteral("metadata.db"))), before);
+
+    // Removed on the Kobo since: removed here.
+    {
+        SqliteDb db;
+        QVERIFY(db.open(database, SqliteDb::Mode::ReadWrite, &error));
+        QVERIFY(db.exec(QStringLiteral("UPDATE Bookmark SET Hidden='true', DateModified='2026-10-23T10:00:00.000' "
+                                       "WHERE BookmarkID='v1'"), &error));
+    }
+    synced.clear();
+    devices.refresh();
+    QVERIFY(synced.wait(15000));
+    QVERIFY(rows().contains(QStringLiteral("v1 removed")));
+
+    // Taken out of the library, and synced no more.
+    QCOMPARE(sync.removeFromLibrary(QStringLiteral("N418000000000")), QString());
+    QVERIFY(waitForSave(library.get()));
+    QCOMPARE(rows(), QStringList());
+    QVERIFY(sync.sources().first().toMap().value(QStringLiteral("off")).toBool());
+    finished.clear();
+    devices.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(!devices.loading(), 15000);
+    QTest::qWait(300);
+    QCOMPARE(rows(), QStringList());
+    // The Kobo kept for later tests no more.
+    QVERIFY(QDir(CousoirPaths::koboFolder()).removeRecursively());
+}
+
+
+// Whoever queues a change hears whether it went in, a failed one too: the
+// reader keeps its highlights until they are in.
+void BookLibraryTest::tellsWhetherChangesWentIn()
+{
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QSignalSpy finished(library.get(), &BookLibrary::changeFinished);
+    const auto position = [](const QString &cfi) {
+        return ReadPosition{ QStringLiteral("EPUB"), QStringLiteral("local"), QStringLiteral("cousoir"), cfi,
+                             double(QDateTime::currentSecsSinceEpoch()), 0.1 };
+    };
+    QCOMPARE(library->saveReading(1, std::nullopt, {}), 0);
+    const int saved = library->saveReading(1, position(QStringLiteral("epubcfi(/4/2/2/1:0)")), {});
+    QVERIFY(saved > 0);
+    QVERIFY(finished.wait(15000));
+    QCOMPARE(finished.first().at(0).toInt(), saved);
+    QVERIFY(finished.first().at(1).toBool());
+
+    // Calibre opened meanwhile: told so.
+    CalibreLock calibre;
+    QVERIFY(calibre.acquire());
+    finished.clear();
+    const int refused = library->saveReading(1, position(QStringLiteral("epubcfi(/4/2/4/1:0)")), {});
+    QVERIFY(refused > saved);
+    QVERIFY(finished.wait(15000));
+    QCOMPARE(finished.first().at(0).toInt(), refused);
+    QVERIFY(!finished.first().at(1).toBool());
+    QVERIFY(!finished.first().at(2).toString().isEmpty());
+
+    // Not writable: nothing queued.
+    library->setWritable(false);
+    QCOMPARE(library->saveReading(1, position(QStringLiteral("epubcfi(/4/2/6/1:0)")), {}), -1);
+}
+
 
 void BookLibraryTest::checksLibrary()
 {

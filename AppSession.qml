@@ -29,6 +29,11 @@ QtObject {
     readonly property MetadataDownloader downloads: MetadataDownloader {
         library: session.library
     }
+    // The Kobos' highlights, put into the library as each Kobo's own.
+    readonly property HighlightSync highlightSync: HighlightSync {
+        library: session.library
+        devices: session.devices
+    }
     readonly property ConcurrencyGuard guard: ConcurrencyGuard {
         libraryPath: session.library.libraryPath
         libraryReadable: session.library.loaded
@@ -55,6 +60,7 @@ QtObject {
     function applySystemAppearance() {
         Theme.systemPalette = appearance.palette
         Theme.systemMonoFont = appearance.fixedFont.family
+        Theme.systemDocumentFont = appearance.uiFont.family
         Theme.systemFontPointSize = appearance.uiFontPointSize
     }
 

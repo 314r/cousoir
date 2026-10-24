@@ -8,6 +8,9 @@
 
 #include "device_books.h"
 
+class QTemporaryDir;
+class SqliteDb;
+
 // A Kobo connected over USB, as Calibre 9.16's KoboTouch driver sees it: the
 // folder its storage is mounted on, with Kobo's own .kobo folder in it.
 // Calibre keeps two files at its root: metadata.calibre, the books it sent
@@ -49,6 +52,11 @@ int usbProductId(const QString &node, const QString &sysRoot = QStringLiteral("/
 QString modelName(int productId, const QString &modelId);
 // The firmware version as numbers, (0, 0, 0) when unknown.
 QList<int> firmwareVersion(const Device &device);
+
+// Opens the Kobo's database at `path` to read it: as it is, unless the Kobo
+// left a write-ahead log beside it, which only a copy, in `copy`, can take
+// in. Neither is ever written.
+bool openDatabase(const QString &path, SqliteDb *db, QTemporaryDir *copy, QString *error);
 
 // The books on the Kobo as KoboTouch's books() lists them: the Kobo's
 // database's, sideloaded or bought, with the metadata Calibre keeps for those

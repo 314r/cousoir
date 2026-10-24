@@ -11,6 +11,8 @@ class SystemAppearance : public QObject
     Q_OBJECT
     Q_PROPERTY(QVariantMap palette READ palette NOTIFY paletteChanged)
     Q_PROPERTY(QFont fixedFont READ fixedFont NOTIFY fontsChanged)
+    // The interface's own font, proportional, for text to read.
+    Q_PROPERTY(QFont uiFont READ uiFont NOTIFY fontsChanged)
     Q_PROPERTY(qreal uiFontPointSize READ uiFontPointSize NOTIFY fontsChanged)
 
 public:
@@ -18,6 +20,7 @@ public:
 
     QVariantMap palette() const;
     QFont fixedFont() const;
+    QFont uiFont() const;
     qreal uiFontPointSize() const;
 
     // QFontInfo reports a negative size when the font is pixel-sized or has no

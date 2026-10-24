@@ -8,6 +8,8 @@
 #include "metadata_downloader.h"
 #include "device_library.h"
 #include "highlight_browser.h"
+#include "highlight_document.h"
+#include "highlight_sync.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
 #include "system_appearance.h"
@@ -38,6 +40,8 @@ int main(int argc, char *argv[])
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+    qmlRegisterType<HighlightDocument>("Cousoir", 1, 0, "HighlightDocument");
+    qmlRegisterType<HighlightSync>("Cousoir", 1, 0, "HighlightSync");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif

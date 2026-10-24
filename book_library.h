@@ -186,6 +186,8 @@ public:
     void setCurrentBookId(int bookId);
     QVariantMap currentBook() const;
     const LibraryData &data() const;
+    // The book's cover as CoverCache serves it; empty when it has none.
+    QString coverUrl(int bookId) const;
     // update_from_mi() of Calibre's Edit metadata dialog: what a book found
     // by a download changes of `bookId`, for the fields chosen, as
     // updateBook() takes it; empty for a book that is gone.
@@ -232,11 +234,18 @@ public:
     Q_INVOKABLE QString readableFormat(int bookId) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in
     // the book and the highlights made or removed there, as Calibre keeps its
-    // viewer's. False, and nothing kept, while the library cannot be written.
-    bool saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations);
+    // viewer's. The change's id, which changeFinished() tells; 0 for nothing
+    // to keep; -1, and nothing kept, while the library cannot be written.
+    int saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations);
     // The highlights and bookmarks of Calibre's viewer in the book's format,
-    // as last read from the library.
+    // and the Kobos', as last read from the library.
     QList<Annotation> annotations(int bookId, const QString &format) const;
+    // Merges readers' highlights into the library's annotations of their
+    // users, in one change, or takes all of a user's out. The change's id,
+    // which changeFinished() tells; -1, and nothing done, while the library
+    // cannot be written.
+    int saveDeviceAnnotations(const QList<DeviceAnnotations> &changes);
+    int removeAnnotationUser(const QString &userType, const QString &user);
     // Shows the book's folder in the file manager. Returns an error message,
     // empty on success.
     Q_INVOKABLE QString openFolder(int bookId);
@@ -350,6 +359,8 @@ signals:
     void saved();
     // An edit could not be saved; the books show what the library holds.
     void saveFailed(const QString &message);
+    // A change queued went into the library, or never will: its id.
+    void changeFinished(int id, bool saved, const QString &error);
     // Something left by an interrupted change was put right.
     void recovered(const QString &message);
     void trashChanged();
@@ -393,6 +404,7 @@ private:
         CommitEngine::Result result;
         BookIndex index;
         QList<BulkEdit> bulkEdits;
+        int id = 0;
     };
 
     // A field of a book a bulk edit set: as it was before, and as the edit
@@ -414,6 +426,8 @@ private:
     QString queueEdit(const BookEdit &edit);
     // A change other than an edit, saved after the ones before it.
     QString queueChange(const CommitEngine::Request &change);
+    // The changes waiting, dropped: each told unsaved.
+    void dropPending(const QString &error);
     void finishImport();
     // find_identical_books(): the books with the authors and the title, as
     // Calibre fuzzily compares it, and the languages if any.
@@ -520,6 +534,8 @@ private:
     QFutureWatcher<CommitResult> m_commitWatcher;
     // The changes waiting, in order; edits in a row go together.
     QList<CommitEngine::Request> m_pending;
+    // The id of the last change queued.
+    int m_lastChangeId = 0;
     QFutureWatcher<ImportResult> m_importWatcher;
     // Books read while some are duplicates, until addDuplicates().
     QList<NewBook> m_importedBooks;

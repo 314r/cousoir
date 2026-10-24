@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
@@ -24,7 +25,14 @@
 #include "conversion_service.h"
 #include "metadata_downloader.h"
 #include "device_library.h"
+#include "epub_book.h"
+#include "epub_cfi.h"
+#include "cousoir_paths.h"
 #include "highlight_browser.h"
+#include "highlight_document.h"
+#include "highlight_sync.h"
+#include "kobo_highlights.h"
+#include "kobo_placement.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
@@ -93,6 +101,9 @@ private slots:
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
     void readsInCousoir();
+    void encodesCfisAsTheReader();
+    void placesKoboHighlightsAsTheReader();
+    void readsKoboHighlights();
     void readsPdfs();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
@@ -139,6 +150,9 @@ private:
     void makeWritable();
     // Makes the copy writable and opens `bookId`.
     void openWritable(int bookId);
+    // Adds the book at `path`, titled `title`, and opens it in the reader;
+    // null when it cannot.
+    QQuickWindow *readNewBook(const QString &path, const QString &title);
     // Clicks a field of the details pane and types over its text.
     void retype(const char *field, const QString &text);
     void waitForSave();
@@ -164,6 +178,8 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+    qmlRegisterType<HighlightDocument>("Cousoir", 1, 0, "HighlightDocument");
+    qmlRegisterType<HighlightSync>("Cousoir", 1, 0, "HighlightSync");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif
@@ -272,6 +288,33 @@ void LibraryUiTest::openWritable(int bookId)
     library()->setProperty("currentBookId", bookId);
     QTRY_VERIFY(control("bookFields") && control("bookFields")->isVisible());
     QVERIFY(QQuickTest::qWaitForPolish(m_window));
+}
+
+QQuickWindow *LibraryUiTest::readNewBook(const QString &path, const QString &title)
+{
+    makeWritable();
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(path) }));
+    if (!error.isEmpty())
+        return nullptr;
+    waitForSave();
+    int bookId = 0;
+    const bool added = QTest::qWaitFor([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == title)
+                bookId = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return bookId > 0;
+    }, 15000);
+    if (!added)
+        return nullptr;
+    library()->setProperty("currentBookId", bookId);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QQuickWindow *reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    if (!reader || !QTest::qWaitFor([reader] { return !reader->property("position").toString().isEmpty(); }, 20000))
+        return nullptr;
+    return reader;
 }
 
 void LibraryUiTest::retype(const char *field, const QString &text)
@@ -825,6 +868,242 @@ void LibraryUiTest::readsInCousoir()
 #endif
 }
 
+// The CFIs Cousoir works out from a page's XML are those the reader's own
+// document gives, for the places of every text of pages made to differ.
+void LibraryUiTest::encodesCfisAsTheReader()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    const QString path = QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/cfi.epub");
+    QQuickWindow *reader = readNewBook(path, QStringLiteral("The Odd Pages"));
+    QVERIFY(reader);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+
+    QString error;
+    const std::unique_ptr<EpubBook> book = EpubBook::open(path, &error);
+    QVERIFY2(book, qPrintable(error));
+    for (int index = 0; index < book->spine().size(); ++index) {
+        QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, index), Q_ARG(QVariant, QStringLiteral("start")));
+        QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == index
+                                     && reader->property("position").toString().startsWith(
+                                         QStringLiteral("epubcfi(/%1/").arg(2 * (index + 1))),
+                                 20000);
+        const std::unique_ptr<XmlTree::Node> root = XmlTree::parse(book->read(book->spine().at(index).name));
+        QVERIFY(root);
+        const EpubCfi::Document document(*root);
+        const XmlTree::Node *body = XmlTree::childElement(XmlTree::documentElement(root.get()), "body");
+        QVERIFY(body);
+        // The texts under the body, as one: a place is an offset in it, the
+        // text it is in the first that holds it, however each side splits
+        // its texts.
+        QList<const XmlTree::Node *> texts;
+        const std::function<void(const XmlTree::Node &)> walk = [&](const XmlTree::Node &node) {
+            for (const auto &child : node.children) {
+                if (child->kind == XmlTree::Node::Kind::Text || child->kind == XmlTree::Node::Kind::Cdata)
+                    texts.append(child.get());
+                else
+                    walk(*child);
+            }
+        };
+        walk(*body);
+        QList<qsizetype> starts;
+        qsizetype total = 0;
+        for (const XmlTree::Node *text : std::as_const(texts)) {
+            starts.append(total);
+            total += text->text.size();
+        }
+        QJsonArray table;
+        for (qsizetype i = 0; i < texts.size(); ++i) {
+            const qsizetype size = texts.at(i)->text.size();
+            for (const qsizetype offset : { qsizetype(0), qMin<qsizetype>(1, size), size / 2, size }) {
+                const qsizetype at = starts.at(i) + offset;
+                qsizetype k = 0;
+                while (!(starts.at(k) <= at && at <= starts.at(k) + texts.at(k)->text.size()))
+                    ++k;
+                table.append(QJsonArray{ double(at), document.encode(*texts.at(k), at - starts.at(k)) });
+            }
+        }
+        const QString script = QStringLiteral(R"((function (table, total) {
+            const texts = [];
+            (function walk(node) {
+                for (let child = node.firstChild; child; child = child.nextSibling) {
+                    if (child.nodeType === Node.TEXT_NODE || child.nodeType === Node.CDATA_SECTION_NODE)
+                        texts.push(child);
+                    else
+                        walk(child);
+                }
+            })(document.body);
+            const starts = [];
+            let length = 0;
+            for (const text of texts) {
+                starts.push(length);
+                length += text.nodeValue.length;
+            }
+            let result = length === total ? 'cfi-ok ' + table.length : 'cfi-text ' + length;
+            for (const [at, expected] of length === total ? table : []) {
+                let k = 0;
+                while (!(starts[k] <= at && at <= starts[k] + texts[k].nodeValue.length))
+                    ++k;
+                const got = window.cousoir.encode(texts[k], at - starts[k]);
+                if (got !== expected) {
+                    result = 'cfi-differs ' + at + ' ' + expected + ' ' + got;
+                    break;
+                }
+            }
+            document.title = result;
+        })(%1, %2))").arg(QString::fromUtf8(QJsonDocument(table).toJson(QJsonDocument::Compact))).arg(total);
+        QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, script)));
+        QTRY_COMPARE_WITH_TIMEOUT(view->property("title").toString(), QStringLiteral("cfi-ok %1").arg(table.size()), 20000);
+    }
+    reader->close();
+#endif
+}
+
+// The places worked out for a Kobo's highlights hold, in the reader's own
+// document, the text the Kobo highlighted.
+void LibraryUiTest::placesKoboHighlightsAsTheReader()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    const QString path = QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub");
+    QTemporaryDir kobo;
+    QString error;
+    QVERIFY2(makeKobo(kobo.path(), &error), qPrintable(error));
+    QList<KoboHighlights::Book> books;
+    {
+        SqliteDb db;
+        QVERIFY2(db.open(QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite")), SqliteDb::Mode::ReadWrite,
+                         &error),
+                 qPrintable(error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-highlights.sql"))), &error),
+                 qPrintable(error));
+        books = KoboHighlights::read(db, &error);
+    }
+    const std::unique_ptr<KoboPlacement::PlacementBook> placing =
+        KoboPlacement::PlacementBook::open(path, QStringLiteral("EPUB"), &error);
+    QVERIFY2(placing, qPrintable(error));
+    // By spine item: the places and the Kobo's text.
+    QMap<int, QJsonArray> tables;
+    for (const KoboHighlights::Book &book : std::as_const(books)) {
+        if (book.title != QLatin1String("The Voyage"))
+            continue;
+        for (const KoboHighlights::Highlight &highlight : book.highlights) {
+            const KoboPlacement::Placement placement = placing->place(highlight);
+            if (placement.method != KoboPlacement::Method::None)
+                tables[placement.spineIndex].append(
+                    QJsonArray{ placement.startCfi, placement.endCfi, KoboPlacement::folded(highlight.text) });
+        }
+    }
+    QCOMPARE(tables.size(), 3);
+
+    QQuickWindow *reader = readNewBook(path, QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+    for (auto it = tables.cbegin(); it != tables.cend(); ++it) {
+        QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, it.key()), Q_ARG(QVariant, QStringLiteral("start")));
+        QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == it.key()
+                                     && reader->property("position").toString().startsWith(
+                                         QStringLiteral("epubcfi(/%1/").arg(2 * (it.key() + 1))),
+                                 20000);
+        const QString script = QStringLiteral(R"((function (table) {
+            const fold = text => text.replace(/[­​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+            let result = 'ranges-ok ' + table.length;
+            for (const [start, end, expected] of table) {
+                const got = window.cousoir.rangeText(start, end);
+                if (got === null || fold(got) !== expected) {
+                    result = 'ranges-differ ' + start + ' ' + JSON.stringify(got);
+                    break;
+                }
+            }
+            document.title = result;
+        })(%1))").arg(QString::fromUtf8(QJsonDocument(it.value()).toJson(QJsonDocument::Compact)));
+        QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, script)));
+        QTRY_COMPARE_WITH_TIMEOUT(view->property("title").toString(), QStringLiteral("ranges-ok %1").arg(it.value().size()),
+                                  20000);
+    }
+    reader->close();
+#endif
+}
+
+// A Kobo's highlights, once in the library, show in the reader as the
+// Kobo's; removed there, they stay removed when the Kobo syncs again.
+void LibraryUiTest::readsKoboHighlights()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    const int bookId = library()->property("currentBookId").toInt();
+    reader->close();
+    QTemporaryDir kobo;
+    QString error;
+    QVERIFY(makeKobo(kobo.path(), &error));
+    const QString database = QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
+    {
+        SqliteDb db;
+        QVERIFY(db.open(database, SqliteDb::Mode::ReadWrite, &error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-highlights.sql"))), &error),
+                 qPrintable(error));
+    }
+    QQuickItem *page = control("highlightsPage");
+    QVERIFY(page);
+    auto *sync = page->property("sync").value<HighlightSync *>();
+    QSignalSpy synced(sync, &HighlightSync::synced);
+    QCOMPARE(sync->importDatabase(QUrl::fromLocalFile(database)), QString());
+    QVERIFY(synced.wait(15000));
+    waitForSave();
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("counts").toMap().value(QStringLiteral("highlights")).toInt() >= 8, 15000);
+
+    library()->setProperty("currentBookId", bookId);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow"));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 8);
+    QVariantMap first;
+    for (const QVariant &highlight : bookReader->property("highlights").toList()) {
+        if (highlight.toMap().value(QStringLiteral("uuid")).toString() == QLatin1String("v1"))
+            first = highlight.toMap();
+    }
+    QCOMPARE(first.value(QStringLiteral("source")).toString(), QStringLiteral("kobo:N418000000000"));
+    QCOMPARE(first.value(QStringLiteral("start")).toString(), QStringLiteral("/2/4/6/1:24"));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("highlightsShown").toInt() == 5,
+                             20000);
+
+    // Removed in the reader, as the Kobo's.
+    reader->setProperty("chosenHighlight", QStringLiteral("v1"));
+    QMetaObject::invokeMethod(reader, "removeChosenHighlight");
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 7);
+    reader->close();
+    waitForSave();
+    const auto removed = [this] {
+        SqliteDb db;
+        QString error;
+        if (!db.open(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error))
+            return false;
+        return QJsonDocument::fromJson(db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE annot_id='v1' "
+                                                                "AND user_type='kobo' AND user='N418000000000'"))
+                                           .toString()
+                                           .toUtf8())
+            .object()
+            .value(QLatin1String("removed"))
+            .toBool();
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(removed(), 15000);
+    // The Kobo synced again: still removed.
+    QCOMPARE(sync->importDatabase(QUrl::fromLocalFile(database)), QString());
+    QTRY_VERIFY_WITH_TIMEOUT(!sync->busy(), 15000);
+    waitForSave();
+    QVERIFY(removed());
+#endif
+}
+
 // A book with only a PDF read in Cousoir's PDF reader.
 void LibraryUiTest::readsPdfs()
 {
@@ -1227,44 +1506,144 @@ void LibraryUiTest::browsesHighlights()
     QFile(database).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
     QMetaObject::invokeMethod(library(), "reload");
     QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
-    QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("highlights")).toInt(), 7);
+    QTRY_COMPARE(library()->property("counts").toMap().value(QStringLiteral("highlights")).toInt(), 8);
 
-    // By book, the books by their titles' sort.
+    // As kbextract2 lists them: the books with highlights or notes, by
+    // their titles' sort, the bookmarks left out.
     click("sidebar_highlights");
     QQuickItem *page = control("highlightsPage");
     QTRY_VERIFY(page && page->isVisible());
     auto *browser = page->property("browser").value<HighlightBrowser *>();
     QVERIFY(browser);
     QTRY_COMPARE(browser->count(), 7);
-    QCOMPARE(browser->rows().size(), 10);
-    QCOMPARE(browser->rows().constFirst().toMap().value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    const auto bookTitles = [browser] {
+        QStringList titles;
+        for (const QVariant &book : browser->books())
+            titles.append(book.toMap().value(QStringLiteral("title")).toString());
+        return titles;
+    };
+    QCOMPARE(bookTitles(), (QStringList{ QStringLiteral("The Black Company"), QStringLiteral("L'Écume des jours"),
+                                         QStringLiteral("Good Omens") }));
+    const QVariantMap first = browser->books().constFirst().toMap();
+    // A highlight with a note is a note.
+    QCOMPARE(first.value(QStringLiteral("counts")).toString(), QStringLiteral("1 highlight · 2 notes"));
+    QCOMPARE(browser->books().constLast().toMap().value(QStringLiteral("counts")).toString(),
+             QStringLiteral("1 highlight · 0 notes"));
+    // The book's cover, its letter for when it has none.
+    QVERIFY(first.value(QStringLiteral("cover")).toString().startsWith(QLatin1String("image://covers/")));
+    QCOMPARE(first.value(QStringLiteral("monogram")).toString(), QStringLiteral("T"));
     QCOMPARE(text("bookCount"), QStringLiteral("7 highlights"));
+    // None picked yet.
+    QVERIFY(browser->current().isEmpty());
+    QTRY_VERIFY(control("noBookSelected")->isVisible());
+    QVERIFY(!control("highlightDocument")->isVisible());
 
-    // A search of Calibre's index, the words found in bold; Ctrl+F goes to
-    // it.
-    QTest::keyClick(m_window, Qt::Key_F, Qt::ControlModifier);
-    QTRY_VERIFY(control("highlightSearch")->hasActiveFocus());
-    typeText(QStringLiteral("amour"));
-    QTRY_COMPARE(browser->count(), 1);
-    QVERIFY(browser->rows().value(1).toMap().value(QStringLiteral("html")).toString().startsWith(QStringLiteral("<b>L'amour</b> est")));
-    QVERIFY(browser->exportText(true).startsWith(QStringLiteral("# L'Écume des jours\n\n## Chapitre II")));
+    // A book picked: its page, as kbextract2 typesets it.
+    click("highlightBook_2");
+    QTRY_COMPARE(browser->current(), QStringLiteral("book:2"));
+    QQuickItem *document = control("highlightDocument");
+    QTRY_VERIFY(document->isVisible());
+    const auto documentText = [document] {
+        QString text;
+        QMetaObject::invokeMethod(document, "getText", Q_RETURN_ARG(QString, text), Q_ARG(int, 0),
+                                  Q_ARG(int, document->property("length").toInt()));
+        return text.replace(QChar::ParagraphSeparator, u'\n').replace(QChar::LineSeparator, u'\n');
+    };
+    QTRY_VERIFY2(documentText().startsWith(QStringLiteral("The Black Company\nGlen Cook\n1 highlight · 2 notes\n")),
+                 qPrintable(documentText()));
+    QVERIFY2(documentText().contains(QLatin1String("Chapter Three\nThe Annals are the memory of the Company.\nNote\nRead on the Kobo.")),
+             qPrintable(documentText()));
+    // The quote bars, the note cards and the rule under the text.
+    QObject *builder = page->property("builder").value<QObject *>();
+    QStringList kinds;
+    for (const QVariant &block : builder->property("blocks").toList())
+        kinds.append(block.toMap().value(QStringLiteral("kind")).toString());
+    QCOMPARE(kinds, (QStringList{ QStringLiteral("rule"), QStringLiteral("quote"), QStringLiteral("note"), QStringLiteral("quote"),
+                                  QStringLiteral("note"), QStringLiteral("quote") }));
+    QTRY_VERIFY(control("highlightDecoration_note") && control("highlightDecoration_note")->height() > 0);
 
-    // Enter asks the reader for the book, where the highlight is.
-    QSignalSpy read(page, SIGNAL(readRequested(int,int,QString)));
-    browser->setQuery(QString());
-    browser->setType(QStringLiteral("highlight"));
-    QTRY_COMPARE(browser->count(), 6);
+    // Up and Down go from book to book; Enter to the page, Esc back.
     QMetaObject::invokeMethod(page, "focusList");
-    QTRY_VERIFY(control("highlightList")->hasActiveFocus());
+    QTRY_VERIFY(control("highlightBooks")->hasActiveFocus());
     QTest::keyClick(m_window, Qt::Key_Down);
+    QTRY_COMPARE(browser->current(), QStringLiteral("book:1"));
+    QTest::keyClick(m_window, Qt::Key_Up);
+    QTRY_COMPARE(browser->current(), QStringLiteral("book:2"));
     QTest::keyClick(m_window, Qt::Key_Return);
-    QTRY_COMPARE(read.size(), 1);
-    QCOMPARE(read.constFirst().at(0).toInt(), 2);
-    QCOMPARE(read.constFirst().at(1).toInt(), 2);
-    QCOMPARE(read.constFirst().at(2).toString(), QStringLiteral("/4/2/4/1:0"));
+    QTRY_VERIFY(document->hasActiveFocus());
+    // The page selectable as a whole, as kbextract2's.
+    QGuiApplication::clipboard()->clear();
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(m_window, Qt::Key_C, Qt::ControlModifier);
+    QTRY_VERIFY(QGuiApplication::clipboard()->text().startsWith(QStringLiteral("The Black Company\nGlen Cook\n")));
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(control("highlightBooks")->hasActiveFocus());
 
-    browser->setType(QStringLiteral("bookmark"));
-    QTRY_COMPARE(browser->count(), 1);
+    // Ctrl+Shift+C: the book's highlights as kbextract2 copies them.
+    const QString kobo = QStringLiteral("## Chapter Three\n\n> The Annals are the memory of the Company.\n\nRead on the Kobo.");
+    QGuiApplication::clipboard()->clear();
+    QTest::keyClick(m_window, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
+    QTRY_COMPARE(QGuiApplication::clipboard()->text(), browser->formatted(QStringLiteral("markdown")));
+    QVERIFY(QGuiApplication::clipboard()->text().contains(kobo));
+    QTRY_COMPARE(text("copyHighlights"), QStringLiteral("Copied"));
+    QVERIFY(browser->formatted(QStringLiteral("obsidian"))
+                .contains(QStringLiteral("## Chapter Three\n\n> [!quote]\n> The Annals are the memory of the Company.\n\nRead on the Kobo.")));
+    // Ctrl+U: the page as that Markdown, and back.
+    QTest::keyClick(m_window, Qt::Key_U, Qt::ControlModifier);
+    QTRY_COMPARE(documentText(), browser->formatted(QStringLiteral("markdown")));
+    QTest::keyClick(m_window, Qt::Key_U, Qt::ControlModifier);
+    QTRY_VERIFY(documentText().startsWith(QLatin1String("The Black Company\n")));
+
+    // Too narrow for both: the books, then the book picked, and back.
+    const QSize size = m_window->size();
+    m_window->resize(720, size.height());
+    QTRY_VERIFY(page->property("narrow").toBool());
+    QMetaObject::invokeMethod(page, "focusList");
+    QTRY_VERIFY(control("highlightBooks")->isVisible() && !document->isVisible());
+    click("highlightBook_4");
+    QTRY_VERIFY(document->isVisible() && !control("highlightBooks")->isVisible());
+    QCOMPARE(browser->current(), QStringLiteral("book:4"));
+    click("highlightsBack");
+    QTRY_VERIFY(control("highlightBooks")->isVisible() && !document->isVisible());
+    m_window->resize(size);
+    QTRY_VERIFY(!page->property("narrow").toBool());
+
+    // A Kobo's database opened as a file: its books the library has not,
+    // after the library's, under its name.
+    QDir(CousoirPaths::koboFolder()).removeRecursively();
+    QTemporaryDir backup;
+    const QString file = QDir(backup.path()).filePath(QStringLiteral("Kobo backup/KoboReader.sqlite"));
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY(writeAll(file, {}));
+        QVERIFY(db.open(file, SqliteDb::Mode::ReadWrite, &error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"))), &error), qPrintable(error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-highlights.sql"))), &error),
+                 qPrintable(error));
+    }
+    auto *sync = page->property("sync").value<HighlightSync *>();
+    QVERIFY(sync);
+    QCOMPARE(sync->importDatabase(QUrl::fromLocalFile(file)), QString());
+    const auto koboOnly = [browser] {
+        QVariantMap books;
+        for (const QVariant &book : browser->books()) {
+            if (book.toMap().value(QStringLiteral("section")).toString().endsWith(QLatin1String(", not in the library")))
+                books.insert(book.toMap().value(QStringLiteral("title")).toString(), book);
+        }
+        return books;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(koboOnly().contains(QStringLiteral("Bought Elsewhere")), 15000);
+    QVERIFY2(koboOnly().contains(QStringLiteral("The Voyage")), qPrintable(koboOnly().keys().join(u',')));
+    const QVariantMap bought = koboOnly().value(QStringLiteral("Bought Elsewhere")).toMap();
+    QCOMPARE(bought.value(QStringLiteral("bookId")).toInt(), 0);
+    QCOMPARE(bought.value(QStringLiteral("cover")).toString(), QString());
+    QCOMPARE(bought.value(QStringLiteral("monogram")).toString(), QStringLiteral("B"));
+    QCOMPARE(bookTitles().constFirst(), QStringLiteral("The Black Company"));
+    // Shown and copied all the same.
+    browser->setCurrent(bought.value(QStringLiteral("key")).toString());
+    QVERIFY(browser->formatted(QStringLiteral("markdown")).startsWith(QStringLiteral("## Opening\n\n> Bought words")));
+    QTRY_VERIFY(documentText().startsWith(QLatin1String("Bought Elsewhere\n")));
 }
 
 void LibraryUiTest::editsCustomColumns()

@@ -23,6 +23,7 @@ class AnnotationSearchTest : public QObject
 private slots:
     void findsAsCalibre_data();
     void findsAsCalibre();
+    void listsUsers();
     void tellsWhatItCannotRead();
     void sortsAndExports();
 
@@ -47,10 +48,11 @@ void AnnotationSearchTest::findsAsCalibre_data()
     const QJsonArray cases = QJsonDocument::fromJson(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/annotations/expected.json"))).array();
     for (const QJsonValue &value : cases) {
         const QJsonObject query = value.toObject().value(QLatin1String("query")).toObject();
-        const QString name = QStringLiteral("%1 %2 %3")
+        const QString name = QStringLiteral("%1 %2 %3 %4")
                                  .arg(query.value(QLatin1String("text")).toString(),
                                       query.value(QLatin1String("stemming")).toBool() ? QStringLiteral("stemmed") : QString(),
-                                      query.value(QLatin1String("type")).toString());
+                                      query.value(QLatin1String("type")).toString(),
+                                      strings(query.value(QLatin1String("user"))).join(u':'));
         QTest::newRow(name.toUtf8().constData()) << query << value.toObject().value(QLatin1String("results")).toArray();
     }
 }
@@ -65,6 +67,9 @@ void AnnotationSearchTest::findsAsCalibre()
     search.text = query.value(QLatin1String("text")).toString();
     search.stemming = query.value(QLatin1String("stemming")).toBool();
     search.type = query.value(QLatin1String("type")).toString();
+    const QStringList user = strings(query.value(QLatin1String("user")));
+    search.userType = user.value(0);
+    search.user = user.value(1);
     QString error;
     const QList<AnnotationSearch::Hit> hits = AnnotationSearch::find(db, search, &error);
     QCOMPARE(error, QString());
@@ -76,6 +81,19 @@ void AnnotationSearchTest::findsAsCalibre()
     QCOMPARE(found, results);
 }
 
+// all_annotation_users(), as Calibre lists them.
+void AnnotationSearchTest::listsUsers()
+{
+    SqliteDb db;
+    QVERIFY(openDatabase(&db));
+    QJsonArray users;
+    QList<QPair<QString, QString>> found = AnnotationSearch::users(db);
+    std::sort(found.begin(), found.end());
+    for (const auto &[type, user] : std::as_const(found))
+        users.append(QJsonArray{ type, user });
+    QCOMPARE(users, QJsonDocument::fromJson(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/annotations/users.json"))).array());
+}
+
 void AnnotationSearchTest::tellsWhatItCannotRead()
 {
     SqliteDb db;
@@ -85,7 +103,8 @@ void AnnotationSearchTest::tellsWhatItCannotRead()
     QString error;
     QVERIFY(AnnotationSearch::find(db, search, &error).isEmpty());
     QVERIFY(!error.isEmpty());
-    QCOMPARE(AnnotationSearch::count(db), 7);
+    // The viewer's and a Kobo's, the removed one aside.
+    QCOMPARE(AnnotationSearch::count(db), 8);
 }
 
 void AnnotationSearchTest::sortsAndExports()

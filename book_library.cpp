@@ -319,7 +319,7 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_findings = {};
     m_checkedAt = {};
     // The changes waiting are the other library's, as was its backup.
-    m_pending.clear();
+    dropPending(tr("Another library is open."));
     m_importedBooks.clear();
     m_importedDuplicates.clear();
     m_backedUp = false;
@@ -886,6 +886,13 @@ QVariantMap BookLibrary::currentBook() const
 const LibraryData &BookLibrary::data() const
 {
     return m_data;
+}
+
+QString BookLibrary::coverUrl(int bookId) const
+{
+    const Book *book = findBook(bookId);
+    return book && !book->coverFile.isEmpty() ? CoverCache::url(coverKeyOf(m_libraryPath), book->id, book->coverModified)
+                                              : QString();
 }
 
 void BookLibrary::openFacetItem(int id)
@@ -1852,6 +1859,7 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
         m_pending.last().edits.append(edit);
     } else {
         CommitEngine::Request request;
+        request.id = ++m_lastChangeId;
         request.edits.append(edit);
         m_pending.append(request);
     }
@@ -1874,18 +1882,18 @@ QString BookLibrary::readableFormat(int bookId) const
     return {};
 }
 
-bool BookLibrary::saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations)
+int BookLibrary::saveReading(int bookId, const std::optional<ReadPosition> &position, const QList<Annotation> &annotations)
 {
     if (!m_writable || !findBook(bookId))
-        return false;
+        return -1;
     CommitEngine::Request request;
     if (position && !position->cfi.isEmpty())
         request.readPositions.append({ bookId, *position });
     for (const Annotation &annotation : annotations)
         request.annotations.append({ bookId, annotation });
     if (request.readPositions.isEmpty() && request.annotations.isEmpty())
-        return true;
-    return queueChange(request).isEmpty();
+        return 0;
+    return queueChange(request).isEmpty() ? m_lastChangeId : -1;
 }
 
 QList<Annotation> BookLibrary::annotations(int bookId, const QString &format) const
@@ -1898,11 +1906,13 @@ QList<Annotation> BookLibrary::annotations(int bookId, const QString &format) co
         || !db.open(cacheFolder(m_libraryPath) + QStringLiteral("/snapshot.db"), SqliteDb::Mode::Immutable, &error))
         return found;
     for (const QVariantList &row :
-         db.rows(QStringLiteral("SELECT annot_type, annot_id, timestamp, annot_data, searchable_text FROM annotations "
-                                "WHERE book=? AND format=? AND user_type='local' AND user='viewer'"),
+         db.rows(QStringLiteral("SELECT annot_type, annot_id, timestamp, annot_data, searchable_text, user_type, user "
+                                "FROM annotations WHERE book=? AND format=? "
+                                "AND ((user_type='local' AND user='viewer') OR user_type='kobo')"),
                  { bookId, format.toUpper() })) {
         found.append({ format.toUpper(), row.value(0).toString(), row.value(1).toString(), row.value(2).toDouble(),
-                       row.value(3).toString().toUtf8(), row.value(4).toString() });
+                       row.value(3).toString().toUtf8(), row.value(4).toString(), row.value(5).toString(),
+                       row.value(6).toString() });
     }
     return found;
 }
@@ -1912,9 +1922,31 @@ QString BookLibrary::queueChange(const CommitEngine::Request &change)
     if (!m_writable)
         return tr("The library cannot be changed right now.");
     m_pending.append(change);
+    m_pending.last().id = ++m_lastChangeId;
     emit savingChanged();
     startCommit();
     return {};
+}
+
+int BookLibrary::saveDeviceAnnotations(const QList<DeviceAnnotations> &changes)
+{
+    CommitEngine::Request request;
+    request.deviceAnnotations = changes;
+    return queueChange(request).isEmpty() ? m_lastChangeId : -1;
+}
+
+int BookLibrary::removeAnnotationUser(const QString &userType, const QString &user)
+{
+    CommitEngine::Request request;
+    request.removedAnnotationUsers.append({ userType, user });
+    return queueChange(request).isEmpty() ? m_lastChangeId : -1;
+}
+
+void BookLibrary::dropPending(const QString &error)
+{
+    const QList<CommitEngine::Request> dropped = std::exchange(m_pending, {});
+    for (const CommitEngine::Request &request : dropped)
+        emit changeFinished(request.id, false, error);
 }
 
 void BookLibrary::startCommit()
@@ -1923,7 +1955,7 @@ void BookLibrary::startCommit()
     if (m_commitWatcher.isRunning() || m_loadWatcher.isRunning() || m_pending.isEmpty())
         return;
     if (!m_writable) {
-        m_pending.clear();
+        dropPending(tr("The library cannot be changed right now."));
         emit savingChanged();
         emit saveFailed(tr("The library cannot be changed right now."));
         return;
@@ -1939,7 +1971,7 @@ void BookLibrary::startCommit()
     request.producerId = QStringLiteral("cousoir");
     const QStringList sortFields = this->sortFields();
     m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
-        CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits };
+        CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits, request.id };
         if (committed.result.ok && committed.result.written)
             committed.index = indexBooks(committed.result.data, request.config, sortFields);
         return committed;
@@ -1965,7 +1997,8 @@ void BookLibrary::finishCommit()
     if (!result.ok) {
         // What follows was made on what failed; the library shows what it
         // holds.
-        m_pending.clear();
+        emit changeFinished(committed.id, false, result.error);
+        dropPending(result.error);
         m_bulkUndo.clear();
         emit bulkUndoChanged();
         emit saveFailed(result.error);
@@ -1984,6 +2017,7 @@ void BookLibrary::finishCommit()
             emit publishedKeyChanged();
         }
         emit saved();
+        emit changeFinished(committed.id, true, {});
         if (!result.added.isEmpty()) {
             QVariantList added;
             for (const int id : result.added)

@@ -350,6 +350,20 @@ QList<int> firmwareVersion(const Device &device)
     return version.size() >= 3 ? version : QList<int>{ 0, 0, 0 };
 }
 
+bool openDatabase(const QString &path, SqliteDb *db, QTemporaryDir *copy, QString *error)
+{
+    if (QFileInfo(path + QStringLiteral("-wal")).size() <= 0)
+        return db->open(path, SqliteDb::Mode::Immutable, error);
+    const QString copied = copy->filePath(QStringLiteral("KoboReader.sqlite"));
+    if (!copy->isValid() || !QFile::copy(path, copied)
+        || !QFile::copy(path + QStringLiteral("-wal"), copied + QStringLiteral("-wal"))) {
+        if (error)
+            *error = QObject::tr("Cannot copy the Kobo's database to read it.");
+        return false;
+    }
+    return db->open(copied, SqliteDb::Mode::ReadWrite, error);
+}
+
 QList<DeviceBook> books(const Device &device, QString *error)
 {
     const QDir root(device.root);
@@ -375,24 +389,11 @@ QList<DeviceBook> books(const Device &device, QString *error)
 
     QList<DeviceBook> found;
     QSet<QString> listed;
-    // The Kobo's database is only read: as it is unless the Kobo left a
-    // write-ahead log beside it, which only a copy can take in.
     const QString database = root.filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
     QTemporaryDir copy;
     SqliteDb db;
     QString dbError;
-    bool opened = false;
-    if (QFileInfo(database).isFile()) {
-        if (QFileInfo(database + QStringLiteral("-wal")).size() > 0) {
-            const QString copied = copy.filePath(QStringLiteral("KoboReader.sqlite"));
-            opened = copy.isValid() && QFile::copy(database, copied)
-                && QFile::copy(database + QStringLiteral("-wal"), copied + QStringLiteral("-wal"))
-                && db.open(copied, SqliteDb::Mode::ReadWrite, &dbError);
-        } else {
-            opened = db.open(database, SqliteDb::Mode::Immutable, &dbError);
-        }
-    }
-    if (opened) {
+    if (QFileInfo(database).isFile() && openDatabase(database, &db, &copy, &dbError)) {
         const int dbVersion = db.value(QStringLiteral("SELECT version FROM dbversion")).toInt();
         const QSet<QString> columns = columnsOf(db, QStringLiteral("content"));
         const auto column = [&](const QString &name, const QString &fallback = QStringLiteral("NULL")) {

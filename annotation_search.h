@@ -28,6 +28,12 @@ struct Query
     bool stemming = true;
     // "highlight", "bookmark", or empty for both.
     QString type;
+    // restrict_to_user: one user's alone, a reader's or the viewer's; all
+    // when empty.
+    QString userType;
+    QString user;
+    // Every one, not only the newest 4096 Calibre's browser shows.
+    bool all = false;
 };
 
 struct Hit
@@ -71,5 +77,8 @@ QString exportText(const QList<Hit> &hits, const LibraryData &data, bool markdow
 
 // How many highlights and bookmarks the library keeps, the removed aside.
 int count(SqliteDb &db);
+
+// all_annotation_users(): the users the annotations are of, type and name.
+QList<QPair<QString, QString>> users(SqliteDb &db);
 
 } // namespace AnnotationSearch

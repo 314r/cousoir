@@ -627,6 +627,38 @@ Kobo told last in `~/.local/share/cousoir/reading/<library>.json`, so a
 book's page still shows it once the Kobo is unplugged, saying when it was
 seen. Neither the library nor the Kobo is written for it.
 
+The Kobo's highlights and notes go into the library too, each time the Kobo
+is read, as the Kobo's own: rows of Calibre's `annotations` table under the
+user type `kobo` and the Kobo's serial number, beside the viewer's. Each one
+is placed in the library's copy of its book, its EPUB, else its KEPUB. The
+Kobo keeps a highlight by Kobo's spans of the KEPUB it read and offsets in
+them; Cousoir makes those spans again of the library's EPUB as kepubify makes
+them, and so knows where each one starts in the book's own text. When the
+text there is not the Kobo's (a KEPUB another converter made, a plain EPUB
+read on the Kobo), the Kobo's text is looked for in its file, nearest where
+the Kobo has it, then in the whole book. The place is written as Calibre's
+viewer writes a highlight's: CFIs worked out from the page's XML as the
+viewer works them out from its pages (`epub_cfi.cpp`, from
+`src/pyj/read_book/cfi.pyj`), with the Kobo's text, note, colour and date,
+the chapter's file and the table of contents' titles. Calibre's annotations
+browser lists them and its search finds them; Cousoir's reader and
+Highlights show them.
+
+A highlight removed on the Kobo, which hides it, is removed from the
+library too, as Calibre removes one; one the Kobo no longer has at all goes
+too, for a book still on it. One removed in the library, in Cousoir's
+reader or Calibre's browser, stays removed, and one changed there since
+stays as changed. While the library cannot be written, the highlights wait,
+and go in once it can; a Kobo read again unchanged writes nothing. What a
+Kobo was last read as is kept in `~/.local/share/cousoir/kobo/`, a file
+per Kobo: its highlights go into the library again when it opens, and
+what the library cannot hold still shows in Highlights: books it has not,
+highlights not found in its copy, notes made on no text. The Kobo's
+database is only read for any of this. The golden test has Calibre list,
+search and change the highlights `cousoir-cli apply` put in, and checks
+that a second sync keeps what Calibre changed
+(`tools/oracle/kobo_highlights_check.py`).
+
 Cousoir departs from Calibre here:
 
 - It never writes to the Kobo's own database, `.kobo/KoboReader.sqlite`,
@@ -643,6 +675,12 @@ Cousoir departs from Calibre here:
 - Removing books, Cousoir takes their entries out of `metadata.calibre` and
   leaves the others as they are; Calibre writes them all again from the
   Kobo's database, which it does anyway whenever it connects.
+- Calibre's Kobo driver fetches annotations only when asked, into each
+  book's description, as HTML. Cousoir keeps them as annotations of the
+  Kobo's own user, where they can be searched and read in the book. Calibre's
+  E-book viewer shows only its own user's highlights: a Kobo's show in
+  Calibre's annotations browser, named by the Kobo's serial number, and in
+  Cousoir's reader, not in Calibre's viewer.
 
 ### Kindle
 
@@ -729,8 +767,10 @@ where Calibre's viewer keeps its highlights: a row of the library's
 text, its start and end CFIs, the chapter's file and titles, the yellow of
 Calibre's colours). The viewer shows Cousoir's highlights, and Cousoir the
 viewer's, in their colours; the Highlights list beside the pages goes to
-each. A highlight clicked can be removed, which Cousoir writes as the viewer
-does, so that the programs that have it forget it too.
+each. A Kobo's highlights show too, with the Kobo's name (see
+[Kobo](#kobo)). A highlight clicked can be removed, which Cousoir writes as
+the viewer does, as whose it was, so that the programs that have it forget
+it too and a Kobo does not bring it back.
 
 A PDF shows a page after the other, fitted to the window's width or to the
 whole page, its page kept.
@@ -739,24 +779,61 @@ Cousoir departs from Calibre's viewer here: no reading aloud, no search in
 the book, no notes on highlights yet, colours other than yellow only as
 shown, and no vertical or right-to-left page order. The position and the
 highlights are written while the library can be written; when Calibre
-writes to it, they wait in Cousoir for the next time.
+writes to it, they wait in Cousoir for the next time, and so do those whose
+writing failed.
 
 ## Highlights
 
-Highlights, under Library in the sidebar, lists every highlight and
-bookmark the library keeps, those made in Cousoir's reader and in
-Calibre's E-book viewer, as Calibre's "Browse annotations" lists them: by
-book, the books by their titles' sort, each one's in their order in the
-book, with the highlight's colour, its note, its chapter and when it was
-made. Its search, which Ctrl+F reaches, is Calibre's: SQLite's full text
-query language on Calibre's index of them, words found by their stems
-unless Word stems is off ("read" finds "reading"), quoted phrases, `*`
-for a prefix, the words found in bold in a snippet, the best first. The
-kind shows highlights, bookmarks or both. Enter, a double click or Read
-opens the book in Cousoir's reader where the highlight is. Copy puts the
-highlights shown on the clipboard as Markdown; Export saves them as
-Markdown or plain text, as Calibre's export writes them: each book's
-title, its highlights under their chapters, each with its date and note.
+Highlights, under Library in the sidebar, shows the highlights and notes
+the library keeps as kbextract2 shows a Kobo's: those made in Cousoir's
+reader and in Calibre's E-book viewer, and those of the Kobos.
+
+On the left are the books that have some, by their titles' sort. Each shows
+its cover, or kbextract2's tile when it has none: the title's first letter
+or digit on one of six colours, always the same for the same title. Under
+the title are the authors and how many highlights and notes the book has,
+a highlight with a note counting as a note, as kbextract2 counts them.
+After the library's books, under "On <Kobo>, not in the library", come the
+books a Kobo has that the library has not. The highlights a Kobo has that
+were not found in the library's copy of a book show with that book.
+
+A click, or Up and Down, picks a book. Nothing is picked at first, as in
+kbextract2. The book picked shows on the right as kbextract2 typesets it:
+
+- its title, its authors and its counts over a rule;
+- by chapter, in the book's order, each highlight a quote with a bar in the
+  accent colour, its paragraphs kept and its lines joined;
+- each note in a card under its highlight.
+
+It is one page of text in the interface's own font, no wider than about 70
+characters, and selectable as a whole: Ctrl+A and Ctrl+C copy what is
+selected. Enter or Right goes to the page, and Esc or Left back to the
+books. Once the page's title scrolls away, the header shows it. Ctrl+= and
+Ctrl+− make the text bigger or smaller, as everywhere in Cousoir.
+
+Copy, or Ctrl+Shift+C, puts the book's highlights on the clipboard as
+kbextract2 writes them, for notes: a heading by chapter, each highlight a
+quote and its note after it. The menu beside Copy gives the other formats:
+Obsidian's Markdown, whose quotes are `[!quote]` callouts, and plain text.
+The button says Copied for a moment. Ctrl+U, or the M↓ button, shows the
+page as that Markdown, in the fixed font with its marks dimmed, and the page
+again.
+
+When the window is too narrow for both, the books show alone. A book opens
+in their place, and the back arrow, Esc or Left returns to the books.
+
+The ⋯ menu, and Ctrl+K, sync the Kobos again, import a Kobo's
+`KoboReader.sqlite` (a backup, a Kobo's database copied elsewhere), whose
+highlights go into the library as the Kobo's, adding and changing but never
+removing, an old copy being no reason to; and take a Kobo's highlights out
+of the library, which Cousoir then leaves out until the next Sync
+highlights. A database found in a Kobo's `.kobo` folder is that Kobo's;
+else one whose highlights a Kobo met already has, and otherwise its
+folder's.
+
+Like kbextract2, the section has no search, filter or export, and leaves
+the bookmarks out. Calibre's annotations browser still searches them all,
+and Cousoir's reader lists a book's highlights beside its page.
 
 ## Settings
 
@@ -829,6 +906,7 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
 cousoir-cli download [--library PATH] [--covers] BOOK_ID
 cousoir-cli kepubify BOOK.epub BOOK.kepub
+cousoir-cli kobo-highlights [--library PATH] KOBO|KoboReader.sqlite
 ```
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
@@ -904,6 +982,11 @@ their path on the reader:
                          "lpaths": ["Vian, Boris/Ecume des jours, L_ - Boris Vian.kepub.epub"] } }]
 ```
 
+A Kobo's highlights go into the library with the library's changes, as the
+application puts them in: `{ "syncHighlights": { "device":
+"/run/media/me/KOBOeReader" } }`, or a `KoboReader.sqlite` file, which only
+adds and changes.
+
 Calibre's log of a conversion or a sending is in its job's folder, in a
 temporary folder removed at the end unless `COUSOIR_KEEP_JOBS` is set.
 
@@ -935,6 +1018,13 @@ reader `mtpdir:FOLDER` is a folder that stands for a Kindle over MTP.
 `read` prints, as JSON, the metadata adding each file would read, custom
 columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 
+`kobo-highlights` prints, as JSON, the highlights and notes of a Kobo, by
+the folder it is mounted on, or of a `KoboReader.sqlite` file: each book,
+the library book it is, each highlight as the Kobo keeps it and where it is
+in the library's copy, found by its spans, its text in its file or in the
+book, or why it is nowhere; then how many of each. It writes nothing,
+neither in the library nor on the Kobo.
+
 ## Keyboard
 
 | Shortcut | Action |
@@ -964,6 +1054,8 @@ columns included, as `tools/oracle/read_oracle.py` prints Calibre's.
 | Enter, Esc | Revert the book's changes or keep them, once asked |
 | Enter | Restore the selected entry of the trash |
 | Enter, Menu, Shift+F10 | A finding's actions, in the check |
+| Ctrl+Shift+C | Copy the book's highlights as Markdown, in Highlights |
+| Ctrl+U | Show the book's highlights as Markdown, or as a page again, in Highlights |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
 
 ## Requirements
@@ -1187,8 +1279,36 @@ The tests check the port against Calibre itself:
   own API saved in a copy of the fixture's database (`tests/data/annotations`,
   `tools/oracle/annotations_oracle.py`): all of them and ten searches,
   stemmed or not, phrases, prefixes, by kind, must find what Calibre's
-  browser finds, in its order, with its snippets; and the export is
-  Calibre's. The UI tests browse, search and filter them and open one.
+  browser finds, in its order, with its snippets, for all users or one, a
+  Kobo's among them; and the export is Calibre's. The UI tests browse,
+  search and filter them, by kind and by whose, open one, copy a book's as
+  kbextract2 does, show its Markdown, and import a Kobo's database whose
+  books the library has not.
+- `epub_cfi_tests` works out CFIs by hand-made examples, and for every place
+  of every text of three books checks that decoding gives the place back, as
+  Calibre's own decoding does. The UI tests have the reader's own
+  `encode()` give the same CFI for every text of pages made to differ
+  (`tests/data/reader/cfi.epub`, `tools/make_cfi_fixture.py`): comments,
+  CDATA and instructions between texts, odd ids, entities, characters
+  beyond the BMP, SVG, MathML, CRLF and a long text.
+- `kobo_highlights_tests` reads kbextract2's own fixture
+  (`tests/data/kobo-kbextract.sql`) and writes its books' highlights as
+  kbextract2's tests expect, Markdown, Obsidian's and plain text, chapters
+  split over files included; reads every field of a Kobo's highlights,
+  hidden ones kept and corners left out; keeps snapshots; and tells whose a
+  database is.
+- `kobo_placement_tests` checks that every span kepubify makes of three
+  books, and of Calibre's own KEPUB chapter, is found in the page it came
+  from, and places the highlights of `tests/data/kobo-highlights.sql`
+  (`tools/make_kobo_highlights.py`, from the KEPUB Cousoir makes of The
+  Voyage): by spans, across spans and paragraphs, into a link; by text when
+  spans are numbered otherwise or the file is another; nowhere for words
+  the book has not. The UI tests check in the reader that the text between
+  each place's CFIs is the Kobo's, and that a Kobo's highlights show there,
+  removed as the Kobo's and not brought back. `book_library_tests` syncs a
+  fake Kobo into a library: waiting while it cannot be written, then in,
+  nothing written when unchanged, hidden on the Kobo removed, taken out and
+  left out; `commit_engine_tests` checks every rule of the merge.
 - `epub_book_tests` reads EPUB 3 and EPUB 2 books: their spine, their table
   of contents from nav or NCX, nested, and paths resolved. The UI tests read
   `tests/data/reader/voyage.epub` (`tools/make_reader_fixture.py`) in the

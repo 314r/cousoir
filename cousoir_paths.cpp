@@ -4,17 +4,13 @@
 #include <QDir>
 #include <QStandardPaths>
 
-namespace {
+namespace CousoirPaths {
 
 QString libraryKey(const QString &libraryPath)
 {
     return QString::fromLatin1(QCryptographicHash::hash(QDir::cleanPath(libraryPath).toUtf8(), QCryptographicHash::Sha1)
                                    .toHex().left(16));
 }
-
-} // namespace
-
-namespace CousoirPaths {
 
 QString cacheFolder(const QString &libraryPath)
 {
@@ -32,6 +28,11 @@ QString readingFile(const QString &libraryPath)
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/cousoir/reading/")
         + libraryKey(libraryPath) + QStringLiteral(".json");
+}
+
+QString koboFolder()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/cousoir/kobo");
 }
 
 } // namespace CousoirPaths

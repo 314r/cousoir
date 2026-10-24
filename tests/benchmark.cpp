@@ -37,6 +37,8 @@
 #include "cover_cache.h"
 #include "device_library.h"
 #include "highlight_browser.h"
+#include "highlight_document.h"
+#include "highlight_sync.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
@@ -181,6 +183,8 @@ void registerTypes()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+    qmlRegisterType<HighlightDocument>("Cousoir", 1, 0, "HighlightDocument");
+    qmlRegisterType<HighlightSync>("Cousoir", 1, 0, "HighlightSync");
 #ifdef COUSOIR_READER
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif
@@ -323,6 +327,17 @@ struct Shot
     bool read = false;
 };
 
+QQuickItem *visualDescendant(QQuickItem *item, const QString &name)
+{
+    for (QQuickItem *child : item->childItems()) {
+        if (child->objectName() == name)
+            return child;
+        if (QQuickItem *found = visualDescendant(child, name))
+            return found;
+    }
+    return nullptr;
+}
+
 int screenshot(const QString &path, const Shot &shot)
 {
     if (!shot.theme.isEmpty())
@@ -362,6 +377,9 @@ int screenshot(const QString &path, const Shot &shot)
     for (const QString &name : shot.clicks) {
         drawn(window);
         QQuickItem *item = window->findChild<QQuickItem *>(name);
+        // A view's delegates are its items', not its children.
+        if (!item)
+            item = visualDescendant(window->contentItem(), name);
         if (!item) {
             out() << "no control " << name << Qt::endl;
             return 1;
