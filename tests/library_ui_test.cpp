@@ -1515,6 +1515,32 @@ void LibraryUiTest::readsKindleAndOtherBooks()
     QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
     reader->close();
     qunsetenv("COUSOIR_FAKE_FAIL");
+
+    // The reader closed while Calibre works: Calibre stopped, the reader
+    // not shown again when it would have been done.
+    qputenv("COUSOIR_FAKE_DELAY", "2");
+    const QString second = m_libraryDir->filePath(QStringLiteral("Another voyage.txt"));
+    QFile secondFile(second);
+    QVERIFY(secondFile.open(QIODevice::WriteOnly) && secondFile.write("Another voyage.\n") > 0);
+    secondFile.close();
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(second) }));
+    waitForSave();
+    int secondBook = 0;
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("Another voyage"))
+                secondBook = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return secondBook > 0;
+    }(), 15000);
+    library()->setProperty("currentBookId", secondBook);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(bookReader->property("preparing").toBool());
+    reader->close();
+    QVERIFY(!bookReader->property("preparing").toBool());
+    QTest::qWait(3000);
+    QVERIFY(!reader->isVisible());
     qunsetenv("COUSOIR_FAKE_DELAY");
     qunsetenv("COUSOIR_EBOOK_CONVERT");
 #endif

@@ -1832,3 +1832,56 @@ review:
 - Nothing was merged into `master`, pushed or published. The last full run
   of the 26 tests, after R7, passed; after R8, the UI and EPUB tests passed.
 
+### 2026-10-25 — the user's go-ahead: the review of rounds 4 to 7 (`exp-review2`)
+
+The user asked to finish what was not done (the review, the turns without a
+wait, the fixed-layout books), then to merge into `master` and push.
+
+A fuzz test came first: `survivesDamagedKindleBooks` damages the three
+Kindle fixtures 150 times each (bytes changed, the file cut short, header
+fields and record offsets at their extremes), `COUSOIR_FUZZ_ROUNDS` and
+`COUSOIR_FUZZ_SEED` for longer runs; 6 × 1 800 of them ran under
+AddressSanitizer and UBSan (a build in `build/asan`). With a review agent's
+report (rounds 4 to 7), fixed:
+
+- The MOBI reader trusted its headers' counts and lengths: a CNCX length
+  wrapped a position negative (an out-of-bounds read, the infinite loop of
+  a length of -10); CDIC, ORDT, TAGX, IDXT, FDST and HUFF counts ran to
+  billions; negative or huge fragment lengths and insert positions doubled
+  a page at each fragment. Every count and length is bounded by the data
+  there; the text by 256 MB, a record's decompression by 1 MB, a font by
+  32 MB. 450 damaged files now take a second, not minutes.
+- Pages of a damaged book could come out nameless or under one name, an
+  EPUB with no spine; each has a name of its own, and a book with no page
+  is refused, saying it may be damaged. Text written into the package and
+  the contents is cleaned of characters XML forbids.
+- Flows inlined from flows already inlined grew without end: inlined as
+  they were, as Calibre does.
+- Two wrong ports: the contents were read after the markup had moved, so
+  an entry went to a later heading (`readNcx()` before `expandMarkup()` now,
+  as `create_ncx()` before `expand_text()`; the test now checks that each
+  section's entry is its heading); links were resolved against parts
+  already rewritten (into new parts now, as Calibre does).
+- The NCX tree no deeper than 8 levels, a parent only an earlier entry; the
+  tag soup no deeper than 256 elements, `xmlns` attributes left out, tags
+  matched within themselves (PCRE checked the whole rest of a page for
+  each), the next ">" found once for all the "<" before it. `mendsTagSoup`
+  tests it, 100 000 nested tags and 100 000 "<a" in under 5 s.
+- A Kindle book was made an EPUB on the main thread, half a second for a
+  novel: now on a thread, the window saying so, as for Calibre's
+  conversions.
+- A conversion was never stopped: closing the reader, or opening another
+  book, now stops Calibre and lets a thread's EPUB go (the window used to
+  come back when Calibre finished; tested).
+- The EPUBs kept are named after their maker's version, so that a fix of
+  the MOBI reader makes them again (`MobiBook::version`).
+- A MOBI without an EXTH language took "und", and the lookup looked up in
+  und.wiktionary.org: the header's locale is read, as `mobi2iana()` reads
+  it, and "und" looks up in English.
+- An EPUB 3 footnote is a note at any length; when one cannot be shown in
+  the box, the notes are shown in their pages, so that the link goes to a
+  note one can read.
+- Smaller: the windows-1252 decoder made once; pictures stored, not
+  deflated, in the EPUB made; `cousoir-cli epub BOOK.azw3 BOOK.epub`, which
+  served to time the slow cases.
+

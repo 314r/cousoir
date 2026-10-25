@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include <QRandomGenerator>
 #include <QTemporaryDir>
 
 #include <zip.h>
@@ -7,6 +8,7 @@
 #include "book_search.h"
 #include "epub_book.h"
 #include "epub_cfi.h"
+#include "html_soup.h"
 #include "mobi_book.h"
 #include "test_support.h"
 #include "xml_tree.h"
@@ -45,6 +47,8 @@ private slots:
     void readsKindleBooks_data();
     void readsKindleBooks();
     void refusesKindleBooksItCannotRead();
+    void survivesDamagedKindleBooks();
+    void mendsTagSoup();
 };
 
 namespace {
@@ -320,6 +324,25 @@ void EpubBookTest::readsKindleBooks()
     }
     for (const char *title : { "The Harbour", "Arrival", "The Lantern", "The Valley", "Thunder", "The North" })
         QVERIFY2(titles.contains(QLatin1String(title)), qPrintable(titles.join(u'|')));
+    // A section's entry goes to its heading, not to another in its file.
+    for (const EpubBook::TocEntry &entry : book->toc()) {
+        if (entry.fragment.isEmpty() || (entry.title != QLatin1String("Arrival") && entry.title != QLatin1String("The Lantern")
+                                         && entry.title != QLatin1String("Thunder")))
+            continue;
+        const std::unique_ptr<XmlTree::Node> page = XmlTree::parse(book->read(entry.name));
+        QVERIFY(page);
+        const EpubCfi::Document document(*page);
+        const XmlTree::Node *anchor = document.element(entry.fragment);
+        QVERIFY2(anchor, qPrintable(entry.fragment));
+        // The heading itself, or an empty anchor of the old kind before it.
+        const EpubCfi::PageText text = EpubCfi::PageText::of(*page);
+        qsizetype at = -1;
+        for (qsizetype i = 0; i < text.starts.size() && at < 0; ++i) {
+            if (text.order.value(text.starts.at(i).node, -1) > text.order.value(anchor, -1))
+                at = i;
+        }
+        QVERIFY2(at >= 0 && text.text.mid(at).startsWith(entry.title), qPrintable(entry.title + u" → " + text.text.mid(at, 40)));
+    }
 
     // The picture of the second chapter, and the link to the note of the
     // third, to its paragraph.
@@ -382,6 +405,103 @@ void EpubBookTest::refusesKindleBooksItCannotRead()
     error.clear();
     QVERIFY(!MobiBook::toEpub(locked, dir.filePath(QStringLiteral("c.epub")), &error));
     QVERIFY2(error.contains(QLatin1String("DRM")), qPrintable(error));
+}
+
+// Kindle books damaged every which way, as a file from anywhere may be:
+// bytes changed, the file cut short, the headers' counts and offsets at
+// their extremes. Read or refused, never a crash (run it under
+// AddressSanitizer too); a page made is XML.
+void EpubBookTest::survivesDamagedKindleBooks()
+{
+    QTemporaryDir dir;
+    // COUSOIR_FUZZ_ROUNDS and COUSOIR_FUZZ_SEED make longer, other runs.
+    const int rounds = qEnvironmentVariableIntValue("COUSOIR_FUZZ_ROUNDS") > 0 ? qEnvironmentVariableIntValue("COUSOIR_FUZZ_ROUNDS") : 150;
+    QRandomGenerator random(quint32(qEnvironmentVariableIntValue("COUSOIR_FUZZ_SEED")) + 20261025);
+    int read = 0;
+    for (const char *name : { "voyage.azw3", "voyage.mobi", "voyage-old.mobi" }) {
+        QFile file(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/") + QLatin1String(name));
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray original = file.readAll();
+        const quint32 record0 = qFromBigEndian<quint32>(original.constData() + 78);
+        for (int round = 0; round < rounds; ++round) {
+            QByteArray data = original;
+            switch (round % 5) {
+            case 0: // Bytes changed anywhere.
+                for (int n = 0, count = 1 + random.bounded(40); n < count; ++n)
+                    data[random.bounded(int(data.size()))] = char(random.bounded(256));
+                break;
+            case 1: // Cut short.
+                data.truncate(random.bounded(int(data.size())));
+                break;
+            case 2: // A field of the first record's headers at an extreme.
+            {
+                const qsizetype at = record0 + 4 * random.bounded(80);
+                const quint32 value = std::array<quint32, 4>{ 0xFFFFFFFF, 0x7FFFFFFF, 0, 1 }[random.bounded(4)];
+                if (at + 4 <= data.size())
+                    qToBigEndian(value, data.data() + at);
+                break;
+            }
+            case 3: // The record table's offsets.
+                for (int n = 0, count = 1 + random.bounded(4); n < count; ++n) {
+                    const qsizetype at = 78 + 8 * random.bounded(int(qFromBigEndian<quint16>(original.constData() + 76)));
+                    qToBigEndian(random.bounded(2) ? quint32(0xFFFFFFF0) : quint32(random.bounded(int(data.size()))),
+                                 data.data() + at);
+                }
+                break;
+            default: // Bytes changed in the records after the text: the
+                     // indices, the pictures, the fonts.
+                for (int n = 0, count = 1 + random.bounded(200); n < count; ++n) {
+                    const qsizetype at = data.size() / 2 + random.bounded(int(data.size() / 2));
+                    data[at] = char(random.bounded(256));
+                }
+            }
+            const QString damaged = dir.filePath(QStringLiteral("damaged.azw3"));
+            QFile out(damaged);
+            QVERIFY(out.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            out.write(data);
+            out.close();
+            QString error;
+            const QString epub = dir.filePath(QStringLiteral("damaged.epub"));
+            if (!MobiBook::toEpub(damaged, epub, &error))
+                continue;
+            ++read;
+            const std::unique_ptr<EpubBook> book = EpubBook::open(epub, &error);
+            QVERIFY2(book, qPrintable(error));
+        }
+    }
+    // Most damages still leave a book to read.
+    QVERIFY2(read > rounds * 2 / 3, qPrintable(QString::number(read)));
+}
+
+// Old HTML read as XHTML: blocks closing paragraphs, items closing items,
+// what is left open closed; and what a hostile page could do bounded.
+void EpubBookTest::mendsTagSoup()
+{
+    const auto bodyOf = [](const QString &html) {
+        const std::unique_ptr<XmlTree::Node> root = HtmlSoup::parse(html);
+        QByteArray xml = XmlTree::serialize(*root);
+        // A page made is XML.
+        if (!XmlTree::parse(xml))
+            return QByteArray("not XML");
+        const qsizetype start = xml.indexOf("<body");
+        return xml.mid(start, xml.indexOf("</body>") + 7 - start);
+    };
+    QCOMPARE(bodyOf(QStringLiteral("<p>one<p>two<ul><li>a<li>b</ul><b>bold<i>both</b>after")),
+             QByteArray("<body><p>one</p><p>two</p><ul><li>a</li><li>b</li></ul><b>bold<i>both</i></b>after</body>"));
+    QCOMPARE(bodyOf(QStringLiteral("<body xmlns=\"\" class=a>x &amp; y &eacute;<script>bad()</script><mbp:pagebreak/>z</body>")),
+             QByteArray("<body class=\"a\">x &amp; y \xc3\xa9z</body>"));
+    // Thousands deep, and "<" without ">": quick, and bounded.
+    QElapsedTimer timer;
+    timer.start();
+    QString deep;
+    for (int i = 0; i < 100000; ++i)
+        deep += QStringLiteral("<b>");
+    QVERIFY(bodyOf(deep + QStringLiteral("text")).contains("text"));
+    QString open;
+    for (int i = 0; i < 100000; ++i)
+        open += QStringLiteral("<a");
+    QVERIFY(bodyOf(open).contains("&lt;a"));
+    QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
 }
 
 #include "epub_book_test.moc"

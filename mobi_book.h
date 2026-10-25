@@ -13,4 +13,7 @@ namespace MobiBook {
 // Writes the EPUB of the book at `mobi` to `epub`; false with `error`.
 bool toEpub(const QString &mobi, const QString &epub, QString *error);
 
+// Changes with what toEpub() makes, for the EPUBs kept to be made again.
+constexpr int version = 2;
+
 } // namespace MobiBook

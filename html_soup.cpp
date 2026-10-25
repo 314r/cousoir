@@ -113,7 +113,9 @@ public:
         auto element = make(name);
         element->attributes = attributes;
         Node *added = m_stack.last()->append(std::move(element));
-        if (!selfClosing && !voidElements().contains(name))
+        // No deeper than a book's pages go: a damaged one's thousands of
+        // open tags would make a tree no recursion through it survives.
+        if (!selfClosing && !voidElements().contains(name) && m_stack.size() < maxDepth)
             m_stack.append(added);
     }
 
@@ -180,6 +182,7 @@ private:
     Node *m_headText = nullptr;
     QList<Node *> m_stack;
     bool m_bodyStarted = false;
+    static constexpr qsizetype maxDepth = 256;
 };
 
 QXmlStreamAttributes attributesOf(QStringView raw)
@@ -191,8 +194,9 @@ QXmlStreamAttributes attributesOf(QStringView raw)
     for (QRegularExpressionMatchIterator it = attribute.globalMatchView(raw); it.hasNext();) {
         const QRegularExpressionMatch match = it.next();
         const QString name = match.captured(1).toLower();
-        // Another namespace's, or no name XML takes.
-        if (!xmlName.match(name).hasMatch() || attributes.hasAttribute(name))
+        // Another namespace's, a namespace's declaration, which would take
+        // the page out of XHTML's, or no name XML takes.
+        if (!xmlName.match(name).hasMatch() || name.startsWith(QLatin1String("xmlns")) || attributes.hasAttribute(name))
             continue;
         QString value = match.captured(2);
         if (match.capturedStart(3) >= 0)
@@ -211,6 +215,8 @@ std::unique_ptr<Node> parse(const QString &html)
     Builder builder;
     static const QRegularExpression tagName(QStringLiteral("^(/?)([A-Za-z][A-Za-z0-9:_-]*)"));
     qsizetype pos = 0;
+    // The next ">", found once for all the "<" before it.
+    qsizetype nextGt = -1;
     while (pos < html.size()) {
         const qsizetype lt = html.indexOf(u'<', pos);
         if (lt < 0) {
@@ -229,9 +235,20 @@ std::unique_ptr<Node> parse(const QString &html)
             pos = close < 0 ? html.size() : close + 1;
             continue;
         }
-        const QRegularExpressionMatch name = tagName.matchView(QStringView(html).mid(lt + 1));
-        const qsizetype gt = html.indexOf(u'>', lt);
-        if (!name.hasMatch() || gt < 0) {
+        if (nextGt >= 0 && nextGt < lt)
+            nextGt = -1;
+        if (nextGt < 0)
+            nextGt = html.indexOf(u'>', lt);
+        const qsizetype gt = nextGt;
+        // Matched in the tag alone, not the rest of the page.
+        const QRegularExpressionMatch name = gt < 0 ? QRegularExpressionMatch()
+                                                    : tagName.matchView(QStringView(html).mid(lt + 1, gt - lt - 1));
+        // No tag closes from here on: the rest is text.
+        if (gt < 0) {
+            builder.text(CalibreText::replaceEntities(html.mid(lt)));
+            break;
+        }
+        if (!name.hasMatch()) {
             builder.text(QStringLiteral("<"));
             pos = lt + 1;
             continue;

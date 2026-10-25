@@ -31,6 +31,7 @@
 #include "conversion.h"
 #include "device_files.h"
 #include "kepub.h"
+#include "mobi_book.h"
 #include "kindle.h"
 #include "kindle_send.h"
 #include "kobo.h"
@@ -1203,6 +1204,8 @@ int main(int argc, char *argv[])
         "          covers found. Without Calibre, Open Library is asked.\n"
         "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
         "          kepubify BOOK.epub BOOK.kepub\n"
+        "  epub    Make an EPUB of a Kindle book, AZW3 or MOBI, as Cousoir's reader\n"
+        "          reads one, without Calibre: epub BOOK.azw3 BOOK.epub\n"
         "  kobo-highlights  Print the highlights and notes of a Kobo, by the folder it\n"
         "          is mounted on, or of a KoboReader.sqlite file, with the library's\n"
         "          book each is.\n\n"
@@ -1225,8 +1228,8 @@ int main(int argc, char *argv[])
     const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
     parser.addOption(coversOption);
     parser.addPositionalArgument(QStringLiteral("command"),
-                                 QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify or "
-                                                "kobo-highlights"));
+                                 QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify, "
+                                                "epub or kobo-highlights"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1251,6 +1254,14 @@ int main(int argc, char *argv[])
         QString error;
         Kepub::Options options;
         if (!Kepub::kepubify(arguments.at(1), arguments.at(2), options, &error)) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+        return 0;
+    }
+    if (arguments.value(0) == QLatin1String("epub") && arguments.size() == 3) {
+        QString error;
+        if (!MobiBook::toEpub(arguments.at(1), arguments.at(2), &error)) {
             err() << error << Qt::endl;
             return 1;
         }
