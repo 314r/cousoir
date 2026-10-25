@@ -762,7 +762,8 @@ book, which Cousoir's does not reproduce.
 An EPUB shows a screen at a time: the arrows, Space, Page Up and Page
 Down, the wheel or a click on either side of the page turn the pages, Home
 and End go to the ends of the chapter, the next and previous chapters
-follow. T shows the table of contents beside the pages, the section being
+follow: the next one is made ready while the last pages of one are read, so
+that its first page shows at once, with no blank between. T shows the table of contents beside the pages, the section being
 read in bold. Links within the book go to their page; others open in the
 browser. F11 reads full screen, the toolbar showing with the mouse at the
 top of the screen or after a click in the middle of the page. Esc leaves

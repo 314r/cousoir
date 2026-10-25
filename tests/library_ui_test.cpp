@@ -110,6 +110,7 @@ private slots:
     void showsNotesInPlace();
     void readsKindleAndOtherBooks();
     void looksWordsUp();
+    void turnsWithoutAWait();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -420,8 +421,11 @@ void LibraryUiTest::listsSearchesAndSortsBooks()
                  (QStringList{ QStringLiteral("title"), QStringLiteral("series"), QStringLiteral("formats"),
                                QStringLiteral("timestamp"), QStringLiteral("rating") }));
     QTRY_VERIFY(!control("bookAuthorsColumn"));
+    // Clicked where the row of headers has put it again.
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
     QQuickItem *series = control("bookSeriesColumn");
     QVERIFY(series);
+    QTRY_VERIFY(series->x() > 0);
     QTest::mouseClick(m_window, Qt::RightButton, Qt::NoModifier, series->mapToScene(QPointF(4, 4)).toPoint());
     QTRY_VERIFY(object("columnMenu")->property("opened").toBool());
     clickVisible("columnMenu_show:tags");
@@ -1585,6 +1589,45 @@ void LibraryUiTest::looksWordsUp()
     QObject *lookup = visualDescendants(reader->contentItem(), QStringLiteral("readerLookupView")).value(0);
     QVERIFY(lookup);
     QTRY_COMPARE_WITH_TIMEOUT(lookup->property("title").toString(), QStringLiteral("Chapter 1"), 10000);
+    reader->close();
+#endif
+}
+
+// The next chapter ready before it is needed: shown at once on turning
+// into it, the page view taking over once it has loaded it, the one after
+// it made ready then.
+void LibraryUiTest::turnsWithoutAWait()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("end")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() > 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    // The second chapter ready behind.
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spareSpine").toInt() == 2 && reader->property("spareReady").toBool(), 20000);
+    QObject *spare = reader->findChild<QObject *>(QStringLiteral("readerSpareView"));
+    QVERIFY(spare);
+    QTest::keyClick(reader, Qt::Key_Right);
+    // At once: the stand-in shows it while the page view loads it.
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("standing").toBool(), 5000);
+    QCOMPARE(spare->property("opacity").toDouble(), 1.0);
+    // Then the page view, at the chapter's start, and the next made ready.
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("standing").toBool()
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/"))
+                                 && reader->property("page").toInt() == 0,
+                             20000);
+    QCOMPARE(spare->property("opacity").toDouble(), 0.0);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spareSpine").toInt() == 3 && reader->property("spareReady").toBool(), 20000);
+    // A jump elsewhere does without it.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QVERIFY(!reader->property("standing").toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
     reader->close();
 #endif
 }

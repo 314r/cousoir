@@ -72,6 +72,11 @@ ThemedWindow {
     property bool speakAfterJump: false
     // EPUB 3's notes in their pages, a note having had to be read there.
     property bool notesShown: false
+    // The spare view: the file after the one read, loaded and laid out,
+    // ready to stand in for the page view while that loads it.
+    property int spareSpine: -1
+    property bool spareReady: false
+    property bool standing: false
     // The words looked up last, and where.
     property string lookupWord: ""
     property string lookupTarget: ""
@@ -111,6 +116,8 @@ ThemedWindow {
     onHighlightColorsChanged: {
         for (const highlight of bookReader.highlights.filter(h => h.spineIndex === spineIndex))
             restyleHighlight(highlight)
+        // The spare's highlights are in the old colours: made again.
+        dropSpare()
     }
     // Calibre's builtin_colors_light and builtin_colors_dark.
     readonly property var highlightColors: darkPage
@@ -186,6 +193,7 @@ ThemedWindow {
         forwardStack = []
         searchIndex = -1
         notesShown = false
+        dropSpare()
         load(start.spineIndex || 0, start.cfi ? "cfi:" + start.cfi : "start")
         return true
     }
@@ -362,6 +370,9 @@ ThemedWindow {
             go()
             return
         }
+        // The next file, ready at its start in the spare view: shown at once,
+        // while the page view loads it under it.
+        standing = action === "start" && index === spareSpine && spareReady
         spineIndex = index
         // Until the new page tells where it is: a place of the old one would
         // be read as one of this one.
@@ -396,10 +407,53 @@ ThemedWindow {
         go()
         updateAnchors()
         view.opacity = 1
+        if (!standing)
+            Qt.callLater(preloadNext)
+    }
+
+    // The next file loaded in the spare view, laid out as the page is and
+    // at its start, to stand in when reading goes on to it.
+    function preloadNext() {
+        const next = spineIndex + 1
+        if (standing || spineIndex < 0 || next >= bookReader.spine.length)
+            return
+        if (spareSpine === next && (spareReady || spareView.loading))
+            return
+        spareReady = false
+        spareSpine = next
+        const url = bookReader.spine[next].url
+        if (spareView.url.toString() === url.toString())
+            spareView.reload()
+        else
+            spareView.url = url
+    }
+
+    function prepareSpare() {
+        if (spareSpine < 0 || spareView.url.toString() !== bookReader.spine[spareSpine].url.toString())
+            return
+        spareView.runJavaScript(bookReader.script)
+        spareView.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings()) + ")")
+        const marks = bookReader.highlights.filter(h => h.spineIndex === spareSpine)
+            .map(h => ({ uuid: h.uuid, start: h.start, end: h.end, note: !!h.notes,
+                         color: highlightColors[h.which] || highlightColors.yellow }))
+        if (marks.length)
+            spareView.runJavaScript("window.cousoir.applyHighlights(" + JSON.stringify(marks) + ")")
+        // Ready once its page tells where it is (no callback: one may come
+        // after the window is gone).
+        spareView.runJavaScript("window.cousoir.goToStart()")
+    }
+
+    // What the spare view holds let go: it is made again when needed.
+    function dropSpare() {
+        spareReady = false
+        spareSpine = -1
+        standing = false
     }
 
     // A setting changed: the page laid out again, where it was.
     function relayout() {
+        if (spareReady)
+            spareView.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings()) + ")")
         if (spineIndex >= 0 && !view.loading)
             view.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings()) + ")",
                                function() { readerWindow.updateAnchors() })
@@ -690,6 +744,8 @@ ThemedWindow {
 
     onClosing: {
         save()
+        dropSpare()
+        spareView.stop()
         bookReader.close()
         spineIndex = -1
         position = ""
@@ -1566,6 +1622,48 @@ ThemedWindow {
                     }
                 }
 
+                // Stands in for the page view at a chapter's start while that
+                // loads it, then steps back and loads the next.
+                WebEngineView {
+                    id: spareView
+                    objectName: "readerSpareView"
+
+                    x: view.x
+                    width: view.width
+                    anchors.top: parent.top
+                    anchors.bottom: footer.top
+                    z: readerWindow.standing ? 2 : -1
+                    opacity: readerWindow.standing ? 1 : 0
+                    enabled: false
+                    backgroundColor: readerWindow.pageBackground
+                    zoomFactor: readerSettings.zoom
+                    settings.javascriptCanOpenWindows: false
+                    settings.localContentCanAccessRemoteUrls: false
+
+                    onLoadingChanged: function(request) {
+                        if (request.status === WebEngineView.LoadSucceededStatus)
+                            readerWindow.prepareSpare()
+                    }
+
+                    onJavaScriptConsoleMessage: function(level, message) {
+                        if (message.startsWith("cousoir:{\"event\":\"position\"") && readerWindow.spareSpine >= 0
+                            && bookReader.spineIndexOf(JSON.parse(message.slice(8)).page_url) === readerWindow.spareSpine)
+                            readerWindow.spareReady = true
+                    }
+                }
+
+                // A moment for the page view's page to be drawn before the
+                // stand-in leaves it in sight.
+                Timer {
+                    id: standDown
+
+                    interval: 150
+                    onTriggered: {
+                        readerWindow.standing = false
+                        readerWindow.preloadNext()
+                    }
+                }
+
                 WebEngineView {
                     id: view
                     objectName: "readerView"
@@ -1580,10 +1678,12 @@ ThemedWindow {
                     settings.localContentCanAccessRemoteUrls: false
 
                     onLoadingChanged: function(request) {
-                        if (request.status === WebEngineView.LoadSucceededStatus)
+                        if (request.status === WebEngineView.LoadSucceededStatus) {
                             readerWindow.prepare()
-                        else if (request.status === WebEngineView.LoadFailedStatus)
+                        } else if (request.status === WebEngineView.LoadFailedStatus) {
+                            readerWindow.standing = false
                             readerWindow.failed(qsTr("This page of the book cannot be shown: %1").arg(request.errorString))
+                        }
                     }
 
                     // Links within the book go to their page; others to the desktop's
@@ -1617,6 +1717,9 @@ ThemedWindow {
                                 readerWindow.noteTurn(readerWindow.spineIndex, event.page, event.pages)
                                 readerWindow.chromeAsked = false
                             }
+                            // The page view ready under the stand-in.
+                            if (readerWindow.standing)
+                                standDown.restart()
                             if (readerWindow.speakAfterJump) {
                                 readerWindow.speakAfterJump = false
                                 readerWindow.speech.start(readerWindow.spineIndex, event.cfi)

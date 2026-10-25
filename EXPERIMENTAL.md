@@ -1885,3 +1885,24 @@ report (rounds 4 to 7), fixed:
   deflated, in the EPUB made; `cousoir-cli epub BOOK.azw3 BOOK.epub`, which
   served to time the slow cases.
 
+### 2026-10-25 — R6, turns without a wait (`exp-turns`)
+
+Turning past a chapter's last page loaded the next file in the one view:
+a blank page for a tenth of a second or more, a flash in the dark themes.
+A second, hidden `WebEngineView` (`readerSpareView`) now loads the next
+chapter as soon as a page is ready, laid out with the same settings and
+gone to its start. When the reader turns to that chapter's first page, the
+spare shows above the view, the view loads the same file behind it, and
+the spare steps down 150 ms after the view tells its position; then it
+loads the chapter after. A change of the settings lays it out again; one
+of the highlight colours, or another book, drops it.
+
+The spare's runJavaScript callback crashed Qt (`QJSEngine::create` from
+`didRunJavaScript`) when it came after the window closed: the spare is
+ready when its page tells its position in the console, as the view's page
+does, and is stopped when the window closes. `turnsWithoutAWait` tests the
+spare's readiness, the hand-over and that going back is no stand-in's.
+
+The library's `listsSearchesAndSortsBooks` failed once in seven runs: a
+right click on a header the row had not placed yet. It waits for the row.
+
