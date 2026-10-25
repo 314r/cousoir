@@ -1019,8 +1019,12 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
 cousoir-cli download [--library PATH] [--covers] BOOK_ID
 cousoir-cli kepubify BOOK.epub BOOK.kepub
+cousoir-cli epub BOOK.azw3 BOOK.epub
 cousoir-cli kobo-highlights [--library PATH] KOBO|KoboReader.sqlite
 ```
+
+`epub` makes an EPUB of a Kindle book, AZW3 or MOBI, as Cousoir's reader
+does to read one (see [Reading in Cousoir](#reading-in-cousoir)).
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
 all` does, byte for byte. `search` prints the ids of the books an

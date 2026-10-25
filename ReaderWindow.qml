@@ -70,6 +70,8 @@ ThemedWindow {
     readonly property bool speaking: speech !== null && speech.state !== "stopped"
     // Reading aloud on from where a link or an entry of the contents goes.
     property bool speakAfterJump: false
+    // EPUB 3's notes in their pages, a note having had to be read there.
+    property bool notesShown: false
     // The words looked up last, and where.
     property string lookupWord: ""
     property string lookupTarget: ""
@@ -183,6 +185,7 @@ ThemedWindow {
         backStack = []
         forwardStack = []
         searchIndex = -1
+        notesShown = false
         load(start.spineIndex || 0, start.cfi ? "cfi:" + start.cfi : "start")
         return true
     }
@@ -210,7 +213,10 @@ ThemedWindow {
     // in the book's language, a web search, or the reader's own address.
     function lookupUrl(text, source) {
         const words = encodeURIComponent(text)
-        const language = (bookReader.language || "en").split(/[-_]/)[0].toLowerCase() || "en"
+        // No language said, or "und": English.
+        let language = (bookReader.language || "en").split(/[-_]/)[0].toLowerCase()
+        if (!/^[a-z]{2,3}$/.test(language) || language === "und")
+            language = "en"
         if (source === "wikipedia")
             return "https://" + language + ".m.wikipedia.org/w/index.php?search=" + words
         if (source === "search")
@@ -252,6 +258,8 @@ ThemedWindow {
     function showNote(href, rect) {
         const note = bookReader.note(href)
         if (!note.html) {
+            // Read in its page: EPUB 3's notes are hidden there otherwise.
+            notesShown = true
             followLink(href)
             return
         }
@@ -374,7 +382,7 @@ ThemedWindow {
             background: pageColors.background, color: pageColors.color, link: pageColors.link,
             margin: sideMargin / readerSettings.zoom, columns: columns, scroll: readerSettings.scroll,
             fontFamily: family === "" || family === "serif" || family === "sans-serif" ? family : JSON.stringify(family) + ", serif",
-            lineHeight: readerSettings.lineHeight, align: readerSettings.align
+            lineHeight: readerSettings.lineHeight, align: readerSettings.align, notesShown: notesShown
         }
     }
 
@@ -1702,7 +1710,9 @@ ThemedWindow {
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignHCenter
                             wrapMode: Text.WordWrap
-                            text: qsTr("Calibre is making an EPUB of “%1”, kept for the next time…").arg(bookReader.preparingTitle)
+                            text: (bookReader.preparingCalibre ? qsTr("Calibre is making an EPUB of “%1”, kept for the next time…")
+                                                               : qsTr("Making an EPUB of “%1”, kept for the next time…"))
+                                .arg(bookReader.preparingTitle)
                             color: readerWindow.pageText
                         }
                     }

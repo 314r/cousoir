@@ -67,8 +67,10 @@ class BookReader : public QObject
     // The book read aloud (BookSpeech); null when Cousoir is built without
     // Qt TextToSpeech.
     Q_PROPERTY(QObject *speech READ speech CONSTANT)
-    // Calibre making an EPUB of the book to open: its title.
+    // An EPUB being made of the book to open, by Calibre or of a Kindle
+    // book by Cousoir: its title.
     Q_PROPERTY(bool preparing READ preparing NOTIFY preparingChanged)
+    Q_PROPERTY(bool preparingCalibre READ preparingCalibre NOTIFY preparingChanged)
     Q_PROPERTY(QString preparingTitle READ preparingTitle NOTIFY preparingChanged)
 
 public:
@@ -100,6 +102,7 @@ public:
     bool searchMore() const;
     QObject *speech() const;
     bool preparing() const;
+    bool preparingCalibre() const;
     QString preparingTitle() const;
 
     // The formats Cousoir reads once Calibre makes them EPUBs, in the order
@@ -182,6 +185,10 @@ private:
     void writePositions(const QJsonObject &positions) const;
     // Has Calibre make `part` of `source`, renamed `made` once done.
     bool convert(int bookId, const QString &title, const QString &source, const QString &part, const QString &made);
+    // The same of a Kindle book, by Cousoir on a thread.
+    void convertKindle(int bookId, const QString &title, const QString &source, const QString &part, const QString &made);
+    // What is being made let go: Calibre stopped, a thread's EPUB not kept.
+    void stopPreparing();
     void queueAnnotation(const Annotation &annotation);
     // A highlight changed, kept as it is now, as whose it is.
     void queueHighlight(const QString &uuid);
@@ -207,6 +214,10 @@ private:
     bool m_local = false;
     // The conversion running, if any, and its book.
     QPointer<QProcess> m_conversion;
+    QString m_preparingPart;
+    QString m_preparingFolder;
+    // The thread making a Kindle book's EPUB, if any.
+    QObject *m_kindle = nullptr;
     int m_preparingBook = 0;
     QString m_preparingTitle;
     QString m_pdfPath;

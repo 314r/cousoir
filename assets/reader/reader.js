@@ -29,7 +29,7 @@
     // ("start", "justify"), empty for the book's own.
     const settings = {
         margin: 40, background: '#ffffff', color: '#1d1d1f', link: '#2f6db5', columns: 1, scroll: false,
-        fontFamily: '', lineHeight: 0, align: '',
+        fontFamily: '', lineHeight: 0, align: '', notesShown: false,
     };
     let styleElement = null;
     let lastCfi = '';
@@ -646,8 +646,8 @@
         styleElement.textContent = `
             @namespace epub "${OPS}";
             ${page}
-            aside[epub|type~="footnote"], aside[epub|type~="endnote"], aside[epub|type~="rearnote"],
-            aside[role~="doc-footnote"], aside[role~="doc-endnote"] { display: none !important; }
+            ${settings.notesShown ? '' : `aside[epub|type~="footnote"], aside[epub|type~="endnote"], aside[epub|type~="rearnote"],
+            aside[role~="doc-footnote"], aside[role~="doc-endnote"] { display: none !important; }`}
             html {
                 margin: 0 !important; padding: 0 !important;
                 background: ${settings.background} !important; color: ${settings.color} !important;

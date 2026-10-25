@@ -85,7 +85,7 @@ QByteArray palmdoc(const QByteArray &input)
     QByteArray out;
     out.reserve(input.size() * 2);
     qsizetype i = 0;
-    while (i < input.size()) {
+    while (i < input.size() && out.size() < (1 << 20)) {
         quint32 c = quint8(input.at(i++));
         if (c >= 1 && c <= 8) {
             while (c-- && i < input.size())
@@ -142,8 +142,9 @@ public:
             }
             const quint32 phrases = u32(cdic, 8);
             const quint32 bits = u32(cdic, 12);
-            const qsizetype n = std::min<qsizetype>(qsizetype(1) << std::min<quint32>(bits, 30),
-                                                    qsizetype(phrases) - m_dictionary.size());
+            // As many as the record holds, whatever its header says.
+            const qsizetype n = std::min({ qsizetype(1) << std::min<quint32>(bits, 30),
+                                           qsizetype(phrases) - m_dictionary.size(), (cdic.size() - 16) / 2 });
             for (qsizetype k = 0; k < n; ++k) {
                 const quint16 offset = u16(cdic, 16 + 2 * k);
                 const quint16 length = u16(cdic, 16 + offset);
@@ -192,6 +193,10 @@ public:
                 phrase.data = unpack(phrase.data, depth + 1);
             }
             out += phrase.data;
+            // A record is 4 kB of text: a phrase blown up, of a damaged
+            // book, stops here.
+            if (out.size() > maxRecord)
+                break;
         }
         return out;
     }
@@ -208,6 +213,7 @@ private:
         QByteArray data;
         bool done = false;
     };
+    static constexpr qsizetype maxRecord = 1 << 20;
     Code m_dict1[256];
     quint64 m_min[33] = {};
     quint64 m_max[33] = {};
@@ -229,6 +235,8 @@ struct Header
     QByteArray title;
     quint32 mobiVersion = 0;
     quint32 firstImageIndex = nullIndex;
+    // The book's locale: its language in the low byte.
+    quint32 langcode = 0;
     quint32 ncxIndex = nullIndex;
     quint32 divIndex = nullIndex;
     quint32 skelIndex = nullIndex;
@@ -274,6 +282,7 @@ Header readHeader(const QByteArray &raw, bool textread)
     const quint32 titleLength = u32(raw, 0x58);
     if (qsizetype(titleOffset) + titleLength < raw.size())
         header.title = raw.mid(titleOffset, titleLength);
+    header.langcode = u32(raw, 0x5C);
     header.mobiVersion = u32(raw, 0x68);
     header.firstImageIndex = u32(raw, 0x6C);
     if (u32(raw, 0x80) & 0x40) {
@@ -304,13 +313,35 @@ Header readHeader(const QByteArray &raw, bool textread)
     return header;
 }
 
+// mobi2iana() of IANA_MOBI in calibre/ebooks/mobi/langcodes.py, the
+// language alone: "und" for one it lacks.
+QString mobiLanguage(quint32 code)
+{
+    static const QHash<quint32, const char *> languages{
+        { 1, "ar" },  { 2, "bg" },  { 3, "ca" },  { 4, "zh" },  { 5, "cs" },  { 6, "da" },  { 7, "de" },   { 8, "el" },
+        { 9, "en" },  { 10, "es" }, { 11, "fi" }, { 12, "fr" }, { 13, "he" }, { 14, "hu" }, { 15, "is" },  { 16, "it" },
+        { 17, "ja" }, { 18, "ko" }, { 19, "nl" }, { 20, "no" }, { 21, "pl" }, { 22, "pt" }, { 23, "rm" },  { 24, "ro" },
+        { 25, "ru" }, { 26, "hr" }, { 27, "sk" }, { 28, "sq" }, { 29, "sv" }, { 30, "th" }, { 31, "tr" },  { 32, "ur" },
+        { 33, "id" }, { 34, "uk" }, { 35, "be" }, { 36, "sl" }, { 37, "et" }, { 38, "lv" }, { 39, "lt" },  { 41, "fa" },
+        { 42, "vi" }, { 43, "hy" }, { 44, "az" }, { 45, "eu" }, { 46, "wen" }, { 47, "mk" }, { 48, "st" }, { 49, "ts" },
+        { 50, "tn" }, { 52, "xh" }, { 53, "zu" }, { 54, "af" }, { 55, "ka" }, { 56, "fo" }, { 57, "hi" },  { 58, "mt" },
+        { 59, "se" }, { 62, "ms" }, { 63, "kk" }, { 65, "sw" }, { 67, "uz" }, { 68, "tt" }, { 69, "bn" },  { 70, "pa" },
+        { 71, "gu" }, { 72, "or" }, { 73, "ta" }, { 74, "te" }, { 75, "kn" }, { 76, "ml" }, { 77, "as" },  { 78, "mr" },
+        { 79, "sa" }, { 87, "kok" }, { 97, "ne" },
+    };
+    return QString::fromLatin1(languages.value(code, "und"));
+}
+
 // --- Indices ----------------------------------------------------------------
 
 // decint(): a number of 7 bits a byte, the last byte's high bit set.
 quint64 decint(const QByteArray &data, qsizetype at, qsizetype *consumed)
 {
     quint64 value = 0;
-    qsizetype i = at;
+    qsizetype i = std::max<qsizetype>(at, 0);
+    *consumed = 0;
+    if (at < 0 || at >= data.size())
+        return 0;
     while (i < data.size()) {
         const quint8 byte = quint8(data.at(i++));
         value = (value << 7) | (byte & 0x7F);
@@ -430,21 +461,22 @@ Index readIndex(const QList<QByteArray> &sections, quint32 idx, const std::funct
     // The ORDT that maps an entry's bytes, of an EBCDIC-UTF table among them.
     QString ordtMap;
     if (ordt2 > 0 && data.mid(ordt2, 4) == "ORDT") {
-        const QByteArray raw = data.mid(ordt2 + 4, 2 * oentries);
-        for (quint32 i = 0; i < oentries; ++i) {
+        const QByteArray raw = data.mid(ordt2 + 4, 2 * qsizetype(oentries));
+        for (qsizetype i = 0; i < raw.size() / 2; ++i) {
             const quint8 second = u8(raw, 2 * i + 1);
             ordtMap += code == 65002 && second > 0x20 && second < 0x7F ? QChar(second) : QChar(u'?');
         }
     }
     if (ncncx > 0) {
         quint32 recordOffset = 0;
-        for (quint32 r = 0; r < ncncx; ++r) {
+        for (qint64 r = 0; r < ncncx && qint64(idx) + count + 1 + r < sections.size(); ++r) {
             const QByteArray raw = sections.value(qsizetype(idx) + count + 1 + r);
             qsizetype pos = 0;
             while (pos < raw.size()) {
                 qsizetype consumed = 0;
                 const quint64 length = decint(raw, pos, &consumed);
-                if (consumed == 0)
+                // A length past the record's end, of a damaged book.
+                if (consumed == 0 || length > quint64(raw.size() - pos - consumed))
                     break;
                 if (length > 0)
                     index.cncx.insert(quint32(pos) + recordOffset, decode(raw.mid(pos + consumed, qsizetype(length))));
@@ -461,14 +493,15 @@ Index readIndex(const QList<QByteArray> &sections, quint32 idx, const std::funct
     const quint32 firstEntry = u32(data, tagxStart + 4);
     const quint32 controlBytes = u32(data, tagxStart + 8);
     QList<TagX> tagx;
-    for (qsizetype i = 12; i + 4 <= qsizetype(firstEntry); i += 4)
+    for (qsizetype i = 12; i + 4 <= qsizetype(firstEntry) && tagxStart + i + 4 <= data.size(); i += 4)
         tagx.append({ u8(data, tagxStart + i), u8(data, tagxStart + i + 1), u8(data, tagxStart + i + 2),
                       u8(data, tagxStart + i + 3) });
     QHash<QString, qsizetype> positions;
     for (quint32 i = idx + 1; i <= idx + count && i < quint32(sections.size()); ++i) {
         const QByteArray &record = sections.at(i);
         const quint32 idxt = field(record, 4);
-        const quint32 entries = field(record, 5);
+        // As many entries as the IDXT holds, whatever the header says.
+        const quint32 entries = std::min<qint64>(field(record, 5), std::max<qint64>(0, (record.size() - qint64(idxt) - 4) / 2));
         QList<quint32> starts;
         for (quint32 j = 0; j < entries; ++j)
             starts.append(u16(record, idxt + 4 + 2 * j));
@@ -581,6 +614,9 @@ QPair<QByteArray, QString> readFont(const QByteArray &data)
             font[n] = char(font.at(n) ^ key.at(n % key.size()));
     }
     if (flags & 0b1) {
+        // A font is some megabytes at most.
+        if (size > (32u << 20))
+            return {};
         QByteArray sized(4, '\0');
         qToBigEndian(size, sized.data());
         font = qUncompress(sized + font);
@@ -670,14 +706,15 @@ private:
     QMap<QString, QByteArray> m_resources;
     QList<QPair<QString, QByteArray>> m_pages;
     QList<TocItem> m_toc;
+    // Windows-1252, a byte a character, with no state between calls.
+    mutable QStringDecoder m_cp1252{ "windows-1252" };
 };
 
 QString Reader::decode(const QByteArray &data) const
 {
     if (m_header.utf8)
         return QString::fromUtf8(data);
-    QStringDecoder decoder("windows-1252");
-    return decoder.isValid() ? QString(decoder(data)) : QString::fromLatin1(data);
+    return m_cp1252.isValid() ? QString(m_cp1252.decode(data)) : QString::fromLatin1(data);
 }
 
 bool Reader::read(const QByteArray &file, QString *error)
@@ -699,7 +736,9 @@ bool Reader::read(const QByteArray &file, QString *error)
     for (quint16 i = 0; i < count; ++i) {
         const quint32 start = u32(file, 78 + 8 * i);
         const quint32 end = i + 1 < count ? u32(file, 78 + 8 * (i + 1)) : quint32(file.size());
-        m_sections.append(file.mid(start, qsizetype(end) - start));
+        // A record past the file's end, or ending before it starts, of a
+        // damaged book: empty.
+        m_sections.append(end >= start ? file.mid(start, qsizetype(end) - start) : QByteArray());
     }
     if (m_sections.isEmpty()) {
         *error = QObject::tr("This book has no records.");
@@ -756,6 +795,9 @@ bool Reader::read(const QByteArray &file, QString *error)
     readIndices();
     buildParts();
     extractResources();
+    // The contents before the markup changes, as Calibre reads them: their
+    // places are in the parts as they were, and the aids they go to stay.
+    m_toc = readNcx();
     expandMarkup();
     finishKf8();
     return true;
@@ -795,7 +837,7 @@ bool Reader::extractText(qsizetype offset, QString *error)
     Huff huff;
     if (m_header.compression == "DH") {
         QList<QByteArray> records;
-        for (quint32 i = 0; i < m_header.huffNumber; ++i)
+        for (qint64 i = 0; i < m_header.huffNumber && qint64(m_header.huffOffset) + i < m_sections.size(); ++i)
             records.append(m_sections.value(qsizetype(m_header.huffOffset) + i));
         if (!huff.load(records, error))
             return false;
@@ -808,8 +850,15 @@ bool Reader::extractText(qsizetype offset, QString *error)
         *error = QObject::tr("This book is compressed in a way Cousoir does not know.");
         return false;
     }
-    for (qsizetype i = offset; i < std::min<qsizetype>(offset + m_header.records, m_sections.size()); ++i)
+    for (qsizetype i = offset; i < std::min<qsizetype>(offset + m_header.records, m_sections.size()); ++i) {
         m_raw += unpack(textSection(i));
+        // The text of the longest books is some tens of megabytes: more is
+        // a damaged book's.
+        if (m_raw.size() > (qsizetype(256) << 20)) {
+            *error = QObject::tr("This book's text is too large: it may be damaged.");
+            return false;
+        }
+    }
     if (m_raw.endsWith('#'))
         m_raw.chop(1);
     return true;
@@ -822,7 +871,7 @@ void Reader::readIndices()
         const QByteArray &fdst = m_kf8.at(m_header.fdstIndex);
         if (fdst.startsWith("FDST")) {
             const quint32 start = u32(fdst, 4);
-            const quint32 count = u32(fdst, 8);
+            const quint32 count = std::min<qint64>(u32(fdst, 8), std::max<qint64>(0, (fdst.size() - qint64(start)) / 8));
             for (quint32 i = 0; i < count; ++i)
                 m_flowTable.append({ u32(fdst, start + 8 * i), u32(fdst, start + 8 * i + 4) });
         }
@@ -853,8 +902,11 @@ void Reader::buildParts()
     // The skeletons, each with its fragments put back in.
     qsizetype div = 0;
     for (const File &file : std::as_const(m_files)) {
-        qint64 base = file.start + file.length;
-        QString skeleton = text.mid(file.start, file.length);
+        // Places and lengths within the text, of a damaged book too.
+        const qint64 fileStart = std::clamp<qint64>(file.start, 0, text.size());
+        const qint64 fileLength = std::clamp<qint64>(file.length, 0, text.size() - fileStart);
+        qint64 base = fileStart + fileLength;
+        QString skeleton = text.mid(fileStart, fileLength);
         QString filename;
         QString aid;
         for (quint64 i = 0; i < file.divCount && div < m_elements.size(); ++i, ++div) {
@@ -863,8 +915,9 @@ void Reader::buildParts()
                 aid = element.tocText.mid(12).chopped(std::min<qsizetype>(2, element.tocText.mid(12).size()));
                 filename = QStringLiteral("part%1.html").arg(element.fileNumber, 4, 10, QChar(u'0'));
             }
-            const QString part = text.mid(base, element.length);
-            qint64 insert = element.insertPos - file.start;
+            const qint64 length = std::clamp<qint64>(element.length, 0, std::max<qint64>(0, text.size() - base));
+            const QString part = text.mid(base, length);
+            qint64 insert = std::clamp<qint64>(element.insertPos - fileStart, 0, skeleton.size());
             const QString head = skeleton.left(insert);
             const QString tail = skeleton.mid(insert);
             // An insert position inside a tag, of badly made books: after the
@@ -875,15 +928,19 @@ void Reader::buildParts()
                                              QRegularExpression::CaseInsensitiveOption);
                 const QRegularExpressionMatch match = tag.match(skeleton);
                 if (match.hasMatch())
-                    insert = skeleton.indexOf(u'>', match.capturedStart() + 1) + 1 + element.startPos;
+                    insert = std::clamp<qint64>(skeleton.indexOf(u'>', match.capturedStart() + 1) + 1 + element.startPos, 0,
+                                                skeleton.size());
             }
             skeleton = skeleton.left(insert) + part + skeleton.mid(insert);
-            base += element.length;
+            base += length;
         }
-        if (file.divCount < 1)
-            filename = QStringLiteral("empty%1.html").arg(m_partInfo.size());
+        // A skeleton without fragments, or one whose name another page
+        // has, of a damaged book: a name of its own.
+        if (filename.isEmpty() || std::any_of(m_partInfo.cbegin(), m_partInfo.cend(),
+                                              [&filename](const Part &other) { return other.filename == filename; }))
+            filename = QStringLiteral("page%1.html").arg(m_partInfo.size(), 4, 10, QChar(u'0'));
         m_parts.append(skeleton);
-        m_partInfo.append({ filename, file.start, base });
+        m_partInfo.append({ filename, fileStart, base });
     }
 
     // The other flows: styles, and pictures in SVG, inlined when they hold
@@ -1088,7 +1145,10 @@ void Reader::expandMarkup()
         result += QStringView(tag).mid(last);
         return result;
     };
-    for (QString &part : m_parts) {
+    // Into new parts: the places of the links are those of the parts as
+    // they were, all of them.
+    QList<QString> linked = m_parts;
+    for (QString &part : linked) {
         eachTag(&part, link, [&](const QString &tag) {
             return subEach(tag, posFid, [&](const QRegularExpressionMatch &match) {
                 const auto target = idTagByPosFid(quint64(base32(match.captured(1))), quint64(base32(match.captured(2))));
@@ -1099,6 +1159,7 @@ void Reader::expandMarkup()
             });
         });
     }
+    m_parts = linked;
 
     // remove_kindlegen_markup(): kindlegen's aids gone, but those linked
     // to, made ids; its page breaks, styles.
@@ -1139,7 +1200,9 @@ void Reader::expandMarkup()
     };
 
     // update_flow_links(): in the styles and pictures, their pictures, fonts
-    // and other styles.
+    // and other styles; a flow inlined as it was, not as it is made here,
+    // which could grow without end.
+    const QList<QString> originalFlows = m_flows;
     for (qsizetype f = 1; f < m_flows.size(); ++f) {
         QString &flow = m_flows[f];
         eachTag(&flow, anyTag, [&](const QString &tag) {
@@ -1171,7 +1234,7 @@ void Reader::expandMarkup()
             if (number < 0 || number >= m_flowInfo.size())
                 return QString();
             if (m_flowInfo.at(number).format == QLatin1String("inline"))
-                return m_flows.at(number);
+                return originalFlows.at(number);
             return subEach(tag, flowRef, [&](const QRegularExpressionMatch &) { return u'"' + flowPath(number) + u'"'; });
         });
     }
@@ -1238,8 +1301,10 @@ QList<TocItem> Reader::readNcx()
         const Entry &entry = table.entries.at(num);
         Item item;
         item.num = num;
-        item.level = entry.tags.contains(4) ? qint64(entry.tag(4)) : -1;
-        item.parent = entry.tags.contains(21) ? qint64(entry.tag(21)) : -1;
+        // Some levels deep at most, a parent before its children: a damaged
+        // book's chains would make a tree as deep as it is long.
+        item.level = entry.tags.contains(4) ? std::min<qint64>(qint64(entry.tag(4)), 8) : -1;
+        item.parent = entry.tags.contains(21) && qint64(entry.tag(21)) < num ? qint64(entry.tag(21)) : -1;
         item.title = CalibreText::replaceEntities(table.cncx.value(quint32(entry.tag(3)), QStringLiteral("Unknown Text")));
         if (entry.tags.contains(6)) {
             const auto target = idTagByPosFid(entry.tag(6), entry.tag(6, 1));
@@ -1278,6 +1343,8 @@ QList<TocItem> Reader::readNcx()
             if (item.level != level)
                 continue;
             QList<int> path = item.parent >= 0 && paths.contains(int(item.parent)) ? paths.value(int(item.parent)) : QList<int>();
+            if (path.size() >= 8)
+                path.clear();
             QList<TocItem> *children = childrenAt(path);
             children->append({ item.title, item.href, {} });
             path.append(int(children->size()) - 1);
@@ -1370,7 +1437,7 @@ void Reader::readMobi6()
     QSet<qsizetype> processed;
     for (qsizetype i = 0; i <= m_header.records; ++i)
         processed.insert(i);
-    for (quint32 i = 0; i < m_header.huffNumber; ++i)
+    for (qint64 i = 0; i < m_header.huffNumber && qint64(m_header.huffOffset) + i < m_sections.size(); ++i)
         processed.insert(qsizetype(m_header.huffOffset) + i);
     qsizetype start = m_header.firstImageIndex;
     if (m_header.firstImageIndex == nullIndex || start > m_sections.size())
@@ -1560,11 +1627,14 @@ void Reader::finishKf8()
         if (info.format == QLatin1String("file"))
             m_resources.insert(info.dir + u'/' + info.name, text(m_flows.at(f)).toUtf8());
     }
-    m_toc = readNcx();
 }
 
 bool Reader::writeEpub(const QString &path, QString *error)
 {
+    if (m_pages.isEmpty()) {
+        *error = QObject::tr("This book has no text Cousoir can find: it may be damaged.");
+        return false;
+    }
     QMap<QString, QByteArray> files = m_resources;
     QStringList spine;
     QHash<QString, QString> types;
@@ -1576,14 +1646,15 @@ bool Reader::writeEpub(const QString &path, QString *error)
     }
 
     // The metadata: the EXTH's title, authors, language and identifier.
-    const auto exthText = [this](quint32 id) { return decode(m_header.exthValue(id)).trimmed(); };
+    // Of characters XML forbids, a damaged book may have some.
+    const auto exthText = [this](quint32 id) { return CalibreText::cleanXmlChars(decode(m_header.exthValue(id))).trimmed(); };
     QString title = exthText(503);
     if (title.isEmpty())
-        title = decode(m_header.title);
+        title = CalibreText::cleanXmlChars(decode(m_header.title));
     QStringList authors;
     for (const auto &[id, value] : m_header.exth) {
         if (id == 100)
-            authors.append(decode(value).trimmed());
+            authors.append(CalibreText::cleanXmlChars(decode(value)).trimmed());
     }
     QString identifier = exthText(112);
     if (identifier.startsWith(QLatin1String("calibre:")))
@@ -1592,7 +1663,9 @@ bool Reader::writeEpub(const QString &path, QString *error)
         identifier = exthText(113);
     if (identifier.isEmpty())
         identifier = QStringLiteral("cousoir:") + title;
-    const QString language = exthText(524).isEmpty() ? QStringLiteral("und") : exthText(524);
+    QString language = exthText(524);
+    if (language.isEmpty())
+        language = mobiLanguage(m_header.langcode & 0xFF);
     const QString direction = exthText(527);
 
     QString manifest;
@@ -1632,7 +1705,8 @@ bool Reader::writeEpub(const QString &path, QString *error)
             xml += QStringLiteral("<navPoint id=\"np%1\" playOrder=\"%1\"><navLabel><text>%2</text></navLabel>"
                                   "<content src=\"%3\"/>")
                        .arg(playOrder)
-                       .arg(item.title.toHtmlEscaped(), item.href.toHtmlEscaped());
+                       .arg(CalibreText::cleanXmlChars(item.title).toHtmlEscaped(),
+                            CalibreText::cleanXmlChars(item.href).toHtmlEscaped());
             xml += points(item.children) + QStringLiteral("</navPoint>");
         }
         return xml;
@@ -1670,7 +1744,12 @@ bool Reader::writeEpub(const QString &path, QString *error)
             *error = QObject::tr("Cannot write %1.").arg(path);
             return false;
         }
-        zip_set_file_compression(archive, zip_uint64_t(index), name == QLatin1String("mimetype") ? ZIP_CM_STORE : ZIP_CM_DEFLATE,
+        // The mimetype first and stored, as EPUB wants; pictures stored too,
+        // compressed already.
+        static const QRegularExpression compressed(QStringLiteral("\\.(jpg|png|gif|webp)$"));
+        zip_set_file_compression(archive, zip_uint64_t(index),
+                                 name == QLatin1String("mimetype") || compressed.match(name).hasMatch() ? ZIP_CM_STORE
+                                                                                                         : ZIP_CM_DEFLATE,
                                  0);
     }
     if (zip_close(archive) != 0) {

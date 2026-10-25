@@ -639,8 +639,11 @@ QVariantMap BookReader::note(const QUrl &url) const
     QString text;
     appendNote(*block, &html, &text);
     text = text.simplified();
-    // A section, a chapter: no note to show in a box.
-    if (text.isEmpty() || text.size() > 3000)
+    // A section, a chapter: no note to show in a box. An EPUB 3 footnote
+    // is one however long, the page hiding it.
+    const QString type = block->attribute(QStringLiteral("epub:type")) + u' ' + block->attribute(QStringLiteral("role"));
+    const bool aside = block->isElement("aside") && (type.contains(QLatin1String("note")));
+    if (text.isEmpty() || text.size() > (aside ? 100000 : 3000))
         return {};
     return { { QStringLiteral("html"), html.trimmed() }, { QStringLiteral("text"), text } };
 }
@@ -654,7 +657,67 @@ QUrl BookReader::imageUrl(const QUrl &url) const
 
 bool BookReader::preparing() const
 {
+    return m_conversion != nullptr || m_kindle != nullptr;
+}
+
+bool BookReader::preparingCalibre() const
+{
     return m_conversion != nullptr;
+}
+
+void BookReader::stopPreparing()
+{
+    const bool was = preparing();
+    if (m_conversion) {
+        QProcess *process = m_conversion;
+        m_conversion = nullptr;
+        process->disconnect(this);
+        CalibreJob::stopProcessGroup(process);
+        process->deleteLater();
+        QFile::remove(m_preparingPart);
+        QDir(m_preparingFolder).removeRecursively();
+    }
+    // A Kindle book's thread goes on to its end; its result is let go then.
+    m_kindle = nullptr;
+    m_preparingBook = 0;
+    m_preparingTitle.clear();
+    if (was)
+        emit preparingChanged();
+}
+
+void BookReader::convertKindle(int bookId, const QString &title, const QString &source, const QString &part,
+                               const QString &made)
+{
+    stopPreparing();
+    auto *watcher = new QFutureWatcher<QString>(this);
+    m_kindle = watcher;
+    m_preparingBook = bookId;
+    m_preparingTitle = title;
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, bookId, part, made, title] {
+        watcher->deleteLater();
+        QString error = watcher->result();
+        if (m_kindle != watcher) {
+            QFile::remove(part);
+            return;
+        }
+        m_kindle = nullptr;
+        m_preparingBook = 0;
+        m_preparingTitle.clear();
+        if (error.isEmpty() && !QFile::rename(part, made))
+            error = tr("“%1” cannot be read.").arg(title);
+        if (!error.isEmpty())
+            QFile::remove(part);
+        emit preparingChanged();
+        emit prepared(bookId, error);
+    });
+    // On a thread: a large book takes a moment, a damaged one longer.
+    watcher->setFuture(QtConcurrent::run([source, part, title] {
+        QString error;
+        if (MobiBook::toEpub(source, part, &error))
+            return QString();
+        return error.isEmpty() ? tr("“%1” cannot be read.").arg(title) : error;
+    }));
+    emit preparingChanged();
 }
 
 QString BookReader::preparingTitle() const
@@ -790,21 +853,24 @@ QString BookReader::open(int bookId)
         const QFileInfo info(path);
         const QDir cache(CousoirPaths::cacheFolder(m_library->libraryPath()) + QStringLiteral("/reader"));
         const QString prefix = QStringLiteral("%1-%2-").arg(book->uuid, m_format);
-        const QString made = cache.filePath(prefix + QStringLiteral("%1-%2.epub").arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch()));
+        // The maker's version too: a book made by an older Cousoir is made
+        // again.
+        const bool calibre = convertedFormats().contains(m_format);
+        const QString maker = calibre ? QStringLiteral("calibre") : QStringLiteral("cousoir%1").arg(MobiBook::version);
+        const QString made = cache.filePath(prefix + QStringLiteral("%1-%2-%3.epub")
+                                                         .arg(info.size())
+                                                         .arg(info.lastModified().toMSecsSinceEpoch())
+                                                         .arg(maker));
         if (!QFileInfo::exists(made)) {
             QDir().mkpath(cache.path());
             for (const QString &old : cache.entryList({ prefix + u'*' }, QDir::Files))
                 QFile::remove(cache.filePath(old));
             const QString part = made + QStringLiteral(".part.epub");
-            if (convertedFormats().contains(m_format)) {
-                m_format.clear();
+            m_format.clear();
+            if (calibre)
                 return convert(bookId, book->title, path, part, made) ? QString() : tr("Calibre cannot be run.");
-            }
-            if (!MobiBook::toEpub(path, part, &error) || !QFile::rename(part, made)) {
-                QFile::remove(part);
-                m_format.clear();
-                return error.isEmpty() ? tr("“%1” cannot be read.").arg(book->title) : error;
-            }
+            convertKindle(bookId, book->title, path, part, made);
+            return {};
         }
         path = made;
     }
@@ -926,6 +992,8 @@ QString BookReader::open(int bookId)
 
 void BookReader::close()
 {
+    // A book being made an EPUB for the window: no longer wanted.
+    stopPreparing();
     if (!m_pdfPath.isEmpty()) {
         m_pdfPath.clear();
         m_pdfTitle.clear();
@@ -965,16 +1033,15 @@ QUrl BookReader::fileUrl() const
 
 bool BookReader::convert(int bookId, const QString &title, const QString &source, const QString &part, const QString &made)
 {
-    if (m_conversion) {
-        m_conversion->disconnect(this);
-        CalibreJob::stopProcessGroup(m_conversion);
-    }
+    stopPreparing();
     const QString program = converter();
     if (program.isEmpty())
         return false;
     auto *process = new QProcess(this);
     const QString folder = QFileInfo(made).dir().filePath(QStringLiteral("job-") + QFileInfo(made).completeBaseName());
     QDir().mkpath(folder);
+    m_preparingPart = part;
+    m_preparingFolder = folder;
     process->setProcessEnvironment(
         CalibreJob::environment(folder, m_library ? m_library->interfaceLanguage() : QString()));
     process->setProcessChannelMode(QProcess::MergedChannels);
