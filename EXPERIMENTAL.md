@@ -465,6 +465,38 @@ Each turn into another file empties the page while the file loads. The
 next file ready before it is needed, a second view swapped in, so that a
 chapter's first page shows at once, as a page within a chapter does.
 
+Left for a later round.
+
+### Round 6
+
+#### R6. Turns without a wait
+
+From round 5: the next file ready before it is needed.
+
+#### R7. Every book of the library readable — picked
+
+The reader opens EPUB, KEPUB and PDF; a book the library has only as AZW3
+or MOBI, the Kindle's formats, says "This book has no EPUB or PDF to read".
+Calibre's viewer reads them by converting them; Cousoir can read them
+itself, which matters more than a faster chapter turn: a whole part of a
+library is closed to the reader today.
+
+- Kindle books without Calibre: a port of Calibre's MOBI reader
+  (`ebooks/mobi/reader`: the PDB and MOBI headers, PalmDOC and HUFF/CDIC
+  decompression, KF8's skeletons, fragments, flows and resources, the
+  older MOBI's file positions and records, the NCX), making an EPUB the
+  reader opens, kept aside in Cousoir's cache while the book is unchanged.
+  A book with DRM is refused, saying so.
+- The other formats (FB2, DOCX, RTF, TXT, comics…) converted to EPUB by
+  Calibre when it is installed, kept aside the same way.
+- Positions and highlights in such a book stay Cousoir's own: Calibre's
+  viewer counts its places in its own conversion, which Cousoir's EPUB
+  does not reproduce.
+
+Done when AZW3 and MOBI books Calibre makes of the reader's fixtures read
+with their text, pictures, links and contents, the tests checking the
+text against the EPUB they were made of.
+
 ## Status
 
 | Goal | State |
