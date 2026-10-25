@@ -280,6 +280,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/ereader.svg
     assets/icons/external.svg
     assets/icons/folder.svg
+    assets/icons/fullscreen.svg
     assets/icons/globe.svg
     assets/icons/highlighter.svg
     assets/icons/grid.svg
@@ -302,6 +303,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/theme-omarchy.svg
     assets/icons/theme-system.svg
     assets/icons/trash.svg
+    assets/icons/type.svg
     assets/icons/user.svg
     assets/icons/hicolor/cousoir-256.png
     assets/reader/reader.js

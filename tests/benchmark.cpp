@@ -323,8 +323,12 @@ struct Shot
     QStringList keys;
     QString typed;
     // The book read in Cousoir's reader, drawn instead, the keys pressed
-    // there.
+    // there; the reader's size, and its settings ("Reader/" keys).
     bool read = false;
+    QSize readerSize;
+    QStringList settings;
+    // Controls of the reader clicked, by name, after the keys.
+    QStringList readerClicks;
 };
 
 QQuickItem *visualDescendant(QQuickItem *item, const QString &name)
@@ -342,6 +346,11 @@ int screenshot(const QString &path, const Shot &shot)
 {
     if (!shot.theme.isEmpty())
         QSettings().setValue(QStringLiteral("Appearance/colorMode"), shot.theme);
+    for (const QString &setting : shot.settings) {
+        const qsizetype equals = setting.indexOf(u'=');
+        if (equals > 0)
+            QSettings().setValue(QStringLiteral("Reader/") + setting.left(equals), setting.mid(equals + 1));
+    }
     QQmlApplicationEngine engine;
     QQuickWindow *window = openWindow(engine, path, shot.size);
     if (!window)
@@ -405,6 +414,8 @@ int screenshot(const QString &path, const Shot &shot)
             return 1;
         }
         window = reader;
+        if (shot.readerSize.isValid())
+            reader->resize(shot.readerSize);
         // The page laid out and its position told.
         QTest::qWait(2500);
     }
@@ -413,6 +424,22 @@ int screenshot(const QString &path, const Shot &shot)
         QTest::keySequence(window, QKeySequence(key));
         if (shot.read)
             QTest::qWait(500);
+    }
+    for (const QString &name : shot.readerClicks) {
+        drawn(window);
+        QQuickItem *item = window->findChild<QQuickItem *>(name);
+        if (!item)
+            item = visualDescendant(window->contentItem(), name);
+        // A popup's items are the overlay's.
+        if (!item && window->contentItem()->parentItem())
+            item = visualDescendant(window->contentItem()->parentItem(), name);
+        if (!item) {
+            out() << "no control " << name << Qt::endl;
+            return 1;
+        }
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        QTest::qWait(500);
     }
     if (!shot.typed.isEmpty()) {
         drawn(window);
@@ -467,6 +494,10 @@ int main(int argc, char *argv[])
                        QStringLiteral("sequence") });
     parser.addOption({ QStringLiteral("type"), QStringLiteral("Text to type, after the keys."), QStringLiteral("text") });
     parser.addOption({ QStringLiteral("read"), QStringLiteral("Read the book in Cousoir's reader, drawn instead.") });
+    parser.addOption({ QStringLiteral("reader-size"), QStringLiteral("The reader's size."), QStringLiteral("WxH") });
+    parser.addOption({ QStringLiteral("set"), QStringLiteral("A reader setting, key=value."), QStringLiteral("setting") });
+    parser.addOption({ QStringLiteral("reader-click"), QStringLiteral("A control of the reader to click, after the keys."),
+                       QStringLiteral("name") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -494,6 +525,11 @@ int main(int argc, char *argv[])
         shot.keys = parser.values(QStringLiteral("key"));
         shot.typed = parser.value(QStringLiteral("type"));
         shot.read = parser.isSet(QStringLiteral("read"));
+        const QStringList readerSize = parser.value(QStringLiteral("reader-size")).split(u'x');
+        if (readerSize.size() == 2)
+            shot.readerSize = QSize(readerSize.at(0).toInt(), readerSize.at(1).toInt());
+        shot.settings = parser.values(QStringLiteral("set"));
+        shot.readerClicks = parser.values(QStringLiteral("reader-click"));
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);
