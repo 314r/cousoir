@@ -398,6 +398,42 @@ voice plugin on this computer. The book read aloud from the page, the
 sentence read marked, the pages turned with it, a voice and a speed picked,
 as Calibre's viewer reads aloud.
 
+Left for the next round.
+
+### Round 4
+
+Reading, finding, keeping: the reader does what a reader app does. Two
+ways further: listening to the book, and the parts of a book a reader
+leaves the page for.
+
+#### R4. Reading aloud — picked
+
+From round 3. A book read aloud is a new way to read it, while walking,
+for eyes that tire, for a language learned; Calibre's viewer has it, and
+the system's voices are there to use.
+
+- The book read aloud from the page shown, a sentence after the other,
+  through the chapters to the end: the sentences found by Cousoir in the
+  page's XML (Qt's sentence boundaries, a paragraph or heading never
+  joined to the next), each with its CFIs, so that the page marks the one
+  read and turns to it.
+- Qt TextToSpeech in C++, with the system's engines (speech-dispatcher,
+  Flite, others installed): the voices of the book's language first, the
+  voice and the speed kept; the mock engine in the tests.
+- A player over the page while reading: pause, the sentence before or
+  after, stop, slower or faster; R starts and stops.
+
+Done when a Gutenberg novel is read aloud across chapters with the page
+following, and the tests cover the sentences, their order across files and
+the page marked.
+
+#### R5. Notes and pictures in place
+
+- A footnote or endnote link shows the note in a box over the page (EPUB
+  3's `noteref` and `footnote`, and the usual links to a paragraph of
+  notes), the page left as it is; Back still there for the others.
+- A picture clicked shows whole over the page, zoomed and moved.
+
 ## Status
 
 | Goal | State |
