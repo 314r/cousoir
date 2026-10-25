@@ -400,7 +400,7 @@ ThemedWindow {
             return
         const format = library.readableFormat(bookId)
         if (!format) {
-            showNotice(qsTr("This book has no EPUB or PDF to read."))
+            showNotice(qsTr("This book has no EPUB, Kindle book or PDF to read."))
             return
         }
         const loader = format === "PDF" ? pdfReaderLoader : readerLoader

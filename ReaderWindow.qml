@@ -167,10 +167,13 @@ ThemedWindow {
             readerWindow.failed(error)
             return false
         }
-        const start = bookReader.startPosition
         show()
         raise()
         requestActivate()
+        // Calibre makes it an EPUB first: opened once prepared().
+        if (bookReader.preparing)
+            return true
+        const start = bookReader.startPosition
         // Another book's page may still be there: this one's loaded anew.
         spineIndex = -1
         lastTurn = null
@@ -608,8 +611,12 @@ ThemedWindow {
         const size = bookReader.spine[last.spineIndex] ? bookReader.spine[last.spineIndex].size : 0
         if (seconds < 3 || seconds > 300 || size <= 0)
             return
-        const rate = Math.max(5, Math.min(500, size / Math.max(1, last.pages) / seconds))
-        readerSettings.readingRate = readerSettings.readingRate > 0 ? 0.85 * readerSettings.readingRate + 0.15 * rate : rate
+        // A page skimmed or left open says nothing of the pace: from about
+        // 30 to 1 300 words a minute only, each page counting a little.
+        const rate = size / Math.max(1, last.pages) / seconds
+        if (rate < 5 || rate > 150)
+            return
+        readerSettings.readingRate = 0.9 * readingRate + 0.1 * rate
     }
 
     // "4 min", "1 h 20 min".
@@ -767,6 +774,16 @@ ThemedWindow {
 
         function onBookmarksChanged() {
             readerWindow.updatePageBookmarks()
+        }
+
+        function onPrepared(bookId, error) {
+            if (!error) {
+                readerWindow.openBook(bookId)
+                return
+            }
+            readerWindow.failed(error)
+            if (readerWindow.spineIndex < 0)
+                readerWindow.close()
         }
     }
 
@@ -1515,6 +1532,35 @@ ThemedWindow {
                                 readerWindow.removeChosenHighlight()
                             else if (event.key === "t" || event.key === "T")
                                 readerWindow.tocVisible = !readerWindow.tocVisible
+                        }
+                    }
+                }
+
+                // Calibre making an EPUB of the book.
+                Rectangle {
+                    objectName: "readerPreparing"
+
+                    anchors.fill: parent
+                    z: 4
+                    visible: bookReader.preparing
+                    color: readerWindow.pageBackground
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width - 2 * Theme.pagePadding, Math.round(50 * Theme.charWidth))
+                        spacing: Theme.gutter
+
+                        BusyIndicator {
+                            Layout.alignment: Qt.AlignHCenter
+                            running: bookReader.preparing
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Calibre is making an EPUB of “%1”, kept for the next time…").arg(bookReader.preparingTitle)
+                            color: readerWindow.pageText
                         }
                     }
                 }

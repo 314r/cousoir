@@ -7,6 +7,7 @@
 #include "book_search.h"
 #include "epub_book.h"
 #include "epub_cfi.h"
+#include "mobi_book.h"
 #include "test_support.h"
 #include "xml_tree.h"
 
@@ -41,6 +42,9 @@ private slots:
     void refusesWhatIsNoEpub();
     void searchesTheText();
     void findsTheSentences();
+    void readsKindleBooks_data();
+    void readsKindleBooks();
+    void refusesKindleBooksItCannotRead();
 };
 
 namespace {
@@ -264,6 +268,120 @@ void EpubBookTest::findsTheSentences()
     // The second chapter: one block, three sentences; a file that is not.
     QCOMPARE(BookSentences(*book, 1).sentences().size(), 1);
     QVERIFY(BookSentences(*book, 7).sentences().isEmpty());
+}
+
+void EpubBookTest::readsKindleBooks_data()
+{
+    QTest::addColumn<QString>("file");
+    QTest::newRow("azw3") << QStringLiteral("voyage.azw3");
+    QTest::newRow("mobi, both kinds") << QStringLiteral("voyage.mobi");
+    QTest::newRow("mobi, old kind") << QStringLiteral("voyage-old.mobi");
+}
+
+// A Kindle book Calibre made of an EPUB, made an EPUB again: its text in
+// the same order, its contents, its picture, its links.
+void EpubBookTest::readsKindleBooks()
+{
+    QFETCH(QString, file);
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("book.epub"));
+    QString error;
+    QVERIFY2(MobiBook::toEpub(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/") + file, path, &error), qPrintable(error));
+    const std::unique_ptr<EpubBook> book = EpubBook::open(path, &error);
+    QVERIFY2(book, qPrintable(error));
+    const std::unique_ptr<EpubBook> source = EpubBook::open(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), &error);
+    QVERIFY2(source, qPrintable(error));
+    QCOMPARE(book->title(), source->title());
+    QCOMPARE(book->language(), QStringLiteral("en"));
+
+    // Every paragraph, in the book's order.
+    const auto paragraphs = [](const EpubBook &epub) {
+        QStringList texts;
+        for (int i = 0; i < epub.spine().size(); ++i) {
+            const BookSentences sentences(epub, i);
+            for (const BookSentences::Sentence &sentence : sentences.sentences()) {
+                if (sentence.text.startsWith(QLatin1String("Chapter ")))
+                    texts.append(sentence.text);
+            }
+        }
+        return texts;
+    };
+    const QStringList expected = paragraphs(*source);
+    QVERIFY(expected.size() > 50);
+    QCOMPARE(paragraphs(*book), expected);
+    for (int i = 0; i < book->spine().size(); ++i)
+        QCOMPARE(book->mediaType(book->spine().at(i).name), QStringLiteral("application/xhtml+xml"));
+
+    // The contents' titles, and where they go.
+    QStringList titles;
+    for (const EpubBook::TocEntry &entry : book->toc()) {
+        titles.append(entry.title);
+        QVERIFY2(book->spineIndex(entry.name) >= 0, qPrintable(entry.name));
+    }
+    for (const char *title : { "The Harbour", "Arrival", "The Lantern", "The Valley", "Thunder", "The North" })
+        QVERIFY2(titles.contains(QLatin1String(title)), qPrintable(titles.join(u'|')));
+
+    // The picture of the second chapter, and the link to the note of the
+    // third, to its paragraph.
+    bool picture = false;
+    QString note;
+    for (int i = 0; i < book->spine().size(); ++i) {
+        const QString name = book->spine().at(i).name;
+        const QByteArray page = book->read(name);
+        static const QRegularExpression image(QStringLiteral("<img[^>]+src=\"([^\"]+)\""));
+        for (QRegularExpressionMatchIterator it = image.globalMatch(QString::fromUtf8(page)); it.hasNext();) {
+            const QString target = EpubBook::resolve(name, it.next().captured(1));
+            picture = picture || (book->contains(target) && !book->read(target).isEmpty());
+        }
+        static const QRegularExpression link(QStringLiteral("<a[^>]+href=\"([^\"]+)\"[^>]*>(?:<[^>]+>)*See the note"));
+        const QRegularExpressionMatch match = link.match(QString::fromUtf8(page));
+        if (match.hasMatch())
+            note = EpubBook::resolve(name, match.captured(1).section(u'#', 0, 0)) + u'#' + match.captured(1).section(u'#', 1);
+    }
+    QVERIFY(picture);
+    QVERIFY2(note.contains(u'#'), qPrintable(note));
+    const QString noteFile = note.section(u'#', 0, 0);
+    const QString noteId = note.section(u'#', 1);
+    QVERIFY(book->spineIndex(noteFile) >= 0);
+    const std::unique_ptr<XmlTree::Node> root = XmlTree::parse(book->read(noteFile));
+    QVERIFY(root);
+    const EpubCfi::Document document(*root);
+    const XmlTree::Node *target = document.element(noteId);
+    QVERIFY2(target, qPrintable(noteId));
+    QString text;
+    const std::function<void(const XmlTree::Node &)> walk = [&](const XmlTree::Node &node) {
+        for (const auto &child : node.children) {
+            if (child->kind == XmlTree::Node::Kind::Text)
+                text += child->text;
+            walk(*child);
+        }
+    };
+    // The note's paragraph, or the paragraph of the old kind's empty anchor.
+    walk(target->children.empty() && target->parent ? *target->parent : *target);
+    QVERIFY2(text.contains(QLatin1String("The note: rivers remember every stone.")), qPrintable(text));
+}
+
+// What Cousoir cannot read, said.
+void EpubBookTest::refusesKindleBooksItCannotRead()
+{
+    QTemporaryDir dir;
+    QString error;
+    QVERIFY(!MobiBook::toEpub(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), dir.filePath(QStringLiteral("b.epub")),
+                              &error));
+    QVERIFY(!error.isEmpty());
+    // A Kindle book with DRM: its first record's encryption set.
+    QFile mobi(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.azw3"));
+    QVERIFY(mobi.open(QIODevice::ReadOnly));
+    QByteArray data = mobi.readAll();
+    const quint32 record0 = qFromBigEndian<quint32>(data.constData() + 78);
+    data[record0 + 13] = 2;
+    const QString locked = dir.filePath(QStringLiteral("locked.azw3"));
+    QFile out(locked);
+    QVERIFY(out.open(QIODevice::WriteOnly) && out.write(data) == data.size());
+    out.close();
+    error.clear();
+    QVERIFY(!MobiBook::toEpub(locked, dir.filePath(QStringLiteral("c.epub")), &error));
+    QVERIFY2(error.contains(QLatin1String("DRM")), qPrintable(error));
 }
 
 #include "epub_book_test.moc"

@@ -473,7 +473,7 @@ Left for a later round.
 
 From round 5: the next file ready before it is needed.
 
-#### R7. Every book of the library readable — picked
+#### R7. Every book of the library readable — picked, done
 
 The reader opens EPUB, KEPUB and PDF; a book the library has only as AZW3
 or MOBI, the Kindle's formats, says "This book has no EPUB or PDF to read".
@@ -1709,4 +1709,55 @@ placement finds an element by id through `EpubCfi::Document::element()`.
 - Tests: the UI's `showsNotesInPlace` (each kind of note, its text, Esc,
   Go to the note and Back, the picture shown and closed, a link followed,
   the aside out of the text). All 26 tests pass.
+
+### 2026-10-25 — round 6, R7: every book of the library readable (`exp-kindle-read`)
+
+- `MobiBook` ports Calibre's MOBI reader (`ebooks/mobi/reader`, 9.16):
+  the PDB records, the MOBI and EXTH headers, the trailing entries of the
+  text records, PalmDOC and HUFF/CDIC decompression. Of KF8 (an AZW3, or
+  the KF8 half of a joint MOBI after its BOUNDARY): the FDST flows, the
+  skeleton and fragment indices put back together into pages (with
+  Calibre's own repair of insert positions inside a tag), the `kindle:pos`
+  links made file and id from the nearest id before the place, the aids
+  removed but those linked to, the styles and SVG flows inlined or made
+  files, `kindle:embed` and `kindle:flow` made addresses, pictures, fonts
+  (their XOR undone, inflated) and HD containers, and the NCX index made a
+  table of contents by levels and parents. The markup is worked on as
+  bytes, a byte a character, as Calibre works on it, and decoded once done.
+- The old kind (MOBI 6), which is Calibre's default MOBI output and so most
+  MOBIs in libraries: the file positions links go to made anchors
+  (`add_anchors()`), the markup mended as `cleanup_html()` mends it, its
+  pictures by record number, its page breaks made pages, the links between
+  pages made addresses, the contents read from the table its guide names.
+  Its HTML is no XML: `HtmlSoup` reads it into Cousoir's XML tree as a
+  browser mends tag soup (a paragraph closed by the next block, an item by
+  the next, an end tag closing what is open in it, the head's elements in
+  the head, scripts and other namespaces' tags out).
+- The EPUB made is kept in Cousoir's cache under the book's uuid, format,
+  size and time: made again only when the file changes, the old one
+  removed. Its pages are XHTML (named entities made numbers), so the search,
+  the sentences read aloud and the notes in place, all of which read the
+  page's XML, work on it.
+- The other formats (FB2, DOCX, ODT, RTF, TXT, comics…) go through
+  Calibre's `ebook-convert`, beside the `calibre-debug` Cousoir finds,
+  asynchronously, the window saying so; `COUSOIR_EBOOK_CONVERT` names a
+  stand-in for the tests.
+- Places and highlights in a book made an EPUB are Cousoir's alone, kept
+  with its positions; the library's positions of that format, Calibre's
+  viewer's, are not taken either.
+- The reading rate learned a quick flip three seconds after opening as a
+  page read at 500 bytes a second: only paces of about 30 to 1 300 words a
+  minute count now, each a tenth, from the default.
+- Found with AddressSanitizer (a build of the tests in a folder of its own,
+  removed after): a loop over a temporary's list, dangling, in a test.
+- Tests: `readsKindleBooks` (an AZW3, a joint MOBI and an old-kind MOBI that
+  Calibre made of the voyage: every paragraph the EPUB's, in order, the
+  contents, the picture, the link to the note and its paragraph),
+  `refusesKindleBooksItCannotRead` (no MOBI, DRM), and the UI's
+  `readsKindleAndOtherBooks` (the AZW3 read, a highlight and the place kept
+  by Cousoir alone and found again; a TXT made an EPUB by a stand-in for
+  Calibre, once). `tools/make_kindle_fixtures.sh` makes the Kindle books.
+  All 26 tests pass.
+- Tried on Pride and Prejudice made an AZW3 and Le Tour du monde made a
+  MOBI by Calibre: both read, with their pictures and contents.
 
