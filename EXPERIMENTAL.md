@@ -1812,3 +1812,23 @@ placement finds an element by id through `EpubCfi::Document::element()`.
   L on a selection, the reader's own address a data URL whose title is the
   words, shown in the panel). No test reaches the network.
 
+### 2026-10-25 — stopped after round 7
+
+The user asked to stop after round 7. Where the reader work stands, for the
+review:
+
+- Done, each merged into `experimental` with `--no-ff` from its `exp-*`
+  branch: R1 a page made for reading (`exp-page`), R2 find in the book
+  (`exp-search`), R3 highlights to work with (`exp-annotate`), a review of
+  rounds 1 to 3 (`exp-review1`), R4 reading aloud (`exp-speech`), R5 notes
+  and pictures in place (`exp-notes-in-place`), R7 every book of the
+  library readable (`exp-kindle-read`), R8 look a word up (`exp-lookup`).
+- A review of rounds 4 to 7 by an agent was started and stopped with the
+  work, unfinished: no review of reading aloud, the notes in place, the
+  Kindle reading or the lookup has been made yet. `mobi_book.cpp` reads
+  files from anywhere; it deserves that review, fuzzed, first.
+- Not done, planned: R6 turns without a wait (the next file ready before
+  it is needed); fixed-layout books (comics, children's books).
+- Nothing was merged into `master`, pushed or published. The last full run
+  of the 26 tests, after R7, passed; after R8, the UI and EPUB tests passed.
+
