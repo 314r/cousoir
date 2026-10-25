@@ -1951,3 +1951,34 @@ What was left after round 7 is done: the review of rounds 4 to 7 with its
 fuzz test, R6 (turns without a wait) and fixed-layout books. The 26 tests
 passed (golden included). At the user's request, `experimental` was
 merged into `master` and pushed.
+
+### 2026-10-25 — on `master`: a blank page on a dark page with highlights
+
+The user's "An Open Letter to Open-Minded Progressives" showed nothing in
+the reader, nor did a highlight clicked in it. Every reproduction in the
+sandbox showed it: the same file, the user's library database, reading
+data, Kobo highlights, settings and Omarchy colours, on Wayland at the
+user's scale, 42 of its highlights jumped to. The user's own run, with
+`QTWEBENGINE_REMOTE_DEBUGGING` and its output kept, told it:
+`ReaderWindow.qml:552: TypeError: Cannot read property 'yellow' of
+undefined`, as `prepare()` marked the chapter's highlights, before it made
+the page visible.
+
+- The cause is Qt 6.12's `qmlcachegen`: `highlightColors: darkPage ? { … }
+  : { … }`, compiled to C++, returns the second branch's object whichever
+  branch ran, undefined after the first (seen in
+  `build/.rcc/qmlcache/cousoir_ReaderWindow_qml.cpp`; a seven-line QML
+  file shows it too). The page is dark with the Omarchy theme, so every
+  chapter with highlights stayed blank; books without any opened.
+- The tests and the screenshot tool read the QML as written, from resources
+  of their own, and so passed. The `Cousoir` module is now the `cousoir_ui`
+  static library, which Cousoir, `library_ui_tests` and `cousoir-benchmark`
+  link: they all run the compiled code. With the old binding,
+  `annotatesTheBook` (a highlight on a dark page) then fails with the
+  user's very errors.
+- The colours are picked by name from one object (`highlightPalettes`).
+  `tools/check_compiled_qml.py`, the `compiled_qml` test, looks through the
+  compiled QML for a value returned that no code set; none is left.
+- `cousoir-benchmark` reader steps: `qml:` prints the expression's value,
+  `wait:MS` waits (to look at the window from outside), and
+  `COUSOIR_OMARCHY_STATE` gives it an Omarchy theme's folder.

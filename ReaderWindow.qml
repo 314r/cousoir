@@ -119,10 +119,14 @@ ThemedWindow {
         // The spare's highlights are in the old colours: made again.
         dropSpare()
     }
-    // Calibre's builtin_colors_light and builtin_colors_dark.
-    readonly property var highlightColors: darkPage
-        ? { yellow: "#906e00", green: "#306f50", blue: "#265589", red: "#a23e5a", purple: "#505088" }
-        : { yellow: "#ffeb6b", green: "#c0ed72", blue: "#add8ff", red: "#ffb0ca", purple: "#d9b2ff" }
+    // Calibre's builtin_colors_light and builtin_colors_dark, picked by name:
+    // Qt 6.12's compiled QML returns the second object of `a ? {…} : {…}`
+    // whichever branch ran, undefined when it is the first.
+    readonly property var highlightPalettes: ({
+        dark: { yellow: "#906e00", green: "#306f50", blue: "#265589", red: "#a23e5a", purple: "#505088" },
+        light: { yellow: "#ffeb6b", green: "#c0ed72", blue: "#add8ff", red: "#ffb0ca", purple: "#d9b2ff" }
+    })
+    readonly property var highlightColors: highlightPalettes[darkPage ? "dark" : "light"]
 
     // The page laid out: lines of at most the measure picked, in characters
     // of the size picked (half the 16 pixels of the text each, on average),

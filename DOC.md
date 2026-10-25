@@ -1462,7 +1462,28 @@ The tests check the port against Calibre itself:
   Open Library on 127.0.0.1, a search by ISBN, its fallback to the title,
   covers, and a site that cannot be reached.
 - The UI tests run offscreen with the software Quick backend at 100% and 200%
-  scale, against a copy of the fixture library.
+  scale, against a copy of the fixture library, and fail on any QML warning.
+- `compiled_qml` looks through the interface's compiled QML for a value
+  returned that no code set (`tools/check_compiled_qml.py`).
+
+### QML compiled ahead of time
+
+Cousoir runs its QML compiled: `qmlcachegen` turns what bindings and
+functions it can into C++ when it builds the `Cousoir` module, the
+`cousoir_ui` library. The UI tests and `cousoir-benchmark` link that same
+library and load `Main` from the module, so they run the code Cousoir runs,
+not the QML read as written. The two can differ: Qt 6.12 compiles
+`dark ? { … } : { … }` to return the second object whichever branch ran,
+undefined after the first. The reader's highlight colours were written so
+and were undefined on a dark page: the reader threw as it marked the
+highlights, before it showed the page, and every chapter with some stayed
+blank, though the tests,
+then reading the QML as written, passed. They are now picked by name from
+one object, and `compiled_qml` looks for the like elsewhere.
+
+`build/.rcc/qmlcache/cousoir_ui_*.cpp` is the C++ made of each file, and
+its `.aotstats` says which bindings were compiled and why the others were
+not.
 
 ### Measuring
 
