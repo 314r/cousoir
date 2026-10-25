@@ -73,7 +73,8 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   at a line length that reads well, in the font, spacing and colours you
   like (sepia and black included), the time left in the chapter and the
   book at your pace; their table of contents, a search of the whole book,
-  notes shown by their links and pictures zoomed; highlights in five colours with your notes, and
+  notes shown by their links and pictures zoomed, words looked up in
+  Wiktionary or Wikipedia beside the page; highlights in five colours with your notes, and
   bookmarks; the book read aloud by your system's voices; full screen;
   and PDFs.
   Your place and your highlights are kept

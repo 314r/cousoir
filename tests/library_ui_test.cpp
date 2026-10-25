@@ -109,6 +109,7 @@ private slots:
     void readsAloud();
     void showsNotesInPlace();
     void readsKindleAndOtherBooks();
+    void looksWordsUp();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -1516,6 +1517,49 @@ void LibraryUiTest::readsKindleAndOtherBooks()
     qunsetenv("COUSOIR_FAKE_FAIL");
     qunsetenv("COUSOIR_FAKE_DELAY");
     qunsetenv("COUSOIR_EBOOK_CONVERT");
+#endif
+}
+
+// Words selected looked up beside the page: the sources' addresses in the
+// book's language, and the reader's own, here a data URL, shown in the
+// panel.
+void LibraryUiTest::looksWordsUp()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QObject *settings = reader->property("settings").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVariant url;
+    QMetaObject::invokeMethod(reader, "lookupUrl", Q_RETURN_ARG(QVariant, url), Q_ARG(QVariant, QStringLiteral("lantern window")),
+                              Q_ARG(QVariant, QStringLiteral("wiktionary")));
+    QCOMPARE(url.toString(), QStringLiteral("https://en.m.wiktionary.org/w/index.php?search=lantern%20window"));
+    QMetaObject::invokeMethod(reader, "lookupUrl", Q_RETURN_ARG(QVariant, url), Q_ARG(QVariant, QStringLiteral("Île")),
+                              Q_ARG(QVariant, QStringLiteral("wikipedia")));
+    QCOMPARE(url.toString(), QStringLiteral("https://en.m.wikipedia.org/w/index.php?search=%C3%8Ele"));
+
+    settings->setProperty("lookupSource", QStringLiteral("custom"));
+    settings->setProperty("lookupAddress", QStringLiteral("data:text/html,<title>{word}</title>"));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = document.querySelector('p'); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 9);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
+    QTest::keyClick(reader, Qt::Key_L);
+    QTRY_COMPARE(reader->property("sidebar").toString(), QStringLiteral("lookup"));
+    QCOMPARE(reader->property("lookupWord").toString(), QStringLiteral("Chapter 1"));
+    QObject *lookup = visualDescendants(reader->contentItem(), QStringLiteral("readerLookupView")).value(0);
+    QVERIFY(lookup);
+    QTRY_COMPARE_WITH_TIMEOUT(lookup->property("title").toString(), QStringLiteral("Chapter 1"), 10000);
+    reader->close();
 #endif
 }
 

@@ -70,6 +70,9 @@ ThemedWindow {
     readonly property bool speaking: speech !== null && speech.state !== "stopped"
     // Reading aloud on from where a link or an entry of the contents goes.
     property bool speakAfterJump: false
+    // The words looked up last, and where.
+    property string lookupWord: ""
+    property string lookupTarget: ""
     // A field has the keys: a search, a bookmark's title, a note.
     readonly property bool editingText: activeFocusItem !== null && activeFocusItem.cursorPosition !== undefined
     // The spine item and page the bookmarks of the page were found for.
@@ -201,6 +204,35 @@ ThemedWindow {
         } else {
             close()
         }
+    }
+
+    // The address of `text` looked up in a source: Wiktionary and Wikipedia
+    // in the book's language, a web search, or the reader's own address.
+    function lookupUrl(text, source) {
+        const words = encodeURIComponent(text)
+        const language = (bookReader.language || "en").split(/[-_]/)[0].toLowerCase() || "en"
+        if (source === "wikipedia")
+            return "https://" + language + ".m.wikipedia.org/w/index.php?search=" + words
+        if (source === "search")
+            return "https://html.duckduckgo.com/html/?q=" + words
+        if (source === "custom" && readerSettings.lookupAddress.indexOf("{word}") >= 0)
+            return readerSettings.lookupAddress.replace("{word}", words)
+        return "https://" + language + ".m.wiktionary.org/w/index.php?search=" + words
+    }
+
+    // Looks a word up beside the page.
+    function lookUp(text) {
+        const words = (text || "").replace(/\s+/g, " ").trim().slice(0, 100)
+        if (!words)
+            return
+        lookupWord = words
+        tocVisible = true
+        sidebar = "lookup"
+        lookupTarget = lookupUrl(words, readerSettings.lookupSource)
+    }
+
+    function lookUpSelection() {
+        view.runJavaScript("window.getSelection().toString()", function(text) { readerWindow.lookUp(text) })
     }
 
     // A link: its page within the book, the desktop's browser for the web.
@@ -662,6 +694,15 @@ ThemedWindow {
         library: readerWindow.library
     }
 
+    // The lookups' web: nothing kept of it, cookies or history, a profile
+    // without storage being off the record.
+    WebEngineProfilePrototype {
+        id: lookupProfile
+        storageName: ""
+        httpCacheType: WebEngineProfile.MemoryHttpCache
+        persistentCookiesPolicy: WebEngineProfile.NoPersistentCookies
+    }
+
     // The reader's settings, for every book.
     Settings {
         id: readerSettings
@@ -683,6 +724,10 @@ ThemedWindow {
         property double readingRate: 0
         // The colour of the last highlight made or coloured.
         property string highlightColor: "yellow"
+        // Where words are looked up: "wiktionary", "wikipedia", "search" or
+        // "custom", the address with {word} in it.
+        property string lookupSource: "wiktionary"
+        property string lookupAddress: ""
         // Reading aloud: the engine and the voice, empty for the system's,
         // and the speed, from -1 to 1.
         property string speechEngine: ""
@@ -990,7 +1035,7 @@ ThemedWindow {
 
             Rectangle {
                 // Its own width: a layout would otherwise take its lists' fill.
-                Layout.preferredWidth: Math.round(30 * Theme.charWidth)
+                Layout.preferredWidth: Math.round((readerWindow.sidebar === "lookup" ? 44 : 30) * Theme.charWidth)
                 Layout.maximumWidth: Layout.preferredWidth
                 Layout.fillWidth: false
                 Layout.fillHeight: true
@@ -1036,6 +1081,17 @@ ThemedWindow {
                             tip: qsTr("Bookmarks")
                             icon.source: "assets/icons/bookmark.svg"
                             onClicked: readerWindow.sidebar = "bookmarks"
+                        }
+
+                        FlatButton {
+                            objectName: "readerLookupTab"
+
+                            iconOnly: true
+                            variant: "outline"
+                            selected: readerWindow.sidebar === "lookup"
+                            text: qsTr("Look up (L)")
+                            icon.source: "assets/icons/globe.svg"
+                            onClicked: readerWindow.sidebar = "lookup"
                         }
 
                         FlatButton {
@@ -1152,6 +1208,91 @@ ThemedWindow {
                             }
 
                             ScrollBar.vertical: ThinScrollBar {}
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: readerWindow.sidebar === "lookup"
+                        spacing: Theme.gutter
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.gutter
+                            Layout.rightMargin: Theme.gutter
+                            spacing: Theme.gutter
+
+                            ChoiceBox {
+                                objectName: "readerLookupSource"
+
+                                readonly property var choices: [
+                                    { value: "wiktionary", label: qsTr("Wiktionary") },
+                                    { value: "wikipedia", label: qsTr("Wikipedia") },
+                                    { value: "search", label: qsTr("Web search") },
+                                    { value: "custom", label: qsTr("My address") }
+                                ]
+
+                                Layout.fillWidth: true
+                                model: choices
+                                currentIndex: Math.max(0, choices.findIndex(choice => choice.value === readerSettings.lookupSource))
+                                onActivated: function(index) {
+                                    readerSettings.lookupSource = choices[index].value
+                                    if (readerWindow.lookupWord)
+                                        readerWindow.lookUp(readerWindow.lookupWord)
+                                }
+                            }
+
+                            FlatButton {
+                                iconOnly: true
+                                enabled: lookupLoader.item !== null
+                                text: qsTr("Open in the browser")
+                                icon.source: "assets/icons/external.svg"
+                                onClicked: Qt.openUrlExternally(lookupLoader.item.url)
+                            }
+                        }
+
+                        TextField {
+                            objectName: "readerLookupAddress"
+
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.gutter
+                            Layout.rightMargin: Theme.gutter
+                            visible: readerSettings.lookupSource === "custom"
+                            placeholderText: qsTr("An address, {word} where the words go")
+                            text: readerSettings.lookupAddress
+                            onEditingFinished: readerSettings.lookupAddress = text
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: Theme.gutter
+                            Layout.rightMargin: Theme.gutter
+                            visible: !readerWindow.lookupWord
+                            text: qsTr("Select words in the book, then L or the globe above them, to look them up here. Nothing is sent to the web but what you look up.")
+                            color: Theme.textMuted
+                            wrapMode: Text.WordWrap
+                        }
+
+                        // A web view of its own once something is looked up.
+                        Loader {
+                            id: lookupLoader
+
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            active: readerWindow.lookupTarget !== ""
+                            visible: active
+
+                            sourceComponent: WebEngineView {
+                                id: lookupView
+                                objectName: "readerLookupView"
+
+                                profile: lookupProfile.instance()
+                                url: readerWindow.lookupTarget
+                                settings.javascriptCanOpenWindows: false
+                                // A page opening another: here.
+                                onNewWindowRequested: function(request) { lookupView.url = request.requestedUrl }
+                            }
                         }
                     }
 
@@ -1528,6 +1669,8 @@ ThemedWindow {
                                 readerWindow.noteSelection()
                             else if (event.key === "r" || event.key === "R")
                                 readerWindow.toggleSpeech()
+                            else if ((event.key === "l" || event.key === "L") && readerWindow.hasSelection)
+                                readerWindow.lookUpSelection()
                             else if (event.key === "Delete" && readerWindow.chosenHighlight)
                                 readerWindow.removeChosenHighlight()
                             else if (event.key === "t" || event.key === "T")
@@ -1669,6 +1812,17 @@ ThemedWindow {
                                 else
                                     view.triggerWebAction(WebEngineView.Copy)
                             }
+                        }
+
+                        FlatButton {
+                            objectName: "readerLookupSelection"
+
+                            visible: !annotationBar.chosen
+                            iconOnly: true
+                            focusPolicy: Qt.NoFocus
+                            text: qsTr("Look up (L)")
+                            icon.source: "assets/icons/globe.svg"
+                            onClicked: readerWindow.lookUpSelection()
                         }
 
                         FlatButton {
