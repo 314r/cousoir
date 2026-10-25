@@ -26,10 +26,13 @@
     // What the window asks for, by setup(): the page's colours, its margin
     // in pixels, how many columns a screen holds, a scroll rather than
     // pages, and the type: a font family, a line height and an alignment
-    // ("start", "justify"), empty for the book's own.
+    // ("start", "justify"), empty for the book's own. A fixed page, laid
+    // out at its own size, is shown whole, at the side of a spread `side`
+    // says ("left", "right", "center"), the page at the address `partner`
+    // beside it. `rtl` for a book whose spine goes from right to left.
     const settings = {
         margin: 40, background: '#ffffff', color: '#1d1d1f', link: '#2f6db5', columns: 1, scroll: false,
-        fontFamily: '', lineHeight: 0, align: '', notesShown: false,
+        fontFamily: '', lineHeight: 0, align: '', notesShown: false, fixed: false, side: '', partner: '', rtl: false,
     };
     let styleElement = null;
     let lastCfi = '';
@@ -533,7 +536,7 @@
 
     // Pages go across, a screen at a time; in a scroll, down.
     function scrolled() {
-        return !!settings.scroll;
+        return !!settings.scroll && !settings.fixed;
     }
 
     function pageWidth() {
@@ -549,6 +552,12 @@
     // 0 down.
     function rtl() {
         return !scrolled() && getComputedStyle(document.body || document.documentElement).direction === 'rtl';
+    }
+
+    // Pages that turn leftward, as a book read from right to left: the left
+    // arrow and the left side go on, the right ones back.
+    function leftward() {
+        return !scrolled() && (!!settings.rtl || rtl());
     }
 
     // A scroll made here, not by the reader: what it shows is told, but the
@@ -611,16 +620,161 @@
         return rules;
     }
 
+    // A fixed page's size: its viewport's, as the book gives it, an SVG's,
+    // or that of the one picture it shows, `picture` then.
+    function sizeOf(doc) {
+        const meta = doc.querySelector('meta[name="viewport"]');
+        if (meta) {
+            const width = /width\s*=\s*([\d.]+)/i.exec(meta.getAttribute('content') || '');
+            const height = /height\s*=\s*([\d.]+)/i.exec(meta.getAttribute('content') || '');
+            if (width && height && +width[1] > 0 && +height[1] > 0)
+                return { width: +width[1], height: +height[1] };
+        }
+        const root = doc.documentElement;
+        let svg = root.localName === 'svg' ? root : null;
+        const body = doc.body;
+        if (!svg && body && body.children.length === 1) {
+            const only = body.children[0].localName === 'div' && body.children[0].children.length === 1
+                ? body.children[0].children[0] : body.children[0];
+            if (only.localName === 'svg')
+                svg = only;
+            else if (only.localName === 'img' && only.naturalWidth > 0)
+                return { width: only.naturalWidth, height: only.naturalHeight, picture: true };
+        }
+        if (svg) {
+            const box = svg.viewBox && svg.viewBox.baseVal;
+            if (box && box.width > 0 && box.height > 0)
+                return { width: box.width, height: box.height, picture: svg !== root };
+            const width = parseFloat(svg.getAttribute('width'));
+            const height = parseFloat(svg.getAttribute('height'));
+            if (width > 0 && height > 0)
+                return { width: width, height: height, picture: svg !== root };
+        }
+        return null;
+    }
+
+    // What shows under a fixed page that sets no colour: white, as it was
+    // made on, and not the reader's theme; a page of a picture, the picture
+    // filling it, out of the margins a browser gives a page.
+    function canvasRule(doc) {
+        const clear = element => {
+            const style = element ? getComputedStyle(element) : null;
+            return !style || ((style.backgroundColor === 'transparent' || style.backgroundColor === 'rgba(0, 0, 0, 0)')
+                              && style.backgroundImage === 'none');
+        };
+        const size = sizeOf(doc);
+        return (clear(doc.documentElement) && clear(doc.body) ? 'html { background: #ffffff; }' : '')
+            + (size && size.picture ? `body, body > div {
+                   margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; }
+               body > img, body > svg, body > div > img, body > div > svg {
+                   display: block !important; width: 100% !important; height: 100% !important; }` : '');
+    }
+
+    let fixedSize = null;
+    let canvas = null;
+    let partnerFrame = null;
+
+    // A fixed page scaled to the window, whole, centred, and the page of a
+    // spread beside it, at the scale that gives them one height; beyond
+    // them, the reader's colour.
+    function fixedLayout() {
+        if (canvas === null)
+            canvas = canvasRule(document);
+        fixedSize = sizeOf(document) || fixedSize || { width: window.innerWidth, height: window.innerHeight };
+        const size = fixedSize;
+        const across = settings.partner ? 2 : 1;
+        const gap = Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.012);
+        const scale = Math.min((window.innerWidth - 2 * gap) / (across * size.width),
+                               (window.innerHeight - 2 * gap) / size.height);
+        let left = (window.innerWidth - across * size.width * scale) / 2;
+        if (settings.partner && settings.side === 'right')
+            left += size.width * scale;
+        const top = (window.innerHeight - size.height * scale) / 2;
+        const beyond = Math.ceil(Math.max(window.innerWidth, window.innerHeight) / scale);
+        styleElement.textContent = `
+            ${canvas}
+            html {
+                width: ${size.width}px !important; height: ${size.height}px !important;
+                margin: 0 !important; padding: 0 !important; overflow: hidden !important;
+                transform: translate(${left}px, ${top}px) scale(${scale}) !important; transform-origin: 0 0 !important;
+                box-shadow: 0 0 0 ${beyond}px ${settings.background} !important;
+            }
+            html::-webkit-scrollbar { display: none; }
+            ::highlight(cousoir-search) { background-color: color-mix(in srgb, ${settings.link} 30%, transparent); }
+            ::highlight(cousoir-search-shown) { background-color: ${settings.link}; color: ${settings.background}; }
+            ::highlight(cousoir-speech) {
+                background-color: color-mix(in srgb, ${settings.link} 20%, transparent);
+                text-decoration: underline ${settings.link};
+            }
+        `;
+        scroller().scrollLeft = 0;
+        scroller().scrollTop = 0;
+        placePartner(size);
+    }
+
+    // The other page of a spread, in a frame beside the page: shown, as the
+    // page across from it in a book; read, searched and marked when it is
+    // the page shown.
+    function placePartner(size) {
+        if (!settings.partner) {
+            if (partnerFrame)
+                partnerFrame.remove();
+            partnerFrame = null;
+            return;
+        }
+        if (!partnerFrame || partnerFrame.getAttribute('src') !== settings.partner) {
+            if (partnerFrame)
+                partnerFrame.remove();
+            partnerFrame = document.createElementNS(XHTML, 'iframe');
+            partnerFrame.setAttribute('src', settings.partner);
+            partnerFrame.setAttribute('scrolling', 'no');
+            partnerFrame.addEventListener('load', () => fitPartner());
+            document.documentElement.appendChild(partnerFrame);
+        }
+        fitPartner();
+    }
+
+    function fitPartner() {
+        if (!partnerFrame || !fixedSize)
+            return;
+        const doc = partnerFrame.contentDocument;
+        const own = (doc && doc.documentElement && sizeOf(doc)) || fixedSize;
+        const scale = fixedSize.height / own.height;
+        const right = settings.side === 'right';
+        partnerFrame.setAttribute('style', `
+            position: absolute !important; top: 0 !important; ${right ? 'right' : 'left'}: ${fixedSize.width}px !important;
+            width: ${own.width}px !important; height: ${own.height}px !important;
+            border: 0 !important; margin: 0 !important; padding: 0 !important; pointer-events: none !important;
+            transform: scale(${scale}) !important; transform-origin: ${right ? 'top right' : 'top left'} !important;
+            max-width: none !important; max-height: none !important;`);
+        if (doc && doc.documentElement && !doc.getElementById('cousoir-partner')) {
+            const style = doc.createElementNS(XHTML, 'style');
+            style.id = 'cousoir-partner';
+            style.textContent = `${canvasRule(doc)}
+                html { margin: 0 !important; overflow: hidden !important; }
+                html::-webkit-scrollbar { display: none; }`;
+            (doc.head || doc.documentElement).appendChild(style);
+        }
+    }
+
     function layout() {
+        if (!styleElement) {
+            styleElement = document.createElementNS(XHTML, 'style');
+            (document.head || document.documentElement).appendChild(styleElement);
+        }
+        if (settings.fixed) {
+            fixedLayout();
+            return;
+        }
+        if (partnerFrame) {
+            partnerFrame.remove();
+            partnerFrame = null;
+        }
         const width = window.innerWidth;
         const height = window.innerHeight;
         const side = Math.max(12, Math.round(settings.margin || 0));
         const top = Math.max(16, Math.round(height * 0.04));
         const columns = scrolled() ? 1 : Math.max(1, settings.columns || 1);
-        if (!styleElement) {
-            styleElement = document.createElementNS(XHTML, 'style');
-            (document.head || document.documentElement).appendChild(styleElement);
-        }
         // A screen holds `columns` columns: each its width and the gap after
         // it, the margins of the body making the gap at the screen's edges.
         const page = scrolled()
@@ -685,6 +839,17 @@
     // The first visible character, as a CFI: scanned from the top left of
     // the page as Calibre's at_current() scans.
     function currentCfi() {
+        // A fixed page is shown whole: its first words, or its picture.
+        if (settings.fixed) {
+            const walker = document.createTreeWalker(document.body || document.documentElement,
+                                                     NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                if (isText(node) ? node.nodeValue.trim().length
+                                 : node.localName === 'img' || node.localName === 'svg' || node.localName === 'image')
+                    return isText(node) ? encode(document, node, 0) : encode(document, node);
+            }
+            return encode(document, document.body || document.documentElement);
+        }
         const width = window.innerWidth;
         const height = window.innerHeight;
         for (let y = 2; y < height; y += 16) {
@@ -867,11 +1032,13 @@
             post({ event: 'key', key: key, ctrl: event.ctrlKey, alt: event.altKey, shift: event.shiftKey });
             return;
         }
+        const on = leftward() ? 'ArrowLeft' : 'ArrowRight';
+        const back = leftward() ? 'ArrowRight' : 'ArrowLeft';
         if (scrolled() && (key === 'ArrowDown' || key === 'ArrowUp'))
             lines(key === 'ArrowDown' ? 1 : -1);
-        else if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown' || (key === ' ' && !event.shiftKey))
+        else if (key === on || key === 'ArrowDown' || key === 'PageDown' || (key === ' ' && !event.shiftKey))
             next();
-        else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp' || (key === ' ' && event.shiftKey))
+        else if (key === back || key === 'ArrowUp' || key === 'PageUp' || (key === ' ' && event.shiftKey))
             previous();
         else if (key === 'Home')
             show(0);
@@ -906,9 +1073,9 @@
         // page of a plate too.
         const picture = event.target.closest ? event.target.closest('img, image') : null;
         if (x < window.innerWidth / 3)
-            previous();
+            leftward() ? next() : previous();
         else if (x > window.innerWidth * 2 / 3)
-            next();
+            leftward() ? previous() : next();
         else if (picture && pictureSource(picture))
             post({ event: 'image', src: pictureSource(picture) });
         else

@@ -49,6 +49,7 @@ private slots:
     void refusesKindleBooksItCannotRead();
     void survivesDamagedKindleBooks();
     void mendsTagSoup();
+    void readsFixedLayouts();
 };
 
 namespace {
@@ -502,6 +503,66 @@ void EpubBookTest::mendsTagSoup()
         open += QStringLiteral("<a");
     QVERIFY(bodyOf(open).contains("&lt;a"));
     QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+}
+
+// A picture book's pages laid out once, at their own size, and the side of
+// a spread each goes on: as its spine says, else across from the page
+// before, the first on the side the book opens to.
+void EpubBookTest::readsFixedLayouts()
+{
+    QString error;
+    const auto book = EpubBook::open(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/fixed.epub"), &error);
+    QVERIFY2(book, qPrintable(error));
+    QStringList sides;
+    for (const EpubBook::SpineItem &item : book->spine())
+        sides.append(item.fixed ? item.side : QStringLiteral("flows"));
+    QCOMPARE(sides, (QStringList{ QStringLiteral("right"), QStringLiteral("left"), QStringLiteral("right"),
+                                  QStringLiteral("left"), QStringLiteral("right"), QStringLiteral("center"),
+                                  QStringLiteral("flows") }));
+
+    // EPUB 2's way, Apple's, a book read from right to left, one whose
+    // pages go one by one, and a fixed page in a book that flows.
+    QTemporaryDir dir;
+    const auto sidesOf = [&](const QString &metadata, const QString &spine, const QString &options = QString()) {
+        QString manifest;
+        QString itemrefs;
+        for (int i = 1; i <= 3; ++i) {
+            manifest += QStringLiteral("<item id=\"p%1\" href=\"p%1.xhtml\" media-type=\"application/xhtml+xml\"/>").arg(i);
+            itemrefs += QStringLiteral("<itemref idref=\"p%1\"%2/>").arg(i).arg(i == 2 ? spine : QString());
+        }
+        QList<QPair<QString, QByteArray>> files{
+            { QStringLiteral("mimetype"), "application/epub+zip" },
+            { QStringLiteral("META-INF/container.xml"), "<?xml version=\"1.0\"?><container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>" },
+            { QStringLiteral("content.opf"),
+              QStringLiteral("<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"id\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>Pages</dc:title><dc:identifier id=\"id\">x</dc:identifier>%1</metadata><manifest>%2</manifest><spine%3>%4</spine></package>")
+                  .arg(metadata, manifest, metadata.contains(QLatin1String("rtl")) ? QStringLiteral(" page-progression-direction=\"rtl\"") : QString(), itemrefs)
+                  .toUtf8() },
+        };
+        if (!options.isEmpty())
+            files.append({ QStringLiteral("META-INF/com.apple.ibooks.display-options.xml"), options.toUtf8() });
+        for (int i = 1; i <= 3; ++i)
+            files.append({ QStringLiteral("p%1.xhtml").arg(i), "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><p>A page.</p></body></html>" });
+        const QString path = dir.filePath(QStringLiteral("pages.epub"));
+        QStringList found;
+        QString error;
+        const auto opened = writeEpub(path, files) ? EpubBook::open(path, &error) : nullptr;
+        for (const EpubBook::SpineItem &item : opened ? opened->spine() : QList<EpubBook::SpineItem>())
+            found.append(item.fixed ? item.side : QStringLiteral("flows"));
+        return found.join(u' ');
+    };
+    QCOMPARE(sidesOf(QStringLiteral("<meta name=\"fixed-layout\" content=\"true\"/>"), QString()),
+             QStringLiteral("right left right"));
+    QCOMPARE(sidesOf(QString(), QString(),
+                     QStringLiteral("<?xml version=\"1.0\"?><display_options><platform name=\"*\"><option name=\"fixed-layout\">true</option></platform></display_options>")),
+             QStringLiteral("right left right"));
+    QCOMPARE(sidesOf(QStringLiteral("<meta property=\"rendition:layout\">pre-paginated</meta><!-- rtl -->"), QString()),
+             QStringLiteral("left right left"));
+    QCOMPARE(sidesOf(QStringLiteral("<meta property=\"rendition:layout\">pre-paginated</meta><meta property=\"rendition:spread\">none</meta>"),
+                     QString()),
+             QStringLiteral("center center center"));
+    QCOMPARE(sidesOf(QString(), QStringLiteral(" properties=\"rendition:layout-pre-paginated page-spread-left\"")),
+             QStringLiteral("flows left flows"));
+    QCOMPARE(sidesOf(QString(), QString()), QStringLiteral("flows flows flows"));
 }
 
 #include "epub_book_test.moc"

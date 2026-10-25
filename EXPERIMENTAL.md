@@ -1906,3 +1906,41 @@ spare's readiness, the hand-over and that going back is no stand-in's.
 The library's `listsSearchesAndSortsBooks` failed once in seven runs: a
 right click on a header the row had not placed yet. It waits for the row.
 
+### 2026-10-25 — fixed-layout books (`exp-fixed`)
+
+Comics, manga and picture books are made of pages laid out once, at a
+size of their own; the reader poured them into its columns, cut and
+recoloured.
+
+- `EpubBook` reads the layout: `rendition:layout` pre-paginated for the
+  book, `rendition:layout-pre-paginated`/`-reflowable` for a page, EPUB 2's
+  `<meta name="fixed-layout">` and Apple's
+  `com.apple.ibooks.display-options.xml`; `rendition:spread` none; and
+  each fixed page's side of a spread (`page-spread-left`/`-right`,
+  `rendition:page-spread-center`, `rendition:spread-none`), a page the
+  book does not place across from the one before, the first of a run on
+  the side the book opens to, alone. `BookReader.spine` tells `fixed`,
+  `side`, `leads` (a page shown with the next one) and `follows`;
+  `rightToLeft` the book's direction.
+- The page script lays a fixed page out at its size (the viewport meta,
+  else an SVG's viewBox, else the one picture's size), scaled whole into
+  the window by a transform of the root, centred, the reader's colour
+  beyond it (the root's box-shadow), white under a page that sets no
+  colour; a page of a picture fills it. Its first words or picture are
+  its position, as no columns are scanned.
+- A spread: the page the book places first is the page shown; the other
+  is in a frame beside it, scaled to its height, clicks going through it.
+  The window turns two spine items at a time, goes back to a spread's
+  first page, shows a spread from its first page whatever page of it is
+  gone to; the stand-in view of R6 makes the next spread ready. A window
+  higher than wide shows a page at a time.
+- A book read from right to left turns leftward: the left arrow and left
+  side go on (books that flow from right to left too, which turned the
+  wrong way).
+- The footer tells "Pages 4–5 of 7" and no time left from the size of
+  pictures, which no longer counts in the reading pace.
+- `tools/make_fixed_fixture.py` makes `tests/data/reader/fixed.epub`;
+  `readsFixedLayouts` (EPUB test: the sides, five ways of saying the
+  layout) and `readsFixedLayouts` (UI test: the cover alone, two spreads,
+  back, a page of a spread gone to, a narrow window, the page that flows).
+

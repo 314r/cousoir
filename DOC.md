@@ -792,6 +792,23 @@ the reader's pace, measured as the pages are turned (250 words a minute
 until then), and how far into the book the page is, also as a bar a click
 on which goes there.
 
+The pages of comics, manga and picture books are laid out once, at a
+size of their own (EPUB 3's fixed layout, `rendition:layout` pre-paginated,
+also EPUB 2's `fixed-layout` meta and Apple's display options): each is
+shown whole, scaled into the window, in its own colours. In a window wider
+than high, with two pages shown, the pages go two by two as the book
+places them, left and right (`page-spread-left`, `page-spread-right`), a
+page it does not place across from the one before, the cover alone; a
+page the book centres, or a book that says its pages go one by one, is
+shown alone. The arrows, Space and the clicks turn a spread at a time; in
+a book read from right to left, a manga, the pages go leftward, the left
+arrow and the left side going on. The footer tells the pages shown and of
+how many. The type, line length and colours picked are for books that
+flow, not for these; the page on the side of a spread is shown, not read:
+search, highlights and reading aloud are for the page of the spread the
+book places first. Positions and highlights are kept as in any book, as
+Calibre's viewer writes them.
+
 Cousoir cannot hyphenate: Qt WebEngine, which shows the pages, has none of
 Chromium's hyphenation dictionaries; a book's own soft hyphens still break
 its words.

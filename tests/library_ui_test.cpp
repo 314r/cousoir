@@ -111,6 +111,7 @@ private slots:
     void readsKindleAndOtherBooks();
     void looksWordsUp();
     void turnsWithoutAWait();
+    void readsFixedLayouts();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -1628,6 +1629,74 @@ void LibraryUiTest::turnsWithoutAWait()
     QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
                                  && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
                              20000);
+    reader->close();
+#endif
+}
+
+// A picture book's fixed pages shown whole, two by two in a wide window as
+// the book pairs them, turned a spread at a time; one by one in a narrow
+// window; its page of text laid out as text.
+void LibraryUiTest::readsFixedLayouts()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/fixed.epub"), QStringLiteral("The Picture Book"));
+    QVERIFY(reader);
+    reader->resize(1200, 800);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+    const auto ask = [&](const QString &script) {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral("(function() { document.title = ") + script + QStringLiteral("; })()")));
+        QTest::qWait(100);
+        return view->property("title").toString();
+    };
+    const QString partner = QStringLiteral("(document.querySelector('iframe') ? document.querySelector('iframe').getAttribute('src').replace(/.*\\//, '') : 'none')");
+    const auto progress = [&] {
+        QQuickItem *label = visualDescendants(reader->contentItem(), QStringLiteral("readerChapterProgress")).value(0);
+        return label ? label->property("text").toString() : QString();
+    };
+    const auto at = [&](int index) {
+        return reader->property("spineIndex").toInt() == index
+            && reader->property("position").toString().startsWith(QStringLiteral("epubcfi(/%1/").arg(2 * (index + 1)));
+    };
+
+    // The cover alone, scaled whole into the window.
+    QTRY_VERIFY_WITH_TIMEOUT(at(0), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(QStringLiteral("getComputedStyle(document.documentElement).transform !== 'none' ? 'fixed' : 'flows'")),
+                              QStringLiteral("fixed"), 10000);
+    QCOMPARE(ask(partner), QStringLiteral("none"));
+    QCOMPARE(progress(), QStringLiteral("Page 1 of 7"));
+    // A spread, its right page beside the left one; the one after it made
+    // ready behind.
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_VERIFY_WITH_TIMEOUT(at(1), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(partner), QStringLiteral("p3.xhtml"), 10000);
+    QCOMPARE(progress(), QStringLiteral("Pages 2–3 of 7"));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spareSpine").toInt() == 3, 20000);
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_VERIFY_WITH_TIMEOUT(at(3) && !reader->property("standing").toBool(), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(partner), QStringLiteral("p5.xhtml"), 10000);
+    // Back a spread, to its first page; a page of a spread gone to shows
+    // the spread.
+    QTest::keyClick(reader, Qt::Key_Left);
+    QTRY_VERIFY_WITH_TIMEOUT(at(1), 20000);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 4), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(at(3), 20000);
+
+    // A window higher than wide: a page at a time.
+    reader->resize(600, 900);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(partner), QStringLiteral("none"), 10000);
+    QCOMPARE(progress(), QStringLiteral("Page 4 of 7"));
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_VERIFY_WITH_TIMEOUT(at(4), 20000);
+
+    // The credits flow.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 6), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(at(6), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(QStringLiteral("getComputedStyle(document.documentElement).transform !== 'none' ? 'fixed' : 'flows'")),
+                              QStringLiteral("flows"), 10000);
+    QVERIFY(progress().contains(QStringLiteral("left in chapter")));
     reader->close();
 #endif
 }

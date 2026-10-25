@@ -255,6 +255,11 @@ QString BookReader::language() const
     return m_book ? m_book->language() : QString();
 }
 
+bool BookReader::rightToLeft() const
+{
+    return m_book && m_book->direction() == QLatin1String("rtl");
+}
+
 qint64 BookReader::totalSize() const
 {
     qint64 total = 0;
@@ -270,14 +275,27 @@ QVariantList BookReader::spine() const
     QVariantList items;
     if (!m_book)
         return items;
-    for (const EpubBook::SpineItem &item : m_book->spine()) {
+    const QList<EpubBook::SpineItem> &spine = m_book->spine();
+    // The side a spread starts on, as the book is read.
+    const QString leading = m_book->direction() == QLatin1String("rtl") ? QStringLiteral("right") : QStringLiteral("left");
+    const auto leads = [&](qsizetype i) {
+        return i >= 0 && i + 1 < spine.size() && spine.at(i).fixed && spine.at(i + 1).fixed
+            && spine.at(i).side == leading && spine.at(i + 1).side != leading
+            && spine.at(i + 1).side != QLatin1String("center");
+    };
+    for (qsizetype i = 0; i < spine.size(); ++i) {
+        const EpubBook::SpineItem &item = spine.at(i);
         QUrl url;
         url.setScheme(QString::fromLatin1(scheme));
         url.setHost(m_token);
         url.setPath(u'/' + item.name);
         items.append(QVariantMap{ { QStringLiteral("url"), url },
                                   { QStringLiteral("name"), item.name },
-                                  { QStringLiteral("size"), item.size } });
+                                  { QStringLiteral("size"), item.size },
+                                  { QStringLiteral("fixed"), item.fixed },
+                                  { QStringLiteral("side"), item.side },
+                                  { QStringLiteral("leads"), leads(i) },
+                                  { QStringLiteral("follows"), leads(i - 1) } });
     }
     return items;
 }

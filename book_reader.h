@@ -33,7 +33,13 @@ class BookReader : public QObject
     Q_PROPERTY(QString format READ format NOTIFY bookChanged)
     // The book's language, as its package gives it: "fr", "en-GB".
     Q_PROPERTY(QString language READ language NOTIFY bookChanged)
-    // { url, name, size } by spine item.
+    // A book read from right to left, as its spine says: its pages turn
+    // leftward.
+    Q_PROPERTY(bool rightToLeft READ rightToLeft NOTIFY bookChanged)
+    // { url, name, size, fixed, side, leads, follows } by spine item: fixed
+    // for a page laid out at its own size, side its side of a spread
+    // ("left", "right", "center"), leads for one shown with the next as a
+    // spread, follows for that next one.
     Q_PROPERTY(QVariantList spine READ spine NOTIFY bookChanged)
     // The size of all its spine items, by which how far into the book a
     // place is counts.
@@ -88,6 +94,7 @@ public:
     QString title() const;
     QString format() const;
     QString language() const;
+    bool rightToLeft() const;
     QVariantList spine() const;
     qint64 totalSize() const;
     QVariantList toc() const;
