@@ -8,7 +8,10 @@ Nothing here is merged into `master`, pushed or published: the review decides.
 
 ## How the work is done
 
-- `experimental` branches from `master` at 7664f54. Each goal is worked on
+- The first `experimental` branched from `master` at 7664f54 and was merged
+  into it on 2026-10-23. The second, from 2026-10-25, branches from
+  `master` at 9e9dc9f and works on the reader (see "Since 2026-10-25: the
+  reader" below). Each goal is worked on
   a branch of its own, `exp-<name>`, merged into `experimental` with
   `--no-ff` once its tests pass, as `master` takes its phases.
 - Nothing is written outside the source tree. `tools/sandbox.sh` runs the
@@ -267,6 +270,52 @@ annotations" does.
 Calibre's full text search (`full-text-search.db`): its index read and
 searched from Cousoir, and books indexed as Calibre indexes them, so that
 Calibre keeps the index Cousoir adds to.
+
+## Since 2026-10-25: the reader
+
+The user asked for autonomous work on the EPUB reader of goal 19: plan two
+goals, work on the one that matters more, then plan two again from where
+the reader stands, until the goals planned look futile, useless or harmful.
+Each round's two goals and the one picked are written here; the one left
+may come back in a later round.
+
+Where the reader stood on 2026-10-25, tried on three books of Project
+Gutenberg (in `build/sandbox/books`, never committed): one column the
+window's whole width, about 110 characters a line at 900 pixels and twice
+that full screen; text justified without hyphens; the size by WebEngine's
+zoom, forgotten when the book closes; the theme's colours only; nothing
+told of the page but a percentage; no search, no notes on highlights, no
+bookmarks, no footnotes but by jumping to them, no reading aloud.
+
+### Round 1
+
+#### R1. A page made for reading — picked
+
+What makes every minute of reading better, and what every reader app has:
+
+- Text laid out at a measure that reads well: a line of about 65 to 75
+  characters at most, the page centred in a wide window, and two pages side
+  by side when the window holds two.
+- Reading settings, kept for every book and applied at once without losing
+  the place: the font (the book's own, serif, sans serif or one installed),
+  the size, the line spacing, the width of the line, the alignment (the
+  book's, left, justified) with hyphenation by the book's language, the
+  page's colours (Cousoir's theme, light, sepia, dark, black), one page or
+  two, pages or a scroll.
+- What the page is: the chapter, the page in it, the time left in the
+  chapter and in the book from how fast one reads, in a footer.
+- Full screen (F11), the toolbar showing when the mouse goes to the top.
+
+Done when real books read well at any window size in every theme, the
+place holds across every change of setting and size, and the tests cover
+the settings, the spreads and the scroll.
+
+#### R2. Find in the book
+
+- A search through all of the book's text, accents and case folded as
+  Calibre folds them, the results listed with their context by chapter, the
+  one picked shown and marked on its page, F3 and Shift+F3 through them.
+- Back and Forward after following a link or a result (Alt+Left, Alt+Right).
 
 ## Status
 
