@@ -497,6 +497,39 @@ Done when AZW3 and MOBI books Calibre makes of the reader's fixtures read
 with their text, pictures, links and contents, the tests checking the
 text against the EPUB they were made of.
 
+### Round 7
+
+Every book reads now, and reads well. Left from before: the turns without
+a wait. New: what a reader does with a word they do not know.
+
+#### R6. Turns without a wait
+
+From rounds 5 and 6.
+
+#### R8. Look a word up — picked
+
+Calibre's viewer has a Lookup panel: the word selected looked up in a
+dictionary, an encyclopedia or a search, beside the book. For a book in a
+language one is learning, for a name, a place, a term, it is what keeps
+the reader in the book instead of a browser.
+
+- The word or words selected looked up (L, or the bar's button) in a panel
+  of the sidebar: Wiktionary and Wikipedia in the book's language, a web
+  search, or an address the reader gives (`{word}` in it), the source kept.
+- The panel a web view of its own, private (no cookies kept), its links
+  followed in place, Open in the browser for the rest; nothing looked up
+  but what the reader asks for.
+- Tests without network: an address of the reader's own, a data URL.
+
+Done when a word selected in a French book shows French Wiktionary's page
+for it beside the page, and the tests cover the sources and the panel.
+
+#### Later
+
+- Fixed-layout books (`rendition:layout` pre-paginated: comics, children's
+  books, art books): each page whole, fitted to the window, two side by
+  side when it is wide.
+
 ## Status
 
 | Goal | State |
