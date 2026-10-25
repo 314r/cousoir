@@ -76,7 +76,8 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   notes shown by their links and pictures zoomed, words looked up in
   Wiktionary or Wikipedia beside the page; highlights in five colours with your notes, and
   bookmarks; the book read aloud by your system's voices; full screen;
-  and PDFs.
+  comics and picture books laid out as they were made, two pages side by
+  side as the book pairs them, right to left for manga; and PDFs.
   Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
   and shows the other's highlights.

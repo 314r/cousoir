@@ -21,6 +21,12 @@ public:
         bool linear = true;
         // The file's size, for how far into the book a position is.
         qint64 size = 0;
+        // A page laid out once, at its own size (EPUB 3's pre-paginated
+        // layout), as comics and picture books are, and the side of a
+        // spread it goes on: "left", "right", or "center" for one shown
+        // alone.
+        bool fixed = false;
+        QString side;
     };
 
     struct TocEntry

@@ -134,7 +134,34 @@ ThemedWindow {
     readonly property real columnWidth: measure > 0 ? measure * characterWidth : Number.POSITIVE_INFINITY
     readonly property int columns: !readerSettings.scroll && readerSettings.spreads
         && pageArea.width >= 2 * (0.85 * (measure || 66) * characterWidth + 2 * sideMargin) ? 2 : 1
-    readonly property int viewWidth: Math.floor(Math.min(pageArea.width, columns * (columnWidth + 2 * sideMargin)))
+    readonly property int viewWidth: fixedPage ? pageArea.width
+        : Math.floor(Math.min(pageArea.width, columns * (columnWidth + 2 * sideMargin)))
+
+    // A page laid out at its own size, a comic's or a picture book's, is
+    // shown whole; two side by side as a spread when the window is wider
+    // than high and the reader shows two pages.
+    readonly property bool fixedPage: isFixed(spineIndex)
+    readonly property bool spreadsShown: readerSettings.spreads && pageArea.width > pageArea.height
+
+    function isFixed(index) {
+        return index >= 0 && index < bookReader.spine.length && bookReader.spine[index].fixed
+    }
+
+    // The page shown beside a fixed one, -1 for none.
+    function partnerOf(index) {
+        return spreadsShown && index >= 0 && index < bookReader.spine.length && bookReader.spine[index].leads
+            ? index + 1 : -1
+    }
+
+    // The spine item after the page or spread at `index`, and the one a
+    // spread before it starts on.
+    function after(index) {
+        return index + (partnerOf(index) >= 0 ? 2 : 1)
+    }
+
+    function spreadStart(index) {
+        return partnerOf(index - 1) === index ? index - 1 : index
+    }
 
     // How fast the reader reads, in bytes of the book's files a second;
     // until measured, about 250 words a minute.
@@ -364,6 +391,12 @@ ThemedWindow {
     function load(index, action) {
         if (index < 0 || index >= bookReader.spine.length)
             return
+        // A spread's second page, shown from its first.
+        if (spreadStart(index) !== index) {
+            index = spreadStart(index)
+            if (action.startsWith("cfi:") || action.startsWith("fragment:") || action.startsWith("fraction:"))
+                action = "start"
+        }
         pending = action
         // Within the page shown: only where to go.
         if (index === spineIndex && !view.loading) {
@@ -372,7 +405,7 @@ ThemedWindow {
         }
         // The next file, ready at its start in the spare view: shown at once,
         // while the page view loads it under it.
-        standing = action === "start" && index === spareSpine && spareReady
+        standing = action === "start" && index === spareSpine && spareReady && isFixed(index) === fixedPage
         spineIndex = index
         // Until the new page tells where it is: a place of the old one would
         // be read as one of this one.
@@ -386,14 +419,20 @@ ThemedWindow {
             view.url = url
     }
 
-    // What the page's script lays the page out by.
-    function pageSettings() {
+    // What the page's script lays the page at `index` out by, the page
+    // shown's by default.
+    function pageSettings(index) {
+        if (index === undefined)
+            index = spineIndex
         const family = readerSettings.fontFamily
+        const partner = partnerOf(index)
         return {
             background: pageColors.background, color: pageColors.color, link: pageColors.link,
             margin: sideMargin / readerSettings.zoom, columns: columns, scroll: readerSettings.scroll,
             fontFamily: family === "" || family === "serif" || family === "sans-serif" ? family : JSON.stringify(family) + ", serif",
-            lineHeight: readerSettings.lineHeight, align: readerSettings.align, notesShown: notesShown
+            lineHeight: readerSettings.lineHeight, align: readerSettings.align, notesShown: notesShown,
+            fixed: isFixed(index), side: isFixed(index) ? bookReader.spine[index].side : "", rtl: bookReader.rightToLeft,
+            partner: partner >= 0 ? bookReader.spine[partner].url.toString() : ""
         }
     }
 
@@ -414,7 +453,7 @@ ThemedWindow {
     // The next file loaded in the spare view, laid out as the page is and
     // at its start, to stand in when reading goes on to it.
     function preloadNext() {
-        const next = spineIndex + 1
+        const next = after(spineIndex)
         if (standing || spineIndex < 0 || next >= bookReader.spine.length)
             return
         if (spareSpine === next && (spareReady || spareView.loading))
@@ -432,7 +471,7 @@ ThemedWindow {
         if (spareSpine < 0 || spareView.url.toString() !== bookReader.spine[spareSpine].url.toString())
             return
         spareView.runJavaScript(bookReader.script)
-        spareView.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings()) + ")")
+        spareView.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings(spareSpine)) + ")")
         const marks = bookReader.highlights.filter(h => h.spineIndex === spareSpine)
             .map(h => ({ uuid: h.uuid, start: h.start, end: h.end, note: !!h.notes,
                          color: highlightColors[h.which] || highlightColors.yellow }))
@@ -453,7 +492,7 @@ ThemedWindow {
     // A setting changed: the page laid out again, where it was.
     function relayout() {
         if (spareReady)
-            spareView.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings()) + ")")
+            spareView.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings(spareSpine)) + ")")
         if (spineIndex >= 0 && !view.loading)
             view.runJavaScript("window.cousoir.setup(" + JSON.stringify(pageSettings()) + ")",
                                function() { readerWindow.updateAnchors() })
@@ -702,7 +741,7 @@ ThemedWindow {
                        || index === last.spineIndex + 1 && newPage === 0 && last.page === last.pages - 1))
             return
         const seconds = (now - last.time) / 1000
-        const size = bookReader.spine[last.spineIndex] ? bookReader.spine[last.spineIndex].size : 0
+        const size = bookReader.spine[last.spineIndex] && !isFixed(last.spineIndex) ? bookReader.spine[last.spineIndex].size : 0
         if (seconds < 3 || seconds > 300 || size <= 0)
             return
         // A page skimmed or left open says nothing of the pace: from about
@@ -1605,7 +1644,7 @@ ThemedWindow {
 
                     anchors.fill: parent
                     onClicked: function(mouse) {
-                        if (mouse.x < pageArea.width / 2)
+                        if ((mouse.x < pageArea.width / 2) !== bookReader.rightToLeft)
                             readerWindow.previous()
                         else
                             readerWindow.next()
@@ -1739,9 +1778,9 @@ ThemedWindow {
                                 readerWindow.updatePageBookmarks()
                             saveTimer.restart()
                         } else if (event.event === "next") {
-                            readerWindow.load(readerWindow.spineIndex + 1, "start")
+                            readerWindow.load(readerWindow.after(readerWindow.spineIndex), "start")
                         } else if (event.event === "previous") {
-                            readerWindow.load(readerWindow.spineIndex - 1, "end")
+                            readerWindow.load(readerWindow.spreadStart(readerWindow.spineIndex - 1), "end")
                         } else if (event.event === "layout") {
                             readerWindow.updateAnchors()
                         } else if (event.event === "note") {
@@ -2130,8 +2169,14 @@ ThemedWindow {
                             objectName: "readerChapterProgress"
 
                             visible: readerWindow.spineIndex >= 0
-                            text: qsTr("%1 / %2  ·  %3 left in chapter").arg(readerWindow.page + 1).arg(readerWindow.pages)
-                                                                          .arg(readerWindow.chapterTimeLeft())
+                            // A fixed page is a page of the book's.
+                            text: !readerWindow.fixedPage
+                                ? qsTr("%1 / %2  ·  %3 left in chapter").arg(readerWindow.page + 1).arg(readerWindow.pages)
+                                                                        .arg(readerWindow.chapterTimeLeft())
+                                : readerWindow.partnerOf(readerWindow.spineIndex) >= 0
+                                ? qsTr("Pages %1–%2 of %3").arg(readerWindow.spineIndex + 1).arg(readerWindow.spineIndex + 2)
+                                                           .arg(bookReader.spine.length)
+                                : qsTr("Page %1 of %2").arg(readerWindow.spineIndex + 1).arg(bookReader.spine.length)
                             color: readerWindow.pageFaint
                             font.pointSize: Theme.fontPointSizeCaption
                         }
@@ -2139,7 +2184,10 @@ ThemedWindow {
                         Label {
                             objectName: "readerProgress"
 
-                            text: qsTr("%1 %  ·  %2 left").arg(Math.round(readerWindow.bookFraction * 100))
+                            // Of pictures, no time is told from the size of
+                            // their files.
+                            text: readerWindow.fixedPage ? qsTr("%1 %").arg(Math.round(readerWindow.bookFraction * 100))
+                                : qsTr("%1 %  ·  %2 left").arg(Math.round(readerWindow.bookFraction * 100))
                                                           .arg(readerWindow.bookTimeLeft())
                             color: readerWindow.pageFaint
                             font.pointSize: Theme.fontPointSizeCaption
