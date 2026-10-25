@@ -762,7 +762,10 @@ void LibraryUiTest::readsInCousoir()
     for (int i = 0; i < 3; ++i) {
         const QString before = reader->property("position").toString();
         QTest::keyClick(reader, Qt::Key_Right);
-        QTRY_VERIFY_WITH_TIMEOUT(reader->property("position").toString() != before, 10000);
+        // Told again: none while another chapter loads.
+        QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty()
+                                     && reader->property("position").toString() != before,
+                                 10000);
     }
     QCOMPARE(reader->property("spineIndex").toInt(), 1);
     QCOMPARE(reader->property("page").toInt(), 2);
@@ -781,7 +784,9 @@ void LibraryUiTest::readsInCousoir()
 
     // The table of contents: a section of the second chapter.
     QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 2), Q_ARG(QVariant, QStringLiteral("fragment:s2")));
-    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() > 0, 20000);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() > 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/")),
+                             20000);
     const QString section = reader->property("position").toString();
     reader->close();
 
@@ -1054,14 +1059,23 @@ void LibraryUiTest::searchesTheBook()
                              10000);
     QTRY_COMPARE_WITH_TIMEOUT(marked().section(u'|', 0, 0), QStringLiteral("lantern window"), 10000);
 
-    // Back to the first place, back to where reading was, forward again.
-    QMetaObject::invokeMethod(reader, "goBack");
-    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), firstPlace, 20000);
+    // Back to where reading was, not through each place seen; forward again.
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty(), 20000);
+    const QString secondPlace = reader->property("position").toString();
     QMetaObject::invokeMethod(reader, "goBack");
     QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), start, 20000);
     QCOMPARE(reader->property("backStack").toList().size(), 0);
     QMetaObject::invokeMethod(reader, "goForward");
-    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), firstPlace, 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), secondPlace, 20000);
+
+    // Esc in the search's field empties it, and leaves the book open.
+    QMetaObject::invokeMethod(reader, "openSearch");
+    QQuickItem *field = visualDescendants(reader->contentItem(), QStringLiteral("readerSearchField")).value(0);
+    QVERIFY(field);
+    QTRY_VERIFY(field->hasActiveFocus());
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_COMPARE(field->property("text").toString(), QString());
+    QVERIFY(reader->isVisible());
 
     // A link to a note in another chapter, and back.
     QMetaObject::invokeMethod(bookReader, "search", Q_ARG(QString, QString()));
@@ -1141,16 +1155,37 @@ void LibraryUiTest::annotatesTheBook()
         QTest::qWait(100);
         return view->property("title").toString() == QLatin1String("dotted");
     }(), 10000);
-    // Coloured blue.
+    // Coloured blue; in the dark page's blue on a dark page.
     QMetaObject::invokeMethod(reader, "recolor", Q_ARG(QVariant, uuid), Q_ARG(QVariant, QStringLiteral("blue")));
     QCOMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("which")).toString(),
              QStringLiteral("blue"));
+    const QString colour = QStringLiteral(
+        "document.title = getComputedStyle(document.querySelector('span[data-annot-id]')).backgroundColor");
+    const auto colourShown = [&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, colour));
+        QTest::qWait(100);
+        return view->property("title").toString();
+    };
+    QTRY_COMPARE_WITH_TIMEOUT(colourShown(), QStringLiteral("rgb(173, 216, 255)"), 10000);
+    reader->property("settings").value<QObject *>()->setProperty("pageTheme", QStringLiteral("dark"));
+    QTRY_COMPARE_WITH_TIMEOUT(colourShown(), QStringLiteral("rgb(38, 85, 137)"), 10000);
 
     // A bookmark at the page, another renamed.
     QMetaObject::invokeMethod(reader, "toggleBookmark");
     QTRY_COMPARE(bookReader->property("bookmarks").toList().size(), 1);
     QCOMPARE(bookReader->property("bookmarks").toList().first().toMap().value(QStringLiteral("title")).toString(),
              QStringLiteral("Arrival"));
+    QTRY_COMPARE(reader->property("pageBookmarks").toStringList(), QStringList{ QStringLiteral("Arrival") });
+    // The next chapter's first page has none, the page number the same.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 2), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/")),
+                             20000);
+    QTRY_VERIFY(reader->property("pageBookmarks").toStringList().isEmpty());
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
     QTRY_COMPARE(reader->property("pageBookmarks").toStringList(), QStringList{ QStringLiteral("Arrival") });
     const QString bookmarked = reader->property("position").toString();
     QTest::keyClick(reader, Qt::Key_Right);

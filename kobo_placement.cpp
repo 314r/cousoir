@@ -54,17 +54,6 @@ QString spanIdOf(const QString &path)
     return match.hasMatch() ? QStringLiteral("kobo.%1.%2").arg(match.captured(1), match.captured(2)) : QString();
 }
 
-const Node *elementById(const Node &node, const QString &id)
-{
-    if (node.kind == Node::Kind::Element && node.attribute(QStringLiteral("id")) == id)
-        return &node;
-    for (const auto &child : node.children) {
-        if (const Node *found = elementById(*child, id))
-            return found;
-    }
-    return nullptr;
-}
-
 } // namespace
 
 QString folded(const QString &text)
@@ -219,7 +208,7 @@ Placement PlacementBook::place(const KoboHighlights::Highlight &highlight)
     if (page && !startSpan.isEmpty() && !endSpan.isEmpty()) {
         const auto pointOf = [&](const QString &id, qint64 offset) -> std::optional<EpubCfi::Point> {
             if (m_format == QLatin1String("KEPUB")) {
-                const Node *span = elementById(*page->root, id);
+                const Node *span = page->cfi->element(id);
                 if (!span || span->children.empty() || !isText(*span->children.front())
                     || offset > span->children.front()->text.size())
                     return std::nullopt;
@@ -289,7 +278,7 @@ Placement PlacementBook::place(const KoboHighlights::Highlight &highlight)
     placement.endCfi = page->cfi->encode(*end->node, end->offset);
     const int startOrder = page->text().order.value(start->node, -1);
     placement.tocFamily = HighlightJson::tocFamily(*m_book, spineIndex, [&](const QString &fragment) {
-        const Node *target = elementById(*page->root, fragment);
+        const Node *target = page->cfi->element(fragment);
         return target && page->text().order.value(target, -1) <= startOrder;
     });
     return placement;

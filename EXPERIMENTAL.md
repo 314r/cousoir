@@ -1587,3 +1587,34 @@ now takes the reader's size, its settings and clicks on its controls).
   paused, stopped). The probe scripts of the UI tests are functions: a
   `const` declared twice at a page's top level stops the second run.
 
+### 2026-10-25 — a review of rounds 1 to 3 (`exp-review1`)
+
+A review agent read the branch's changes, rounds 1 to 3. Six bugs, fixed,
+each with a test:
+
+- The page's bookmarks were worked out again only when the page number
+  changed: from a bookmarked one-page chapter to the next chapter's first
+  page, Ctrl+D removed the other chapter's bookmark; a new book open in
+  the same window could take the old book's. Now for each spine item and
+  page, and nothing kept of a book when another opens.
+- Esc in the search's field or a bookmark's title closed the book: the
+  window's Esc came first. It now gives way while a field has the keys.
+- A page's highlights kept their colours for a light page when the page
+  turned dark: they are drawn again when the colours change.
+- While another file loaded, the position was still the old file's, under
+  the new spine index: Back, Forward, a bookmark or the position saved then
+  took a place of one file for one of the other. The position (and the
+  page) are now emptied until the new page tells its own.
+- In a scroll, the bar over a selection stayed where the selection had
+  been: it now goes with any scroll.
+- Each search place seen went into Back's history: only the first does now,
+  Back returning where reading was.
+
+And: since the reader is a window of its own (round 2), the window's
+shortcuts take their keys even while the page has the focus (checked by
+logging both paths): the page's own handling of Esc, F11, Ctrl+F, F3,
+Alt+arrows, Ctrl+D and Ctrl+W was dead and is gone; the text sizes are
+window shortcuts too; the page tells only letters, which would type in a
+field. Highlights and bookmarks are sorted by keys made once; the Kobo
+placement finds an element by id through `EpubCfi::Document::element()`.
+
