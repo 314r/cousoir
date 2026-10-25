@@ -19,6 +19,8 @@
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlExpression>
+#include <QQmlExtensionPlugin>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSettings>
@@ -44,6 +46,9 @@
 #endif
 #include "omarchy_theme.h"
 #include "system_appearance.h"
+
+// Cousoir's interface, its QML compiled as Cousoir runs it.
+Q_IMPORT_QML_PLUGIN(CousoirPlugin)
 
 namespace {
 
@@ -189,17 +194,6 @@ void registerTypes()
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
-    // The interface's own types, from the resources as the UI tests have them.
-    const QDir qml(QStringLiteral(":/qt/qml/Cousoir"));
-    for (const QString &file : qml.entryList({ QStringLiteral("*.qml") })) {
-        const QString type = file.chopped(4);
-        if (type == QLatin1String("Theme"))
-            qmlRegisterSingletonType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/Theme.qml")), "Cousoir", 1, 0, "Theme");
-        else if (type != QLatin1String("Main"))
-            qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1").arg(file)), "Cousoir", 1, 0,
-                            qPrintable(type));
-    }
-
 }
 
 // The window on the library at `path`, once the library is loaded; null
@@ -209,7 +203,7 @@ QQuickWindow *openWindow(QQmlApplicationEngine &engine, const QString &path, QSi
     qputenv("COUSOIR_LIBRARY_PATH", QFile::encodeName(path));
     qputenv("CALIBRE_OVERRIDE_LANG", "fr");
     engine.addImageProvider(QStringLiteral("covers"), new CoverCache);
-    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/Main.qml")));
+    engine.loadFromModule("Cousoir", "Main");
     auto *window = engine.rootObjects().isEmpty() ? nullptr
                                                   : qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
     if (!window) {
@@ -329,7 +323,8 @@ struct Shot
     QStringList settings;
     // What is done in the reader after the keys, in order: "click:NAME"
     // clicks a control by its name, "js:SCRIPT" runs a script in its page,
-    // "key:SEQUENCE" presses keys, "type:TEXT" types.
+    // "qml:EXPRESSION" an expression in its window, its value printed,
+    // "wait:MS" waits, "key:SEQUENCE" presses keys, "type:TEXT" types.
     QStringList readerSteps;
 };
 
@@ -449,6 +444,23 @@ int screenshot(const QString &path, const Shot &shot)
                 QTest::keyClick(window, character.toLatin1());
             continue;
         }
+        // "wait:MS": a while, to look at the window from outside.
+        if (step.startsWith(QLatin1String("wait:"))) {
+            QTest::qWait(step.mid(5).toInt());
+            continue;
+        }
+        // "qml:EXPRESSION" runs in the reader window, a jump, a setting, and
+        // prints what it is worth: the reader's state.
+        if (step.startsWith(QLatin1String("qml:"))) {
+            QQmlExpression expression(qmlContext(window), window, step.mid(4));
+            const QVariant value = expression.evaluate();
+            if (expression.hasError())
+                out() << expression.error().toString() << Qt::endl;
+            else if (value.isValid())
+                out() << step.mid(4) << " = " << value.toString() << Qt::endl;
+            QTest::qWait(1500);
+            continue;
+        }
         if (step.startsWith(QLatin1String("js:"))) {
             if (QObject *view = window->findChild<QObject *>(QStringLiteral("readerView")))
                 QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, step.mid(3)));
@@ -523,15 +535,17 @@ int main(int argc, char *argv[])
     parser.addOption({ QStringLiteral("reader-size"), QStringLiteral("The reader's size."), QStringLiteral("WxH") });
     parser.addOption({ QStringLiteral("set"), QStringLiteral("A reader setting, key=value."), QStringLiteral("setting") });
     parser.addOption({ QStringLiteral("reader"), QStringLiteral("In the reader, after the keys: click:NAME clicks a "
-                                                                "control, js:SCRIPT runs a script in its page, key:KEYS, type:TEXT."),
+                                                                "control, js:SCRIPT runs a script in its page, qml:EXPRESSION in "
+                                                                "its window, wait:MS, key:KEYS, type:TEXT."),
                        QStringLiteral("step") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
     const QString path = QDir(parser.positionalArguments().constFirst()).absolutePath();
 
+    // An Omarchy theme of COUSOIR_OMARCHY_STATE's, else none.
     QTemporaryDir state;
-    themeStateRoot = state.path();
+    themeStateRoot = qEnvironmentVariable("COUSOIR_OMARCHY_STATE", state.path());
     registerTypes();
     if (parser.isSet(QStringLiteral("screenshot"))) {
         Shot shot;

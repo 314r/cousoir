@@ -1,6 +1,7 @@
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
+#include <QQmlExtensionPlugin>
 
 #include "book_library.h"
 #include "concurrency_guard.h"
@@ -17,6 +18,9 @@
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
+
+// The interface's QML module, a static library's.
+Q_IMPORT_QML_PLUGIN(CousoirPlugin)
 
 int main(int argc, char *argv[])
 {

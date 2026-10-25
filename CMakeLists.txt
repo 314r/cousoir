@@ -331,18 +331,32 @@ set(COUSOIR_ICON_FILES
     assets/reader/reader.js
 )
 
-qt_add_qml_module(cousoir
+# The interface, its QML compiled ahead of time, in a library of its own: the
+# UI tests and the benchmark run the very code Cousoir runs, which can differ
+# from the QML read as it is written (see DOC.md, "QML compiled ahead of
+# time").
+qt_add_library(cousoir_ui STATIC)
+qt_add_qml_module(cousoir_ui
     URI Cousoir
     VERSION 1.0
+    OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Cousoir
     QML_FILES
         ${COUSOIR_QML_FILES}
     RESOURCES
         ${COUSOIR_ICON_FILES}
 )
+target_link_libraries(cousoir_ui
+    PRIVATE
+        cousoir_models
+        Qt6::Qml
+        Qt6::QuickControls2
+        Qt6::Svg
+)
 
 target_link_libraries(cousoir
     PRIVATE
         cousoir_models
+        cousoir_uiplugin
         Qt6::Qml
         Qt6::QuickControls2
         Qt6::Svg
@@ -473,15 +487,9 @@ if(BUILD_TESTING)
 
     qt_add_executable(library_ui_tests tests/library_ui_test.cpp)
     target_link_libraries(library_ui_tests PRIVATE
-        cousoir_models Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
+        cousoir_models cousoir_uiplugin Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
     )
     cousoir_configure_test_executable(library_ui_tests)
-    qt_add_resources(library_ui_tests "library_ui"
-        PREFIX "/qt/qml/Cousoir"
-        FILES
-            ${COUSOIR_QML_FILES}
-            ${COUSOIR_ICON_FILES}
-    )
     foreach(scale IN ITEMS 1 2)
         cousoir_add_logged_test(library_ui_tests_scale_${scale} library_ui_tests)
         set_tests_properties(library_ui_tests_scale_${scale} PROPERTIES
@@ -493,15 +501,9 @@ if(BUILD_TESTING)
     # window with --ui; run by hand on a large library, not by ctest.
     qt_add_executable(cousoir-benchmark tests/benchmark.cpp)
     target_link_libraries(cousoir-benchmark PRIVATE
-        cousoir_models Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
+        cousoir_models cousoir_uiplugin Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
     )
     cousoir_configure_test_executable(cousoir-benchmark)
-    qt_add_resources(cousoir-benchmark "benchmark_ui"
-        PREFIX "/qt/qml/Cousoir"
-        FILES
-            ${COUSOIR_QML_FILES}
-            ${COUSOIR_ICON_FILES}
-    )
 
     # Compares cousoir-cli list with calibredb's own output on copies of the
     # libraries; skipped without Calibre.
@@ -510,4 +512,14 @@ if(BUILD_TESTING)
             "$<TARGET_FILE:cousoir-test-tool>"
     )
     set_tests_properties(golden_list PROPERTIES SKIP_RETURN_CODE 77)
+
+    # The interface's compiled QML looked through for a value returned that
+    # no code set, as Qt 6.12 compiles `a ? { … } : { … }`.
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME compiled_qml
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_compiled_qml.py"
+                "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache" cousoir_ui_
+        )
+    endif()
 endif()

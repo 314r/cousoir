@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QQmlApplicationEngine>
+#include <QQmlExtensionPlugin>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QColor>
@@ -43,6 +44,9 @@
 #include "omarchy_theme.h"
 #include "system_appearance.h"
 #include "test_support.h"
+
+// Cousoir's interface, its QML compiled as Cousoir runs it.
+Q_IMPORT_QML_PLUGIN(CousoirPlugin)
 
 namespace {
 QString themeStateRoot;
@@ -195,14 +199,6 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
-    for (const char *type : { "AboutSettingsPage", "ActionMenu", "AppSession", "AppearanceSettingsPage", "BookDetailsPane", "BookPage",
-                              "BooksPage", "BulkEditPane", "CheckPage", "ChoiceBox", "ConfirmDialog", "CoverGrid", "Divider", "FacetPage", "FlatButton", "FormField",
-                              "HeadingLabel", "LibrarySettingsPage", "ListTable", "MetaRow", "SearchField",
-                              "SettingsWindow", "Sidebar", "SidebarItem", "ThemedWindow", "ThinScrollBar", "TrashPage" }) {
-        qmlRegisterType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/%1.qml").arg(QLatin1String(type))),
-                        "Cousoir", 1, 0, type);
-    }
-    qmlRegisterSingletonType(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/Theme.qml")), "Cousoir", 1, 0, "Theme");
 }
 
 void LibraryUiTest::init()
@@ -228,7 +224,8 @@ bool LibraryUiTest::loadUi()
         for (const QQmlError &error : errors)
             m_warnings.append(error.toString());
     });
-    m_engine->load(QUrl(QStringLiteral("qrc:/qt/qml/Cousoir/Main.qml")));
+    // The module's, compiled as Cousoir runs it.
+    m_engine->loadFromModule("Cousoir", "Main");
     if (m_engine->rootObjects().isEmpty())
         return false;
     m_window = qobject_cast<QQuickWindow *>(m_engine->rootObjects().constFirst());
