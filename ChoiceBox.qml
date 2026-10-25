@@ -77,7 +77,8 @@ ComboBox {
     popup: Popup {
         y: control.height - 1
         width: control.width
-        implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
+        // A long list scrolls, a dozen rows shown.
+        implicitHeight: Math.min(contentItem.implicitHeight, 12 * Theme.rowHeight) + topPadding + bottomPadding
         padding: 1
 
         contentItem: ListView {
@@ -86,6 +87,9 @@ ComboBox {
             model: control.popup.visible ? control.delegateModel : null
             currentIndex: control.highlightedIndex
             boundsBehavior: Flickable.StopAtBounds
+            highlightMoveDuration: 0
+
+            ScrollBar.vertical: ThinScrollBar {}
         }
 
         background: Rectangle {

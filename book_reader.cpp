@@ -144,6 +144,16 @@ QString BookReader::format() const
     return m_format;
 }
 
+qint64 BookReader::totalSize() const
+{
+    qint64 total = 0;
+    if (m_book) {
+        for (const EpubBook::SpineItem &item : m_book->spine())
+            total += item.size;
+    }
+    return total;
+}
+
 QVariantList BookReader::spine() const
 {
     QVariantList items;
@@ -526,6 +536,25 @@ double BookReader::bookFraction(int spineIndex, double fileFraction) const
     if (total <= 0)
         return 0;
     return std::clamp((double(before) + fileFraction * double(m_book->spine().at(spineIndex).size)) / double(total), 0.0, 1.0);
+}
+
+QVariantMap BookReader::locate(double bookFraction) const
+{
+    const qint64 total = totalSize();
+    if (!m_book || m_book->spine().isEmpty())
+        return { { QStringLiteral("spineIndex"), -1 }, { QStringLiteral("fileFraction"), 0 } };
+    const double wanted = std::clamp(bookFraction, 0.0, 1.0) * double(total);
+    qint64 before = 0;
+    const int last = int(m_book->spine().size()) - 1;
+    for (int i = 0; i <= last; ++i) {
+        const qint64 size = m_book->spine().at(i).size;
+        if (wanted < double(before + size) || i == last) {
+            const double fraction = size > 0 ? (wanted - double(before)) / double(size) : 0;
+            return { { QStringLiteral("spineIndex"), i }, { QStringLiteral("fileFraction"), std::clamp(fraction, 0.0, 1.0) } };
+        }
+        before += size;
+    }
+    return { { QStringLiteral("spineIndex"), last }, { QStringLiteral("fileFraction"), 1.0 } };
 }
 
 void BookReader::savePosition(int spineIndex, const QString &cfi, double fileFraction)

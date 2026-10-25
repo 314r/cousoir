@@ -10,6 +10,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QColor>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -101,6 +102,7 @@ private slots:
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
     void readsInCousoir();
+    void laysOutPagesAsAsked();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -865,6 +867,124 @@ void LibraryUiTest::readsInCousoir()
         db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE book=%1").arg(bookId)).toString().toUtf8()).object();
     db.close();
     QVERIFY(removed.value(QLatin1String("removed")).toBool());
+#endif
+}
+
+// The reader's settings: a scroll, the text's size, two pages side by side
+// in a wide window, the type and the page's colours, each laid out at once
+// and the place kept through them; and a place found by how far into the
+// book it is.
+void LibraryUiTest::laysOutPagesAsAsked()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *settings = reader->property("settings").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(settings && view);
+    QCOMPARE(reader->property("columns").toInt(), 1);
+    // The line no longer than the measure: the page narrower than the window.
+    QVERIFY(view->property("width").toDouble() < reader->width() - 100);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QCOMPARE(reader->property("shownLayout").toString(), QStringLiteral("1"));
+    const int onePage = reader->property("pages").toInt();
+    QVERIFY2(onePage >= 4, qPrintable(QString::number(onePage)));
+    for (int page = 1; page <= 2; ++page) {
+        QTest::keyClick(reader, Qt::Key_Right);
+        QTRY_COMPARE(reader->property("page").toInt(), page);
+    }
+    const QString place = reader->property("position").toString();
+
+    // A scroll, then pages again: the same page.
+    settings->setProperty("scroll", true);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("scroll"));
+    const QString scrolled = reader->property("position").toString();
+    QTest::keyClick(reader, Qt::Key_Space);
+    QTRY_VERIFY(reader->property("position").toString() != scrolled);
+    QTest::keyClick(reader, Qt::Key_Space, Qt::ShiftModifier);
+    QTRY_COMPARE(reader->property("position").toString(), scrolled);
+    settings->setProperty("scroll", false);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("1"));
+    QTRY_COMPARE(reader->property("position").toString(), place);
+    QCOMPARE(reader->property("page").toInt(), 2);
+
+    // Larger text, then the book's size again: the same page.
+    QMetaObject::invokeMethod(reader, "setZoom", Q_ARG(QVariant, 1.6));
+    QTRY_VERIFY(reader->property("pages").toInt() > onePage);
+    QMetaObject::invokeMethod(reader, "setZoom", Q_ARG(QVariant, 1));
+    QTRY_COMPARE(reader->property("pages").toInt(), onePage);
+    QTRY_COMPARE(reader->property("position").toString(), place);
+
+    // Two pages side by side in a wide window, each as wide as the one was:
+    // half as many screens, the place on the second page of the second.
+    reader->resize(1600, reader->height());
+    QTRY_COMPARE(reader->property("columns").toInt(), 2);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("2"));
+    QTRY_COMPARE(reader->property("pages").toInt(), (onePage + 1) / 2);
+    QTRY_COMPARE(reader->property("position").toString(), place);
+    QCOMPARE(reader->property("page").toInt(), 1);
+    // One page asked for: one, the window as wide.
+    settings->setProperty("spreads", false);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("1"));
+    QTRY_COMPARE(reader->property("position").toString(), place);
+
+    // The type: a font, a line height and an alignment over the book's; the
+    // alignment the paragraphs', not the headings'.
+    settings->setProperty("fontFamily", QStringLiteral("serif"));
+    settings->setProperty("lineHeight", 1.8);
+    settings->setProperty("align", QStringLiteral("justify"));
+    const QString probe = QStringLiteral(R"((function () {
+        const p = getComputedStyle(document.querySelector('p'));
+        const h1 = getComputedStyle(document.querySelector('h1'));
+        document.title = [p.fontFamily, (parseFloat(p.lineHeight) / parseFloat(p.fontSize)).toFixed(1), p.textAlign,
+                          h1.textAlign].join('|');
+    })())");
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, probe));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("serif|1.8|justify|start");
+    }(), 10000);
+    QTRY_COMPARE(reader->property("position").toString().left(13), place.left(13));
+
+    // The page's colours: the margins beside it, and the page itself.
+    settings->setProperty("pageTheme", QStringLiteral("sepia"));
+    QTRY_COMPARE(reader->property("pageBackground").value<QColor>(), QColor(QStringLiteral("#f5ecd9")));
+    const QString background = QStringLiteral(
+        "document.title = getComputedStyle(document.documentElement).backgroundColor");
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, background));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("rgb(245, 236, 217)");
+    }(), 10000);
+
+    // Kept for the next book read.
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Reader/pageTheme")).toString(), QStringLiteral("sepia"));
+
+    // Near the end of the book, by the progress bar: the last chapter.
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    const int last = bookReader->property("spine").toList().size() - 1;
+    QMetaObject::invokeMethod(reader, "goToBookFraction", Q_ARG(QVariant, 0.99));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == last
+                                 && reader->property("position").toString().startsWith(
+                                     QStringLiteral("epubcfi(/%1/").arg(2 * (last + 1))),
+                             20000);
+    QVERIFY(reader->property("bookFraction").toDouble() > 0.8);
+    // The time left at the reader's pace.
+    const QList<QQuickItem *> progress = visualDescendants(reader->contentItem(), QStringLiteral("readerChapterProgress"));
+    QVERIFY(!progress.isEmpty());
+    QVERIFY2(progress.first()->property("text").toString().contains(QLatin1String(" min left in chapter")),
+             qPrintable(progress.first()->property("text").toString()));
+    reader->close();
 #endif
 }
 

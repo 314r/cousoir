@@ -745,14 +745,41 @@ Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
 the book in Cousoir's reader: its EPUB (or KEPUB), else its PDF. Ctrl+O still
 opens it in the desktop's reader.
 
-An EPUB shows a screen at a time, in the theme's colours and with its own
-fonts: the arrows, Space, Page Up and Page Down, the wheel or a click on
-either side turn the pages, Home and End go to the ends of the chapter, the
-next and previous chapters follow. T shows the table of contents beside the
-pages, the section being read in bold and named in the toolbar; Ctrl+Plus
-and Ctrl+Minus change the text's size. Links within the book go to their
-page; others open in the browser. The toolbar tells how far into the book
-the page is. Esc closes the book.
+An EPUB shows a screen at a time: the arrows, Space, Page Up and Page
+Down, the wheel or a click on either side of the page turn the pages, Home
+and End go to the ends of the chapter, the next and previous chapters
+follow. T shows the table of contents beside the pages, the section being
+read in bold. Links within the book go to their page; others open in the
+browser. F11 reads full screen, the toolbar showing with the mouse at the
+top of the screen or after a click in the middle of the page. Esc leaves
+full screen, then closes the book.
+
+The page is centred, its lines no longer than read well: about 66
+characters of the text's size, or the measure picked. When the window holds
+two such pages side by side, it shows two, as an open book. The Aa button
+picks, for every book:
+
+- the text's size (also Ctrl+Plus, Ctrl+Minus, Ctrl+0);
+- the font: the book's own, serif, sans serif or one installed;
+- the line spacing, the book's or 1.2 to 1.8;
+- the line length: short (52 characters), medium (66), long (80) or the
+  window's;
+- the alignment: the book's, ragged or justified, for the paragraphs the
+  book aligns to the start or justifies (those it centres stay so);
+- the page's colours: Cousoir's theme, light, sepia, dark or black;
+- one page, two pages side by side when the window is wide enough, or a
+  scroll, where Space and Page Down go a window down and the wheel and the
+  arrows scroll, on to the next chapter at the end of one.
+
+Each change shows at once, on the same page. The footer tells the chapter,
+the page in it, how long the rest of the chapter and of the book take at
+the reader's pace, measured as the pages are turned (250 words a minute
+until then), and how far into the book the page is, also as a bar a click
+on which goes there.
+
+Cousoir cannot hyphenate: Qt WebEngine, which shows the pages, has none of
+Chromium's hyphenation dictionaries; a book's own soft hyphens still break
+its words.
 
 Where reading stopped is kept as reading goes, and in the library when the
 book closes, where Calibre keeps its own: a CFI in `last_read_positions`, as
@@ -777,7 +804,7 @@ whole page, its page kept.
 
 Cousoir departs from Calibre's viewer here: no reading aloud, no search in
 the book, no notes on highlights yet, colours other than yellow only as
-shown, and no vertical or right-to-left page order. The position and the
+shown, and no vertical page order. The position and the
 highlights are written while the library can be written; when Calibre
 writes to it, they wait in Cousoir for the next time, and so do those whose
 writing failed.

@@ -289,7 +289,7 @@ bookmarks, no footnotes but by jumping to them, no reading aloud.
 
 ### Round 1
 
-#### R1. A page made for reading — picked
+#### R1. A page made for reading — picked, done
 
 What makes every minute of reading better, and what every reader app has:
 
@@ -305,6 +305,10 @@ What makes every minute of reading better, and what every reader app has:
 - What the page is: the chapter, the page in it, the time left in the
   chapter and in the book from how fast one reads, in a footer.
 - Full screen (F11), the toolbar showing when the mouse goes to the top.
+- Hyphenation was planned, and dropped: Qt WebEngine never gives Chromium
+  its hyphenation dictionaries (`ContentBrowserClientQt` does not implement
+  `GetHyphenationDictionary()`), so `hyphens: auto` does nothing; soft
+  hyphens put in by the reader would shift every CFI.
 
 Done when real books read well at any window size in every theme, the
 place holds across every change of setting and size, and the tests cover
@@ -1309,3 +1313,50 @@ across files:
   Built on Calibre names the search, template and sort ports, the viewer's
   positions and highlights, the notes, kepubify and the sends; ICU,
   Snowball, xxHash and Grant Drake's Find Duplicates are thanked.
+
+### 2026-10-25 — round 1, R1: a page made for reading (`exp-page`)
+
+Tried on three books of Project Gutenberg in a sandbox library, by
+screenshots of the reader (`cousoir-benchmark --screenshot --read`, which
+now takes the reader's size, its settings and clicks on its controls).
+
+- The page: `ReaderWindow` centres the page at the measure picked (66
+  characters of half the text's 16 pixels each by default), the margins
+  beside it in the page's colours, and asks `reader.js` for one or two
+  columns a screen: two when the window holds two of 85 % of the measure.
+  A column is the screen's width over their count less the margins, the
+  gap twice the margin, so that a screen is still a page to turn. A click
+  or the wheel beside the page turns it too.
+- A scroll: the same page without columns, scrolled; a "page" is a window
+  high, for the footer and the table of contents; Space goes a window less
+  two lines down; the wheel at the end of a chapter goes on to the next once
+  it stayed there a moment.
+- The place through layouts: the reader's script keeps an anchor, the place
+  gone to or the start of the page turned to, and every new layout (a
+  setting, a size, the font) goes back to it, not to the start of the page
+  it lands on, which would creep back a little with each one. Scrolls the
+  script makes itself do not move the anchor.
+- The type: a font family over the book's (code kept monospace), a line
+  height, and an alignment for the paragraphs the book aligns to the start
+  or justifies, marked once before any rule of the reader's applies, so
+  that centred ones stay centred. The size stays WebEngine's zoom, which
+  scales a book's pixel sizes as its relative ones.
+- The page's colours: Cousoir's theme, light, sepia, dark, black; the
+  highlights' colours follow the page's lightness.
+- The settings, in a panel under an Aa button, are kept for every book
+  (`Reader/` settings). ChoiceBox's list now scrolls past a dozen rows,
+  for the fonts.
+- The footer: the chapter, the page in it, the time left in the chapter
+  and the book at the reader's pace (bytes of the book's files a second,
+  measured from the pages turned forward after 3 s to 5 min, 30 until then:
+  250 words a minute of Gutenberg's XHTML), how far into the book, and a
+  bar a click on which goes there (`BookReader::locate()`).
+- F11 full screen, the toolbar sliding over the page with the mouse at the
+  top or after a click in the middle; Esc leaves full screen first.
+- Fixed on the way: in a scroll, `line-height: normal` made the step NaN.
+- Tests: `laysOutPagesAsAsked` (a scroll and back, a larger size and back,
+  two pages in a wide window, one asked for, each on the same page; the
+  type and the page's colours read back from the page; the settings kept;
+  a place near the end by the progress bar; the time left told). The UI
+  tests pass at both scales.
+

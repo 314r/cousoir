@@ -30,6 +30,9 @@ class BookReader : public QObject
     Q_PROPERTY(QString format READ format NOTIFY bookChanged)
     // { url, name, size } by spine item.
     Q_PROPERTY(QVariantList spine READ spine NOTIFY bookChanged)
+    // The size of all its spine items, by which how far into the book a
+    // place is counts.
+    Q_PROPERTY(qint64 totalSize READ totalSize NOTIFY bookChanged)
     // { title, spineIndex, fragment, depth }.
     Q_PROPERTY(QVariantList toc READ toc NOTIFY bookChanged)
     // Where to open: { spineIndex, cfi, device }, the newest position kept,
@@ -61,6 +64,7 @@ public:
     QString title() const;
     QString format() const;
     QVariantList spine() const;
+    qint64 totalSize() const;
     QVariantList toc() const;
     QVariantMap startPosition() const;
     QString script() const;
@@ -78,6 +82,9 @@ public:
     Q_INVOKABLE int spineIndexOf(const QUrl &url) const;
     // How far into the book a position in a spine item is, from 0 to 1.
     Q_INVOKABLE double bookFraction(int spineIndex, double fileFraction) const;
+    // Where a place so far into the book is: { spineIndex, fileFraction },
+    // spineIndex -1 for a book with nothing to read.
+    Q_INVOKABLE QVariantMap locate(double bookFraction) const;
     // Keeps where reading is: a CFI in the spine item, and how far into it.
     Q_INVOKABLE void savePosition(int spineIndex, const QString &cfi, double fileFraction);
     // A highlight of the text from `start` to `end`, CFIs within the spine

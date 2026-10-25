@@ -1,6 +1,7 @@
 // Cousoir's reader, run in each page of a book it shows: the page laid out
-// in columns a screen wide, turned by the keys, clicks and the wheel, and
-// positions found and gone back to as Calibre's viewer writes them.
+// in columns, one or two a screen, or as a scroll, in the type the reader
+// picks; turned by the keys, clicks and the wheel; and positions found and
+// gone back to as Calibre's viewer writes them.
 //
 // The CFI code is ported from src/pyj/read_book/cfi.pyj of Calibre 9.16,
 // Copyright (C) 2016 Kovid Goyal, GPL v3: encode(), decode() and their
@@ -8,8 +9,10 @@
 // skips them.
 //
 // It tells the window what happens by console messages, "cousoir:" and JSON:
-// { event: "position", cfi, fraction, page, pages }, { event: "next" } and
-// { event: "previous" } at the ends of the page, { event: "key", key },
+// { event: "position", cfi, fraction, page, pages, layout } (layout "1" or
+// "2", the columns a screen, or "scroll"), { event: "next" } and
+// { event: "previous" } at the ends of the page, { event: "key", key, ctrl,
+// alt, shift }, { event: "menu" } for a click in the middle,
 // { event: "selection", empty }, { event: "highlight", uuid } when one is
 // clicked, and { event: "layout" } once laid out again for a new size.
 (function () {
@@ -18,7 +21,14 @@
         return;
 
     const XHTML = 'http://www.w3.org/1999/xhtml';
-    const settings = { margin: 0.06, background: '#ffffff', color: '#1d1d1f', link: '#2f6db5' };
+    // What the window asks for, by setup(): the page's colours, its margin
+    // in pixels, how many columns a screen holds, a scroll rather than
+    // pages, and the type: a font family, a line height and an alignment
+    // ("start", "justify"), empty for the book's own.
+    const settings = {
+        margin: 40, background: '#ffffff', color: '#1d1d1f', link: '#2f6db5', columns: 1, scroll: false,
+        fontFamily: '', lineHeight: 0, align: '',
+    };
     let styleElement = null;
     let lastCfi = '';
 
@@ -376,45 +386,125 @@
         return document.scrollingElement || document.documentElement;
     }
 
+    // Pages go across, a screen at a time; in a scroll, down.
+    function scrolled() {
+        return !!settings.scroll;
+    }
+
     function pageWidth() {
         return window.innerWidth;
+    }
+
+    // What a page is: a screen's width, or in a scroll its height.
+    function pageStep() {
+        return scrolled() ? window.innerHeight : pageWidth();
     }
 
     // A right to left page: its columns go leftward, its scroll position from
     // 0 down.
     function rtl() {
-        return getComputedStyle(document.body || document.documentElement).direction === 'rtl';
+        return !scrolled() && getComputedStyle(document.body || document.documentElement).direction === 'rtl';
+    }
+
+    // A scroll made here, not by the reader: what it shows is told, but the
+    // place kept through layouts stays.
+    let ownScroll = -1;
+
+    function setScrollTop(top) {
+        scroller().scrollTop = top;
+        ownScroll = scroller().scrollTop;
+    }
+
+    function atScrollEnd() {
+        const s = scroller();
+        return s.scrollTop + window.innerHeight >= s.scrollHeight - 2;
     }
 
     function pages() {
-        return Math.max(1, Math.round(scroller().scrollWidth / pageWidth()));
+        const s = scroller();
+        // The last column of a spread may stand alone: a page all the same.
+        const extent = scrolled() ? s.scrollHeight : s.scrollWidth;
+        return Math.max(1, Math.ceil((extent - 2) / pageStep()));
     }
 
     function page() {
+        if (scrolled())
+            return atScrollEnd() ? pages() - 1 : Math.floor((scroller().scrollTop + 1) / pageStep());
         return Math.round(Math.abs(scroller().scrollLeft) / pageWidth());
+    }
+
+    // The paragraphs the book aligns to the start or justifies, which the
+    // reader's alignment then sets; those centred or to the end stay so.
+    let marked = false;
+
+    function markParagraphs() {
+        marked = true;
+        if (!document.body)
+            return;
+        for (const element of document.body.querySelectorAll('p, li, dd, dt, blockquote, div')) {
+            const align = getComputedStyle(element).textAlign;
+            if (align === 'start' || align === 'left' || align === 'justify' || align === '-webkit-auto')
+                element.dataset.cousoirAlign = '';
+        }
+    }
+
+    function typeRules() {
+        let rules = '';
+        if (settings.fontFamily) {
+            rules += `body, body * { font-family: ${settings.fontFamily} !important; }
+                      body code, body pre, body kbd, body samp, body tt, body code *, body pre * {
+                          font-family: monospace !important; }`;
+        }
+        if (settings.lineHeight) {
+            rules += `body, body p, body div, body li, body blockquote, body dd, body dt, body td, body th {
+                          line-height: ${settings.lineHeight} !important; }`;
+        }
+        if (settings.align === 'justify')
+            rules += '[data-cousoir-align] { text-align: justify !important; }';
+        else if (settings.align === 'start')
+            rules += '[data-cousoir-align] { text-align: start !important; }';
+        return rules;
     }
 
     function layout() {
         const width = window.innerWidth;
         const height = window.innerHeight;
-        const side = Math.max(16, Math.round(width * settings.margin));
-        const top = Math.max(16, Math.round(height * 0.05));
+        const side = Math.max(12, Math.round(settings.margin || 0));
+        const top = Math.max(16, Math.round(height * 0.04));
+        const columns = scrolled() ? 1 : Math.max(1, settings.columns || 1);
         if (!styleElement) {
             styleElement = document.createElementNS(XHTML, 'style');
             (document.head || document.documentElement).appendChild(styleElement);
         }
+        // A screen holds `columns` columns: each its width and the gap after
+        // it, the margins of the body making the gap at the screen's edges.
+        const page = scrolled()
+            ? `html {
+                   width: ${width}px !important; height: auto !important;
+                   overflow-x: hidden !important; overflow-y: auto !important; scrollbar-width: none !important;
+               }
+               body {
+                   margin: ${top}px ${side}px !important;
+                   width: auto !important; max-width: none !important; min-width: 0 !important; height: auto !important;
+                   columns: auto !important;
+               }`
+            : `html { width: ${width}px !important; height: ${height}px !important; overflow: hidden !important; }
+               body {
+                   height: ${height - 2 * top}px !important;
+                   width: auto !important; max-width: none !important; min-width: 0 !important;
+                   margin: ${top}px ${side}px !important;
+                   column-width: ${Math.floor(width / columns) - 2 * side}px !important;
+                   column-gap: ${2 * side}px !important; column-fill: auto !important;
+               }`;
         styleElement.textContent = `
+            ${page}
             html {
-                width: ${width}px !important; height: ${height}px !important;
-                margin: 0 !important; padding: 0 !important; overflow: hidden !important;
+                margin: 0 !important; padding: 0 !important;
                 background: ${settings.background} !important; color: ${settings.color} !important;
             }
+            html::-webkit-scrollbar { display: none; }
             body {
-                box-sizing: content-box !important; height: ${height - 2 * top}px !important;
-                width: auto !important; max-width: none !important; min-width: 0 !important;
-                margin: ${top}px ${side}px !important; padding: 0 !important;
-                column-width: ${width - 2 * side}px !important; column-gap: ${2 * side}px !important;
-                column-fill: auto !important; overflow: visible !important;
+                box-sizing: content-box !important; padding: 0 !important; overflow: visible !important;
                 background: transparent !important; color: ${settings.color} !important;
                 overflow-wrap: break-word;
             }
@@ -422,13 +512,18 @@
             a, a * { color: ${settings.link} !important; }
             img, svg, video { max-width: 100% !important; max-height: ${height - 2 * top}px !important; object-fit: contain; }
             ::selection { background: ${settings.link}; color: ${settings.background}; }
+            ${typeRules()}
         `;
     }
 
-    function show(n) {
-        const at = Math.max(0, Math.min(n, pages() - 1)) * pageWidth();
-        scroller().scrollLeft = rtl() ? -at : at;
-        report();
+    function show(n, keepAnchor) {
+        if (scrolled()) {
+            setScrollTop(Math.max(0, n) * pageStep());
+        } else {
+            const at = Math.max(0, Math.min(n, pages() - 1)) * pageWidth();
+            scroller().scrollLeft = rtl() ? -at : at;
+        }
+        report(keepAnchor);
     }
 
     // The first visible character, as a CFI: scanned from the top left of
@@ -445,7 +540,9 @@
                 if (isText(node) && node.nodeValue.trim().length) {
                     const rects = range.getClientRects();
                     const rect = rects.length ? rects[0] : null;
-                    if (!rect || (rect.right > 0 && rect.left < width))
+                    // In a scroll, the first line whole in sight.
+                    if (!rect || (rect.right > 0 && rect.left < width && rect.top < height
+                                  && (scrolled() ? rect.top >= -1 : rect.bottom > 0)))
                         return encode(document, node, range.startOffset);
                 }
                 const element = document.elementFromPoint(x, y);
@@ -457,10 +554,21 @@
         return encode(document, document.body || document.documentElement);
     }
 
-    function report() {
+    // Where the reader is, gone back to when the page is laid out again: the
+    // place gone to, or the start of the page turned to, and not the start
+    // of the page a new layout puts it on, which would creep back a little
+    // with every one.
+    let anchor = '';
+
+    function report(keepAnchor) {
         lastCfi = currentCfi();
+        if (!keepAnchor)
+            anchor = lastCfi;
         const count = pages();
-        post({ event: 'position', cfi: lastCfi, fraction: count > 1 ? page() / count : 0, page: page(), pages: count });
+        const fraction = scrolled() ? scroller().scrollTop / Math.max(1, scroller().scrollHeight)
+                                    : count > 1 ? page() / count : 0;
+        post({ event: 'position', cfi: lastCfi, fraction: fraction, page: page(), pages: count,
+               layout: scrolled() ? 'scroll' : String(Math.max(1, settings.columns || 1)) });
     }
 
     // The page a node, at a character, shows on.
@@ -478,9 +586,27 @@
         }
         if (!rect)
             return 0;
+        if (scrolled())
+            return Math.floor((rect.top + scroller().scrollTop) / pageStep());
         // Where it is with the page at its start.
         const x = rect.left + scroller().scrollLeft;
         return rtl() ? Math.floor((pageWidth() - 1 - x) / pageWidth()) : Math.floor(x / pageWidth());
+    }
+
+    // In a scroll, the place itself at the top of the window.
+    function scrollTo(node, offset) {
+        let rect = null;
+        if (isText(node)) {
+            const range = document.createRange();
+            const at = Math.min(offset || 0, node.nodeValue.length);
+            range.setStart(node, at);
+            range.setEnd(node, Math.min(at + 1, node.nodeValue.length));
+            const rects = range.getClientRects();
+            rect = rects.length ? rects[0] : range.getBoundingClientRect();
+        } else if (node.getBoundingClientRect) {
+            rect = node.getBoundingClientRect();
+        }
+        setScrollTop(rect ? Math.max(0, scroller().scrollTop + rect.top - 4) : 0);
     }
 
     function goToCfi(cfi) {
@@ -491,45 +617,112 @@
             show(0);
             return false;
         }
-        show(pageOf(decoded.node, decoded.offset));
+        if (scrolled()) {
+            scrollTo(decoded.node, decoded.offset);
+            report(true);
+        } else {
+            show(pageOf(decoded.node, decoded.offset), true);
+        }
+        anchor = inner;
         return true;
     }
 
     function goToFragment(fragment) {
         const target = fragment ? document.getElementById(fragment) : null;
+        if (target && scrolled()) {
+            scrollTo(target);
+            report();
+            return;
+        }
         show(target ? pageOf(target) : 0);
     }
 
+    function goToEnd() {
+        if (scrolled()) {
+            setScrollTop(scroller().scrollHeight);
+            report();
+        } else {
+            show(pages() - 1);
+        }
+    }
+
+    // How far into the page's file, from 0 to 1.
+    function goToFraction(fraction) {
+        fraction = Math.max(0, Math.min(1, fraction || 0));
+        if (scrolled()) {
+            setScrollTop(fraction * scroller().scrollHeight);
+            report();
+        } else {
+            show(Math.min(pages() - 1, Math.floor(fraction * pages())));
+        }
+    }
+
+    // A scroll goes a window down, but for a line or two kept in sight.
+    function scrollBy(screens) {
+        const style = getComputedStyle(document.body || document.documentElement);
+        // "normal" is about 1.2 times the font's size.
+        const line = parseFloat(style.lineHeight) || 1.2 * parseFloat(style.fontSize) || 20;
+        const step = Math.max(40, window.innerHeight - 2 * line);
+        setScrollTop(scroller().scrollTop + screens * step);
+        report();
+    }
+
     function next() {
-        if (page() < pages() - 1)
+        if (scrolled()) {
+            if (atScrollEnd())
+                post({ event: 'next' });
+            else
+                scrollBy(1);
+        } else if (page() < pages() - 1) {
             show(page() + 1);
-        else
+        } else {
             post({ event: 'next' });
+        }
     }
 
     function previous() {
-        if (page() > 0)
+        if (scrolled()) {
+            if (scroller().scrollTop <= 1)
+                post({ event: 'previous' });
+            else
+                scrollBy(-1);
+        } else if (page() > 0) {
             show(page() - 1);
-        else
+        } else {
             post({ event: 'previous' });
+        }
+    }
+
+    // A few lines down or up in a scroll, on to the next file at its end.
+    function lines(count) {
+        if (count > 0 && atScrollEnd())
+            post({ event: 'next' });
+        else if (count < 0 && scroller().scrollTop <= 1)
+            post({ event: 'previous' });
+        else {
+            setScrollTop(scroller().scrollTop + count * 40);
+            report();
+        }
     }
 
     document.addEventListener('keydown', event => {
         const key = event.key;
         if (event.ctrlKey || event.altKey || event.metaKey) {
-            post({ event: 'key', key: key, ctrl: event.ctrlKey, shift: event.shiftKey });
+            post({ event: 'key', key: key, ctrl: event.ctrlKey, alt: event.altKey, shift: event.shiftKey });
             return;
         }
-        if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown' || (key === ' ' && !event.shiftKey))
+        if (scrolled() && (key === 'ArrowDown' || key === 'ArrowUp'))
+            lines(key === 'ArrowDown' ? 1 : -1);
+        else if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown' || (key === ' ' && !event.shiftKey))
             next();
         else if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp' || (key === ' ' && event.shiftKey))
             previous();
         else if (key === 'Home')
             show(0);
         else if (key === 'End')
-            show(pages() - 1);
+            goToEnd();
         else {
-            post({ event: 'key', key: key, ctrl: false, shift: event.shiftKey });
+            post({ event: 'key', key: key, ctrl: false, alt: false, shift: event.shiftKey });
             return;
         }
         event.preventDefault();
@@ -554,10 +747,31 @@
             post({ event: 'menu' });
     });
 
+    // The wheel turns a page at a time; in a scroll it scrolls, and goes on
+    // to the next file or back to the one before once the end was reached a
+    // moment before.
     let wheelLock = 0;
+    let endReached = 0;
     document.addEventListener('wheel', event => {
-        event.preventDefault();
         const now = Date.now();
+        if (scrolled()) {
+            const atEnd = event.deltaY > 0 && atScrollEnd();
+            const atStart = event.deltaY < 0 && scroller().scrollTop <= 1;
+            if (!atEnd && !atStart) {
+                endReached = 0;
+                return;
+            }
+            event.preventDefault();
+            if (!endReached)
+                endReached = now;
+            if (now - endReached > 400 && now >= wheelLock) {
+                wheelLock = now + 600;
+                endReached = 0;
+                post({ event: atEnd ? 'next' : 'previous' });
+            }
+            return;
+        }
+        event.preventDefault();
         if (now < wheelLock || Math.abs(event.deltaY) < 1)
             return;
         wheelLock = now + 250;
@@ -567,29 +781,49 @@
             previous();
     }, { passive: false });
 
+    let scrollTimer = 0;
+    window.addEventListener('scroll', () => {
+        if (!scrolled() || Math.abs(scroller().scrollTop - ownScroll) < 1)
+            return;
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => report(), 120);
+    });
+
     let selectionTimer = 0;
     document.addEventListener('selectionchange', () => {
         clearTimeout(selectionTimer);
         selectionTimer = setTimeout(() => post({ event: 'selection', empty: window.getSelection().isCollapsed }), 150);
     });
 
-    window.addEventListener('resize', () => {
-        const cfi = lastCfi;
+    // Laid out again, and back where the reader was.
+    function relayout() {
         layout();
-        goToCfi('epubcfi(/2' + cfi + ')');
+        if (anchor)
+            goToCfi('epubcfi(/2' + anchor + ')');
+    }
+
+    window.addEventListener('resize', () => {
+        relayout();
         post({ event: 'layout' });
     });
 
     window.cousoir = {
+        // The page's colours, margin, columns, scroll and type, from the
+        // window; again when the reader changes them, the place kept.
         setup(options) {
             Object.assign(settings, options || {});
-            layout();
+            if (!marked)
+                markParagraphs();
+            relayout();
             return true;
         },
         goToStart() { show(0); },
-        goToEnd() { show(pages() - 1); },
+        goToEnd: goToEnd,
         goToCfi: goToCfi,
         goToFragment: goToFragment,
+        goToFraction: goToFraction,
+        next: next,
+        previous: previous,
         // The page of each of these ids, -1 for one the page lacks.
         pagesOf(ids) {
             const pagesById = {};
