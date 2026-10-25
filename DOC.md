@@ -790,6 +790,22 @@ is shown, marked on its page, the book's other places on that page marked
 lightly. F3 and Shift+F3, Enter again, or a click go through them. A search
 lists 1 000 places at most.
 
+A link to a note shows the note in a box by the link, the page left as it
+is: EPUB 3's noterefs (`epub:type="noteref"`, `role="doc-noteref"`) and the
+links most books have to their notes, a number, a letter or a mark alone,
+raised or in brackets ("[2]", "³", "*"). The note is the element the link
+names when it is a paragraph, an aside or an item of a list, else the
+paragraph it is in, as Gutenberg's notes start with an anchor; read from
+the same file or another of the book, its italics, bold and raised text
+kept, a link back left out. "Go to the note" goes there, Back returns. A
+link naming more than a note, or nothing, goes as any link does. EPUB 3's
+footnotes and endnotes (asides) are left out of the text they are in, shown
+from their links.
+
+A picture clicked in the middle of the page shows whole over the window,
+fitted to it; the wheel, Plus and Minus zoom it, dragging moves it, a
+click or Esc closes it. A click on either side still turns the page.
+
 Back (Alt+Left, or the Back button) returns where reading was before a
 link, a search's place, an entry of the contents or of the highlights, or
 the progress bar took it elsewhere: a note read, back to the page. Forward

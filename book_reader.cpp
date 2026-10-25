@@ -11,6 +11,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMutex>
+#include <QQmlEngine>
+#include <QQuickImageProvider>
 #include <QQuickWebEngineProfile>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -72,6 +74,72 @@ public:
         job->reply(type.toUtf8(), buffer);
     }
 };
+
+// The book's pictures for QML: image://book/<host>/<name in the archive>.
+class ImageProvider : public QQuickImageProvider
+{
+public:
+    ImageProvider() : QQuickImageProvider(QQuickImageProvider::Image) {}
+
+    QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override
+    {
+        const qsizetype slash = id.indexOf(u'/');
+        std::shared_ptr<EpubBook> book;
+        {
+            const QMutexLocker locker(&booksLock);
+            book = openBooks.value(id.left(slash)).lock();
+        }
+        QImage image;
+        if (book && slash > 0)
+            image = QImage::fromData(book->read(QUrl::fromPercentEncoding(id.mid(slash + 1).toUtf8())));
+        if (size)
+            *size = image.size();
+        if (!image.isNull() && requestedSize.isValid() && !requestedSize.isEmpty())
+            image = image.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        return image;
+    }
+};
+
+// The note's elements kept as rich text, the others' text alone.
+void appendNote(const XmlTree::Node &node, QString *html, QString *text)
+{
+    for (const auto &child : node.children) {
+        if (child->kind == XmlTree::Node::Kind::Text || child->kind == XmlTree::Node::Kind::Cdata) {
+            html->append(child->text.toHtmlEscaped());
+            text->append(child->text);
+            continue;
+        }
+        if (child->kind != XmlTree::Node::Kind::Element)
+            continue;
+        const QString name = child->localName.toLower();
+        const QString type = child->attribute(QStringLiteral("epub:type")) + u' ' + child->attribute(QStringLiteral("role"));
+        if (name == QLatin1String("script") || name == QLatin1String("style")
+            || (name == QLatin1String("a") && type.contains(QLatin1String("backlink"))))
+            continue;
+        if (name == QLatin1String("br")) {
+            html->append(QStringLiteral("<br/>"));
+            text->append(u'\n');
+            continue;
+        }
+        static const QHash<QString, QString> tags{
+            { QStringLiteral("i"), QStringLiteral("i") },        { QStringLiteral("em"), QStringLiteral("i") },
+            { QStringLiteral("cite"), QStringLiteral("i") },     { QStringLiteral("var"), QStringLiteral("i") },
+            { QStringLiteral("dfn"), QStringLiteral("i") },      { QStringLiteral("b"), QStringLiteral("b") },
+            { QStringLiteral("strong"), QStringLiteral("b") },   { QStringLiteral("sup"), QStringLiteral("sup") },
+            { QStringLiteral("sub"), QStringLiteral("sub") },    { QStringLiteral("p"), QStringLiteral("p") },
+            { QStringLiteral("div"), QStringLiteral("p") },      { QStringLiteral("li"), QStringLiteral("p") },
+            { QStringLiteral("dd"), QStringLiteral("p") },       { QStringLiteral("blockquote"), QStringLiteral("p") },
+        };
+        const QString tag = tags.value(name);
+        if (!tag.isEmpty())
+            html->append(u'<' + tag + u'>');
+        appendNote(*child, html, text);
+        if (!tag.isEmpty())
+            html->append(QStringLiteral("</") + tag + u'>');
+        if (tag == QLatin1String("p"))
+            text->append(u'\n');
+    }
+}
 
 void installHandler()
 {
@@ -508,6 +576,51 @@ void BookReader::finishSave(int id, bool saved)
     keepPending(uuid);
 }
 
+QVariantMap BookReader::note(const QUrl &url) const
+{
+    if (!m_book || url.scheme() != QLatin1String(scheme) || url.host() != m_token || !url.hasFragment())
+        return {};
+    const QString name = url.path(QUrl::FullyDecoded).mid(1);
+    const QString id = url.fragment(QUrl::FullyDecoded);
+    const std::unique_ptr<XmlTree::Node> root = XmlTree::parse(m_book->read(name));
+    if (!root || id.isEmpty())
+        return {};
+    const EpubCfi::Document document(*root);
+    const XmlTree::Node *target = document.element(id);
+    if (!target)
+        return {};
+    // The note: the element named when it is a block, else the block it is
+    // in, as an anchor at the start of Gutenberg's notes is.
+    static const QSet<QString> blocks{
+        QStringLiteral("aside"), QStringLiteral("li"), QStringLiteral("p"), QStringLiteral("div"), QStringLiteral("dd"),
+        QStringLiteral("dt"), QStringLiteral("section"), QStringLiteral("blockquote"), QStringLiteral("td"),
+        QStringLiteral("footer"),
+    };
+    const XmlTree::Node *block = target;
+    while (block && !(block->kind == XmlTree::Node::Kind::Element && blocks.contains(block->localName.toLower()))) {
+        block = block->parent;
+        if (block && block->isElement("body"))
+            block = nullptr;
+    }
+    if (!block)
+        block = target;
+    QString html;
+    QString text;
+    appendNote(*block, &html, &text);
+    text = text.simplified();
+    // A section, a chapter: no note to show in a box.
+    if (text.isEmpty() || text.size() > 3000)
+        return {};
+    return { { QStringLiteral("html"), html.trimmed() }, { QStringLiteral("text"), text } };
+}
+
+QUrl BookReader::imageUrl(const QUrl &url) const
+{
+    if (!m_book || url.scheme() != QLatin1String(scheme) || url.host() != m_token)
+        return {};
+    return QUrl(QStringLiteral("image://book/") + m_token + url.path(QUrl::FullyEncoded));
+}
+
 QObject *BookReader::speech() const
 {
     return m_speech;
@@ -605,6 +718,9 @@ QString BookReader::open(int bookId)
     if (!opened)
         return error;
     installHandler();
+    // The book's pictures for the window's Image.
+    if (QQmlEngine *engine = qmlEngine(this); engine && !engine->imageProvider(QStringLiteral("book")))
+        engine->addImageProvider(QStringLiteral("book"), new ImageProvider);
     m_book = std::move(opened);
     m_search = std::make_shared<BookSearch>(m_book);
 #ifdef COUSOIR_SPEECH

@@ -14,8 +14,9 @@
 // { event: "previous" } at the ends of the page, { event: "key", key, ctrl,
 // alt, shift }, { event: "menu" } for a click in the middle,
 // { event: "selection", empty, rect }, { event: "highlight", uuid, rect }
-// when one is clicked, rect where it is in the window, and { event: "layout" }
-// once laid out again for a new size.
+// when one is clicked, rect where it is in the window, { event: "note", href,
+// rect } for a link to a note, { event: "image", src } for a picture
+// clicked, and { event: "layout" } once laid out again for a new size.
 (function () {
     'use strict';
     if (window.cousoir)
@@ -447,6 +448,35 @@
         return count;
     }
 
+    // --- Notes and pictures -------------------------------------------------
+
+    const OPS = 'http://www.idpf.org/2007/ops';
+    const XLINK = 'http://www.w3.org/1999/xlink';
+
+    // A link to a note: EPUB 3's noteref, ARIA's doc-noteref, or a number,
+    // a mark or a letter alone, raised or in brackets, as most books have
+    // them; the window shows the note, or follows the link when it names
+    // more than a note.
+    function noteLink(link) {
+        const href = link.getAttribute('href') || '';
+        if (!href.includes('#'))
+            return false;
+        const type = (link.getAttributeNS(OPS, 'type') || '') + ' ' + (link.getAttribute('role') || '');
+        if (/\b(doc-)?noteref\b/.test(type))
+            return true;
+        if (/backlink/.test(type))
+            return false;
+        return /^[\[(]?\s*(\d{1,4}|[a-z]|[*\u2020\u2021\u00a7\u00b6#]{1,3})\s*[\])]?\.?$/i.test(link.textContent.trim());
+    }
+
+    // The address of a picture clicked, for the window to show it whole.
+    function pictureSource(element) {
+        if (element.localName === 'img')
+            return element.currentSrc || element.src || '';
+        const href = element.getAttributeNS(XLINK, 'href') || element.getAttribute('href') || '';
+        return href ? new URL(href, location.href).href : '';
+    }
+
     // --- Reading aloud ------------------------------------------------------
 
     // A place brought into sight: its page turned to, or in a scroll, the
@@ -611,8 +641,13 @@
                    column-width: ${Math.floor(width / columns) - 2 * side}px !important;
                    column-gap: ${2 * side}px !important; column-fill: auto !important;
                }`;
+        // EPUB 3's notes are shown over the page, from their links: out of
+        // the text, which keeps its nodes, and so its CFIs.
         styleElement.textContent = `
+            @namespace epub "${OPS}";
             ${page}
+            aside[epub|type~="footnote"], aside[epub|type~="endnote"], aside[epub|type~="rearnote"],
+            aside[role~="doc-footnote"], aside[role~="doc-endnote"] { display: none !important; }
             html {
                 margin: 0 !important; padding: 0 !important;
                 background: ${settings.background} !important; color: ${settings.color} !important;
@@ -850,8 +885,15 @@
     }, true);
 
     document.addEventListener('click', event => {
-        if (event.target.closest && event.target.closest('a[href]'))
+        const link = event.target.closest ? event.target.closest('a[href]') : null;
+        if (link) {
+            // A note, over the page, the page left as it is.
+            if (window.getSelection().isCollapsed && noteLink(link)) {
+                event.preventDefault();
+                post({ event: 'note', href: link.href, rect: rectOf(link.getClientRects()) });
+            }
             return;
+        }
         const wrapper = event.target.closest ? event.target.closest('span[data-annot-id]') : null;
         if (wrapper && window.getSelection().isCollapsed) {
             post({ event: 'highlight', uuid: wrapper.dataset.annotId, rect: highlightRect(wrapper.dataset.annotId) });
@@ -860,10 +902,15 @@
         if (!window.getSelection().isCollapsed)
             return;
         const x = event.clientX;
+        // A picture in the middle shows whole; the sides turn the page, a
+        // page of a plate too.
+        const picture = event.target.closest ? event.target.closest('img, image') : null;
         if (x < window.innerWidth / 3)
             previous();
         else if (x > window.innerWidth * 2 / 3)
             next();
+        else if (picture && pictureSource(picture))
+            post({ event: 'image', src: pictureSource(picture) });
         else
             post({ event: 'menu' });
     });

@@ -181,6 +181,52 @@ ThemedWindow {
         return true
     }
 
+    // Esc: what is over the page closed, the highlight chosen let go, full
+    // screen left, else the book closed.
+    function pressEscape() {
+        if (noteBox.opened) {
+            noteBox.close()
+        } else if (imageViewer.opened) {
+            imageViewer.close()
+        } else if (settingsPopup.opened) {
+            settingsPopup.close()
+        } else if (chosenHighlight) {
+            chosenHighlight = ""
+            highlightRect = null
+        } else if (fullScreen) {
+            toggleFullScreen()
+        } else {
+            close()
+        }
+    }
+
+    // A link: its page within the book, the desktop's browser for the web.
+    function followLink(url) {
+        const index = bookReader.spineIndexOf(url)
+        if (index >= 0) {
+            const address = url.toString()
+            const hash = address.indexOf("#")
+            jump(index, hash >= 0 ? "fragment:" + decodeURIComponent(address.slice(hash + 1)) : "start")
+        } else if (/^(https?|mailto):/.test(url.toString())) {
+            Qt.openUrlExternally(url)
+        }
+    }
+
+    // A link to a note: the note in a box by the link, or, when it names
+    // more than a note, its page.
+    function showNote(href, rect) {
+        const note = bookReader.note(href)
+        if (!note.html) {
+            followLink(href)
+            return
+        }
+        noteBox.href = href
+        noteBox.html = note.html
+        noteBox.anchorRect = pageRect(rect)
+        noteBox.open()
+        noteBox.place()
+    }
+
     // Somewhere else in the book, where reading was kept for Back.
     function jump(index, action) {
         if (speaking) {
@@ -656,16 +702,7 @@ ThemedWindow {
         sequences: ["Esc"]
         // A field's own Esc first.
         enabled: !readerWindow.editingText
-        onActivated: {
-            if (readerWindow.chosenHighlight) {
-                readerWindow.chosenHighlight = ""
-                readerWindow.highlightRect = null
-            } else if (readerWindow.fullScreen) {
-                readerWindow.toggleFullScreen()
-            } else {
-                readerWindow.close()
-            }
-        }
+        onActivated: readerWindow.pressEscape()
     }
 
     Shortcut {
@@ -1389,18 +1426,9 @@ ThemedWindow {
                         if (request.navigationType !== WebEngineNavigationRequest.LinkClickedNavigation)
                             return
                         request.reject()
-                        const index = bookReader.spineIndexOf(request.url)
-                        if (index >= 0) {
-                            const url = request.url.toString()
-                            const hash = url.indexOf("#")
-                            // Once the navigation refused is over: loading
-                            // another page within it fails a check of
-                            // Chromium's.
-                            Qt.callLater(readerWindow.jump, index,
-                                         hash >= 0 ? "fragment:" + decodeURIComponent(url.slice(hash + 1)) : "start")
-                        } else if (/^(https?|mailto):/.test(request.url.toString())) {
-                            Qt.openUrlExternally(request.url)
-                        }
+                        // Once the navigation refused is over: loading another
+                        // page within it fails a check of Chromium's.
+                        Qt.callLater(readerWindow.followLink, request.url)
                     }
 
                     onJavaScriptConsoleMessage: function(level, message) {
@@ -1447,6 +1475,11 @@ ThemedWindow {
                             readerWindow.load(readerWindow.spineIndex - 1, "end")
                         } else if (event.event === "layout") {
                             readerWindow.updateAnchors()
+                        } else if (event.event === "note") {
+                            readerWindow.showNote(event.href, event.rect)
+                        } else if (event.event === "image") {
+                            imageViewer.source = bookReader.imageUrl(event.src)
+                            imageViewer.open()
                         } else if (event.event === "menu") {
                             if (readerWindow.fullScreen)
                                 readerWindow.chromeAsked = !readerWindow.chromeAsked
@@ -1462,7 +1495,12 @@ ThemedWindow {
                             readerWindow.highlightRect = readerWindow.pageRect(event.rect)
                         } else if (event.event === "key") {
                             // The keys the window's shortcuts have not
-                            // taken: those that would type in a field.
+                            // taken: those that would type in a field, and
+                            // Esc, which WebEngine keeps from them.
+                            if (event.key === "Escape") {
+                                readerWindow.pressEscape()
+                                return
+                            }
                             if (event.ctrl || event.alt)
                                 return
                             if ((event.key === "h" || event.key === "H") && readerWindow.hasSelection)
@@ -2154,6 +2192,177 @@ ThemedWindow {
                     tip: qsTr("Ctrl+Enter")
                     onClicked: noteEditor.save()
                 }
+            }
+        }
+    }
+
+    // A note, by the link to it, the page left as it is.
+    Popup {
+        id: noteBox
+        objectName: "readerNoteBox"
+
+        property string href: ""
+        property string html: ""
+        // Where the link is, in the page's area.
+        property var anchorRect: null
+
+        // By the link: below it, else above it, within the page.
+        function place() {
+            const origin = pageArea.mapToItem(null, 0, 0)
+            if (!anchorRect) {
+                x = Math.round((readerWindow.width - width) / 2)
+                y = Math.round((readerWindow.height - height) / 3)
+                return
+            }
+            x = Math.round(Math.max(origin.x + Theme.gutter,
+                                    Math.min(origin.x + pageArea.width - width - Theme.gutter,
+                                             origin.x + anchorRect.x + anchorRect.width / 2 - width / 2)))
+            const below = origin.y + anchorRect.y + anchorRect.height + Theme.gutter
+            y = Math.round(below + height < readerWindow.height ? below
+                                                                 : Math.max(Theme.gutter, origin.y + anchorRect.y - height - Theme.gutter))
+        }
+
+        parent: Overlay.overlay
+        width: Math.min(pageArea.width - 2 * Theme.gutter, Math.round(52 * Theme.charWidth))
+        padding: Theme.panePadding
+        onClosed: view.forceActiveFocus()
+
+        background: Rectangle {
+            color: readerWindow.pageBackground
+            border.width: 1
+            border.color: Theme.mix(readerWindow.pageBackground, readerWindow.pageText, 0.3)
+        }
+
+        contentItem: ColumnLayout {
+            spacing: Theme.gutter
+
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(noteBoxText.implicitHeight, Math.round(readerWindow.height * 0.4))
+                contentWidth: availableWidth
+                clip: true
+
+                Label {
+                    id: noteBoxText
+                    objectName: "readerNoteBoxText"
+
+                    width: parent.width
+                    text: noteBox.html
+                    textFormat: Text.RichText
+                    wrapMode: Text.Wrap
+                    color: readerWindow.pageText
+                    font.family: readerSettings.fontFamily && readerSettings.fontFamily !== "sans-serif"
+                        ? readerSettings.fontFamily : "serif"
+                    font.pointSize: Theme.fontPointSizeBody * 1.15 * readerSettings.zoom
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                FlatButton {
+                    objectName: "readerGoToNote"
+
+                    variant: "outline"
+                    text: qsTr("Go to the note")
+                    onClicked: {
+                        noteBox.close()
+                        readerWindow.followLink(noteBox.href)
+                    }
+                }
+            }
+        }
+    }
+
+    // A picture, whole over the window: the wheel or Plus and Minus zoom it,
+    // dragging moves it, Esc or a click closes it.
+    Popup {
+        id: imageViewer
+        objectName: "readerImageViewer"
+
+        property url source
+        property real zoom: 1
+
+        function zoomBy(factor) {
+            zoom = Math.max(1, Math.min(8, zoom * factor))
+            if (zoom === 1) {
+                picture.x = 0
+                picture.y = 0
+            }
+        }
+
+        parent: Overlay.overlay
+        x: 0
+        y: 0
+        width: parent.width
+        height: parent.height
+        modal: true
+        focus: true
+        padding: 0
+        onOpened: {
+            zoom = 1
+            picture.x = 0
+            picture.y = 0
+        }
+        onClosed: view.forceActiveFocus()
+
+        background: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.85)
+        }
+
+        contentItem: Item {
+            clip: true
+            focus: true
+            Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Plus || event.key === Qt.Key_Equal)
+                    imageViewer.zoomBy(1.25)
+                else if (event.key === Qt.Key_Minus)
+                    imageViewer.zoomBy(0.8)
+                else if (event.key === Qt.Key_0)
+                    imageViewer.zoomBy(0)
+                else
+                    return
+                event.accepted = true
+            }
+
+            Image {
+                id: picture
+                objectName: "readerPicture"
+
+                width: parent.width
+                height: parent.height
+                source: imageViewer.source
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                smooth: true
+                mipmap: true
+                scale: imageViewer.zoom
+
+                DragHandler {
+                    enabled: imageViewer.zoom > 1
+                }
+            }
+
+            WheelHandler {
+                onWheel: function(event) { imageViewer.zoomBy(event.angleDelta.y > 0 ? 1.15 : 1 / 1.15) }
+            }
+
+            TapHandler {
+                onTapped: imageViewer.close()
+            }
+
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Theme.gutter
+                text: picture.status === Image.Error ? qsTr("This picture cannot be shown.")
+                    : qsTr("The wheel zooms, dragging moves, Esc closes")
+                color: "#d0d0d0"
+                font.pointSize: Theme.fontPointSizeCaption
             }
         }
     }
