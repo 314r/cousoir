@@ -438,7 +438,7 @@ Left for the next round.
 
 ### Round 5
 
-#### R5. Notes and pictures in place — picked
+#### R5. Notes and pictures in place — picked, done
 
 From round 4. Notes are where a reader leaves the page most: classics,
 essays, history, translations are full of them, and Back, since round 2,
@@ -1648,4 +1648,33 @@ Alt+arrows, Ctrl+D and Ctrl+W was dead and is gone; the text sizes are
 window shortcuts too; the page tells only letters, which would type in a
 field. Highlights and bookmarks are sorted by keys made once; the Kobo
 placement finds an element by id through `EpubCfi::Document::element()`.
+
+### 2026-10-25 — round 5, R5: notes and pictures in place (`exp-notes-in-place`)
+
+- The page's script tells a link that looks like a note's (EPUB 3's
+  `noteref`, ARIA's `doc-noteref`, or a number, a letter or a mark alone,
+  in brackets or not) instead of following it. `BookReader::note()` finds
+  the note in the book's XML, the same file or another, and gives it as a
+  Text's rich text: the element named when it is a block, else the block
+  it is in; italics, bold, raised text and paragraphs kept, a link back
+  left out; nothing when it is more than 3 000 characters, a chapter
+  rather than a note, and the link is then followed. Doing it in C++
+  spares the page fetching another file through Cousoir's scheme.
+- The box by the link, below it or above it, in the page's colours; "Go to
+  the note" follows the link, with Back. EPUB 3's footnote and endnote
+  asides are hidden by the page's style, their nodes kept, so no CFI moves.
+- A picture clicked in the middle of the page (the sides still turn it)
+  shows over the window from an image provider, "book", that `BookReader`
+  gives its engine and that reads the open books, as the page's scheme
+  does: fitted, zoomed by the wheel or the keys, moved by dragging.
+- Esc: with the page focused, Qt WebEngine keeps Esc from the window's
+  shortcut (the one key found so), so the page's Esc goes the same way:
+  the note or the picture closed first, the highlight let go, full screen
+  left, the book closed.
+- `tools/make_notes_fixture.py` writes `tests/data/reader/notes.epub`:
+  EPUB 3 noterefs to an aside, Gutenberg's [2] and a raised 3 to a page of
+  notes, a link that is no note, a picture.
+- Tests: the UI's `showsNotesInPlace` (each kind of note, its text, Esc,
+  Go to the note and Back, the picture shown and closed, a link followed,
+  the aside out of the text). All 26 tests pass.
 

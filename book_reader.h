@@ -135,6 +135,14 @@ public:
     Q_INVOKABLE bool renameBookmark(const QString &title, const QString &newTitle);
     // Puts text on the clipboard.
     Q_INVOKABLE void copyText(const QString &text) const;
+    // The note an address of the book points to, for a box over the page:
+    // { html, text }, html for a Text's rich text, the element it names or
+    // the block it is in, its italics, bold and raised text kept, a link
+    // back left out. Empty when it names nothing, or more than a note.
+    Q_INVOKABLE QVariantMap note(const QUrl &url) const;
+    // The address of a picture of the book for QML's Image, through the
+    // provider "book" the reader gives its engine.
+    Q_INVOKABLE QUrl imageUrl(const QUrl &url) const;
     // Searches the book's text, case and accents ignored, on a thread of its
     // own; searchResults has what it finds. An empty query clears them.
     Q_INVOKABLE void search(const QString &query);

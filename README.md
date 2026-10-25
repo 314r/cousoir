@@ -71,8 +71,8 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 📖 **Read in Cousoir.** EPUBs a page or two at a time, or as a scroll,
   at a line length that reads well, in the font, spacing and colours you
   like (sepia and black included), the time left in the chapter and the
-  book at your pace; their table of contents, a search of the whole book
-  and Back after a note; highlights in five colours with your notes, and
+  book at your pace; their table of contents, a search of the whole book,
+  notes shown by their links and pictures zoomed; highlights in five colours with your notes, and
   bookmarks; the book read aloud by your system's voices; full screen;
   and PDFs.
   Your place and your highlights are kept

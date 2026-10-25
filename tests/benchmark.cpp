@@ -459,9 +459,6 @@ int screenshot(const QString &path, const Shot &shot)
         QQuickItem *item = window->findChild<QQuickItem *>(name);
         if (!item)
             item = visualDescendant(window->contentItem(), name);
-        // A popup's items are the overlay's.
-        if (!item && window->contentItem()->parentItem())
-            item = visualDescendant(window->contentItem()->parentItem(), name);
         if (!item) {
             out() << "no control " << name << Qt::endl;
             return 1;

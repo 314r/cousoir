@@ -107,6 +107,7 @@ private slots:
     void searchesTheBook();
     void annotatesTheBook();
     void readsAloud();
+    void showsNotesInPlace();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -1137,10 +1138,7 @@ void LibraryUiTest::annotatesTheBook()
     QCOMPARE(highlight.value(QStringLiteral("chapter")).toString(), QStringLiteral("Arrival"));
     QMetaObject::invokeMethod(reader, "editNote", Q_ARG(QVariant, uuid));
     QQuickItem *noteText = nullptr;
-    QTRY_VERIFY((noteText = reader->findChild<QQuickItem *>(QStringLiteral("readerNoteText")))
-                || !visualDescendants(reader->contentItem()->parentItem(), QStringLiteral("readerNoteText")).isEmpty());
-    if (!noteText)
-        noteText = visualDescendants(reader->contentItem()->parentItem(), QStringLiteral("readerNoteText")).first();
+    QTRY_VERIFY((noteText = visualDescendants(reader->contentItem(), QStringLiteral("readerNoteText")).value(0)));
     QTRY_VERIFY(noteText->hasActiveFocus());
     for (const QChar character : QStringLiteral("Rivers remember."))
         QTest::keyClick(reader, character.toLatin1());
@@ -1336,6 +1334,87 @@ void LibraryUiTest::readsAloud()
     QCOMPARE(speech->property("state").toString(), QStringLiteral("stopped"));
     QVERIFY(sentence().isEmpty());
     QTRY_COMPARE_WITH_TIMEOUT(markedText(), QStringLiteral("none"), 10000);
+    reader->close();
+#endif
+}
+
+// Notes shown by their links, in a box over the page: EPUB 3's from the same
+// page, Gutenberg's and a raised number's from another; a link that is no
+// note followed; a picture shown whole.
+void LibraryUiTest::showsNotesInPlace()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/notes.epub"), QStringLiteral("The Notes"));
+    QVERIFY(reader);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+    // The popups are in the window's overlay, under its content item.
+    const auto popup = [&](const QString &name) { return visualDescendants(reader->contentItem(), name).value(0); };
+    // A closed popup leaves the overlay.
+    const auto shown = [&](const QString &name) { return popup(name) && popup(name)->isVisible(); };
+    const auto click = [&](const QString &script) {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, script));
+    };
+
+    // The aside of EPUB 3's note is out of the text.
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        click(QStringLiteral("document.title = getComputedStyle(document.getElementById('fn1')).display"));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("none");
+    }(), 10000);
+
+    // A noteref to an aside of the same page.
+    click(QStringLiteral("document.getElementById('r1').click()"));
+    QTRY_VERIFY(shown(QStringLiteral("readerNoteBoxText")));
+    QCOMPARE(popup(QStringLiteral("readerNoteBoxText"))->property("text").toString(),
+             QStringLiteral("<p>The first note, in <i>italics</i>.</p>"));
+    QCOMPARE(reader->property("spineIndex").toInt(), 0);
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_VERIFY(!shown(QStringLiteral("readerNoteBoxText")));
+    QVERIFY(reader->isVisible());
+
+    // Gutenberg's [2], to a page of notes; then the note itself, and back.
+    click(QStringLiteral("document.getElementById('ref2').click()"));
+    QTRY_VERIFY(shown(QStringLiteral("readerNoteBoxText")));
+    QCOMPARE(popup(QStringLiteral("readerNoteBoxText"))->property("text").toString(),
+             QStringLiteral("[2] The second note, from another page."));
+    const QString place = reader->property("position").toString();
+    QQuickItem *go = popup(QStringLiteral("readerGoToNote"));
+    QVERIFY(go);
+    QTest::mouseClick(reader, Qt::LeftButton, Qt::NoModifier, go->mapToScene(QPointF(go->width() / 2, go->height() / 2)).toPoint());
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/")),
+                             20000);
+    QMetaObject::invokeMethod(reader, "goBack");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), place, 20000);
+
+    // A raised number, the note a paragraph of its own.
+    click(QStringLiteral("document.querySelector('sup a').click()"));
+    QTRY_VERIFY(shown(QStringLiteral("readerNoteBoxText")));
+    QCOMPARE(popup(QStringLiteral("readerNoteBoxText"))->property("text").toString(), QStringLiteral("3. The third note."));
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_VERIFY(!shown(QStringLiteral("readerNoteBoxText")));
+
+    // A picture clicked in the middle: shown whole.
+    click(QStringLiteral("const plate = document.getElementById('plate'); const r = plate.getBoundingClientRect();"
+                         "plate.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: innerWidth / 2, clientY: r.top + 5 }))"));
+    QTRY_VERIFY(shown(QStringLiteral("readerPicture")));
+    QTRY_COMPARE_WITH_TIMEOUT(popup(QStringLiteral("readerPicture"))->property("status").toInt(), 1, 10000);
+    QCOMPARE(popup(QStringLiteral("readerPicture"))->property("sourceSize").toSize(), QSize(400, 200));
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_VERIFY(!shown(QStringLiteral("readerPicture")));
+    QVERIFY(reader->isVisible());
+
+    // A link that is no note: followed.
+    click(QStringLiteral("document.getElementById('next').click()"));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QVERIFY(!shown(QStringLiteral("readerNoteBoxText")));
     reader->close();
 #endif
 }
