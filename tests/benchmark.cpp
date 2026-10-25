@@ -416,11 +416,21 @@ int screenshot(const QString &path, const Shot &shot)
         window = reader;
         if (shot.readerSize.isValid())
             reader->resize(shot.readerSize);
+        // The reader's shortcuts, not the library's.
+        reader->requestActivate();
+        if (!QTest::qWaitForWindowActive(reader, 2000))
+            out() << "the reader is not the active window" << Qt::endl;
         // The page laid out and its position told.
         QTest::qWait(2500);
     }
     for (const QString &key : shot.keys) {
         drawn(window);
+        // "type:words" types them, between keys.
+        if (key.startsWith(QLatin1String("type:"))) {
+            for (const QChar character : key.mid(5))
+                QTest::keyClick(window, character.toLatin1());
+            continue;
+        }
         QTest::keySequence(window, QKeySequence(key));
         if (shot.read)
             QTest::qWait(500);
@@ -490,7 +500,7 @@ int main(int argc, char *argv[])
                        QStringLiteral("ms") });
     parser.addOption({ QStringLiteral("kobo"), QStringLiteral("A folder standing for a Kobo plugged in."),
                        QStringLiteral("folder") });
-    parser.addOption({ QStringLiteral("key"), QStringLiteral("Keys to press, Ctrl+K, after the clicks."),
+    parser.addOption({ QStringLiteral("key"), QStringLiteral("Keys to press, Ctrl+K, after the clicks; type:TEXT types it."),
                        QStringLiteral("sequence") });
     parser.addOption({ QStringLiteral("type"), QStringLiteral("Text to type, after the keys."), QStringLiteral("text") });
     parser.addOption({ QStringLiteral("read"), QStringLiteral("Read the book in Cousoir's reader, drawn instead.") });

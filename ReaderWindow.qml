@@ -33,7 +33,7 @@ ThemedWindow {
     // "scroll".
     property string shownLayout: ""
     property bool tocVisible: false
-    // The sidebar's list: "toc" or "highlights".
+    // The sidebar's list: "toc", "highlights" or "search".
     property string sidebar: "toc"
     property bool hasSelection: false
     // The highlights shown on the page.
@@ -57,6 +57,13 @@ ThemedWindow {
     }
     // The highlight clicked, to remove.
     property string chosenHighlight: ""
+    // The search's place shown, in bookReader.searchResults; -1 for none.
+    property int searchIndex: -1
+    // Where reading was before a link, a search's place or an entry of the
+    // contents took it elsewhere, for Back; and where Back left, for
+    // Forward: { spineIndex, cfi }.
+    property var backStack: []
+    property var forwardStack: []
     readonly property double bookFraction: bookReader.bookFraction(spineIndex, fileFraction)
 
     readonly property bool fullScreen: visibility === Window.FullScreen
@@ -139,8 +146,84 @@ ThemedWindow {
         // Another book's page may still be there: this one's loaded anew.
         spineIndex = -1
         lastTurn = null
+        backStack = []
+        forwardStack = []
+        searchIndex = -1
         load(start.spineIndex || 0, start.cfi ? "cfi:" + start.cfi : "start")
         return true
+    }
+
+    // Somewhere else in the book, where reading was kept for Back.
+    function jump(index, action) {
+        if (position) {
+            backStack = backStack.concat([{ spineIndex: spineIndex, cfi: position }]).slice(-50)
+            forwardStack = []
+        }
+        load(index, action)
+    }
+
+    function goBack() {
+        if (!backStack.length)
+            return
+        const to = backStack[backStack.length - 1]
+        backStack = backStack.slice(0, -1)
+        if (position)
+            forwardStack = forwardStack.concat([{ spineIndex: spineIndex, cfi: position }])
+        load(to.spineIndex, "cfi:" + to.cfi)
+    }
+
+    function goForward() {
+        if (!forwardStack.length)
+            return
+        const to = forwardStack[forwardStack.length - 1]
+        forwardStack = forwardStack.slice(0, -1)
+        if (position)
+            backStack = backStack.concat([{ spineIndex: spineIndex, cfi: position }])
+        load(to.spineIndex, "cfi:" + to.cfi)
+    }
+
+    // The search's place `index` shown and marked.
+    function showResult(index) {
+        const results = bookReader.searchResults
+        if (!results.length)
+            return
+        searchIndex = (index + results.length) % results.length
+        const result = results[searchIndex]
+        jump(result.spineIndex, "cfi:epubcfi(/" + 2 * (result.spineIndex + 1) + result.start + ")")
+    }
+
+    // Searches the book, or with the same words goes on to the next place.
+    function find(query) {
+        if (query === bookReader.searchQuery && bookReader.searchResults.length) {
+            showResult(searchIndex + 1)
+            return
+        }
+        searchIndex = -1
+        bookReader.search(query)
+    }
+
+    function openSearch() {
+        tocVisible = true
+        sidebar = "search"
+        searchField.forceActiveFocus()
+        searchField.selectAll()
+    }
+
+    // The search's places on the page marked, the one shown more.
+    function markSearch() {
+        if (spineIndex < 0 || view.loading)
+            return
+        const marks = []
+        let current = -1
+        const results = bookReader.searchResults
+        for (let i = 0; i < results.length; ++i) {
+            if (results[i].spineIndex !== spineIndex)
+                continue
+            if (i === searchIndex)
+                current = marks.length
+            marks.push({ start: results[i].start, end: results[i].end })
+        }
+        view.runJavaScript("window.cousoir.markSearch(" + JSON.stringify(marks) + "," + current + ")")
     }
 
     function load(index, action) {
@@ -204,7 +287,9 @@ ThemedWindow {
             view.runJavaScript("window.cousoir.goToStart()")
         hasSelection = false
         chosenHighlight = ""
-        view.forceActiveFocus()
+        markSearch()
+        if (!searchField.activeFocus)
+            view.forceActiveFocus()
     }
 
     function next() {
@@ -221,7 +306,7 @@ ThemedWindow {
     function goToBookFraction(fraction) {
         const place = bookReader.locate(fraction)
         if (place.spineIndex >= 0)
-            load(place.spineIndex, "fraction:" + place.fileFraction)
+            jump(place.spineIndex, "fraction:" + place.fileFraction)
     }
 
     // Where the table of contents' anchors of the spine item are, for the
@@ -324,6 +409,9 @@ ThemedWindow {
         return duration(bookReader.totalSize * Math.max(0, 1 - bookFraction) / readingRate)
     }
 
+    // A window of its own, not one over the library's: the library's
+    // shortcuts, Ctrl+F among them, stay its own.
+    transientParent: null
     visible: false
     width: 900
     height: 1000
@@ -378,6 +466,9 @@ ThemedWindow {
         onTriggered: readerWindow.save()
     }
 
+    // While the page has the focus, it takes the keys and tells them (see
+    // onJavaScriptConsoleMessage); these serve elsewhere in the window. Each
+    // key once: a key in two sequences would be ambiguous, and do nothing.
     Shortcut {
         sequences: ["Esc", StandardKey.Close]
         onActivated: readerWindow.fullScreen ? readerWindow.toggleFullScreen() : readerWindow.close()
@@ -386,6 +477,65 @@ ThemedWindow {
     Shortcut {
         sequence: "F11"
         onActivated: readerWindow.toggleFullScreen()
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Find]
+        onActivated: readerWindow.openSearch()
+    }
+
+    Shortcut {
+        sequences: [StandardKey.FindNext]
+        enabled: bookReader.searchResults.length > 0
+        onActivated: readerWindow.showResult(readerWindow.searchIndex + 1)
+    }
+
+    Shortcut {
+        sequences: [StandardKey.FindPrevious]
+        enabled: bookReader.searchResults.length > 0
+        onActivated: readerWindow.showResult(readerWindow.searchIndex - 1)
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Back]
+        onActivated: readerWindow.goBack()
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Forward]
+        onActivated: readerWindow.goForward()
+    }
+
+    // A new search's places: the first from the page read on shown.
+    Connections {
+        target: bookReader
+
+        function onSearchChanged() {
+            if (bookReader.searching || !bookReader.searchResults.length) {
+                readerWindow.markSearch()
+                return
+            }
+            const results = bookReader.searchResults
+            const here = []
+            for (let i = 0; i < results.length; ++i) {
+                if (results[i].spineIndex === readerWindow.spineIndex)
+                    here.push(i)
+            }
+            const later = results.findIndex(result => result.spineIndex > readerWindow.spineIndex)
+            const fallback = later >= 0 ? later : 0
+            if (!here.length || view.loading) {
+                readerWindow.showResult(here.length ? here[0] : fallback)
+                return
+            }
+            const query = bookReader.searchQuery
+            view.runJavaScript("window.cousoir.pagesOfCfis(" + JSON.stringify(here.map(i => results[i].start)) + ")",
+                               function(pages) {
+                if (bookReader.searchQuery !== query)
+                    return
+                const at = (pages || []).findIndex(page => page >= readerWindow.page)
+                readerWindow.showResult(at >= 0 ? here[at] : fallback)
+            })
+        }
     }
 
     Item {
@@ -421,6 +571,17 @@ ThemedWindow {
                     icon.source: "assets/icons/list.svg"
                     selected: readerWindow.tocVisible
                     onClicked: readerWindow.tocVisible = !readerWindow.tocVisible
+                }
+
+                FlatButton {
+                    objectName: "readerBackButton"
+
+                    visible: readerWindow.backStack.length > 0
+                    variant: "outline"
+                    text: qsTr("Back")
+                    tip: qsTr("Back where you were (Alt+Left)")
+                    icon.source: "assets/icons/arrow-left.svg"
+                    onClicked: readerWindow.goBack()
                 }
 
                 Label {
@@ -539,6 +700,122 @@ ThemedWindow {
                             text: qsTr("Highlights (%1)").arg(bookReader.highlights.length)
                             onClicked: readerWindow.sidebar = "highlights"
                         }
+
+                        FlatButton {
+                            objectName: "readerSearchTab"
+
+                            iconOnly: true
+                            variant: "outline"
+                            selected: readerWindow.sidebar === "search"
+                            text: qsTr("Search the book (Ctrl+F)")
+                            icon.source: "assets/icons/search.svg"
+                            onClicked: readerWindow.openSearch()
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.leftMargin: Theme.gutter
+                        Layout.rightMargin: Theme.gutter
+                        visible: readerWindow.sidebar === "search"
+                        spacing: Theme.gutter
+
+                        SearchField {
+                            id: searchField
+                            objectName: "readerSearchField"
+
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Search the book")
+                            onAccepted: readerWindow.find(text)
+                            Keys.onEscapePressed: function(event) {
+                                if (text) {
+                                    text = ""
+                                    bookReader.search("")
+                                } else {
+                                    view.forceActiveFocus()
+                                }
+                                event.accepted = true
+                            }
+                        }
+
+                        Label {
+                            objectName: "readerSearchStatus"
+
+                            Layout.fillWidth: true
+                            visible: text !== ""
+                            text: bookReader.searching ? qsTr("Searching…")
+                                : !bookReader.searchQuery ? ""
+                                : !bookReader.searchResults.length ? qsTr("Nothing found.")
+                                : readerWindow.searchIndex >= 0
+                                    ? (bookReader.searchMore ? qsTr("%1 of the first %2 places") : qsTr("%1 of %2 places"))
+                                      .arg(readerWindow.searchIndex + 1).arg(bookReader.searchResults.length)
+                                : (bookReader.searchMore ? qsTr("The first %1 places") : qsTr("%1 places"))
+                                      .arg(bookReader.searchResults.length)
+                            color: Theme.textMuted
+                            font.pointSize: Theme.fontPointSizeCaption
+                            elide: Text.ElideRight
+                        }
+
+                        ListView {
+                            id: searchList
+                            objectName: "readerSearchResults"
+
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.leftMargin: -Theme.gutter
+                            Layout.rightMargin: -Theme.gutter
+                            clip: true
+                            model: bookReader.searchResults
+                            currentIndex: readerWindow.searchIndex
+                            highlightFollowsCurrentItem: true
+                            highlightMoveDuration: 0
+
+                            delegate: ItemDelegate {
+                                id: result
+
+                                required property var modelData
+                                required property int index
+
+                                width: ListView.view.width
+                                leftPadding: Theme.gutter
+                                rightPadding: Theme.gutter
+                                highlighted: result.index === readerWindow.searchIndex
+                                onClicked: readerWindow.showResult(result.index)
+
+                                function escaped(text) {
+                                    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                                }
+
+                                contentItem: ColumnLayout {
+                                    spacing: 2
+
+                                    HeadingLabel {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: result.index > 0 ? Theme.gutter : 0
+                                        visible: result.modelData.newChapter
+                                        text: result.modelData.chapter || qsTr("Page %1").arg(result.modelData.spineIndex + 1)
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        textFormat: Text.StyledText
+                                        text: result.escaped(result.modelData.before) + "<b>" + result.escaped(result.modelData.text)
+                                              + "</b>" + result.escaped(result.modelData.after)
+                                        wrapMode: Text.Wrap
+                                        maximumLineCount: 3
+                                        elide: Text.ElideRight
+                                        color: result.highlighted ? Theme.textBright : Theme.text
+                                    }
+                                }
+                                background: Rectangle {
+                                    color: result.highlighted ? Theme.selected : result.hovered ? Theme.hover : "transparent"
+                                }
+                            }
+
+                            ScrollBar.vertical: ThinScrollBar {}
+                        }
                     }
 
                     ListView {
@@ -559,7 +836,7 @@ ThemedWindow {
                             width: ListView.view.width
                             leftPadding: Theme.gutter
                             rightPadding: Theme.gutter
-                            onClicked: readerWindow.load(mark.modelData.spineIndex,
+                            onClicked: readerWindow.jump(mark.modelData.spineIndex,
                                                          "cfi:epubcfi(/" + 2 * (mark.modelData.spineIndex + 1) + mark.modelData.start + ")")
 
                             contentItem: ColumnLayout {
@@ -626,7 +903,7 @@ ThemedWindow {
                             text: entry.modelData.title
                             highlighted: entry.index === readerWindow.currentEntry
                             enabled: entry.modelData.spineIndex >= 0
-                            onClicked: readerWindow.load(entry.modelData.spineIndex,
+                            onClicked: readerWindow.jump(entry.modelData.spineIndex,
                                                          entry.modelData.fragment ? "fragment:" + entry.modelData.fragment : "start")
 
                             contentItem: Label {
@@ -713,7 +990,11 @@ ThemedWindow {
                         if (index >= 0) {
                             const url = request.url.toString()
                             const hash = url.indexOf("#")
-                            readerWindow.load(index, hash >= 0 ? "fragment:" + decodeURIComponent(url.slice(hash + 1)) : "start")
+                            // Once the navigation refused is over: loading
+                            // another page within it fails a check of
+                            // Chromium's.
+                            Qt.callLater(readerWindow.jump, index,
+                                         hash >= 0 ? "fragment:" + decodeURIComponent(url.slice(hash + 1)) : "start")
                         } else if (/^(https?|mailto):/.test(request.url.toString())) {
                             Qt.openUrlExternally(request.url)
                         }
@@ -767,6 +1048,14 @@ ThemedWindow {
                                 readerWindow.close()
                             else if (event.key === "F11")
                                 readerWindow.toggleFullScreen()
+                            else if (event.ctrl && (event.key === "f" || event.key === "F"))
+                                readerWindow.openSearch()
+                            else if (event.key === "F3" && bookReader.searchResults.length)
+                                readerWindow.showResult(readerWindow.searchIndex + (event.shift ? -1 : 1))
+                            else if (event.alt && event.key === "ArrowLeft")
+                                readerWindow.goBack()
+                            else if (event.alt && event.key === "ArrowRight")
+                                readerWindow.goForward()
                             else if (!event.ctrl && (event.key === "h" || event.key === "H") && readerWindow.hasSelection)
                                 readerWindow.highlightSelection()
                             else if (event.key === "Delete" && readerWindow.chosenHighlight)

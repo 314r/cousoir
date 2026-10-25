@@ -116,6 +116,8 @@ qt_add_library(cousoir_core STATIC
     file_transaction.h
     identifier_links.cpp
     identifier_links.h
+    book_search.cpp
+    book_search.h
     epub_book.cpp
     epub_book.h
     kepub.cpp

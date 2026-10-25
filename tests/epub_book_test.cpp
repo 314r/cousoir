@@ -4,8 +4,11 @@
 
 #include <zip.h>
 
+#include "book_search.h"
 #include "epub_book.h"
+#include "epub_cfi.h"
 #include "test_support.h"
+#include "xml_tree.h"
 
 namespace {
 
@@ -37,6 +40,7 @@ private slots:
     void readsAnEpub2();
     void resolvesPaths();
     void refusesWhatIsNoEpub();
+    void searchesTheText();
 };
 
 void EpubBookTest::readsAnEpub3()
@@ -136,5 +140,84 @@ void EpubBookTest::refusesWhatIsNoEpub()
 }
 
 QTEST_GUILESS_MAIN(EpubBookTest)
+
+// A search of the book's text: case, accents and ligatures ignored, across
+// elements, white space and soft hyphens; each place by the CFIs that name
+// its text, under its chapter.
+void EpubBookTest::searchesTheText()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("search.epub"));
+    const QByteArray chapter1 = R"(<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Un</title><style>p { color: red }</style></head>
+<body><h1 id="un">L'Écume</h1>
+<p>Les <i>jours</i> passent, deux
+     mots et une lan&#173;terne.</p>
+<h2 id="deux">Suite</h2><p>Une Œuvre, l'écume des JOURS.</p></body></html>)";
+    const QByteArray chapter2 = R"(<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Deux</title></head>
+<body><p>Encore l’écume, écume, écume.</p></body></html>)";
+    QVERIFY(writeEpub(path, {
+        { QStringLiteral("mimetype"), "application/epub+zip" },
+        { QStringLiteral("META-INF/container.xml"), R"(<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>)" },
+        { QStringLiteral("content.opf"), R"(<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Recherche</dc:title><dc:identifier id="id">x</dc:identifier></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest><spine toc="ncx"><itemref idref="c1"/><itemref idref="c2"/></spine></package>)" },
+        { QStringLiteral("toc.ncx"), R"(<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap><navPoint id="n1"><navLabel><text>Premier</text></navLabel><content src="c1.xhtml#un"/><navPoint id="n2"><navLabel><text>Suite</text></navLabel><content src="c1.xhtml#deux"/></navPoint></navPoint><navPoint id="n3"><navLabel><text>Second</text></navLabel><content src="c2.xhtml"/></navPoint></navMap></ncx>)" },
+        { QStringLiteral("c1.xhtml"), chapter1 },
+        { QStringLiteral("c2.xhtml"), chapter2 },
+    }));
+    QString error;
+    std::shared_ptr<const EpubBook> book = EpubBook::open(path, &error);
+    QVERIFY2(book, qPrintable(error));
+    BookSearch search(book);
+
+    // Each place's CFIs name the text found, in its page.
+    const auto textOf = [&](const BookSearch::Match &match) {
+        const std::unique_ptr<XmlTree::Node> root = XmlTree::parse(book->read(book->spine().at(match.spineIndex).name));
+        const EpubCfi::Document document(*root);
+        return document.textBetween(document.decode(match.start), document.decode(match.end));
+    };
+
+    bool more = true;
+    QList<BookSearch::Match> found = search.find(QStringLiteral("ecume"), 1000, &more);
+    QVERIFY(!more);
+    QCOMPARE(found.size(), 5);
+    QCOMPARE(found.at(0).spineIndex, 0);
+    QCOMPARE(found.at(0).text, QStringLiteral("Écume"));
+    QCOMPARE(textOf(found.at(0)), QStringLiteral("Écume"));
+    QCOMPARE(found.at(0).chapter, QStringLiteral("Premier"));
+    QCOMPARE(found.at(1).text, QStringLiteral("écume"));
+    QCOMPARE(found.at(1).chapter, QStringLiteral("Suite"));
+    QCOMPARE(found.at(1).before, QStringLiteral("…deux mots et une lanterne. Suite Une Œuvre, l'"));
+    QCOMPARE(found.at(1).after, QStringLiteral(" des JOURS."));
+    QCOMPARE(found.at(2).spineIndex, 1);
+    QCOMPARE(found.at(2).chapter, QStringLiteral("Second"));
+    for (const BookSearch::Match &match : std::as_const(found))
+        QCOMPARE(textOf(match).toCaseFolded(), match.text.toCaseFolded());
+
+    // Across elements, blocks, white space and a soft hyphen; a ligature.
+    found = search.find(QStringLiteral("suite une"));
+    QCOMPARE(found.size(), 1);
+    QCOMPARE(textOf(found.first()), QStringLiteral("SuiteUne"));
+    found = search.find(QStringLiteral("les jours"));
+    QCOMPARE(found.size(), 1);
+    QCOMPARE(textOf(found.first()), QStringLiteral("Les jours"));
+    found = search.find(QStringLiteral(" deux  mots "));
+    QCOMPARE(found.size(), 1);
+    QCOMPARE(textOf(found.first()), QStringLiteral("deux\n     mots"));
+    found = search.find(QStringLiteral("lanterne"));
+    QCOMPARE(found.size(), 1);
+    QCOMPARE(textOf(found.first()), QStringLiteral("lan­terne"));
+    QCOMPARE(found.first().text, QStringLiteral("lanterne"));
+    found = search.find(QStringLiteral("oeuvre"));
+    QCOMPARE(found.size(), 1);
+    QCOMPARE(textOf(found.first()), QStringLiteral("Œuvre"));
+    // Not the style's text.
+    QVERIFY(search.find(QStringLiteral("color")).isEmpty());
+
+    // At most so many, and told so.
+    found = search.find(QStringLiteral("écume"), 2, &more);
+    QCOMPARE(found.size(), 2);
+    QVERIFY(more);
+}
 
 #include "epub_book_test.moc"

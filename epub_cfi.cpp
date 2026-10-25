@@ -13,6 +13,9 @@
 #include "epub_cfi.h"
 
 #include <QRegularExpression>
+#include <QSet>
+
+#include <functional>
 
 namespace EpubCfi {
 
@@ -220,6 +223,83 @@ QString Document::textBetween(Point start, Point end) const
     };
     walk(m_root);
     return text;
+}
+
+const Node *Document::element(const QString &id) const
+{
+    return m_firstById.value(id);
+}
+
+bool invisible(QChar c)
+{
+    return c == QChar(0x00ad) || c == QChar(0x200b) || c == QChar(0x200c) || c == QChar(0x200d) || c == QChar(0xfeff);
+}
+
+PageText PageText::of(const Node &root, bool blockBreaks)
+{
+    static const QSet<QString> blocks{
+        QStringLiteral("address"), QStringLiteral("article"), QStringLiteral("aside"), QStringLiteral("blockquote"),
+        QStringLiteral("br"), QStringLiteral("dd"), QStringLiteral("div"), QStringLiteral("dl"), QStringLiteral("dt"),
+        QStringLiteral("figcaption"), QStringLiteral("figure"), QStringLiteral("footer"), QStringLiteral("h1"),
+        QStringLiteral("h2"), QStringLiteral("h3"), QStringLiteral("h4"), QStringLiteral("h5"), QStringLiteral("h6"),
+        QStringLiteral("header"), QStringLiteral("hr"), QStringLiteral("li"), QStringLiteral("nav"),
+        QStringLiteral("ol"), QStringLiteral("p"), QStringLiteral("pre"), QStringLiteral("section"),
+        QStringLiteral("table"), QStringLiteral("td"), QStringLiteral("th"), QStringLiteral("tr"), QStringLiteral("ul"),
+    };
+    PageText page;
+    const Node *html = XmlTree::documentElement(const_cast<Node *>(&root));
+    const Node *body = html ? XmlTree::childElement(const_cast<Node *>(html), "body") : nullptr;
+    bool space = false;
+    // Where the white space began; none for a break between blocks.
+    Point spaceStart;
+    const auto blockBreak = [&](const Node &node) {
+        if (blockBreaks && !space && isElement(node) && blocks.contains(node.localName.toLower())) {
+            space = true;
+            spaceStart = {};
+        }
+    };
+    const std::function<void(const Node &)> walk = [&](const Node &node) {
+        page.order.insert(&node, int(page.order.size()));
+        if (node.isElement("script") || node.isElement("style"))
+            return;
+        blockBreak(node);
+        if (isText(node)) {
+            for (qsizetype i = 0; i < node.text.size(); ++i) {
+                const QChar c = node.text.at(i);
+                if (invisible(c))
+                    continue;
+                if (c.isSpace()) {
+                    if (!space)
+                        spaceStart = { &node, i };
+                    space = true;
+                    continue;
+                }
+                if (space && !page.text.isEmpty()) {
+                    page.text += u' ';
+                    page.starts.append(spaceStart.node ? spaceStart : Point{ &node, i });
+                    page.ends.append({ &node, i });
+                }
+                space = false;
+                page.text += c;
+                page.starts.append({ &node, i });
+                page.ends.append({ &node, i + 1 });
+            }
+        }
+        for (const auto &child : node.children)
+            walk(*child);
+        blockBreak(node);
+    };
+    walk(body ? *body : root);
+    return page;
+}
+
+qsizetype PageText::indexOf(const Point &point) const
+{
+    for (qsizetype i = 0; i < starts.size(); ++i) {
+        if (starts.at(i).node == point.node && starts.at(i).offset >= point.offset)
+            return i;
+    }
+    return -1;
 }
 
 } // namespace EpubCfi
