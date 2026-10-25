@@ -781,6 +781,20 @@ Cousoir cannot hyphenate: Qt WebEngine, which shows the pages, has none of
 Chromium's hyphenation dictionaries; a book's own soft hyphens still break
 its words.
 
+Ctrl+F, or the search button beside Contents and Highlights, searches the
+book: Enter lists every place of the words, case and accents ignored as
+the library's search ignores them ("oeuvre" finds "Œuvre"), white space as
+one space, across italics, links and paragraphs. The places show under
+their chapters with the words around them; the first from the page read on
+is shown, marked on its page, the book's other places on that page marked
+lightly. F3 and Shift+F3, Enter again, or a click go through them. A search
+lists 1 000 places at most.
+
+Back (Alt+Left, or the Back button) returns where reading was before a
+link, a search's place, an entry of the contents or of the highlights, or
+the progress bar took it elsewhere: a note read, back to the page. Forward
+(Alt+Right) goes again.
+
 Where reading stopped is kept as reading goes, and in the library when the
 book closes, where Calibre keeps its own: a CFI in `last_read_positions`, as
 Calibre's viewer counts positions in its pages (from
@@ -802,9 +816,9 @@ it too and a Kobo does not bring it back.
 A PDF shows a page after the other, fitted to the window's width or to the
 whole page, its page kept.
 
-Cousoir departs from Calibre's viewer here: no reading aloud, no search in
-the book, no notes on highlights yet, colours other than yellow only as
-shown, and no vertical page order. The position and the
+Cousoir departs from Calibre's viewer here: no reading aloud, no search by
+whole words or regular expressions, no notes on highlights yet, colours
+other than yellow only as shown, and no vertical page order. The position and the
 highlights are written while the library can be written; when Calibre
 writes to it, they wait in Cousoir for the next time, and so do those whose
 writing failed.

@@ -329,7 +329,7 @@ With the page laid out well, what the reader lacks most is a way through
 the book other than turning pages, and a way to keep more than a yellow
 mark.
 
-#### R2. Find in the book — picked
+#### R2. Find in the book — picked, done
 
 From round 1. Searching a book is what one cannot do without once one
 needs it; Calibre's viewer has it, and nothing in Cousoir can stand in for
@@ -1400,4 +1400,48 @@ now takes the reader's size, its settings and clicks on its controls).
   type and the page's colours read back from the page; the settings kept;
   a place near the end by the progress bar; the time left told). The UI
   tests pass at both scales.
+
+### 2026-10-25 — round 2, R2: find in the book (`exp-search`)
+
+- `BookSearch` searches an EPUB's spine items as the reader shows their
+  text: `EpubCfi::PageText`, the Kobo placement's walk of a page's body
+  moved to be shared, white space as one space, the characters that show
+  nothing left out, and here a space between blocks the page has none
+  between ("Suite</h2><p>Une"). Each character is folded as the library's
+  search folds (`CalibreText::foldForSearch()`, so "œ" is "oe"), the folded
+  text keeping for each of its characters the page's one, so that a place
+  found is a range of the page's text, and its CFIs are `EpubCfi`'s, which
+  `encodesCfisAsTheReader` checks against the reader's script. The folded
+  text of each spine item is kept; a page is parsed again only when it has
+  places. On Pride and Prejudice (Gutenberg, 24 MB with its plates): 34 ms
+  the first search, under 1 ms the next.
+- `BookReader::search()` runs it on a thread; a newer search or another
+  book makes an answer stale. The results carry their chapter, from
+  `HighlightJson::tocFamily()`, and whether each is the first of one.
+- The Search tab (Ctrl+F): the places under their chapters, the words
+  found in bold; the first from the page read on shown (the page of each
+  place of the spine item asked of the script), F3 and Shift+F3 through
+  them. The page marks them with the CSS Custom Highlight API, which adds
+  no node to the page: highlights' wrappers would shift the CFIs.
+- Back and Forward: a link, a search's place, an entry of the contents or
+  the highlights, or the progress bar keeps where reading was.
+- Bugs found on the way, fixed:
+  - A link to another chapter crashed Cousoir, since goal 19: the page was
+    loaded from within `onNavigationRequested`, which fails a check of
+    Chromium's (SIGTRAP in `WebContentsAdapter::load`). It is loaded once
+    the handler returns. No test had followed a link to another file.
+  - The reader's Ctrl+F was the library's: a window declared in the
+    library's makes it its transient parent, and Qt counts the library's
+    window active while the reader is, so both windows' Ctrl+F matched and
+    neither ran. The reader and the PDF reader are windows of their own.
+  - A shortcut naming F3 twice (`StandardKey.FindNext` and "F3") is
+    ambiguous with itself and does nothing.
+  - While the page has the focus, Qt WebEngine takes the keys before the
+    window's shortcuts: Ctrl+F, F3, Alt+Left and Alt+Right are also read
+    from the page's key events.
+- Tests: `searchesTheText` (accents, ligatures, blocks, elements, white
+  space, soft hyphens, chapters, CFIs naming the text, the limit) and the
+  UI's `searchesTheBook` (the places, the first shown and marked, F3, Back
+  and Forward, a link to a note and back). All 26 tests pass, the golden
+  test included.
 
