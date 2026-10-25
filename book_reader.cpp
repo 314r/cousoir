@@ -250,6 +250,11 @@ QString BookReader::format() const
     return m_format;
 }
 
+QString BookReader::language() const
+{
+    return m_book ? m_book->language() : QString();
+}
+
 qint64 BookReader::totalSize() const
 {
     qint64 total = 0;

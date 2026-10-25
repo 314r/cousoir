@@ -820,6 +820,14 @@ A picture clicked in the middle of the page shows whole over the window,
 fitted to it; the wheel, Plus and Minus zoom it, dragging moves it, a
 click or Esc closes it. A click on either side still turns the page.
 
+L, or the globe in the bar over a selection, looks the words selected up
+beside the page, in a panel of the sidebar: Wiktionary or Wikipedia in the
+book's language (their pages for phones, which fit the panel), a web search
+(DuckDuckGo), or the reader's own address, with `{word}` where the words go;
+the source is kept. The panel's links go on in it; a button opens its page
+in the browser. It is a web view of its own, private: its cookies and its
+cache are not kept, and nothing is sent to the web but what is looked up.
+
 Back (Alt+Left, or the Back button) returns where reading was before a
 link, a search's place, an entry of the contents or of the highlights, or
 the progress bar took it elsewhere: a note read, back to the page. Forward

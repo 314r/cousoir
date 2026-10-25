@@ -506,7 +506,7 @@ a wait. New: what a reader does with a word they do not know.
 
 From rounds 5 and 6.
 
-#### R8. Look a word up — picked
+#### R8. Look a word up — picked, done
 
 Calibre's viewer has a Lookup panel: the word selected looked up in a
 dictionary, an encyclopedia or a search, beside the book. For a book in a
@@ -1793,4 +1793,22 @@ placement finds an element by id through `EpubCfi::Document::element()`.
   All 26 tests pass.
 - Tried on Pride and Prejudice made an AZW3 and Le Tour du monde made a
   MOBI by Calibre: both read, with their pictures and contents.
+
+### 2026-10-25 — round 7, R8: look a word up (`exp-lookup`)
+
+- L or the globe over a selection looks the words up in a panel of the
+  sidebar, wider for it: Wiktionary and Wikipedia in the book's language
+  (`BookReader::language`, back for this), by their mobile pages and their
+  search, which goes to the page of the words when there is one whatever
+  their case; DuckDuckGo's HTML search; or an address of the reader's with
+  `{word}`. Tried on Le Tour du monde: French Wiktionary's "il".
+- The panel's view is made the first time something is looked up (a
+  Loader): its profile, from `WebEngineProfilePrototype` (Qt 6.9's; a
+  `WebEngineProfile` declared in QML is deprecated) with no storage name,
+  so off the record, cookies and cache in memory, gives no profile while
+  the window is being made, and a web view given none crashes
+  (`QQuickWebEngineView::setProfile(nullptr)`, seen in the tests).
+- Tests: the UI's `looksWordsUp` (the sources' addresses, accents encoded;
+  L on a selection, the reader's own address a data URL whose title is the
+  words, shown in the panel). No test reaches the network.
 

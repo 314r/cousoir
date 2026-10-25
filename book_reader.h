@@ -31,6 +31,8 @@ class BookReader : public QObject
     Q_PROPERTY(int bookId READ bookId NOTIFY bookChanged)
     Q_PROPERTY(QString title READ title NOTIFY bookChanged)
     Q_PROPERTY(QString format READ format NOTIFY bookChanged)
+    // The book's language, as its package gives it: "fr", "en-GB".
+    Q_PROPERTY(QString language READ language NOTIFY bookChanged)
     // { url, name, size } by spine item.
     Q_PROPERTY(QVariantList spine READ spine NOTIFY bookChanged)
     // The size of all its spine items, by which how far into the book a
@@ -83,6 +85,7 @@ public:
     int bookId() const;
     QString title() const;
     QString format() const;
+    QString language() const;
     QVariantList spine() const;
     qint64 totalSize() const;
     QVariantList toc() const;
