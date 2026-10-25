@@ -434,6 +434,37 @@ the page marked.
   notes), the page left as it is; Back still there for the others.
 - A picture clicked shows whole over the page, zoomed and moved.
 
+Left for the next round.
+
+### Round 5
+
+#### R5. Notes and pictures in place — picked
+
+From round 4. Notes are where a reader leaves the page most: classics,
+essays, history, translations are full of them, and Back, since round 2,
+only brings the reader back after the jump. Pictures in a reflowed book
+are shrunk to the column; maps and plates want to be seen whole.
+
+- A link to a note shows the note in a box over the page, the page left
+  as it is: EPUB 3's `noteref` and `doc-noteref`, and the usual links to a
+  note, a number, a mark or a letter, alone or raised; the note found in
+  its page or fetched from another file of the book, as the paragraph or
+  the aside it is in, its text with its italics; "Go to the note" for the
+  rest of it. Other links go as before.
+- A picture clicked shows over the window, fitted, zoomed with the wheel
+  or the keys, moved by dragging; Esc or a click closes it. The picture
+  comes from the book through an image provider, as the page's own does
+  through the book's scheme.
+
+Done when Gutenberg's and EPUB 3's notes show in place, from the same file
+and from another, and the tests cover both kinds and a picture shown.
+
+#### R6. Turns without a wait
+
+Each turn into another file empties the page while the file loads. The
+next file ready before it is needed, a second view swapped in, so that a
+chapter's first page shows at once, as a page within a chapter does.
+
 ## Status
 
 | Goal | State |
