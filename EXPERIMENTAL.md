@@ -321,6 +321,47 @@ the settings, the spreads and the scroll.
   one picked shown and marked on its page, F3 and Shift+F3 through them.
 - Back and Forward after following a link or a result (Alt+Left, Alt+Right).
 
+Left for a later round.
+
+### Round 2
+
+With the page laid out well, what the reader lacks most is a way through
+the book other than turning pages, and a way to keep more than a yellow
+mark.
+
+#### R2. Find in the book — picked
+
+From round 1. Searching a book is what one cannot do without once one
+needs it; Calibre's viewer has it, and nothing in Cousoir can stand in for
+it, while highlights at least exist. The results are placed by the CFIs
+Cousoir's C++ already works out as the reader's script does (goal 19's
+`EpubCfi`, checked against the page by `encodesCfisAsTheReader`), so a
+result is found on its page exactly, without the page's script searching.
+
+- A Search tab beside Contents and Highlights (Ctrl+F): every place of the
+  book's text, case and accents ignored, white space as one space, listed
+  in the book's order under their chapters with the words around them; the
+  one picked shown on its page and marked there, the others of the page
+  marked lightly; Enter, F3 and Shift+F3 go through them.
+- Back and Forward (Alt+Left, Alt+Right, and a Back button while there is
+  somewhere to go back to) after a link, a result, a table of contents
+  entry, a highlight or the progress bar: a footnote read, back to the page.
+
+Done when a search of a whole Gutenberg novel lists its results at once,
+each goes to its exact place, and the tests cover the search, its marks and
+the way back.
+
+#### R3. Highlights to work with
+
+- A bar over the selection: the five colours of Calibre's viewer, a note,
+  copy; a highlight clicked: its colour changed, its note written or
+  changed, removed.
+- Notes kept in the viewer's JSON (`notes`), shown in the sidebar, edited
+  there too, and in the library's Highlights section, as Calibre's viewer
+  and "Browse annotations" show them.
+- Bookmarks, as the viewer keeps them (`bookmark` annotations), listed and
+  gone to.
+
 ## Status
 
 | Goal | State |
