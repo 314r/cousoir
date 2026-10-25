@@ -103,6 +103,7 @@ private slots:
     void creditsCalibreInSettings();
     void readsInCousoir();
     void laysOutPagesAsAsked();
+    void searchesTheBook();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -984,6 +985,94 @@ void LibraryUiTest::laysOutPagesAsAsked()
     QVERIFY(!progress.isEmpty());
     QVERIFY2(progress.first()->property("text").toString().contains(QLatin1String(" min left in chapter")),
              qPrintable(progress.first()->property("text").toString()));
+    reader->close();
+#endif
+}
+
+// A search of the book: its places listed, the one shown marked on its page,
+// F3 to the next; Back and Forward through the places gone to, a link
+// followed among them.
+void LibraryUiTest::searchesTheBook()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(bookReader && view);
+    const QString start = reader->property("position").toString();
+
+    QMetaObject::invokeMethod(reader, "openSearch");
+    QCOMPARE(reader->property("sidebar").toString(), QStringLiteral("search"));
+    QMetaObject::invokeMethod(reader, "find", Q_ARG(QVariant, QStringLiteral("LANTERN window")));
+    QTRY_VERIFY_WITH_TIMEOUT(!bookReader->property("searching").toBool()
+                                 && !bookReader->property("searchResults").toList().isEmpty(),
+                             10000);
+    const QVariantList results = bookReader->property("searchResults").toList();
+    for (const QVariant &result : results)
+        QCOMPARE(result.toMap().value(QStringLiteral("text")).toString().toLower(), QStringLiteral("lantern window"));
+    QCOMPARE(results.first().toMap().value(QStringLiteral("chapter")).toString(), QStringLiteral("Arrival"));
+    QVERIFY(results.first().toMap().value(QStringLiteral("newChapter")).toBool());
+
+    // The first shown, from where reading was, and marked.
+    QTRY_COMPARE(reader->property("searchIndex").toInt(), 0);
+    const QVariantMap first = results.first().toMap();
+    const int spine = first.value(QStringLiteral("spineIndex")).toInt();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == spine
+                                 && reader->property("position").toString().startsWith(
+                                     QStringLiteral("epubcfi(/%1/").arg(2 * (spine + 1))),
+                             20000);
+    const QString shown = QStringLiteral(R"((function () {
+        const shown = CSS.highlights.get('cousoir-search-shown');
+        const others = CSS.highlights.get('cousoir-search');
+        document.title = shown && shown.size === 1 ? [...shown][0].toString().toLowerCase() + '|' + others.size : 'none';
+    })())");
+    const auto marked = [&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, shown));
+        QTest::qWait(100);
+        return view->property("title").toString();
+    };
+    int inChapter = 0;
+    for (const QVariant &result : results)
+        inChapter += result.toMap().value(QStringLiteral("spineIndex")).toInt() == spine;
+    QTRY_COMPARE_WITH_TIMEOUT(marked(), QStringLiteral("lantern window|%1").arg(inChapter - 1), 10000);
+    const QString firstPlace = reader->property("position").toString();
+
+    // F3: the next, the reader's shortcut.
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QTest::keyClick(reader, Qt::Key_F3);
+    QTRY_COMPARE(reader->property("searchIndex").toInt(), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("position").toString() != firstPlace
+                                 || results.at(1).toMap().value(QStringLiteral("spineIndex")).toInt() == spine,
+                             10000);
+    QTRY_COMPARE_WITH_TIMEOUT(marked().section(u'|', 0, 0), QStringLiteral("lantern window"), 10000);
+
+    // Back to the first place, back to where reading was, forward again.
+    QMetaObject::invokeMethod(reader, "goBack");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), firstPlace, 20000);
+    QMetaObject::invokeMethod(reader, "goBack");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), start, 20000);
+    QCOMPARE(reader->property("backStack").toList().size(), 0);
+    QMetaObject::invokeMethod(reader, "goForward");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), firstPlace, 20000);
+
+    // A link to a note in another chapter, and back.
+    QMetaObject::invokeMethod(bookReader, "search", Q_ARG(QString, QString()));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    const QString chapter = reader->property("position").toString();
+    QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral("document.getElementById('noteref').click()")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 3
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/8/")),
+                             20000);
+    QMetaObject::invokeMethod(reader, "goBack");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), chapter, 20000);
     reader->close();
 #endif
 }

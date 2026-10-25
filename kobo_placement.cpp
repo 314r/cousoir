@@ -23,11 +23,6 @@ using XmlTree::Node;
 
 namespace {
 
-bool skippedCharacter(QChar c)
-{
-    return c == QChar(0x00ad) || c == QChar(0x200b) || c == QChar(0x200c) || c == QChar(0x200d) || c == QChar(0xfeff);
-}
-
 bool isText(const Node &node)
 {
     return node.kind == Node::Kind::Text || node.kind == Node::Kind::Cdata;
@@ -78,7 +73,7 @@ QString folded(const QString &text)
     result.reserve(text.size());
     bool space = false;
     for (const QChar c : text) {
-        if (skippedCharacter(c))
+        if (EpubCfi::invisible(c))
             continue;
         if (c.isSpace()) {
             space = true;
@@ -124,72 +119,22 @@ struct PlacementBook::Page
     std::unique_ptr<Node> root;
     std::unique_ptr<EpubCfi::Document> cfi;
     std::optional<QHash<QString, Kepub::SpanStart>> spans;
-    // The body's text folded, and where each of its characters starts and
-    // ends in the page.
-    bool foldedMade = false;
-    QString text;
-    QList<EpubCfi::Point> starts;
-    QList<EpubCfi::Point> ends;
-    // The nodes in document order.
-    QHash<const Node *, int> order;
+    // The body's text, white space folded, and where each of its characters
+    // is in the page.
+    std::optional<EpubCfi::PageText> folded;
 
-    void fold()
+    const EpubCfi::PageText &text()
     {
-        if (foldedMade)
-            return;
-        foldedMade = true;
-        Node *html = XmlTree::documentElement(root.get());
-        const Node *body = html ? XmlTree::childElement(html, "body") : nullptr;
-        bool space = false;
-        EpubCfi::Point spaceStart;
-        const std::function<void(const Node &)> walk = [&](const Node &node) {
-            order.insert(&node, int(order.size()));
-            if (node.isElement("script") || node.isElement("style"))
-                return;
-            if (isText(node)) {
-                for (qsizetype i = 0; i < node.text.size(); ++i) {
-                    const QChar c = node.text.at(i);
-                    if (skippedCharacter(c))
-                        continue;
-                    if (c.isSpace()) {
-                        if (!space)
-                            spaceStart = { &node, i };
-                        space = true;
-                        continue;
-                    }
-                    if (space && !text.isEmpty()) {
-                        text += u' ';
-                        starts.append(spaceStart);
-                        ends.append({ &node, i });
-                    }
-                    space = false;
-                    text += c;
-                    starts.append({ &node, i });
-                    ends.append({ &node, i + 1 });
-                }
-            }
-            for (const auto &child : node.children)
-                walk(*child);
-        };
-        walk(body ? *body : *root);
-    }
-
-    // The folded index of a place, -1 for none.
-    qsizetype indexOf(const EpubCfi::Point &point)
-    {
-        fold();
-        for (qsizetype i = 0; i < starts.size(); ++i) {
-            if (starts.at(i).node == point.node && starts.at(i).offset >= point.offset)
-                return i;
-        }
-        return -1;
+        if (!folded)
+            folded = EpubCfi::PageText::of(*root);
+        return *folded;
     }
 
     // Where `needle` is in the page, the occurrence nearest `hint`; -1 for
     // none.
     qsizetype find(const QString &needle, qsizetype hint)
     {
-        fold();
+        const QString &text = this->text().text;
         for (const Qt::CaseSensitivity sensitivity : { Qt::CaseSensitive, Qt::CaseInsensitive }) {
             qsizetype best = -1;
             for (qsizetype at = text.indexOf(needle, 0, sensitivity); at >= 0;
@@ -290,7 +235,7 @@ Placement PlacementBook::place(const KoboHighlights::Highlight &highlight)
         start = pointOf(startSpan, highlight.startOffset);
         end = pointOf(endSpan, highlight.endOffset);
         if (start)
-            hint = page->indexOf(*start);
+            hint = page->text().indexOf(*start);
         if (start && end && folded(page->cfi->textBetween(*start, *end)) == needle) {
             placement.method = Method::Spans;
         } else {
@@ -302,14 +247,12 @@ Placement PlacementBook::place(const KoboHighlights::Highlight &highlight)
     // The text, in its file, then in the others, nearest where the Kobo has
     // it.
     if (placement.method == Method::None && page) {
-        if (hint < 0) {
-            page->fold();
-            hint = qsizetype(highlight.chapterProgress * double(page->text.size()));
-        }
+        if (hint < 0)
+            hint = qsizetype(highlight.chapterProgress * double(page->text().text.size()));
         const qsizetype at = page->find(needle, hint);
         if (at >= 0) {
-            start = page->starts.at(at);
-            end = page->ends.at(at + needle.size() - 1);
+            start = page->text().starts.at(at);
+            end = page->text().ends.at(at + needle.size() - 1);
             placement.method = Method::Text;
         }
     }
@@ -329,8 +272,8 @@ Placement PlacementBook::place(const KoboHighlights::Highlight &highlight)
         if (best >= 0) {
             page = this->page(best);
             spineIndex = best;
-            start = page->starts.at(bestAt);
-            end = page->ends.at(bestAt + needle.size() - 1);
+            start = page->text().starts.at(bestAt);
+            end = page->text().ends.at(bestAt + needle.size() - 1);
             placement.method = Method::Book;
         }
     }
@@ -344,11 +287,10 @@ Placement PlacementBook::place(const KoboHighlights::Highlight &highlight)
     placement.spineName = m_book->spine().at(spineIndex).name;
     placement.startCfi = page->cfi->encode(*start->node, start->offset);
     placement.endCfi = page->cfi->encode(*end->node, end->offset);
-    page->fold();
-    const int startOrder = page->order.value(start->node, -1);
+    const int startOrder = page->text().order.value(start->node, -1);
     placement.tocFamily = HighlightJson::tocFamily(*m_book, spineIndex, [&](const QString &fragment) {
         const Node *target = elementById(*page->root, fragment);
-        return target && page->order.value(target, -1) <= startOrder;
+        return target && page->text().order.value(target, -1) <= startOrder;
     });
     return placement;
 }

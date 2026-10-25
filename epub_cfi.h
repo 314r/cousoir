@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QList>
 #include <QString>
 
 #include "xml_tree.h"
@@ -33,6 +34,9 @@ public:
     // The text between two places in texts, as a Range's toString() gives
     // it.
     QString textBetween(Point start, Point end) const;
+    // The first element of the id, as getElementById() finds it; null for
+    // none.
+    const XmlTree::Node *element(const QString &id) const;
 
 private:
     const XmlTree::Node &m_root;
@@ -40,6 +44,30 @@ private:
     QHash<QString, int> m_ids;
     QHash<QString, const XmlTree::Node *> m_firstById;
 };
+
+// A page's text as a reader reads it: the characters of the texts of its
+// body, in order, each run of white space as one space and the characters
+// that show nothing (soft hyphens, zero widths) left out; and where in the
+// page each character starts and ends, for the CFIs of a part of it.
+struct PageText
+{
+    QString text;
+    QList<Point> starts;
+    QList<Point> ends;
+    // The page's nodes, by their place in document order.
+    QHash<const XmlTree::Node *, int> order;
+
+    // The text of the body of the page `root`, or of all of it without one;
+    // with `blockBreaks`, a space between blocks, paragraphs and headings,
+    // the page has none between, as a reader sees one.
+    static PageText of(const XmlTree::Node &root, bool blockBreaks = false);
+    // The index of the first character at or after a place in a text; -1
+    // for none.
+    qsizetype indexOf(const Point &point) const;
+};
+
+// Whether a character shows nothing, which PageText leaves out.
+bool invisible(QChar c);
 
 // escape_for_cfi() and unescape_from_cfi().
 QString escape(const QString &raw);

@@ -13,6 +13,8 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QUuid>
+#include <QtConcurrent>
+#include <QFutureWatcher>
 #include <QtWebEngineQuick/qtwebenginequickglobal.h>
 #include <QWebEngineUrlRequestJob>
 #include <QWebEngineUrlScheme>
@@ -20,6 +22,7 @@
 
 #include "book.h"
 #include "book_library.h"
+#include "book_search.h"
 #include "cousoir_paths.h"
 #include "epub_book.h"
 #include "highlight_json.h"
@@ -352,6 +355,71 @@ void BookReader::finishSave(int id, bool saved)
     keepPending(uuid);
 }
 
+QVariantList BookReader::searchResults() const
+{
+    return m_searchResults;
+}
+
+QString BookReader::searchQuery() const
+{
+    return m_searchQuery;
+}
+
+bool BookReader::searching() const
+{
+    return m_searching;
+}
+
+bool BookReader::searchMore() const
+{
+    return m_searchMore;
+}
+
+void BookReader::search(const QString &query)
+{
+    const int run = ++m_searchRun;
+    m_searchQuery = query;
+    m_searchResults.clear();
+    m_searchMore = false;
+    m_searching = m_search && !query.trimmed().isEmpty();
+    emit searchChanged();
+    if (!m_searching)
+        return;
+    struct Found
+    {
+        QList<BookSearch::Match> matches;
+        bool more = false;
+    };
+    auto *watcher = new QFutureWatcher<Found>(this);
+    connect(watcher, &QFutureWatcher<Found>::finished, this, [this, watcher, run] {
+        watcher->deleteLater();
+        if (run != m_searchRun)
+            return;
+        const Found found = watcher->result();
+        for (qsizetype i = 0; i < found.matches.size(); ++i) {
+            const BookSearch::Match &match = found.matches.at(i);
+            const bool newChapter = i == 0 || found.matches.at(i - 1).chapter != match.chapter
+                                    || (match.chapter.isEmpty() && found.matches.at(i - 1).spineIndex != match.spineIndex);
+            m_searchResults.append(QVariantMap{ { QStringLiteral("spineIndex"), match.spineIndex },
+                                                { QStringLiteral("newChapter"), newChapter },
+                                                { QStringLiteral("start"), match.start },
+                                                { QStringLiteral("end"), match.end },
+                                                { QStringLiteral("text"), match.text },
+                                                { QStringLiteral("before"), match.before },
+                                                { QStringLiteral("after"), match.after },
+                                                { QStringLiteral("chapter"), match.chapter } });
+        }
+        m_searchMore = found.more;
+        m_searching = false;
+        emit searchChanged();
+    });
+    watcher->setFuture(QtConcurrent::run([search = m_search, query] {
+        Found found;
+        found.matches = search->find(query, 1000, &found.more);
+        return found;
+    }));
+}
+
 QString BookReader::open(int bookId)
 {
     close();
@@ -375,6 +443,7 @@ QString BookReader::open(int bookId)
         return error;
     installHandler();
     m_book = std::move(opened);
+    m_search = std::make_shared<BookSearch>(m_book);
     m_bookId = bookId;
     m_uuid = book->uuid;
     m_token = QStringLiteral("book-%1").arg(bookId);
@@ -470,10 +539,13 @@ void BookReader::close()
         openBooks.remove(m_token);
     }
     m_book.reset();
+    m_search.reset();
     m_bookId = 0;
     m_format.clear();
     m_start.clear();
     emit bookChanged();
+    if (!m_searchQuery.isEmpty() || m_searching)
+        search(QString());
 }
 
 QUrl BookReader::fileUrl() const

@@ -14,6 +14,7 @@
 #include "book.h"
 
 class BookLibrary;
+class BookSearch;
 class EpubBook;
 
 // A library book read in Cousoir: its EPUB served to Qt WebEngine as
@@ -48,6 +49,14 @@ class BookReader : public QObject
     // source, sourceName }, source "kobo:SERIAL" for a Kobo's, in the book's
     // order.
     Q_PROPERTY(QVariantList highlights READ highlights NOTIFY highlightsChanged)
+    // The places the last search found, in the book's order: { spineIndex,
+    // start, end, text, before, after, chapter, newChapter }, start and end
+    // CFIs within the spine item, newChapter for the first of a chapter; at
+    // most 1000, searchMore telling there were more.
+    Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
+    Q_PROPERTY(QString searchQuery READ searchQuery NOTIFY searchChanged)
+    Q_PROPERTY(bool searching READ searching NOTIFY searchChanged)
+    Q_PROPERTY(bool searchMore READ searchMore NOTIFY searchChanged)
 
 public:
     explicit BookReader(QObject *parent = nullptr);
@@ -70,6 +79,10 @@ public:
     QString script() const;
     QVariantList highlights() const;
     QUrl fileUrl() const;
+    QVariantList searchResults() const;
+    QString searchQuery() const;
+    bool searching() const;
+    bool searchMore() const;
 
     // Opens the book's EPUB. Returns why it cannot, empty once open.
     Q_INVOKABLE QString open(int bookId);
@@ -95,11 +108,15 @@ public:
     // As Calibre's viewer removes one: kept, marked removed, for the
     // programs that have it to forget it too.
     Q_INVOKABLE void removeHighlight(const QString &uuid);
+    // Searches the book's text, case and accents ignored, on a thread of its
+    // own; searchResults has what it finds. An empty query clears them.
+    Q_INVOKABLE void search(const QString &query);
 
 signals:
     void libraryChanged();
     void bookChanged();
     void highlightsChanged();
+    void searchChanged();
 
 private:
     QString positionsFile() const;
@@ -141,4 +158,12 @@ private:
     // By change on its way to the library: the book and what it writes.
     QHash<int, QPair<QString, QList<Annotation>>> m_saving;
     QTimer m_flushTimer;
+    std::shared_ptr<BookSearch> m_search;
+    QVariantList m_searchResults;
+    QString m_searchQuery;
+    bool m_searchMore = false;
+    // The search running, if any: a newer one, or another book, makes its
+    // answer stale.
+    int m_searchRun = 0;
+    bool m_searching = false;
 };

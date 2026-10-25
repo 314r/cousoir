@@ -380,6 +380,29 @@
         };
     }
 
+    // --- A search's places, marked without changing the page ---------------
+
+    // The places of a search on this page, { start, end }, the one at
+    // `current` marked more; by the CSS Custom Highlight API, which adds no
+    // node to the page, so that no CFI changes.
+    function markSearch(list, current) {
+        if (!window.CSS || !CSS.highlights)
+            return 0;
+        const others = new Highlight();
+        const shown = new Highlight();
+        let count = 0;
+        (list || []).forEach((place, i) => {
+            const range = rangeOf(place.start, place.end);
+            if (!range)
+                return;
+            (i === current ? shown : others).add(range);
+            ++count;
+        });
+        CSS.highlights.set('cousoir-search', others);
+        CSS.highlights.set('cousoir-search-shown', shown);
+        return count;
+    }
+
     // --- Pages ------------------------------------------------------------
 
     function scroller() {
@@ -512,6 +535,8 @@
             a, a * { color: ${settings.link} !important; }
             img, svg, video { max-width: 100% !important; max-height: ${height - 2 * top}px !important; object-fit: contain; }
             ::selection { background: ${settings.link}; color: ${settings.background}; }
+            ::highlight(cousoir-search) { background-color: color-mix(in srgb, ${settings.link} 30%, transparent); }
+            ::highlight(cousoir-search-shown) { background-color: ${settings.link}; color: ${settings.background}; }
             ${typeRules()}
         `;
     }
@@ -833,7 +858,16 @@
             }
             return pagesById;
         },
+        // The page of each of these CFIs within the page, -1 for one it
+        // lacks.
+        pagesOfCfis(cfis) {
+            return (cfis || []).map(cfi => {
+                const decoded = decode(cfi, document);
+                return decoded && decoded.node && decoded.node !== document ? pageOf(decoded.node, decoded.offset) : -1;
+            });
+        },
         applyHighlights: applyHighlights,
+        markSearch: markSearch,
         removeHighlight: removeHighlight,
         selection: selection,
         clearSelection() { window.getSelection().removeAllRanges(); },
