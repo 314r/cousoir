@@ -1944,3 +1944,10 @@ recoloured.
   layout) and `readsFixedLayouts` (UI test: the cover alone, two spreads,
   back, a page of a spread gone to, a narrow window, the page that flows).
 
+
+### 2026-10-25 — merged into `master`
+
+What was left after round 7 is done: the review of rounds 4 to 7 with its
+fuzz test, R6 (turns without a wait) and fixed-layout books. The 26 tests
+passed (golden included). At the user's request, `experimental` was
+merged into `master` and pushed.
