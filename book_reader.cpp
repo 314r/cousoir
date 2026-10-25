@@ -231,17 +231,16 @@ QString BookReader::script() const
 
 QVariantList BookReader::highlights() const
 {
-    QList<QJsonObject> sorted = m_highlights.values();
     // The book's order: by spine item, then where they start.
-    std::stable_sort(sorted.begin(), sorted.end(), [](const QJsonObject &a, const QJsonObject &b) {
-        const int aIndex = a.value(QLatin1String("spine_index")).toInt();
-        const int bIndex = b.value(QLatin1String("spine_index")).toInt();
-        if (aIndex != bIndex)
-            return aIndex < bIndex;
-        return cfiKey(a.value(QLatin1String("start_cfi")).toString()) < cfiKey(b.value(QLatin1String("start_cfi")).toString());
-    });
+    QList<std::pair<QList<int>, QJsonObject>> sorted;
+    for (const QJsonObject &highlight : m_highlights) {
+        QList<int> key = cfiKey(highlight.value(QLatin1String("start_cfi")).toString());
+        key.prepend(highlight.value(QLatin1String("spine_index")).toInt());
+        sorted.append({ key, highlight });
+    }
+    std::stable_sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     QVariantList list;
-    for (const QJsonObject &highlight : std::as_const(sorted)) {
+    for (const auto &[key, highlight] : std::as_const(sorted)) {
         const QJsonObject style = highlight.value(QLatin1String("style")).toObject();
         const QPair<QString, QString> owner = m_owners.value(highlight.value(QLatin1String("uuid")).toString());
         int spineIndex = highlight.value(QLatin1String("spine_index")).toInt(-1);
@@ -268,12 +267,12 @@ QVariantList BookReader::highlights() const
 
 QVariantList BookReader::bookmarks() const
 {
-    QList<QJsonObject> sorted = m_bookmarks.values();
-    std::stable_sort(sorted.begin(), sorted.end(), [](const QJsonObject &a, const QJsonObject &b) {
-        return cfiKey(a.value(QLatin1String("pos")).toString()) < cfiKey(b.value(QLatin1String("pos")).toString());
-    });
+    QList<std::pair<QList<int>, QJsonObject>> sorted;
+    for (const QJsonObject &bookmark : m_bookmarks)
+        sorted.append({ cfiKey(bookmark.value(QLatin1String("pos")).toString()), bookmark });
+    std::stable_sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
     QVariantList list;
-    for (const QJsonObject &bookmark : std::as_const(sorted)) {
+    for (const auto &[key, bookmark] : std::as_const(sorted)) {
         const QString cfi = bookmark.value(QLatin1String("pos")).toString();
         list.append(QVariantMap{ { QStringLiteral("title"), bookmark.value(QLatin1String("title")).toString() },
                                  { QStringLiteral("cfi"), cfi },
@@ -786,12 +785,9 @@ double BookReader::bookFraction(int spineIndex, double fileFraction) const
     if (!m_book || spineIndex < 0 || spineIndex >= m_book->spine().size())
         return 0;
     qint64 before = 0;
-    qint64 total = 0;
-    for (int i = 0; i < m_book->spine().size(); ++i) {
-        if (i < spineIndex)
-            before += m_book->spine().at(i).size;
-        total += m_book->spine().at(i).size;
-    }
+    for (int i = 0; i < spineIndex; ++i)
+        before += m_book->spine().at(i).size;
+    const qint64 total = totalSize();
     if (total <= 0)
         return 0;
     return std::clamp((double(before) + fileFraction * double(m_book->spine().at(spineIndex).size)) / double(total), 0.0, 1.0);

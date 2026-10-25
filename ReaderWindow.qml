@@ -70,6 +70,10 @@ ThemedWindow {
     readonly property bool speaking: speech !== null && speech.state !== "stopped"
     // Reading aloud on from where a link or an entry of the contents goes.
     property bool speakAfterJump: false
+    // A field has the keys: a search, a bookmark's title, a note.
+    readonly property bool editingText: activeFocusItem !== null && activeFocusItem.cursorPosition !== undefined
+    // The spine item and page the bookmarks of the page were found for.
+    property string bookmarksFor: ""
     // The search's place shown, in bookReader.searchResults; -1 for none.
     property int searchIndex: -1
     // Where reading was before a link, a search's place or an entry of the
@@ -99,6 +103,10 @@ ThemedWindow {
     readonly property color pageText: pageColors.color
     readonly property color pageFaint: Theme.mix(pageBackground, pageText, 0.55)
     readonly property bool darkPage: pageBackground.hslLightness < 0.5
+    onHighlightColorsChanged: {
+        for (const highlight of bookReader.highlights.filter(h => h.spineIndex === spineIndex))
+            restyleHighlight(highlight)
+    }
     // Calibre's builtin_colors_light and builtin_colors_dark.
     readonly property var highlightColors: darkPage
         ? { yellow: "#906e00", green: "#306f50", blue: "#265589", red: "#a23e5a", purple: "#505088" }
@@ -147,6 +155,13 @@ ThemedWindow {
 
     // Reads the book from where it was left.
     function openBook(bookId) {
+        // Nothing of the book shown before kept for this one.
+        spineIndex = -1
+        position = ""
+        fileFraction = 0
+        page = 0
+        pageBookmarks = []
+        bookmarksFor = ""
         const error = bookReader.open(bookId)
         if (error) {
             readerWindow.failed(error)
@@ -204,9 +219,15 @@ ThemedWindow {
         const results = bookReader.searchResults
         if (!results.length)
             return
+        // Back returns where reading was, not to each place seen.
+        const first = searchIndex < 0
         searchIndex = (index + results.length) % results.length
         const result = results[searchIndex]
-        jump(result.spineIndex, "cfi:epubcfi(/" + 2 * (result.spineIndex + 1) + result.start + ")")
+        const action = "cfi:epubcfi(/" + 2 * (result.spineIndex + 1) + result.start + ")"
+        if (first)
+            jump(result.spineIndex, action)
+        else
+            load(result.spineIndex, action)
     }
 
     // Searches the book, or with the same words goes on to the next place.
@@ -253,6 +274,10 @@ ThemedWindow {
             return
         }
         spineIndex = index
+        // Until the new page tells where it is: a place of the old one would
+        // be read as one of this one.
+        position = ""
+        page = 0
         view.opacity = 0
         const url = bookReader.spine[index].url
         if (view.url.toString() === url.toString())
@@ -389,9 +414,13 @@ ThemedWindow {
     function restyle(uuid) {
         const highlight = highlightOf(uuid)
         if (highlight)
-            view.runJavaScript("window.cousoir.restyleHighlight(" + JSON.stringify(uuid) + ","
-                               + JSON.stringify(highlightColors[highlight.which] || highlightColors.yellow) + ","
-                               + !!highlight.notes + ")")
+            restyleHighlight(highlight)
+    }
+
+    function restyleHighlight(highlight) {
+        view.runJavaScript("window.cousoir.restyleHighlight(" + JSON.stringify(highlight.uuid) + ","
+                           + JSON.stringify(highlightColors[highlight.which] || highlightColors.yellow) + ","
+                           + !!highlight.notes + ")")
     }
 
     function recolor(uuid, which) {
@@ -467,8 +496,9 @@ ThemedWindow {
 
     // Which bookmarks the page shown has.
     function updatePageBookmarks() {
+        bookmarksFor = spineIndex + ":" + page
         const here = bookReader.bookmarks.filter(bookmark => bookmark.spineIndex === spineIndex)
-        if (!here.length || view.loading) {
+        if (!here.length || view.loading || !position) {
             pageBookmarks = []
             return
         }
@@ -618,12 +648,44 @@ ThemedWindow {
         onTriggered: readerWindow.save()
     }
 
-    // While the page has the focus, it takes the keys and tells them (see
-    // onJavaScriptConsoleMessage); these serve elsewhere in the window. Each
-    // key once: a key in two sequences would be ambiguous, and do nothing.
+    // The window's keys, the page's focus or not; letters, which would type
+    // in a field, are read from the page's key events (see
+    // onJavaScriptConsoleMessage). Each key once: a key in two sequences
+    // would be ambiguous, and do nothing.
     Shortcut {
-        sequences: ["Esc", StandardKey.Close]
-        onActivated: readerWindow.fullScreen ? readerWindow.toggleFullScreen() : readerWindow.close()
+        sequences: ["Esc"]
+        // A field's own Esc first.
+        enabled: !readerWindow.editingText
+        onActivated: {
+            if (readerWindow.chosenHighlight) {
+                readerWindow.chosenHighlight = ""
+                readerWindow.highlightRect = null
+            } else if (readerWindow.fullScreen) {
+                readerWindow.toggleFullScreen()
+            } else {
+                readerWindow.close()
+            }
+        }
+    }
+
+    Shortcut {
+        sequences: [StandardKey.Close]
+        onActivated: readerWindow.close()
+    }
+
+    Shortcut {
+        sequences: ["Ctrl++", "Ctrl+="]
+        onActivated: readerWindow.setZoom(readerSettings.zoom + 0.1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+-"
+        onActivated: readerWindow.setZoom(readerSettings.zoom - 0.1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+0"
+        onActivated: readerWindow.setZoom(1)
     }
 
     Shortcut {
@@ -1369,13 +1431,15 @@ ThemedWindow {
                             readerWindow.page = event.page
                             readerWindow.pages = event.pages
                             readerWindow.shownLayout = event.layout
-                            if (turned) {
-                                // The bar over a selection or a highlight
-                                // stays with the page it was on.
+                            // The bar over a selection or a highlight stays
+                            // with the page it was on; in a scroll, with
+                            // what was in sight.
+                            if (turned || event.layout === "scroll") {
                                 readerWindow.selectionRect = null
                                 readerWindow.highlightRect = null
-                                readerWindow.updatePageBookmarks()
                             }
+                            if (readerWindow.bookmarksFor !== readerWindow.spineIndex + ":" + event.page)
+                                readerWindow.updatePageBookmarks()
                             saveTimer.restart()
                         } else if (event.event === "next") {
                             readerWindow.load(readerWindow.spineIndex + 1, "start")
@@ -1397,46 +1461,22 @@ ThemedWindow {
                             readerWindow.chosenHighlight = event.uuid
                             readerWindow.highlightRect = readerWindow.pageRect(event.rect)
                         } else if (event.event === "key") {
-                            if (event.key === "Escape" && readerWindow.chosenHighlight) {
-                                readerWindow.chosenHighlight = ""
-                                readerWindow.highlightRect = null
-                            }
-                            else if (event.key === "Escape" && readerWindow.fullScreen)
-                                readerWindow.toggleFullScreen()
-                            else if (event.key === "Escape")
-                                readerWindow.close()
-                            else if (event.key === "F11")
-                                readerWindow.toggleFullScreen()
-                            else if (event.ctrl && (event.key === "f" || event.key === "F"))
-                                readerWindow.openSearch()
-                            else if (event.key === "F3" && bookReader.searchResults.length)
-                                readerWindow.showResult(readerWindow.searchIndex + (event.shift ? -1 : 1))
-                            else if (event.alt && event.key === "ArrowLeft")
-                                readerWindow.goBack()
-                            else if (event.alt && event.key === "ArrowRight")
-                                readerWindow.goForward()
-                            else if (!event.ctrl && (event.key === "h" || event.key === "H") && readerWindow.hasSelection)
+                            // The keys the window's shortcuts have not
+                            // taken: those that would type in a field.
+                            if (event.ctrl || event.alt)
+                                return
+                            if ((event.key === "h" || event.key === "H") && readerWindow.hasSelection)
                                 readerWindow.highlightSelection()
-                            else if (!event.ctrl && (event.key === "n" || event.key === "N") && readerWindow.chosenHighlight)
+                            else if ((event.key === "n" || event.key === "N") && readerWindow.chosenHighlight)
                                 readerWindow.editNote(readerWindow.chosenHighlight)
-                            else if (!event.ctrl && (event.key === "n" || event.key === "N") && readerWindow.hasSelection)
+                            else if ((event.key === "n" || event.key === "N") && readerWindow.hasSelection)
                                 readerWindow.noteSelection()
-                            else if (event.ctrl && (event.key === "d" || event.key === "D"))
-                                readerWindow.toggleBookmark()
-                            else if (!event.ctrl && !event.alt && (event.key === "r" || event.key === "R"))
+                            else if (event.key === "r" || event.key === "R")
                                 readerWindow.toggleSpeech()
                             else if (event.key === "Delete" && readerWindow.chosenHighlight)
                                 readerWindow.removeChosenHighlight()
-                            else if (!event.ctrl && (event.key === "t" || event.key === "T"))
+                            else if (event.key === "t" || event.key === "T")
                                 readerWindow.tocVisible = !readerWindow.tocVisible
-                            else if (event.ctrl && (event.key === "+" || event.key === "="))
-                                readerWindow.setZoom(readerSettings.zoom + 0.1)
-                            else if (event.ctrl && event.key === "-")
-                                readerWindow.setZoom(readerSettings.zoom - 0.1)
-                            else if (event.ctrl && event.key === "0")
-                                readerWindow.setZoom(1)
-                            else if (event.ctrl && (event.key === "w" || event.key === "W"))
-                                readerWindow.close()
                         }
                     }
                 }
