@@ -369,7 +369,7 @@ Left for the next round.
 The reader now shows a book well and finds anything in it. What it keeps
 of the reading is still a yellow mark; and the one way to read is to read.
 
-#### R3. Highlights to work with — picked
+#### R3. Highlights to work with — picked, done
 
 From round 2. A highlight's note is what turns highlighting into study:
 Calibre's viewer, a Kobo and Cousoir's Highlights section all show notes,
@@ -1480,4 +1480,39 @@ now takes the reader's size, its settings and clicks on its controls).
   UI's `searchesTheBook` (the places, the first shown and marked, F3, Back
   and Forward, a link to a note and back). All 26 tests pass, the golden
   test included.
+
+### 2026-10-25 — round 3, R3: highlights to work with (`exp-annotate`)
+
+- The bar over the selection or a highlight clicked: the page's script
+  tells where they are (the client rectangles of the range or of the
+  highlight's wrappers, on the page shown), the window places the bar
+  above, else below, and hides it when the page turns. Its colours make a
+  highlight or recolour one; the note highlights first, as the viewer
+  does; Copy is WebEngine's own for a selection, the highlight's text for a
+  highlight; the search searches the book for the selection.
+- `BookReader::setHighlightStyle()` and `setHighlightNotes()` change the
+  viewer's JSON as `set_style_for_highlights()` and
+  `set_notes_for_highlight()` do, its search text with the notes
+  (`annot_db_data()`), as whose the highlight is. The note changes the time
+  too, which the viewer does not: Calibre's merge keeps the newer of two
+  copies by their time, and would keep its own.
+- Bookmarks: `addBookmark()`, `removeBookmark()` and `renameBookmark()` as
+  the viewer's `add_bookmark()`, `remove_bookmark()` and `edit_bookmark()`,
+  read and written as user `viewer` only, as the viewer reads them. The
+  library keeps a bookmark by its title (`annot_db_data()`): a rename is
+  the old title removed and the new one added. Bookmarks and highlights
+  are in the book's order by their CFIs' steps, as `cfi_sort_key()` orders
+  them (highlights were by spine item only).
+- The pending annotations, kept while the library cannot be written, are
+  now told apart by type and id, a bookmark's title being its id.
+- Fixed on the way: the contents entries a new highlight is under were all
+  those of its file, not those before it (`toc_family_titles` said "The
+  Lantern" for the first paragraph of "Arrival"): worked out from the
+  page's XML now, as the Kobo placement does.
+- Tests: the UI's `annotatesTheBook`: the bar over a selection, a green
+  highlight under its section, a note typed in the box and saved with
+  Ctrl+Enter, its dotted line on the page, blue, two bookmarks named after
+  the section, the page's own told, one renamed; the rows in the library
+  as the viewer writes them (the note in the search text, the old title
+  removed); read back; a bookmark removed.
 

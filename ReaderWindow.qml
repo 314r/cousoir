@@ -55,8 +55,16 @@ ThemedWindow {
         }
         return found
     }
-    // The highlight clicked, to remove.
+    // The highlight clicked, to colour, note or remove.
     property string chosenHighlight: ""
+    // Where the selection and the highlight clicked are on the page, in the
+    // page's area: { x, y, width, height }; null when not on the page shown.
+    property var selectionRect: null
+    property var highlightRect: null
+    // The highlight whose note is being written.
+    property string noteFor: ""
+    // The titles of the bookmarks on the page shown.
+    property var pageBookmarks: []
     // The search's place shown, in bookReader.searchResults; -1 for none.
     property int searchIndex: -1
     // Where reading was before a link, a search's place or an entry of the
@@ -287,6 +295,8 @@ ThemedWindow {
             view.runJavaScript("window.cousoir.goToStart()")
         hasSelection = false
         chosenHighlight = ""
+        selectionRect = null
+        highlightRect = null
         markSearch()
         if (!searchField.activeFocus)
             view.forceActiveFocus()
@@ -321,26 +331,88 @@ ThemedWindow {
     }
 
     function applyHighlights(list) {
-        const marks = list.map(h => ({ uuid: h.uuid, start: h.start, end: h.end,
+        const marks = list.map(h => ({ uuid: h.uuid, start: h.start, end: h.end, note: !!h.notes,
                                        color: highlightColors[h.which] || highlightColors.yellow }))
         if (marks.length)
             view.runJavaScript("window.cousoir.applyHighlights(" + JSON.stringify(marks) + ")",
                                function(count) { readerWindow.highlightsShown += count || 0 })
     }
 
-    // The selection made a highlight, kept where Calibre's viewer keeps its
-    // own.
-    function highlightSelection() {
+    // A rectangle of the page's script, in the page area.
+    function pageRect(rect) {
+        const zoom = readerSettings.zoom
+        return rect ? { x: view.x + rect.x * zoom, y: view.y + rect.y * zoom, width: rect.width * zoom,
+                        height: rect.height * zoom } : null
+    }
+
+    function highlightOf(uuid) {
+        return uuid ? bookReader.highlights.find(h => h.uuid === uuid) || null : null
+    }
+
+    // The selection made a highlight in Calibre's colour `which`, the last
+    // one picked by default, kept where Calibre's viewer keeps its own.
+    function highlightSelection(which) {
+        makeHighlight(which, null)
+    }
+
+    // As highlightSelection(); `done` then has its id.
+    function makeHighlight(which, done) {
+        const colour = which || readerSettings.highlightColor
+        readerSettings.highlightColor = colour
         view.runJavaScript("JSON.stringify(window.cousoir.selection())", function(result) {
             const selected = result ? JSON.parse(result) : null
             if (!selected)
                 return
-            const uuid = bookReader.addHighlight(spineIndex, selected.start, selected.end, selected.text, "yellow")
+            const uuid = bookReader.addHighlight(spineIndex, selected.start, selected.end, selected.text, colour)
             if (!uuid)
                 return
-            applyHighlights([{ uuid: uuid, start: selected.start, end: selected.end, which: "yellow" }])
+            applyHighlights([{ uuid: uuid, start: selected.start, end: selected.end, which: colour }])
             view.runJavaScript("window.cousoir.clearSelection()")
             hasSelection = false
+            selectionRect = null
+            if (done)
+                done(uuid)
+        })
+    }
+
+    // A highlight shown again as it now is: its colour, and its note.
+    function restyle(uuid) {
+        const highlight = highlightOf(uuid)
+        if (highlight)
+            view.runJavaScript("window.cousoir.restyleHighlight(" + JSON.stringify(uuid) + ","
+                               + JSON.stringify(highlightColors[highlight.which] || highlightColors.yellow) + ","
+                               + !!highlight.notes + ")")
+    }
+
+    function recolor(uuid, which) {
+        readerSettings.highlightColor = which
+        bookReader.setHighlightStyle(uuid, which)
+        restyle(uuid)
+    }
+
+    function editNote(uuid) {
+        noteFor = uuid
+        noteEditor.open()
+    }
+
+    function saveNote(text) {
+        bookReader.setHighlightNotes(noteFor, text)
+        restyle(noteFor)
+    }
+
+    // A note on the selection: highlighted first, then its note written.
+    function noteSelection() {
+        makeHighlight("", function(uuid) { readerWindow.editNote(uuid) })
+    }
+
+    function searchSelection() {
+        view.runJavaScript("window.getSelection().toString()", function(text) {
+            const query = (text || "").replace(/\s+/g, " ").trim()
+            if (!query)
+                return
+            readerWindow.openSearch()
+            searchField.text = query
+            readerWindow.find(query)
         })
     }
 
@@ -350,7 +422,41 @@ ThemedWindow {
         bookReader.removeHighlight(chosenHighlight)
         view.runJavaScript("window.cousoir.removeHighlight(" + JSON.stringify(chosenHighlight) + ")")
         chosenHighlight = ""
+        highlightRect = null
         highlightsShown = Math.max(0, highlightsShown - 1)
+    }
+
+    // Which bookmarks the page shown has.
+    function updatePageBookmarks() {
+        const here = bookReader.bookmarks.filter(bookmark => bookmark.spineIndex === spineIndex)
+        if (!here.length || view.loading) {
+            pageBookmarks = []
+            return
+        }
+        const shown = page
+        const cfis = here.map(bookmark => bookmark.cfi.replace(/^epubcfi\(\/\d+/, "").replace(/\)$/, ""))
+        view.runJavaScript("window.cousoir.pagesOfCfis(" + JSON.stringify(cfis) + ")", function(pages) {
+            readerWindow.pageBookmarks = here.filter((bookmark, i) => pages && pages[i] === shown)
+                                             .map(bookmark => bookmark.title)
+        })
+    }
+
+    // A bookmark at the page, named after its chapter; or the page's
+    // bookmarks removed.
+    function toggleBookmark() {
+        if (pageBookmarks.length) {
+            for (const title of pageBookmarks)
+                bookReader.removeBookmark(title)
+            return
+        }
+        if (!position)
+            return
+        const base = chapterTitle() || bookReader.title || qsTr("Bookmark")
+        const titles = bookReader.bookmarks.map(bookmark => bookmark.title)
+        let title = base
+        for (let n = 2; titles.includes(title); ++n)
+            title = base + " (" + n + ")"
+        bookReader.addBookmark(title, position)
     }
 
     function save() {
@@ -453,6 +559,8 @@ ThemedWindow {
         property bool spreads: true
         property bool scroll: false
         property double readingRate: 0
+        // The colour of the last highlight made or coloured.
+        property string highlightColor: "yellow"
     }
 
     // The page laid out again when a setting or the room changes.
@@ -497,6 +605,11 @@ ThemedWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+D"
+        onActivated: readerWindow.toggleBookmark()
+    }
+
+    Shortcut {
         sequences: [StandardKey.Back]
         onActivated: readerWindow.goBack()
     }
@@ -504,6 +617,14 @@ ThemedWindow {
     Shortcut {
         sequences: [StandardKey.Forward]
         onActivated: readerWindow.goForward()
+    }
+
+    Connections {
+        target: bookReader
+
+        function onBookmarksChanged() {
+            readerWindow.updatePageBookmarks()
+        }
     }
 
     // A new search's places: the first from the page read on shown.
@@ -592,23 +713,15 @@ ThemedWindow {
                 }
 
                 FlatButton {
-                    objectName: "readerHighlightButton"
+                    objectName: "readerBookmarkButton"
 
-                    visible: readerWindow.hasSelection && readerWindow.spineIndex >= 0
-                    variant: "outline"
-                    text: qsTr("Highlight")
-                    tip: qsTr("Highlight the selection (H)")
-                    onClicked: readerWindow.highlightSelection()
-                }
-
-                FlatButton {
-                    objectName: "readerRemoveHighlightButton"
-
-                    visible: readerWindow.chosenHighlight !== ""
-                    variant: "outline"
-                    text: qsTr("Remove highlight")
-                    icon.source: "assets/icons/trash.svg"
-                    onClicked: readerWindow.removeChosenHighlight()
+                    iconOnly: true
+                    enabled: readerWindow.spineIndex >= 0
+                    text: readerWindow.pageBookmarks.length ? qsTr("Remove the page's bookmark (Ctrl+D)")
+                                                            : qsTr("Bookmark the page (Ctrl+D)")
+                    icon.source: readerWindow.pageBookmarks.length ? "assets/icons/bookmark-filled.svg"
+                                                                   : "assets/icons/bookmark.svg"
+                    onClicked: readerWindow.toggleBookmark()
                 }
 
                 FlatButton {
@@ -686,6 +799,8 @@ ThemedWindow {
                         spacing: Theme.gutter
 
                         FlatButton {
+                            objectName: "readerContentsTab"
+
                             variant: "outline"
                             selected: readerWindow.sidebar === "toc"
                             text: qsTr("Contents")
@@ -697,8 +812,21 @@ ThemedWindow {
 
                             variant: "outline"
                             selected: readerWindow.sidebar === "highlights"
-                            text: qsTr("Highlights (%1)").arg(bookReader.highlights.length)
+                            text: bookReader.highlights.length
+                            tip: qsTr("Highlights and notes")
+                            icon.source: "assets/icons/highlighter.svg"
                             onClicked: readerWindow.sidebar = "highlights"
+                        }
+
+                        FlatButton {
+                            objectName: "readerBookmarksTab"
+
+                            variant: "outline"
+                            selected: readerWindow.sidebar === "bookmarks"
+                            text: bookReader.bookmarks.length
+                            tip: qsTr("Bookmarks")
+                            icon.source: "assets/icons/bookmark.svg"
+                            onClicked: readerWindow.sidebar = "bookmarks"
                         }
 
                         FlatButton {
@@ -842,6 +970,30 @@ ThemedWindow {
                             contentItem: ColumnLayout {
                                 spacing: 2
 
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Theme.gutter
+
+                                    HeadingLabel {
+                                        Layout.fillWidth: true
+                                        text: mark.modelData.chapter
+                                        elide: Text.ElideRight
+                                    }
+
+                                    // Its note written or changed, from here.
+                                    FlatButton {
+                                        objectName: "readerHighlightNote"
+
+                                        iconOnly: true
+                                        implicitWidth: Theme.rowHeight * 0.8
+                                        implicitHeight: Theme.rowHeight * 0.8
+                                        opacity: mark.hovered || hovered ? 1 : 0
+                                        text: mark.modelData.notes ? qsTr("Change the note") : qsTr("Write a note")
+                                        icon.source: "assets/icons/note.svg"
+                                        onClicked: readerWindow.editNote(mark.modelData.uuid)
+                                    }
+                                }
+
                                 Label {
                                     Layout.fillWidth: true
                                     text: mark.modelData.text
@@ -878,6 +1030,102 @@ ThemedWindow {
                             background: Rectangle {
                                 color: mark.hovered ? Theme.hover : "transparent"
                             }
+                        }
+
+                        ScrollBar.vertical: ThinScrollBar {}
+                    }
+
+                    ListView {
+                        id: bookmarkList
+                        objectName: "readerBookmarks"
+
+                        // The bookmark being renamed.
+                        property string renaming: ""
+
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: readerWindow.sidebar === "bookmarks"
+                        clip: true
+                        model: bookReader.bookmarks
+
+                        delegate: ItemDelegate {
+                            id: bookmark
+
+                            required property var modelData
+
+                            width: ListView.view.width
+                            leftPadding: Theme.gutter
+                            rightPadding: Theme.gutter
+                            onClicked: readerWindow.jump(bookmark.modelData.spineIndex, "cfi:" + bookmark.modelData.cfi)
+                            onDoubleClicked: bookmarkList.renaming = bookmark.modelData.title
+
+                            contentItem: RowLayout {
+                                spacing: Theme.gutter
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    visible: bookmarkList.renaming !== bookmark.modelData.title
+                                    text: bookmark.modelData.title
+                                    elide: Text.ElideRight
+                                    font.weight: readerWindow.pageBookmarks.includes(bookmark.modelData.title) ? Font.Bold : Font.Normal
+                                }
+
+                                TextField {
+                                    objectName: "readerBookmarkTitle"
+
+                                    Layout.fillWidth: true
+                                    visible: bookmarkList.renaming === bookmark.modelData.title
+                                    text: bookmark.modelData.title
+                                    onVisibleChanged: {
+                                        if (visible) {
+                                            forceActiveFocus()
+                                            selectAll()
+                                        }
+                                    }
+                                    onAccepted: {
+                                        bookReader.renameBookmark(bookmark.modelData.title, text)
+                                        bookmarkList.renaming = ""
+                                    }
+                                    Keys.onEscapePressed: function(event) {
+                                        bookmarkList.renaming = ""
+                                        event.accepted = true
+                                    }
+                                }
+
+                                FlatButton {
+                                    iconOnly: true
+                                    implicitWidth: Theme.rowHeight * 0.8
+                                    implicitHeight: Theme.rowHeight * 0.8
+                                    opacity: bookmark.hovered || hovered ? 1 : 0
+                                    text: qsTr("Rename")
+                                    icon.source: "assets/icons/note.svg"
+                                    onClicked: bookmarkList.renaming = bookmark.modelData.title
+                                }
+
+                                FlatButton {
+                                    objectName: "readerRemoveBookmark"
+
+                                    iconOnly: true
+                                    implicitWidth: Theme.rowHeight * 0.8
+                                    implicitHeight: Theme.rowHeight * 0.8
+                                    opacity: bookmark.hovered || hovered ? 1 : 0
+                                    text: qsTr("Remove")
+                                    icon.source: "assets/icons/trash.svg"
+                                    onClicked: bookReader.removeBookmark(bookmark.modelData.title)
+                                }
+                            }
+                            background: Rectangle {
+                                color: bookmark.hovered ? Theme.hover : "transparent"
+                            }
+                        }
+
+                        Label {
+                            anchors.fill: parent
+                            anchors.margins: Theme.gutter
+                            visible: !bookReader.bookmarks.length
+                            text: qsTr("No bookmarks. Ctrl+D, or the bookmark above, bookmarks the page.")
+                            color: Theme.textMuted
+                            wrapMode: Text.WordWrap
                         }
 
                         ScrollBar.vertical: ThinScrollBar {}
@@ -1020,9 +1268,17 @@ ThemedWindow {
                                 readerWindow.noteTurn(readerWindow.spineIndex, event.page, event.pages)
                                 readerWindow.chromeAsked = false
                             }
+                            const turned = event.page !== readerWindow.page
                             readerWindow.page = event.page
                             readerWindow.pages = event.pages
                             readerWindow.shownLayout = event.layout
+                            if (turned) {
+                                // The bar over a selection or a highlight
+                                // stays with the page it was on.
+                                readerWindow.selectionRect = null
+                                readerWindow.highlightRect = null
+                                readerWindow.updatePageBookmarks()
+                            }
                             saveTimer.restart()
                         } else if (event.event === "next") {
                             readerWindow.load(readerWindow.spineIndex + 1, "start")
@@ -1035,13 +1291,19 @@ ThemedWindow {
                                 readerWindow.chromeAsked = !readerWindow.chromeAsked
                         } else if (event.event === "selection") {
                             readerWindow.hasSelection = !event.empty
-                            if (!event.empty)
+                            readerWindow.selectionRect = readerWindow.pageRect(event.rect)
+                            if (!event.empty) {
                                 readerWindow.chosenHighlight = ""
+                                readerWindow.highlightRect = null
+                            }
                         } else if (event.event === "highlight") {
                             readerWindow.chosenHighlight = event.uuid
+                            readerWindow.highlightRect = readerWindow.pageRect(event.rect)
                         } else if (event.event === "key") {
-                            if (event.key === "Escape" && readerWindow.chosenHighlight)
+                            if (event.key === "Escape" && readerWindow.chosenHighlight) {
                                 readerWindow.chosenHighlight = ""
+                                readerWindow.highlightRect = null
+                            }
                             else if (event.key === "Escape" && readerWindow.fullScreen)
                                 readerWindow.toggleFullScreen()
                             else if (event.key === "Escape")
@@ -1058,6 +1320,12 @@ ThemedWindow {
                                 readerWindow.goForward()
                             else if (!event.ctrl && (event.key === "h" || event.key === "H") && readerWindow.hasSelection)
                                 readerWindow.highlightSelection()
+                            else if (!event.ctrl && (event.key === "n" || event.key === "N") && readerWindow.chosenHighlight)
+                                readerWindow.editNote(readerWindow.chosenHighlight)
+                            else if (!event.ctrl && (event.key === "n" || event.key === "N") && readerWindow.hasSelection)
+                                readerWindow.noteSelection()
+                            else if (event.ctrl && (event.key === "d" || event.key === "D"))
+                                readerWindow.toggleBookmark()
                             else if (event.key === "Delete" && readerWindow.chosenHighlight)
                                 readerWindow.removeChosenHighlight()
                             else if (!event.ctrl && (event.key === "t" || event.key === "T"))
@@ -1070,6 +1338,136 @@ ThemedWindow {
                                 readerWindow.setZoom(1)
                             else if (event.ctrl && (event.key === "w" || event.key === "W"))
                                 readerWindow.close()
+                        }
+                    }
+                }
+
+                // Over the selection, or the highlight clicked: Calibre's five
+                // colours, a note, copy, and a search of the book for the
+                // selection or the highlight removed.
+                Rectangle {
+                    id: annotationBar
+                    objectName: "readerAnnotationBar"
+
+                    readonly property var chosen: readerWindow.highlightOf(readerWindow.chosenHighlight)
+                    readonly property var target: chosen ? readerWindow.highlightRect
+                        : readerWindow.hasSelection ? readerWindow.selectionRect : null
+
+                    z: 3
+                    visible: target !== null && !noteEditor.opened
+                    width: barRow.implicitWidth + Theme.gutter
+                    height: barRow.implicitHeight + Theme.gutter
+                    x: target ? Math.round(Math.max(Theme.gutter, Math.min(pageArea.width - width - Theme.gutter,
+                                                                        target.x + (target.width - width) / 2))) : 0
+                    // Above, else below.
+                    y: !target ? 0 : target.y - height - Theme.gutter >= 0 ? Math.round(target.y - height - Theme.gutter)
+                                                                         : Math.round(target.y + target.height + Theme.gutter)
+                    color: Theme.canvas
+                    border.width: 1
+                    border.color: Theme.controlBorder
+
+                    RowLayout {
+                        id: barRow
+
+                        anchors.centerIn: parent
+                        spacing: Math.round(4 * Theme.spacingScale)
+
+                        Repeater {
+                            model: ["yellow", "green", "blue", "red", "purple"]
+
+                            delegate: Button {
+                                id: swatch
+
+                                required property string modelData
+                                readonly property bool current: annotationBar.chosen ? annotationBar.chosen.which === modelData
+                                                                                     : readerSettings.highlightColor === modelData
+
+                                objectName: "readerColor_" + modelData
+                                implicitWidth: Theme.rowHeight
+                                implicitHeight: Theme.rowHeight
+                                hoverEnabled: true
+                                focusPolicy: Qt.NoFocus
+                                Accessible.name: modelData
+                                ToolTip.visible: hovered
+                                ToolTip.delay: 600
+                                ToolTip.text: annotationBar.chosen ? qsTr("Colour it so") : qsTr("Highlight (H for the colour marked)")
+                                onClicked: {
+                                    if (annotationBar.chosen)
+                                        readerWindow.recolor(annotationBar.chosen.uuid, modelData)
+                                    else
+                                        readerWindow.highlightSelection(modelData)
+                                }
+
+                                contentItem: Item {}
+                                background: Item {
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: parent.width * (swatch.hovered ? 0.72 : 0.62)
+                                        height: width
+                                        radius: width / 2
+                                        color: readerWindow.highlightColors[swatch.modelData]
+                                        border.width: swatch.current ? 2 : 1
+                                        border.color: swatch.current ? Theme.text : Theme.controlBorder
+                                    }
+                                }
+                            }
+                        }
+
+                        Divider {
+                            Layout.preferredWidth: 1
+                            Layout.preferredHeight: Theme.rowHeight * 0.7
+                        }
+
+                        FlatButton {
+                            objectName: "readerNoteButton"
+
+                            iconOnly: true
+                            focusPolicy: Qt.NoFocus
+                            text: annotationBar.chosen && annotationBar.chosen.notes ? qsTr("Change the note (N)") : qsTr("Note (N)")
+                            icon.source: "assets/icons/note.svg"
+                            onClicked: {
+                                if (annotationBar.chosen)
+                                    readerWindow.editNote(annotationBar.chosen.uuid)
+                                else
+                                    readerWindow.noteSelection()
+                            }
+                        }
+
+                        FlatButton {
+                            objectName: "readerCopyButton"
+
+                            iconOnly: true
+                            focusPolicy: Qt.NoFocus
+                            text: qsTr("Copy")
+                            icon.source: "assets/icons/copy.svg"
+                            onClicked: {
+                                if (annotationBar.chosen)
+                                    bookReader.copyText(annotationBar.chosen.text)
+                                else
+                                    view.triggerWebAction(WebEngineView.Copy)
+                            }
+                        }
+
+                        FlatButton {
+                            objectName: "readerSearchSelection"
+
+                            visible: !annotationBar.chosen
+                            iconOnly: true
+                            focusPolicy: Qt.NoFocus
+                            text: qsTr("Search the book for it")
+                            icon.source: "assets/icons/search.svg"
+                            onClicked: readerWindow.searchSelection()
+                        }
+
+                        FlatButton {
+                            objectName: "readerRemoveHighlightButton"
+
+                            visible: annotationBar.chosen !== null
+                            iconOnly: true
+                            focusPolicy: Qt.NoFocus
+                            text: qsTr("Remove the highlight (Del)")
+                            icon.source: "assets/icons/trash.svg"
+                            onClicked: readerWindow.removeChosenHighlight()
                         }
                     }
                 }
@@ -1358,6 +1756,120 @@ ThemedWindow {
                 color: Theme.textMuted
                 font.pointSize: Theme.fontPointSizeCaption
                 wrapMode: Text.WordWrap
+            }
+        }
+    }
+
+    // A highlight's note, written or changed.
+    Popup {
+        id: noteEditor
+        objectName: "readerNoteEditor"
+
+        readonly property var highlight: readerWindow.highlightOf(readerWindow.noteFor)
+
+        function save() {
+            readerWindow.saveNote(noteText.text)
+            close()
+        }
+
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 3)
+        width: Math.min(readerWindow.width - 2 * Theme.gutter, Math.round(56 * Theme.charWidth))
+        modal: true
+        focus: true
+        // A click beside it would lose the note: Esc or Cancel leave it.
+        closePolicy: Popup.CloseOnEscape
+        padding: Theme.panePadding
+        onOpened: {
+            noteText.text = highlight ? highlight.notes : ""
+            noteText.forceActiveFocus()
+            noteText.cursorPosition = noteText.length
+        }
+        onClosed: view.forceActiveFocus()
+
+        background: Rectangle {
+            color: Theme.canvas
+            border.width: 1
+            border.color: Theme.controlBorder
+        }
+
+        contentItem: ColumnLayout {
+            spacing: Theme.gutter
+
+            HeadingLabel {
+                text: qsTr("Note")
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: noteEditor.highlight ? noteEditor.highlight.text : ""
+                wrapMode: Text.Wrap
+                maximumLineCount: 4
+                elide: Text.ElideRight
+                color: Theme.textMuted
+                font.italic: true
+                leftPadding: Theme.gutter
+                background: Rectangle {
+                    width: 3
+                    height: parent.height
+                    color: noteEditor.highlight ? readerWindow.highlightColors[noteEditor.highlight.which]
+                                                  || readerWindow.highlightColors.yellow : "transparent"
+                }
+            }
+
+            ScrollView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 8 * Theme.rowHeight
+
+                TextArea {
+                    id: noteText
+                    objectName: "readerNoteText"
+
+                    wrapMode: TextEdit.Wrap
+                    color: Theme.text
+                    placeholderText: qsTr("Your note")
+                    placeholderTextColor: Theme.textFaint
+                    selectionColor: Theme.textSelection
+                    selectedTextColor: Theme.textBright
+                    Keys.onPressed: function(event) {
+                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                            && (event.modifiers & Qt.ControlModifier)) {
+                            noteEditor.save()
+                            event.accepted = true
+                        }
+                    }
+
+                    background: Rectangle {
+                        color: Theme.fill
+                        border.width: 1
+                        border.color: noteText.activeFocus ? Theme.accent : Theme.controlBorder
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.gutter
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                FlatButton {
+                    variant: "outline"
+                    text: qsTr("Cancel")
+                    onClicked: noteEditor.close()
+                }
+
+                FlatButton {
+                    objectName: "readerSaveNote"
+
+                    variant: "primary"
+                    text: qsTr("Save")
+                    tip: qsTr("Ctrl+Enter")
+                    onClicked: noteEditor.save()
+                }
             }
         }
     }

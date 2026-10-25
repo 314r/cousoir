@@ -45,10 +45,13 @@ class BookReader : public QObject
     // The script that pages a document and finds positions in it.
     Q_PROPERTY(QString script READ script CONSTANT)
     // The highlights of Calibre's viewer and Cousoir's in the book, and the
-    // Kobos': { uuid, spineIndex, start, end, text, notes, which, timestamp,
-    // source, sourceName }, source "kobo:SERIAL" for a Kobo's, in the book's
-    // order.
+    // Kobos': { uuid, spineIndex, start, end, text, notes, chapter, which,
+    // timestamp, source, sourceName }, source "kobo:SERIAL" for a Kobo's, in
+    // the book's order.
     Q_PROPERTY(QVariantList highlights READ highlights NOTIFY highlightsChanged)
+    // The bookmarks of Calibre's viewer and Cousoir's in the book: { title,
+    // cfi, spineIndex, timestamp }, in the book's order.
+    Q_PROPERTY(QVariantList bookmarks READ bookmarks NOTIFY bookmarksChanged)
     // The places the last search found, in the book's order: { spineIndex,
     // start, end, text, before, after, chapter, newChapter }, start and end
     // CFIs within the spine item, newChapter for the first of a chapter; at
@@ -78,6 +81,7 @@ public:
     QVariantMap startPosition() const;
     QString script() const;
     QVariantList highlights() const;
+    QVariantList bookmarks() const;
     QUrl fileUrl() const;
     QVariantList searchResults() const;
     QString searchQuery() const;
@@ -108,6 +112,24 @@ public:
     // As Calibre's viewer removes one: kept, marked removed, for the
     // programs that have it to forget it too.
     Q_INVOKABLE void removeHighlight(const QString &uuid);
+    // A highlight's colour, one of Calibre's five, as the viewer's
+    // set_style_for_highlights() changes it.
+    Q_INVOKABLE void setHighlightStyle(const QString &uuid, const QString &which);
+    // A highlight's note, none when empty, as the viewer's
+    // set_notes_for_highlight() sets it; its time too, so that Calibre's
+    // viewer, merging, takes it.
+    Q_INVOKABLE void setHighlightNotes(const QString &uuid, const QString &notes);
+    // A bookmark at a CFI of the book, as the viewer's add_bookmark() adds
+    // one: one of the same title is replaced.
+    Q_INVOKABLE void addBookmark(const QString &title, const QString &cfi);
+    // As the viewer's remove_bookmark(): kept, marked removed.
+    Q_INVOKABLE void removeBookmark(const QString &title);
+    // The viewer's edit_bookmark(); false when the new title is empty or
+    // another bookmark's. The library keeps bookmarks by their titles: the
+    // old one is written as removed.
+    Q_INVOKABLE bool renameBookmark(const QString &title, const QString &newTitle);
+    // Puts text on the clipboard.
+    Q_INVOKABLE void copyText(const QString &text) const;
     // Searches the book's text, case and accents ignored, on a thread of its
     // own; searchResults has what it finds. An empty query clears them.
     Q_INVOKABLE void search(const QString &query);
@@ -116,6 +138,7 @@ signals:
     void libraryChanged();
     void bookChanged();
     void highlightsChanged();
+    void bookmarksChanged();
     void searchChanged();
 
 private:
@@ -123,6 +146,9 @@ private:
     QJsonObject readPositions() const;
     void writePositions(const QJsonObject &positions) const;
     void queueAnnotation(const Annotation &annotation);
+    // A highlight changed, kept as it is now, as whose it is.
+    void queueHighlight(const QString &uuid);
+    void queueBookmark(const QJsonObject &bookmark);
     void keepPending() const;
     // The highlights of the book `uuid` still to be in the library.
     void keepPending(const QString &uuid) const;
@@ -148,6 +174,8 @@ private:
     // "local" and "viewer", or a Kobo's, "kobo" and its serial.
     QMap<QString, QJsonObject> m_highlights;
     QHash<QString, QPair<QString, QString>> m_owners;
+    // By title, as the viewer keeps them.
+    QMap<QString, QJsonObject> m_bookmarks;
     // The Kobos' names, by serial.
     QHash<QString, QString> m_koboNames;
     // Those made or removed and not yet in the library, written together a
