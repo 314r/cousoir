@@ -32,6 +32,9 @@ ThemedWindow {
         return true
     }
 
+    // A window of its own, not one over the library's: the library's
+    // shortcuts stay its own.
+    transientParent: null
     visible: false
     width: 900
     height: 1000

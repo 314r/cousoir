@@ -31,7 +31,8 @@ if(UNIX AND NOT APPLE)
 endif()
 # libmtp, to reach a Kindle Paperwhite; without it, Cousoir sees no MTP device.
 # Qt WebEngine, to read books in Cousoir; without it, there is no reader.
-find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick)
+# Qt TextToSpeech, to read them aloud.
+find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick TextToSpeech)
 find_package(PkgConfig)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIBMTP IMPORTED_TARGET libmtp)
@@ -116,6 +117,8 @@ qt_add_library(cousoir_core STATIC
     file_transaction.h
     identifier_links.cpp
     identifier_links.h
+    book_search.cpp
+    book_search.h
     epub_book.cpp
     epub_book.h
     kepub.cpp
@@ -134,6 +137,8 @@ qt_add_library(cousoir_core STATIC
     library_check.h
     metadata_download.cpp
     metadata_download.h
+    mobi_book.cpp
+    mobi_book.h
     mobi_metadata.cpp
     mobi_metadata.h
     mtp.cpp
@@ -164,6 +169,8 @@ qt_add_library(cousoir_core STATIC
     epub_cfi.h
     highlight_formats.cpp
     highlight_formats.h
+    html_soup.cpp
+    html_soup.h
     highlight_json.cpp
     highlight_json.h
     kobo_highlights.cpp
@@ -218,6 +225,11 @@ if(TARGET Qt6::WebEngineQuick)
     target_sources(cousoir_models PRIVATE book_reader.cpp book_reader.h)
     target_link_libraries(cousoir_models PUBLIC Qt6::WebEngineQuick)
     target_compile_definitions(cousoir_models PUBLIC COUSOIR_READER)
+    if(TARGET Qt6::TextToSpeech)
+        target_sources(cousoir_models PRIVATE book_speech.cpp book_speech.h)
+        target_link_libraries(cousoir_models PUBLIC Qt6::TextToSpeech)
+        target_compile_definitions(cousoir_models PUBLIC COUSOIR_SPEECH)
+    endif()
 endif()
 
 qt_add_executable(cousoir main.cpp)
@@ -272,14 +284,18 @@ endif()
 set(COUSOIR_ICON_FILES
     assets/icons/arrow-left.svg
     assets/icons/book.svg
+    assets/icons/bookmark.svg
+    assets/icons/bookmark-filled.svg
     assets/icons/building.svg
     assets/icons/check.svg
     assets/icons/chevron-down.svg
     assets/icons/close.svg
+    assets/icons/copy.svg
     assets/icons/eject.svg
     assets/icons/ereader.svg
     assets/icons/external.svg
     assets/icons/folder.svg
+    assets/icons/fullscreen.svg
     assets/icons/globe.svg
     assets/icons/highlighter.svg
     assets/icons/grid.svg
@@ -290,18 +306,26 @@ set(COUSOIR_ICON_FILES
     assets/icons/lock.svg
     assets/icons/markdown.svg
     assets/icons/more.svg
+    assets/icons/note.svg
     assets/icons/panel-right.svg
+    assets/icons/pause.svg
+    assets/icons/play.svg
     assets/icons/plus.svg
     assets/icons/refresh.svg
     assets/icons/search.svg
     assets/icons/settings-appearance.svg
     assets/icons/settings.svg
+    assets/icons/skip-back.svg
+    assets/icons/skip-forward.svg
+    assets/icons/speaker.svg
+    assets/icons/stop.svg
     assets/icons/tag.svg
     assets/icons/theme-dark.svg
     assets/icons/theme-light.svg
     assets/icons/theme-omarchy.svg
     assets/icons/theme-system.svg
     assets/icons/trash.svg
+    assets/icons/type.svg
     assets/icons/user.svg
     assets/icons/hicolor/cousoir-256.png
     assets/reader/reader.js

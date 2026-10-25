@@ -10,6 +10,7 @@
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QColor>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -35,6 +36,7 @@
 #include "kobo_placement.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
+#include "book_search.h"
 #endif
 #include "sqlite_db.h"
 #include "cover_cache.h"
@@ -101,6 +103,15 @@ private slots:
     void picksLibraryInSettings();
     void creditsCalibreInSettings();
     void readsInCousoir();
+    void laysOutPagesAsAsked();
+    void searchesTheBook();
+    void annotatesTheBook();
+    void readsAloud();
+    void showsNotesInPlace();
+    void readsKindleAndOtherBooks();
+    void looksWordsUp();
+    void turnsWithoutAWait();
+    void readsFixedLayouts();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -411,8 +422,11 @@ void LibraryUiTest::listsSearchesAndSortsBooks()
                  (QStringList{ QStringLiteral("title"), QStringLiteral("series"), QStringLiteral("formats"),
                                QStringLiteral("timestamp"), QStringLiteral("rating") }));
     QTRY_VERIFY(!control("bookAuthorsColumn"));
+    // Clicked where the row of headers has put it again.
+    QVERIFY(QQuickTest::qWaitForPolish(m_window));
     QQuickItem *series = control("bookSeriesColumn");
     QVERIFY(series);
+    QTRY_VERIFY(series->x() > 0);
     QTest::mouseClick(m_window, Qt::RightButton, Qt::NoModifier, series->mapToScene(QPointF(4, 4)).toPoint());
     QTRY_VERIFY(object("columnMenu")->property("opened").toBool());
     clickVisible("columnMenu_show:tags");
@@ -756,7 +770,10 @@ void LibraryUiTest::readsInCousoir()
     for (int i = 0; i < 3; ++i) {
         const QString before = reader->property("position").toString();
         QTest::keyClick(reader, Qt::Key_Right);
-        QTRY_VERIFY_WITH_TIMEOUT(reader->property("position").toString() != before, 10000);
+        // Told again: none while another chapter loads.
+        QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty()
+                                     && reader->property("position").toString() != before,
+                                 10000);
     }
     QCOMPARE(reader->property("spineIndex").toInt(), 1);
     QCOMPARE(reader->property("page").toInt(), 2);
@@ -775,7 +792,9 @@ void LibraryUiTest::readsInCousoir()
 
     // The table of contents: a section of the second chapter.
     QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 2), Q_ARG(QVariant, QStringLiteral("fragment:s2")));
-    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() > 0, 20000);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() > 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/")),
+                             20000);
     const QString section = reader->property("position").toString();
     reader->close();
 
@@ -821,7 +840,7 @@ void LibraryUiTest::readsInCousoir()
         "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 22);"
         "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
     QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
-    QMetaObject::invokeMethod(reader, "highlightSelection");
+    QMetaObject::invokeMethod(reader, "highlightSelection", Q_ARG(QVariant, QVariant()));
     QObject *bookReader = reader->property("reader").value<QObject *>();
     QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
     const QVariantMap highlight = bookReader->property("highlights").toList().first().toMap();
@@ -865,6 +884,820 @@ void LibraryUiTest::readsInCousoir()
         db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE book=%1").arg(bookId)).toString().toUtf8()).object();
     db.close();
     QVERIFY(removed.value(QLatin1String("removed")).toBool());
+#endif
+}
+
+// The reader's settings: a scroll, the text's size, two pages side by side
+// in a wide window, the type and the page's colours, each laid out at once
+// and the place kept through them; and a place found by how far into the
+// book it is.
+void LibraryUiTest::laysOutPagesAsAsked()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *settings = reader->property("settings").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(settings && view);
+    QCOMPARE(reader->property("columns").toInt(), 1);
+    // The line no longer than the measure: the page narrower than the window.
+    QVERIFY(view->property("width").toDouble() < reader->width() - 100);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QCOMPARE(reader->property("shownLayout").toString(), QStringLiteral("1"));
+    const int onePage = reader->property("pages").toInt();
+    QVERIFY2(onePage >= 4, qPrintable(QString::number(onePage)));
+    for (int page = 1; page <= 2; ++page) {
+        QTest::keyClick(reader, Qt::Key_Right);
+        QTRY_COMPARE(reader->property("page").toInt(), page);
+    }
+    const QString place = reader->property("position").toString();
+
+    // A scroll, then pages again: the same page.
+    settings->setProperty("scroll", true);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("scroll"));
+    const QString scrolled = reader->property("position").toString();
+    QTest::keyClick(reader, Qt::Key_Space);
+    QTRY_VERIFY(reader->property("position").toString() != scrolled);
+    QTest::keyClick(reader, Qt::Key_Space, Qt::ShiftModifier);
+    QTRY_COMPARE(reader->property("position").toString(), scrolled);
+    settings->setProperty("scroll", false);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("1"));
+    QTRY_COMPARE(reader->property("position").toString(), place);
+    QCOMPARE(reader->property("page").toInt(), 2);
+
+    // Larger text, then the book's size again: the same page.
+    QMetaObject::invokeMethod(reader, "setZoom", Q_ARG(QVariant, 1.6));
+    QTRY_VERIFY(reader->property("pages").toInt() > onePage);
+    QMetaObject::invokeMethod(reader, "setZoom", Q_ARG(QVariant, 1));
+    QTRY_COMPARE(reader->property("pages").toInt(), onePage);
+    QTRY_COMPARE(reader->property("position").toString(), place);
+
+    // Two pages side by side in a wide window, each as wide as the one was:
+    // half as many screens, the place on the second page of the second.
+    reader->resize(1600, reader->height());
+    QTRY_COMPARE(reader->property("columns").toInt(), 2);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("2"));
+    QTRY_COMPARE(reader->property("pages").toInt(), (onePage + 1) / 2);
+    QTRY_COMPARE(reader->property("position").toString(), place);
+    QCOMPARE(reader->property("page").toInt(), 1);
+    // One page asked for: one, the window as wide.
+    settings->setProperty("spreads", false);
+    QTRY_COMPARE(reader->property("shownLayout").toString(), QStringLiteral("1"));
+    QTRY_COMPARE(reader->property("position").toString(), place);
+
+    // The type: a font, a line height and an alignment over the book's; the
+    // alignment the paragraphs', not the headings'.
+    settings->setProperty("fontFamily", QStringLiteral("serif"));
+    settings->setProperty("lineHeight", 1.8);
+    settings->setProperty("align", QStringLiteral("justify"));
+    const QString probe = QStringLiteral(R"((function () {
+        const p = getComputedStyle(document.querySelector('p'));
+        const h1 = getComputedStyle(document.querySelector('h1'));
+        document.title = [p.fontFamily, (parseFloat(p.lineHeight) / parseFloat(p.fontSize)).toFixed(1), p.textAlign,
+                          h1.textAlign].join('|');
+    })())");
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, probe));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("serif|1.8|justify|start");
+    }(), 10000);
+    QTRY_COMPARE(reader->property("position").toString().left(13), place.left(13));
+
+    // The page's colours: the margins beside it, and the page itself.
+    settings->setProperty("pageTheme", QStringLiteral("sepia"));
+    QTRY_COMPARE(reader->property("pageBackground").value<QColor>(), QColor(QStringLiteral("#f5ecd9")));
+    const QString background = QStringLiteral(
+        "document.title = getComputedStyle(document.documentElement).backgroundColor");
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, background));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("rgb(245, 236, 217)");
+    }(), 10000);
+
+    // Kept for the next book read.
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Reader/pageTheme")).toString(), QStringLiteral("sepia"));
+
+    // Near the end of the book, by the progress bar: the last chapter.
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    const int last = bookReader->property("spine").toList().size() - 1;
+    QMetaObject::invokeMethod(reader, "goToBookFraction", Q_ARG(QVariant, 0.99));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == last
+                                 && reader->property("position").toString().startsWith(
+                                     QStringLiteral("epubcfi(/%1/").arg(2 * (last + 1))),
+                             20000);
+    QVERIFY(reader->property("bookFraction").toDouble() > 0.8);
+    // The time left at the reader's pace.
+    const QList<QQuickItem *> progress = visualDescendants(reader->contentItem(), QStringLiteral("readerChapterProgress"));
+    QVERIFY(!progress.isEmpty());
+    QVERIFY2(progress.first()->property("text").toString().contains(QLatin1String(" min left in chapter")),
+             qPrintable(progress.first()->property("text").toString()));
+    reader->close();
+#endif
+}
+
+// A search of the book: its places listed, the one shown marked on its page,
+// F3 to the next; Back and Forward through the places gone to, a link
+// followed among them.
+void LibraryUiTest::searchesTheBook()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(bookReader && view);
+    const QString start = reader->property("position").toString();
+
+    QMetaObject::invokeMethod(reader, "openSearch");
+    QCOMPARE(reader->property("sidebar").toString(), QStringLiteral("search"));
+    QMetaObject::invokeMethod(reader, "find", Q_ARG(QVariant, QStringLiteral("LANTERN window")));
+    QTRY_VERIFY_WITH_TIMEOUT(!bookReader->property("searching").toBool()
+                                 && !bookReader->property("searchResults").toList().isEmpty(),
+                             10000);
+    const QVariantList results = bookReader->property("searchResults").toList();
+    for (const QVariant &result : results)
+        QCOMPARE(result.toMap().value(QStringLiteral("text")).toString().toLower(), QStringLiteral("lantern window"));
+    QCOMPARE(results.first().toMap().value(QStringLiteral("chapter")).toString(), QStringLiteral("Arrival"));
+    QVERIFY(results.first().toMap().value(QStringLiteral("newChapter")).toBool());
+
+    // The first shown, from where reading was, and marked.
+    QTRY_COMPARE(reader->property("searchIndex").toInt(), 0);
+    const QVariantMap first = results.first().toMap();
+    const int spine = first.value(QStringLiteral("spineIndex")).toInt();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == spine
+                                 && reader->property("position").toString().startsWith(
+                                     QStringLiteral("epubcfi(/%1/").arg(2 * (spine + 1))),
+                             20000);
+    const QString shown = QStringLiteral(R"((function () {
+        const shown = CSS.highlights.get('cousoir-search-shown');
+        const others = CSS.highlights.get('cousoir-search');
+        document.title = shown && shown.size === 1 ? [...shown][0].toString().toLowerCase() + '|' + others.size : 'none';
+    })())");
+    const auto marked = [&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, shown));
+        QTest::qWait(100);
+        return view->property("title").toString();
+    };
+    int inChapter = 0;
+    for (const QVariant &result : results)
+        inChapter += result.toMap().value(QStringLiteral("spineIndex")).toInt() == spine;
+    QTRY_COMPARE_WITH_TIMEOUT(marked(), QStringLiteral("lantern window|%1").arg(inChapter - 1), 10000);
+    const QString firstPlace = reader->property("position").toString();
+
+    // F3: the next, the reader's shortcut.
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QTest::keyClick(reader, Qt::Key_F3);
+    QTRY_COMPARE(reader->property("searchIndex").toInt(), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("position").toString() != firstPlace
+                                 || results.at(1).toMap().value(QStringLiteral("spineIndex")).toInt() == spine,
+                             10000);
+    QTRY_COMPARE_WITH_TIMEOUT(marked().section(u'|', 0, 0), QStringLiteral("lantern window"), 10000);
+
+    // Back to where reading was, not through each place seen; forward again.
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty(), 20000);
+    const QString secondPlace = reader->property("position").toString();
+    QMetaObject::invokeMethod(reader, "goBack");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), start, 20000);
+    QCOMPARE(reader->property("backStack").toList().size(), 0);
+    QMetaObject::invokeMethod(reader, "goForward");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), secondPlace, 20000);
+
+    // Esc in the search's field empties it, and leaves the book open.
+    QMetaObject::invokeMethod(reader, "openSearch");
+    QQuickItem *field = visualDescendants(reader->contentItem(), QStringLiteral("readerSearchField")).value(0);
+    QVERIFY(field);
+    QTRY_VERIFY(field->hasActiveFocus());
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_COMPARE(field->property("text").toString(), QString());
+    QVERIFY(reader->isVisible());
+
+    // A link to a note in another chapter, and back.
+    QMetaObject::invokeMethod(bookReader, "search", Q_ARG(QString, QString()));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    const QString chapter = reader->property("position").toString();
+    QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral("document.getElementById('noteref').click()")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 3
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/8/")),
+                             20000);
+    QMetaObject::invokeMethod(reader, "goBack");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), chapter, 20000);
+    reader->close();
+#endif
+}
+
+// Highlights coloured and noted, and bookmarks, written as Calibre's viewer
+// writes them: read back from the library, renamed and removed.
+void LibraryUiTest::annotatesTheBook()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(bookReader && view);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    const int bookId = bookReader->property("bookId").toInt();
+
+    // A selection: the bar over it.
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = document.querySelector('p'); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 22);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("selectionRect").isValid()
+                                 && !reader->property("selectionRect").value<QJSValue>().isNull(),
+                             10000);
+    const QList<QQuickItem *> bars = visualDescendants(reader->contentItem(), QStringLiteral("readerAnnotationBar"));
+    QVERIFY(!bars.isEmpty());
+    QTRY_VERIFY(bars.first()->isVisible());
+
+    // Highlighted green, with a note.
+    QMetaObject::invokeMethod(reader, "highlightSelection", Q_ARG(QVariant, QStringLiteral("green")));
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
+    QVariantMap highlight = bookReader->property("highlights").toList().first().toMap();
+    const QString uuid = highlight.value(QStringLiteral("uuid")).toString();
+    QCOMPARE(highlight.value(QStringLiteral("which")).toString(), QStringLiteral("green"));
+    // Under its section, not the chapter's last.
+    QCOMPARE(highlight.value(QStringLiteral("chapter")).toString(), QStringLiteral("Arrival"));
+    QMetaObject::invokeMethod(reader, "editNote", Q_ARG(QVariant, uuid));
+    QQuickItem *noteText = nullptr;
+    QTRY_VERIFY((noteText = visualDescendants(reader->contentItem(), QStringLiteral("readerNoteText")).value(0)));
+    QTRY_VERIFY(noteText->hasActiveFocus());
+    for (const QChar character : QStringLiteral("Rivers remember."))
+        QTest::keyClick(reader, character.toLatin1());
+    QTest::keyClick(reader, Qt::Key_Return, Qt::ControlModifier);
+    QTRY_COMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("notes")).toString(),
+                 QStringLiteral("Rivers remember."));
+    // Shown on the page by a dotted line.
+    const QString underline = QStringLiteral(
+        "document.title = getComputedStyle(document.querySelector('span[data-annot-id]')).textDecorationStyle");
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, underline));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("dotted");
+    }(), 10000);
+    // Coloured blue; in the dark page's blue on a dark page.
+    QMetaObject::invokeMethod(reader, "recolor", Q_ARG(QVariant, uuid), Q_ARG(QVariant, QStringLiteral("blue")));
+    QCOMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("which")).toString(),
+             QStringLiteral("blue"));
+    const QString colour = QStringLiteral(
+        "document.title = getComputedStyle(document.querySelector('span[data-annot-id]')).backgroundColor");
+    const auto colourShown = [&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, colour));
+        QTest::qWait(100);
+        return view->property("title").toString();
+    };
+    QTRY_COMPARE_WITH_TIMEOUT(colourShown(), QStringLiteral("rgb(173, 216, 255)"), 10000);
+    reader->property("settings").value<QObject *>()->setProperty("pageTheme", QStringLiteral("dark"));
+    QTRY_COMPARE_WITH_TIMEOUT(colourShown(), QStringLiteral("rgb(38, 85, 137)"), 10000);
+
+    // A bookmark at the page, another renamed.
+    QMetaObject::invokeMethod(reader, "toggleBookmark");
+    QTRY_COMPARE(bookReader->property("bookmarks").toList().size(), 1);
+    QCOMPARE(bookReader->property("bookmarks").toList().first().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Arrival"));
+    QTRY_COMPARE(reader->property("pageBookmarks").toStringList(), QStringList{ QStringLiteral("Arrival") });
+    // The next chapter's first page has none, the page number the same.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 2), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/")),
+                             20000);
+    QTRY_VERIFY(reader->property("pageBookmarks").toStringList().isEmpty());
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QTRY_COMPARE(reader->property("pageBookmarks").toStringList(), QStringList{ QStringLiteral("Arrival") });
+    const QString bookmarked = reader->property("position").toString();
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_COMPARE(reader->property("page").toInt(), 1);
+    QTRY_VERIFY(reader->property("pageBookmarks").toStringList().isEmpty());
+    QMetaObject::invokeMethod(reader, "toggleBookmark");
+    QTRY_COMPARE(bookReader->property("bookmarks").toList().size(), 2);
+    bool renamed = false;
+    QMetaObject::invokeMethod(bookReader, "renameBookmark", Q_RETURN_ARG(bool, renamed),
+                              Q_ARG(QString, QStringLiteral("Arrival (2)")), Q_ARG(QString, QStringLiteral("Later")));
+    QVERIFY(renamed);
+
+    // In the library, as the viewer writes them.
+    reader->close();
+    waitForSave();
+    SqliteDb db;
+    QString dbError;
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QHash<QString, QJsonObject> rows;
+    QHash<QString, QString> searchable;
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT annot_type, annot_id, annot_data, searchable_text, user_type, "
+                                                        "user FROM annotations WHERE book=?"), { bookId })) {
+        QCOMPARE(row.value(4).toString(), QStringLiteral("local"));
+        QCOMPARE(row.value(5).toString(), QStringLiteral("viewer"));
+        const QString key = row.value(0).toString() + u':' + row.value(1).toString();
+        rows.insert(key, QJsonDocument::fromJson(row.value(2).toString().toUtf8()).object());
+        searchable.insert(key, row.value(3).toString());
+    }
+    db.close();
+    const QJsonObject written = rows.value(QStringLiteral("highlight:") + uuid);
+    QCOMPARE(written.value(QLatin1String("notes")).toString(), QStringLiteral("Rivers remember."));
+    QCOMPARE(written.value(QLatin1String("style")).toObject().value(QLatin1String("which")).toString(), QStringLiteral("blue"));
+    QCOMPARE(searchable.value(QStringLiteral("highlight:") + uuid),
+             QStringLiteral("Chapter 1, paragraph 0\n\x1f\nRivers remember."));
+    const QJsonObject first = rows.value(QStringLiteral("bookmark:Arrival"));
+    QCOMPARE(first.value(QLatin1String("type")).toString(), QStringLiteral("bookmark"));
+    QCOMPARE(first.value(QLatin1String("pos_type")).toString(), QStringLiteral("epubcfi"));
+    QCOMPARE(first.value(QLatin1String("pos")).toString(), bookmarked);
+    QVERIFY(rows.value(QStringLiteral("bookmark:Arrival (2)")).value(QLatin1String("removed")).toBool());
+    QVERIFY(!rows.value(QStringLiteral("bookmark:Later")).value(QLatin1String("removed")).toBool());
+    QCOMPARE(searchable.value(QStringLiteral("bookmark:Later")), QStringLiteral("Later"));
+
+    // Read back: the note, the colour, the bookmarks; one removed.
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    highlight = bookReader->property("highlights").toList().first().toMap();
+    QCOMPARE(highlight.value(QStringLiteral("notes")).toString(), QStringLiteral("Rivers remember."));
+    QCOMPARE(highlight.value(QStringLiteral("which")).toString(), QStringLiteral("blue"));
+    QStringList titles;
+    for (const QVariant &bookmark : bookReader->property("bookmarks").toList())
+        titles.append(bookmark.toMap().value(QStringLiteral("title")).toString());
+    QCOMPARE(titles, (QStringList{ QStringLiteral("Arrival"), QStringLiteral("Later") }));
+    QMetaObject::invokeMethod(bookReader, "removeBookmark", Q_ARG(QString, QStringLiteral("Later")));
+    QCOMPARE(bookReader->property("bookmarks").toList().size(), 1);
+    reader->close();
+    waitForSave();
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QVERIFY(QJsonDocument::fromJson(db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE book=%1 AND "
+                                                           "annot_id='Later'").arg(bookId)).toString().toUtf8())
+                .object().value(QLatin1String("removed")).toBool());
+    db.close();
+#endif
+}
+
+// The book read aloud by Qt's mock engine: the sentence read marked on the
+// page, the next ones after it, into the next chapter, the page following;
+// paused, resumed and stopped.
+void LibraryUiTest::readsAloud()
+{
+#if !defined(COUSOIR_READER) || !defined(COUSOIR_SPEECH)
+    QSKIP("Built without Qt WebEngine or Qt TextToSpeech");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *settings = reader->property("settings").value<QObject *>();
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QObject *speech = bookReader->property("speech").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(settings && speech && view);
+    settings->setProperty("speechEngine", QStringLiteral("mock"));
+    QCOMPARE(speech->property("engine").toString(), QStringLiteral("mock"));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+
+    const auto sentence = [speech] { return speech->property("sentence").toMap(); };
+    const QString marked = QStringLiteral(
+        "(function () { const h = CSS.highlights.get('cousoir-speech');"
+        "document.title = h && h.size === 1 ? [...h][0].toString().replace(/\\s+/g, ' ').trim() : 'none'; })()");
+    const auto markedText = [&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, marked));
+        QTest::qWait(50);
+        return view->property("title").toString();
+    };
+
+    // From the page: the chapter's title first, marked; paused there, as
+    // Qt's mock engine speaks fast.
+    QMetaObject::invokeMethod(reader, "toggleSpeech");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("speaking"));
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), QStringLiteral("The Harbour"));
+    QMetaObject::invokeMethod(speech, "pause");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("paused"));
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), QStringLiteral("The Harbour"), 10000);
+    // The next.
+    QMetaObject::invokeMethod(speech, "skip", Q_ARG(int, 1));
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), QStringLiteral("Arrival"));
+    QMetaObject::invokeMethod(speech, "pause");
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), QStringLiteral("Arrival"), 10000);
+    // On again, and on by itself to the ones after.
+    QMetaObject::invokeMethod(speech, "resume");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("speaking"));
+    QTRY_VERIFY_WITH_TIMEOUT(sentence().value(QStringLiteral("text")).toString().startsWith(QLatin1String("Chapter 1, paragraph")),
+                             20000);
+
+    // Past the chapter's last sentence: the next chapter, loaded and marked.
+    QString error;
+    const std::unique_ptr<EpubBook> book = EpubBook::open(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), &error);
+    QVERIFY2(book, qPrintable(error));
+    const QList<BookSentences::Sentence> chapter1 = BookSentences(*book, 1).sentences();
+    const QList<BookSentences::Sentence> chapter2 = BookSentences(*book, 2).sentences();
+    QVERIFY(chapter1.size() > 2 && !chapter2.isEmpty());
+    const QString now = sentence().value(QStringLiteral("text")).toString();
+    int at = 0;
+    while (at < chapter1.size() && chapter1.at(at).text != now)
+        ++at;
+    QVERIFY(at < chapter1.size());
+    QMetaObject::invokeMethod(speech, "skip", Q_ARG(int, int(chapter1.size()) - at));
+    QMetaObject::invokeMethod(speech, "pause");
+    QCOMPARE(sentence().value(QStringLiteral("spineIndex")).toInt(), 2);
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), chapter2.first().text);
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("spineIndex").toInt(), 2, 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), chapter2.first().text, 20000);
+    // And back to the first chapter's last.
+    QMetaObject::invokeMethod(speech, "skip", Q_ARG(int, -1));
+    QMetaObject::invokeMethod(speech, "pause");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("spineIndex").toInt(), 1, 20000);
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), chapter1.last().text);
+    // The page the sentence is on, shown.
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("page").toInt() > 0, 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), chapter1.last().text, 10000);
+
+    // Stopped: nothing marked.
+    QMetaObject::invokeMethod(reader, "toggleSpeech");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("stopped"));
+    QVERIFY(sentence().isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), QStringLiteral("none"), 10000);
+    reader->close();
+#endif
+}
+
+// Notes shown by their links, in a box over the page: EPUB 3's from the same
+// page, Gutenberg's and a raised number's from another; a link that is no
+// note followed; a picture shown whole.
+void LibraryUiTest::showsNotesInPlace()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/notes.epub"), QStringLiteral("The Notes"));
+    QVERIFY(reader);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+    // The popups are in the window's overlay, under its content item.
+    const auto popup = [&](const QString &name) { return visualDescendants(reader->contentItem(), name).value(0); };
+    // A closed popup leaves the overlay.
+    const auto shown = [&](const QString &name) { return popup(name) && popup(name)->isVisible(); };
+    const auto click = [&](const QString &script) {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, script));
+    };
+
+    // The aside of EPUB 3's note is out of the text.
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        click(QStringLiteral("document.title = getComputedStyle(document.getElementById('fn1')).display"));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("none");
+    }(), 10000);
+
+    // A noteref to an aside of the same page.
+    click(QStringLiteral("document.getElementById('r1').click()"));
+    QTRY_VERIFY(shown(QStringLiteral("readerNoteBoxText")));
+    QCOMPARE(popup(QStringLiteral("readerNoteBoxText"))->property("text").toString(),
+             QStringLiteral("<p>The first note, in <i>italics</i>.</p>"));
+    QCOMPARE(reader->property("spineIndex").toInt(), 0);
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_VERIFY(!shown(QStringLiteral("readerNoteBoxText")));
+    QVERIFY(reader->isVisible());
+
+    // Gutenberg's [2], to a page of notes; then the note itself, and back.
+    click(QStringLiteral("document.getElementById('ref2').click()"));
+    QTRY_VERIFY(shown(QStringLiteral("readerNoteBoxText")));
+    QCOMPARE(popup(QStringLiteral("readerNoteBoxText"))->property("text").toString(),
+             QStringLiteral("[2] The second note, from another page."));
+    const QString place = reader->property("position").toString();
+    QQuickItem *go = popup(QStringLiteral("readerGoToNote"));
+    QVERIFY(go);
+    QTest::mouseClick(reader, Qt::LeftButton, Qt::NoModifier, go->mapToScene(QPointF(go->width() / 2, go->height() / 2)).toPoint());
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/")),
+                             20000);
+    QMetaObject::invokeMethod(reader, "goBack");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), place, 20000);
+
+    // A raised number, the note a paragraph of its own.
+    click(QStringLiteral("document.querySelector('sup a').click()"));
+    QTRY_VERIFY(shown(QStringLiteral("readerNoteBoxText")));
+    QCOMPARE(popup(QStringLiteral("readerNoteBoxText"))->property("text").toString(), QStringLiteral("3. The third note."));
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_VERIFY(!shown(QStringLiteral("readerNoteBoxText")));
+
+    // A picture clicked in the middle: shown whole.
+    click(QStringLiteral("const plate = document.getElementById('plate'); const r = plate.getBoundingClientRect();"
+                         "plate.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: innerWidth / 2, clientY: r.top + 5 }))"));
+    QTRY_VERIFY(shown(QStringLiteral("readerPicture")));
+    QTRY_COMPARE_WITH_TIMEOUT(popup(QStringLiteral("readerPicture"))->property("status").toInt(), 1, 10000);
+    QCOMPARE(popup(QStringLiteral("readerPicture"))->property("sourceSize").toSize(), QSize(400, 200));
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_VERIFY(!shown(QStringLiteral("readerPicture")));
+    QVERIFY(reader->isVisible());
+
+    // A link that is no note: followed.
+    click(QStringLiteral("document.getElementById('next').click()"));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QVERIFY(!shown(QStringLiteral("readerNoteBoxText")));
+    reader->close();
+#endif
+}
+
+// A Kindle book read by Cousoir itself, its place and highlights kept by
+// Cousoir alone; a book in another format made an EPUB by Calibre first.
+void LibraryUiTest::readsKindleAndOtherBooks()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.azw3"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QCOMPARE(bookReader->property("format").toString(), QStringLiteral("AZW3"));
+    const int bookId = bookReader->property("bookId").toInt();
+    QVERIFY(bookReader->property("toc").toList().size() >= 6);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    // The chapter "The Valley": a highlight there, a page on.
+    int valley = -1;
+    for (const QVariant &entry : bookReader->property("toc").toList()) {
+        if (entry.toMap().value(QStringLiteral("title")).toString() == QLatin1String("The Valley"))
+            valley = entry.toMap().value(QStringLiteral("spineIndex")).toInt();
+    }
+    QVERIFY(valley > 0);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, valley), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == valley
+                                 && !reader->property("position").toString().isEmpty(),
+                             20000);
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = [...document.querySelectorAll('p')].find(p => p.textContent.startsWith('Chapter 2')); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 9);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
+    QMetaObject::invokeMethod(reader, "highlightSelection", Q_ARG(QVariant, QStringLiteral("purple")));
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_COMPARE(reader->property("page").toInt(), 1);
+    const QString place = reader->property("position").toString();
+    reader->close();
+    waitForSave();
+    // Nothing of it in the library: Calibre's viewer has its own places.
+    SqliteDb db;
+    QString dbError;
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QCOMPARE(db.value(QStringLiteral("SELECT count(*) FROM annotations WHERE book=%1").arg(bookId)).toInt(), 0);
+    QCOMPARE(db.value(QStringLiteral("SELECT count(*) FROM last_read_positions WHERE book=%1").arg(bookId)).toInt(), 0);
+    db.close();
+    // Read again where it was left, its highlight there.
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && reader->property("position").toString() == place, 20000);
+    QCOMPARE(bookReader->property("highlights").toList().size(), 1);
+    QCOMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("which")).toString(),
+             QStringLiteral("purple"));
+    reader->close();
+
+    // A text file, made an EPUB by Calibre, here a stand-in, once.
+    qputenv("COUSOIR_EBOOK_CONVERT", COUSOIR_TEST_DATA_DIR "/fake-ebook-convert");
+    qputenv("COUSOIR_FAKE_DELAY", "1");
+    const QString text = m_libraryDir->filePath(QStringLiteral("Notes of a voyage.txt"));
+    QFile file(text);
+    QVERIFY(file.open(QIODevice::WriteOnly) && file.write("A voyage, told in plain text.\n") > 0);
+    file.close();
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(text) }));
+    QCOMPARE(error, QString());
+    waitForSave();
+    int textBook = 0;
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("Notes of a voyage"))
+                textBook = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return textBook > 0;
+    }(), 15000);
+    library()->setProperty("currentBookId", textBook);
+    QString format;
+    QMetaObject::invokeMethod(library(), "readableFormat", Q_RETURN_ARG(QString, format), Q_ARG(int, textBook));
+    QCOMPARE(format, QStringLiteral("TXT"));
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(bookReader->property("preparing").toBool());
+    QCOMPARE(bookReader->property("preparingTitle").toString(), QStringLiteral("Notes of a voyage"));
+    QTRY_VERIFY_WITH_TIMEOUT(!bookReader->property("preparing").toBool() && reader->isVisible()
+                                 && !reader->property("position").toString().isEmpty(),
+                             20000);
+    QCOMPARE(bookReader->property("format").toString(), QStringLiteral("TXT"));
+    QCOMPARE(bookReader->property("title").toString(), QStringLiteral("The Voyage"));
+    reader->close();
+    // Kept: no conversion the next time.
+    qputenv("COUSOIR_FAKE_FAIL", "1");
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QVERIFY(!bookReader->property("preparing").toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    reader->close();
+    qunsetenv("COUSOIR_FAKE_FAIL");
+
+    // The reader closed while Calibre works: Calibre stopped, the reader
+    // not shown again when it would have been done.
+    qputenv("COUSOIR_FAKE_DELAY", "2");
+    const QString second = m_libraryDir->filePath(QStringLiteral("Another voyage.txt"));
+    QFile secondFile(second);
+    QVERIFY(secondFile.open(QIODevice::WriteOnly) && secondFile.write("Another voyage.\n") > 0);
+    secondFile.close();
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(second) }));
+    waitForSave();
+    int secondBook = 0;
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("Another voyage"))
+                secondBook = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return secondBook > 0;
+    }(), 15000);
+    library()->setProperty("currentBookId", secondBook);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(bookReader->property("preparing").toBool());
+    reader->close();
+    QVERIFY(!bookReader->property("preparing").toBool());
+    QTest::qWait(3000);
+    QVERIFY(!reader->isVisible());
+    qunsetenv("COUSOIR_FAKE_DELAY");
+    qunsetenv("COUSOIR_EBOOK_CONVERT");
+#endif
+}
+
+// Words selected looked up beside the page: the sources' addresses in the
+// book's language, and the reader's own, here a data URL, shown in the
+// panel.
+void LibraryUiTest::looksWordsUp()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QObject *settings = reader->property("settings").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVariant url;
+    QMetaObject::invokeMethod(reader, "lookupUrl", Q_RETURN_ARG(QVariant, url), Q_ARG(QVariant, QStringLiteral("lantern window")),
+                              Q_ARG(QVariant, QStringLiteral("wiktionary")));
+    QCOMPARE(url.toString(), QStringLiteral("https://en.m.wiktionary.org/w/index.php?search=lantern%20window"));
+    QMetaObject::invokeMethod(reader, "lookupUrl", Q_RETURN_ARG(QVariant, url), Q_ARG(QVariant, QStringLiteral("Île")),
+                              Q_ARG(QVariant, QStringLiteral("wikipedia")));
+    QCOMPARE(url.toString(), QStringLiteral("https://en.m.wikipedia.org/w/index.php?search=%C3%8Ele"));
+
+    settings->setProperty("lookupSource", QStringLiteral("custom"));
+    settings->setProperty("lookupAddress", QStringLiteral("data:text/html,<title>{word}</title>"));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = document.querySelector('p'); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 9);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
+    QTest::keyClick(reader, Qt::Key_L);
+    QTRY_COMPARE(reader->property("sidebar").toString(), QStringLiteral("lookup"));
+    QCOMPARE(reader->property("lookupWord").toString(), QStringLiteral("Chapter 1"));
+    QObject *lookup = visualDescendants(reader->contentItem(), QStringLiteral("readerLookupView")).value(0);
+    QVERIFY(lookup);
+    QTRY_COMPARE_WITH_TIMEOUT(lookup->property("title").toString(), QStringLiteral("Chapter 1"), 10000);
+    reader->close();
+#endif
+}
+
+// The next chapter ready before it is needed: shown at once on turning
+// into it, the page view taking over once it has loaded it, the one after
+// it made ready then.
+void LibraryUiTest::turnsWithoutAWait()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("end")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() > 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    // The second chapter ready behind.
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spareSpine").toInt() == 2 && reader->property("spareReady").toBool(), 20000);
+    QObject *spare = reader->findChild<QObject *>(QStringLiteral("readerSpareView"));
+    QVERIFY(spare);
+    QTest::keyClick(reader, Qt::Key_Right);
+    // At once: the stand-in shows it while the page view loads it.
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2 && reader->property("standing").toBool(), 5000);
+    QCOMPARE(spare->property("opacity").toDouble(), 1.0);
+    // Then the page view, at the chapter's start, and the next made ready.
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("standing").toBool()
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/6/"))
+                                 && reader->property("page").toInt() == 0,
+                             20000);
+    QCOMPARE(spare->property("opacity").toDouble(), 0.0);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spareSpine").toInt() == 3 && reader->property("spareReady").toBool(), 20000);
+    // A jump elsewhere does without it.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QVERIFY(!reader->property("standing").toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    reader->close();
+#endif
+}
+
+// A picture book's fixed pages shown whole, two by two in a wide window as
+// the book pairs them, turned a spread at a time; one by one in a narrow
+// window; its page of text laid out as text.
+void LibraryUiTest::readsFixedLayouts()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/fixed.epub"), QStringLiteral("The Picture Book"));
+    QVERIFY(reader);
+    reader->resize(1200, 800);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(view);
+    const auto ask = [&](const QString &script) {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral("(function() { document.title = ") + script + QStringLiteral("; })()")));
+        QTest::qWait(100);
+        return view->property("title").toString();
+    };
+    const QString partner = QStringLiteral("(document.querySelector('iframe') ? document.querySelector('iframe').getAttribute('src').replace(/.*\\//, '') : 'none')");
+    const auto progress = [&] {
+        QQuickItem *label = visualDescendants(reader->contentItem(), QStringLiteral("readerChapterProgress")).value(0);
+        return label ? label->property("text").toString() : QString();
+    };
+    const auto at = [&](int index) {
+        return reader->property("spineIndex").toInt() == index
+            && reader->property("position").toString().startsWith(QStringLiteral("epubcfi(/%1/").arg(2 * (index + 1)));
+    };
+
+    // The cover alone, scaled whole into the window.
+    QTRY_VERIFY_WITH_TIMEOUT(at(0), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(QStringLiteral("getComputedStyle(document.documentElement).transform !== 'none' ? 'fixed' : 'flows'")),
+                              QStringLiteral("fixed"), 10000);
+    QCOMPARE(ask(partner), QStringLiteral("none"));
+    QCOMPARE(progress(), QStringLiteral("Page 1 of 7"));
+    // A spread, its right page beside the left one; the one after it made
+    // ready behind.
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_VERIFY_WITH_TIMEOUT(at(1), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(partner), QStringLiteral("p3.xhtml"), 10000);
+    QCOMPARE(progress(), QStringLiteral("Pages 2–3 of 7"));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spareSpine").toInt() == 3, 20000);
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_VERIFY_WITH_TIMEOUT(at(3) && !reader->property("standing").toBool(), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(partner), QStringLiteral("p5.xhtml"), 10000);
+    // Back a spread, to its first page; a page of a spread gone to shows
+    // the spread.
+    QTest::keyClick(reader, Qt::Key_Left);
+    QTRY_VERIFY_WITH_TIMEOUT(at(1), 20000);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 4), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(at(3), 20000);
+
+    // A window higher than wide: a page at a time.
+    reader->resize(600, 900);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(partner), QStringLiteral("none"), 10000);
+    QCOMPARE(progress(), QStringLiteral("Page 4 of 7"));
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_VERIFY_WITH_TIMEOUT(at(4), 20000);
+
+    // The credits flow.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 6), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(at(6), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(ask(QStringLiteral("getComputedStyle(document.documentElement).transform !== 'none' ? 'fixed' : 'flows'")),
+                              QStringLiteral("flows"), 10000);
+    QVERIFY(progress().contains(QStringLiteral("left in chapter")));
+    reader->close();
 #endif
 }
 

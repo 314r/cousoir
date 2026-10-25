@@ -130,7 +130,16 @@ bool EpubBook::load(QString *error)
     QHash<QString, QString> hrefs;
     QString navName;
     QString ncxId;
-    QList<QPair<QString, bool>> itemrefs;
+    struct Itemref
+    {
+        QString idref;
+        bool linear = true;
+        QStringList properties;
+    };
+    QList<Itemref> itemrefs;
+    // The book's layout, and whether its pages go two by two.
+    bool fixed = false;
+    bool spreads = true;
     QXmlStreamReader opf(read(package));
     bool inMetadata = false;
     while (!opf.atEnd()) {
@@ -146,6 +155,15 @@ bool EpubBook::load(QString *error)
             m_title = opf.readElementText(QXmlStreamReader::IncludeChildElements).simplified();
         } else if (inMetadata && name == QLatin1String("language") && m_language.isEmpty()) {
             m_language = opf.readElementText(QXmlStreamReader::IncludeChildElements).trimmed();
+        } else if (inMetadata && name == QLatin1String("meta")) {
+            const QString property = attribute(opf, "property");
+            // EPUB 2's fixed layout, as Kindle and some others write it.
+            if (attribute(opf, "name") == QLatin1String("fixed-layout"))
+                fixed = attribute(opf, "content") == QLatin1String("true");
+            else if (property == QLatin1String("rendition:layout"))
+                fixed = opf.readElementText().trimmed() == QLatin1String("pre-paginated");
+            else if (property == QLatin1String("rendition:spread"))
+                spreads = opf.readElementText().trimmed() != QLatin1String("none");
         } else if (name == QLatin1String("item")) {
             const QString id = attribute(opf, "id");
             const QString file = resolve(package, attribute(opf, "href"));
@@ -157,14 +175,48 @@ bool EpubBook::load(QString *error)
             ncxId = attribute(opf, "toc");
             m_direction = attribute(opf, "page-progression-direction");
         } else if (name == QLatin1String("itemref")) {
-            itemrefs.append({ attribute(opf, "idref"), attribute(opf, "linear") != QLatin1String("no") });
+            itemrefs.append({ attribute(opf, "idref"), attribute(opf, "linear") != QLatin1String("no"),
+                              attribute(opf, "properties").split(u' ', Qt::SkipEmptyParts) });
         }
     }
-    for (const auto &[idref, linear] : std::as_const(itemrefs)) {
-        const QString file = hrefs.value(idref);
+    // Apple's books say it in a file of their own.
+    if (!fixed) {
+        QXmlStreamReader options(read(QStringLiteral("META-INF/com.apple.ibooks.display-options.xml")));
+        while (!options.atEnd()) {
+            if (options.readNext() == QXmlStreamReader::StartElement && options.name() == QLatin1String("option")
+                && attribute(options, "name") == QLatin1String("fixed-layout"))
+                fixed = options.readElementText().trimmed() == QLatin1String("true");
+        }
+    }
+    // The side of a page the book does not place is across from the one
+    // before it; the first of a run, a cover, on the side a book opens to,
+    // alone: the right in a book read from left to right.
+    const bool rtl = m_direction == QLatin1String("rtl");
+    QString before;
+    for (const Itemref &itemref : std::as_const(itemrefs)) {
+        const QString file = hrefs.value(itemref.idref);
         if (file.isEmpty() || !contains(file))
             continue;
-        m_spine.append({ file, linear, m_sizes.value(file) });
+        SpineItem item{ file, itemref.linear, m_sizes.value(file) };
+        const QStringList &properties = itemref.properties;
+        item.fixed = properties.contains(QStringLiteral("rendition:layout-pre-paginated"))
+            || (fixed && !properties.contains(QStringLiteral("rendition:layout-reflowable")));
+        if (item.fixed) {
+            for (const QString &side : { QStringLiteral("left"), QStringLiteral("right"), QStringLiteral("center") }) {
+                if (properties.contains(QStringLiteral("page-spread-") + side)
+                    || properties.contains(QStringLiteral("rendition:page-spread-") + side))
+                    item.side = side;
+            }
+            if (!spreads || properties.contains(QStringLiteral("rendition:spread-none")))
+                item.side = QStringLiteral("center");
+            else if (item.side.isEmpty())
+                item.side = before == QLatin1String("left") ? QStringLiteral("right")
+                    : before == QLatin1String("right")      ? QStringLiteral("left")
+                    : rtl                                   ? QStringLiteral("left")
+                                                            : QStringLiteral("right");
+        }
+        before = item.side;
+        m_spine.append(item);
     }
     if (m_spine.isEmpty()) {
         *error = QObject::tr("%1 has nothing to read: its spine is empty.").arg(QFileInfo(m_path).fileName());

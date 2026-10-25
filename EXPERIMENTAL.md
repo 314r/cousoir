@@ -8,7 +8,10 @@ Nothing here is merged into `master`, pushed or published: the review decides.
 
 ## How the work is done
 
-- `experimental` branches from `master` at 7664f54. Each goal is worked on
+- The first `experimental` branched from `master` at 7664f54 and was merged
+  into it on 2026-10-23. The second, from 2026-10-25, branches from
+  `master` at 9e9dc9f and works on the reader (see "Since 2026-10-25: the
+  reader" below). Each goal is worked on
   a branch of its own, `exp-<name>`, merged into `experimental` with
   `--no-ff` once its tests pass, as `master` takes its phases.
 - Nothing is written outside the source tree. `tools/sandbox.sh` runs the
@@ -267,6 +270,265 @@ annotations" does.
 Calibre's full text search (`full-text-search.db`): its index read and
 searched from Cousoir, and books indexed as Calibre indexes them, so that
 Calibre keeps the index Cousoir adds to.
+
+## Since 2026-10-25: the reader
+
+The user asked for autonomous work on the EPUB reader of goal 19: plan two
+goals, work on the one that matters more, then plan two again from where
+the reader stands, until the goals planned look futile, useless or harmful.
+Each round's two goals and the one picked are written here; the one left
+may come back in a later round.
+
+Where the reader stood on 2026-10-25, tried on three books of Project
+Gutenberg (in `build/sandbox/books`, never committed): one column the
+window's whole width, about 110 characters a line at 900 pixels and twice
+that full screen; text justified without hyphens; the size by WebEngine's
+zoom, forgotten when the book closes; the theme's colours only; nothing
+told of the page but a percentage; no search, no notes on highlights, no
+bookmarks, no footnotes but by jumping to them, no reading aloud.
+
+### Round 1
+
+#### R1. A page made for reading — picked, done
+
+What makes every minute of reading better, and what every reader app has:
+
+- Text laid out at a measure that reads well: a line of about 65 to 75
+  characters at most, the page centred in a wide window, and two pages side
+  by side when the window holds two.
+- Reading settings, kept for every book and applied at once without losing
+  the place: the font (the book's own, serif, sans serif or one installed),
+  the size, the line spacing, the width of the line, the alignment (the
+  book's, left, justified) with hyphenation by the book's language, the
+  page's colours (Cousoir's theme, light, sepia, dark, black), one page or
+  two, pages or a scroll.
+- What the page is: the chapter, the page in it, the time left in the
+  chapter and in the book from how fast one reads, in a footer.
+- Full screen (F11), the toolbar showing when the mouse goes to the top.
+- Hyphenation was planned, and dropped: Qt WebEngine never gives Chromium
+  its hyphenation dictionaries (`ContentBrowserClientQt` does not implement
+  `GetHyphenationDictionary()`), so `hyphens: auto` does nothing; soft
+  hyphens put in by the reader would shift every CFI.
+
+Done when real books read well at any window size in every theme, the
+place holds across every change of setting and size, and the tests cover
+the settings, the spreads and the scroll.
+
+#### R2. Find in the book
+
+- A search through all of the book's text, accents and case folded as
+  Calibre folds them, the results listed with their context by chapter, the
+  one picked shown and marked on its page, F3 and Shift+F3 through them.
+- Back and Forward after following a link or a result (Alt+Left, Alt+Right).
+
+Left for a later round.
+
+### Round 2
+
+With the page laid out well, what the reader lacks most is a way through
+the book other than turning pages, and a way to keep more than a yellow
+mark.
+
+#### R2. Find in the book — picked, done
+
+From round 1. Searching a book is what one cannot do without once one
+needs it; Calibre's viewer has it, and nothing in Cousoir can stand in for
+it, while highlights at least exist. The results are placed by the CFIs
+Cousoir's C++ already works out as the reader's script does (goal 19's
+`EpubCfi`, checked against the page by `encodesCfisAsTheReader`), so a
+result is found on its page exactly, without the page's script searching.
+
+- A Search tab beside Contents and Highlights (Ctrl+F): every place of the
+  book's text, case and accents ignored, white space as one space, listed
+  in the book's order under their chapters with the words around them; the
+  one picked shown on its page and marked there, the others of the page
+  marked lightly; Enter, F3 and Shift+F3 go through them.
+- Back and Forward (Alt+Left, Alt+Right, and a Back button while there is
+  somewhere to go back to) after a link, a result, a table of contents
+  entry, a highlight or the progress bar: a footnote read, back to the page.
+
+Done when a search of a whole Gutenberg novel lists its results at once,
+each goes to its exact place, and the tests cover the search, its marks and
+the way back.
+
+#### R3. Highlights to work with
+
+- A bar over the selection: the five colours of Calibre's viewer, a note,
+  copy; a highlight clicked: its colour changed, its note written or
+  changed, removed.
+- Notes kept in the viewer's JSON (`notes`), shown in the sidebar, edited
+  there too, and in the library's Highlights section, as Calibre's viewer
+  and "Browse annotations" show them.
+- Bookmarks, as the viewer keeps them (`bookmark` annotations), listed and
+  gone to.
+
+Left for the next round.
+
+### Round 3
+
+The reader now shows a book well and finds anything in it. What it keeps
+of the reading is still a yellow mark; and the one way to read is to read.
+
+#### R3. Highlights to work with — picked, done
+
+From round 2. A highlight's note is what turns highlighting into study:
+Calibre's viewer, a Kobo and Cousoir's Highlights section all show notes,
+and Cousoir's reader can neither write one nor change a colour. Bookmarks
+come with it: the viewer keeps them in the same table.
+
+- A bar over the selection: the five colours of Calibre's viewer, a note,
+  copy, search the book for it. A highlight clicked: the same bar, its
+  colour changed, its note written or changed, removed.
+- Notes kept in the viewer's JSON (`notes`, its search text with them, as
+  `annot_db_data()` makes it), shown on the page by a dotted underline,
+  in the sidebar's list, edited from there too.
+- Bookmarks as the viewer keeps them (`bookmark` annotations, by title,
+  `pos` a CFI; removed as `remove_bookmark()` removes one): one added at the
+  page with Ctrl+D or the toolbar, listed in the book's order, renamed,
+  removed, gone to; the toolbar shows when the page has one.
+
+Done when each change shows in Calibre's viewer as made there (the JSON as
+the viewer writes it), and the tests cover colours, notes and bookmarks
+written, read back and removed.
+
+#### R4. Reading aloud
+
+Qt TextToSpeech is installed with speech-dispatcher, Flite and a Kokoro
+voice plugin on this computer. The book read aloud from the page, the
+sentence read marked, the pages turned with it, a voice and a speed picked,
+as Calibre's viewer reads aloud.
+
+Left for the next round.
+
+### Round 4
+
+Reading, finding, keeping: the reader does what a reader app does. Two
+ways further: listening to the book, and the parts of a book a reader
+leaves the page for.
+
+#### R4. Reading aloud — picked, done
+
+From round 3. A book read aloud is a new way to read it, while walking,
+for eyes that tire, for a language learned; Calibre's viewer has it, and
+the system's voices are there to use.
+
+- The book read aloud from the page shown, a sentence after the other,
+  through the chapters to the end: the sentences found by Cousoir in the
+  page's XML (Qt's sentence boundaries, a paragraph or heading never
+  joined to the next), each with its CFIs, so that the page marks the one
+  read and turns to it.
+- Qt TextToSpeech in C++, with the system's engines (speech-dispatcher,
+  Flite, others installed): the voices of the book's language first, the
+  voice and the speed kept; the mock engine in the tests.
+- A player over the page while reading: pause, the sentence before or
+  after, stop, slower or faster; R starts and stops.
+
+Done when a Gutenberg novel is read aloud across chapters with the page
+following, and the tests cover the sentences, their order across files and
+the page marked.
+
+#### R5. Notes and pictures in place
+
+- A footnote or endnote link shows the note in a box over the page (EPUB
+  3's `noteref` and `footnote`, and the usual links to a paragraph of
+  notes), the page left as it is; Back still there for the others.
+- A picture clicked shows whole over the page, zoomed and moved.
+
+Left for the next round.
+
+### Round 5
+
+#### R5. Notes and pictures in place — picked, done
+
+From round 4. Notes are where a reader leaves the page most: classics,
+essays, history, translations are full of them, and Back, since round 2,
+only brings the reader back after the jump. Pictures in a reflowed book
+are shrunk to the column; maps and plates want to be seen whole.
+
+- A link to a note shows the note in a box over the page, the page left
+  as it is: EPUB 3's `noteref` and `doc-noteref`, and the usual links to a
+  note, a number, a mark or a letter, alone or raised; the note found in
+  its page or fetched from another file of the book, as the paragraph or
+  the aside it is in, its text with its italics; "Go to the note" for the
+  rest of it. Other links go as before.
+- A picture clicked shows over the window, fitted, zoomed with the wheel
+  or the keys, moved by dragging; Esc or a click closes it. The picture
+  comes from the book through an image provider, as the page's own does
+  through the book's scheme.
+
+Done when Gutenberg's and EPUB 3's notes show in place, from the same file
+and from another, and the tests cover both kinds and a picture shown.
+
+#### R6. Turns without a wait
+
+Each turn into another file empties the page while the file loads. The
+next file ready before it is needed, a second view swapped in, so that a
+chapter's first page shows at once, as a page within a chapter does.
+
+Left for a later round.
+
+### Round 6
+
+#### R6. Turns without a wait
+
+From round 5: the next file ready before it is needed.
+
+#### R7. Every book of the library readable — picked, done
+
+The reader opens EPUB, KEPUB and PDF; a book the library has only as AZW3
+or MOBI, the Kindle's formats, says "This book has no EPUB or PDF to read".
+Calibre's viewer reads them by converting them; Cousoir can read them
+itself, which matters more than a faster chapter turn: a whole part of a
+library is closed to the reader today.
+
+- Kindle books without Calibre: a port of Calibre's MOBI reader
+  (`ebooks/mobi/reader`: the PDB and MOBI headers, PalmDOC and HUFF/CDIC
+  decompression, KF8's skeletons, fragments, flows and resources, the
+  older MOBI's file positions and records, the NCX), making an EPUB the
+  reader opens, kept aside in Cousoir's cache while the book is unchanged.
+  A book with DRM is refused, saying so.
+- The other formats (FB2, DOCX, RTF, TXT, comics…) converted to EPUB by
+  Calibre when it is installed, kept aside the same way.
+- Positions and highlights in such a book stay Cousoir's own: Calibre's
+  viewer counts its places in its own conversion, which Cousoir's EPUB
+  does not reproduce.
+
+Done when AZW3 and MOBI books Calibre makes of the reader's fixtures read
+with their text, pictures, links and contents, the tests checking the
+text against the EPUB they were made of.
+
+### Round 7
+
+Every book reads now, and reads well. Left from before: the turns without
+a wait. New: what a reader does with a word they do not know.
+
+#### R6. Turns without a wait
+
+From rounds 5 and 6.
+
+#### R8. Look a word up — picked, done
+
+Calibre's viewer has a Lookup panel: the word selected looked up in a
+dictionary, an encyclopedia or a search, beside the book. For a book in a
+language one is learning, for a name, a place, a term, it is what keeps
+the reader in the book instead of a browser.
+
+- The word or words selected looked up (L, or the bar's button) in a panel
+  of the sidebar: Wiktionary and Wikipedia in the book's language, a web
+  search, or an address the reader gives (`{word}` in it), the source kept.
+- The panel a web view of its own, private (no cookies kept), its links
+  followed in place, Open in the browser for the rest; nothing looked up
+  but what the reader asks for.
+- Tests without network: an address of the reader's own, a data URL.
+
+Done when a word selected in a French book shows French Wiktionary's page
+for it beside the page, and the tests cover the sources and the panel.
+
+#### Later
+
+- Fixed-layout books (`rendition:layout` pre-paginated: comics, children's
+  books, art books): each page whole, fitted to the window, two side by
+  side when it is wide.
 
 ## Status
 
@@ -1260,3 +1522,432 @@ across files:
   Built on Calibre names the search, template and sort ports, the viewer's
   positions and highlights, the notes, kepubify and the sends; ICU,
   Snowball, xxHash and Grant Drake's Find Duplicates are thanked.
+
+### 2026-10-25 — round 1, R1: a page made for reading (`exp-page`)
+
+Tried on three books of Project Gutenberg in a sandbox library, by
+screenshots of the reader (`cousoir-benchmark --screenshot --read`, which
+now takes the reader's size, its settings and clicks on its controls).
+
+- The page: `ReaderWindow` centres the page at the measure picked (66
+  characters of half the text's 16 pixels each by default), the margins
+  beside it in the page's colours, and asks `reader.js` for one or two
+  columns a screen: two when the window holds two of 85 % of the measure.
+  A column is the screen's width over their count less the margins, the
+  gap twice the margin, so that a screen is still a page to turn. A click
+  or the wheel beside the page turns it too.
+- A scroll: the same page without columns, scrolled; a "page" is a window
+  high, for the footer and the table of contents; Space goes a window less
+  two lines down; the wheel at the end of a chapter goes on to the next once
+  it stayed there a moment.
+- The place through layouts: the reader's script keeps an anchor, the place
+  gone to or the start of the page turned to, and every new layout (a
+  setting, a size, the font) goes back to it, not to the start of the page
+  it lands on, which would creep back a little with each one. Scrolls the
+  script makes itself do not move the anchor.
+- The type: a font family over the book's (code kept monospace), a line
+  height, and an alignment for the paragraphs the book aligns to the start
+  or justifies, marked once before any rule of the reader's applies, so
+  that centred ones stay centred. The size stays WebEngine's zoom, which
+  scales a book's pixel sizes as its relative ones.
+- The page's colours: Cousoir's theme, light, sepia, dark, black; the
+  highlights' colours follow the page's lightness.
+- The settings, in a panel under an Aa button, are kept for every book
+  (`Reader/` settings). ChoiceBox's list now scrolls past a dozen rows,
+  for the fonts.
+- The footer: the chapter, the page in it, the time left in the chapter
+  and the book at the reader's pace (bytes of the book's files a second,
+  measured from the pages turned forward after 3 s to 5 min, 30 until then:
+  250 words a minute of Gutenberg's XHTML), how far into the book, and a
+  bar a click on which goes there (`BookReader::locate()`).
+- F11 full screen, the toolbar sliding over the page with the mouse at the
+  top or after a click in the middle; Esc leaves full screen first.
+- Fixed on the way: in a scroll, `line-height: normal` made the step NaN.
+- Tests: `laysOutPagesAsAsked` (a scroll and back, a larger size and back,
+  two pages in a wide window, one asked for, each on the same page; the
+  type and the page's colours read back from the page; the settings kept;
+  a place near the end by the progress bar; the time left told). The UI
+  tests pass at both scales.
+
+### 2026-10-25 — round 2, R2: find in the book (`exp-search`)
+
+- `BookSearch` searches an EPUB's spine items as the reader shows their
+  text: `EpubCfi::PageText`, the Kobo placement's walk of a page's body
+  moved to be shared, white space as one space, the characters that show
+  nothing left out, and here a space between blocks the page has none
+  between ("Suite</h2><p>Une"). Each character is folded as the library's
+  search folds (`CalibreText::foldForSearch()`, so "œ" is "oe"), the folded
+  text keeping for each of its characters the page's one, so that a place
+  found is a range of the page's text, and its CFIs are `EpubCfi`'s, which
+  `encodesCfisAsTheReader` checks against the reader's script. The folded
+  text of each spine item is kept; a page is parsed again only when it has
+  places. On Pride and Prejudice (Gutenberg, 24 MB with its plates): 34 ms
+  the first search, under 1 ms the next.
+- `BookReader::search()` runs it on a thread; a newer search or another
+  book makes an answer stale. The results carry their chapter, from
+  `HighlightJson::tocFamily()`, and whether each is the first of one.
+- The Search tab (Ctrl+F): the places under their chapters, the words
+  found in bold; the first from the page read on shown (the page of each
+  place of the spine item asked of the script), F3 and Shift+F3 through
+  them. The page marks them with the CSS Custom Highlight API, which adds
+  no node to the page: highlights' wrappers would shift the CFIs.
+- Back and Forward: a link, a search's place, an entry of the contents or
+  the highlights, or the progress bar keeps where reading was.
+- Bugs found on the way, fixed:
+  - A link to another chapter crashed Cousoir, since goal 19: the page was
+    loaded from within `onNavigationRequested`, which fails a check of
+    Chromium's (SIGTRAP in `WebContentsAdapter::load`). It is loaded once
+    the handler returns. No test had followed a link to another file.
+  - The reader's Ctrl+F was the library's: a window declared in the
+    library's makes it its transient parent, and Qt counts the library's
+    window active while the reader is, so both windows' Ctrl+F matched and
+    neither ran. The reader and the PDF reader are windows of their own.
+  - A shortcut naming F3 twice (`StandardKey.FindNext` and "F3") is
+    ambiguous with itself and does nothing.
+  - While the page has the focus, Qt WebEngine takes the keys before the
+    window's shortcuts: Ctrl+F, F3, Alt+Left and Alt+Right are also read
+    from the page's key events.
+- Tests: `searchesTheText` (accents, ligatures, blocks, elements, white
+  space, soft hyphens, chapters, CFIs naming the text, the limit) and the
+  UI's `searchesTheBook` (the places, the first shown and marked, F3, Back
+  and Forward, a link to a note and back). All 26 tests pass, the golden
+  test included.
+
+### 2026-10-25 — round 3, R3: highlights to work with (`exp-annotate`)
+
+- The bar over the selection or a highlight clicked: the page's script
+  tells where they are (the client rectangles of the range or of the
+  highlight's wrappers, on the page shown), the window places the bar
+  above, else below, and hides it when the page turns. Its colours make a
+  highlight or recolour one; the note highlights first, as the viewer
+  does; Copy is WebEngine's own for a selection, the highlight's text for a
+  highlight; the search searches the book for the selection.
+- `BookReader::setHighlightStyle()` and `setHighlightNotes()` change the
+  viewer's JSON as `set_style_for_highlights()` and
+  `set_notes_for_highlight()` do, its search text with the notes
+  (`annot_db_data()`), as whose the highlight is. The note changes the time
+  too, which the viewer does not: Calibre's merge keeps the newer of two
+  copies by their time, and would keep its own.
+- Bookmarks: `addBookmark()`, `removeBookmark()` and `renameBookmark()` as
+  the viewer's `add_bookmark()`, `remove_bookmark()` and `edit_bookmark()`,
+  read and written as user `viewer` only, as the viewer reads them. The
+  library keeps a bookmark by its title (`annot_db_data()`): a rename is
+  the old title removed and the new one added. Bookmarks and highlights
+  are in the book's order by their CFIs' steps, as `cfi_sort_key()` orders
+  them (highlights were by spine item only).
+- The pending annotations, kept while the library cannot be written, are
+  now told apart by type and id, a bookmark's title being its id.
+- Fixed on the way: the contents entries a new highlight is under were all
+  those of its file, not those before it (`toc_family_titles` said "The
+  Lantern" for the first paragraph of "Arrival"): worked out from the
+  page's XML now, as the Kobo placement does.
+- Tests: the UI's `annotatesTheBook`: the bar over a selection, a green
+  highlight under its section, a note typed in the box and saved with
+  Ctrl+Enter, its dotted line on the page, blue, two bookmarks named after
+  the section, the page's own told, one renamed; the rows in the library
+  as the viewer writes them (the note in the search text, the old title
+  removed); read back; a bookmark removed.
+
+### 2026-10-25 — round 4, R4: reading aloud (`exp-speech`)
+
+- `BookSentences` finds a spine item's sentences in the page's XML:
+  `EpubCfi::PageText` now notes where blocks end, each block is split by
+  Qt's sentence boundaries (`QTextBoundaryFinder`), a line without a letter
+  is left out; each sentence has its CFIs and its place in the page's text,
+  for the CFI of a word read in it.
+- `BookSpeech` (built with Qt TextToSpeech) reads from the sentence a place
+  is in, a sentence after the other, across spine items to the book's end;
+  the sentence read and the word read, when the engine tells it, by their
+  CFIs. `BookReader::speech` gives it the book open and its language,
+  whose voices come first.
+- Qt's queue of texts (`enqueue()`) was tried first, for no pause between
+  sentences, and left: `aboutToSynthesize()` fires inside `enqueue()`,
+  before its id is returned, repeats ids, and a text given from within it
+  is said out of turn. Each sentence is said once the one before is over.
+- Engines: the one picked, else Qt's first, else the others; a plug-in
+  whose library is missing (Flite here) loads no engine and Qt does not
+  try another; speech-dispatcher's fails when its service is not there.
+  When none works, the footer says so. On this computer none speaks:
+  Calibre reads aloud with Piper voices of its own, which Cousoir has not.
+  The tests use Qt's mock engine; nothing was heard.
+- Engines pause at the end of a word: a one-word sentence ends instead, and
+  resuming then reads on from the next.
+- The window: R or the speaker starts and stops; the sentence marked by the
+  CSS Custom Highlight API, its page turned to, and in a scroll the window
+  moved for it to be a third down; the player in the footer, in the page's
+  colours (the footer grows for it); the engine and the voice in the Aa
+  panel; a jump while reading reads on from there.
+- Tests: `findsTheSentences` (blocks, CFIs naming the text, the sentence a
+  place is in) and the UI's `readsAloud` (the title read and marked, the
+  next, on by itself, into the next chapter and back, the page following,
+  paused, stopped). The probe scripts of the UI tests are functions: a
+  `const` declared twice at a page's top level stops the second run.
+
+### 2026-10-25 — a review of rounds 1 to 3 (`exp-review1`)
+
+A review agent read the branch's changes, rounds 1 to 3. Six bugs, fixed,
+each with a test:
+
+- The page's bookmarks were worked out again only when the page number
+  changed: from a bookmarked one-page chapter to the next chapter's first
+  page, Ctrl+D removed the other chapter's bookmark; a new book open in
+  the same window could take the old book's. Now for each spine item and
+  page, and nothing kept of a book when another opens.
+- Esc in the search's field or a bookmark's title closed the book: the
+  window's Esc came first. It now gives way while a field has the keys.
+- A page's highlights kept their colours for a light page when the page
+  turned dark: they are drawn again when the colours change.
+- While another file loaded, the position was still the old file's, under
+  the new spine index: Back, Forward, a bookmark or the position saved then
+  took a place of one file for one of the other. The position (and the
+  page) are now emptied until the new page tells its own.
+- In a scroll, the bar over a selection stayed where the selection had
+  been: it now goes with any scroll.
+- Each search place seen went into Back's history: only the first does now,
+  Back returning where reading was.
+
+And: since the reader is a window of its own (round 2), the window's
+shortcuts take their keys even while the page has the focus (checked by
+logging both paths): the page's own handling of Esc, F11, Ctrl+F, F3,
+Alt+arrows, Ctrl+D and Ctrl+W was dead and is gone; the text sizes are
+window shortcuts too; the page tells only letters, which would type in a
+field. Highlights and bookmarks are sorted by keys made once; the Kobo
+placement finds an element by id through `EpubCfi::Document::element()`.
+
+### 2026-10-25 — round 5, R5: notes and pictures in place (`exp-notes-in-place`)
+
+- The page's script tells a link that looks like a note's (EPUB 3's
+  `noteref`, ARIA's `doc-noteref`, or a number, a letter or a mark alone,
+  in brackets or not) instead of following it. `BookReader::note()` finds
+  the note in the book's XML, the same file or another, and gives it as a
+  Text's rich text: the element named when it is a block, else the block
+  it is in; italics, bold, raised text and paragraphs kept, a link back
+  left out; nothing when it is more than 3 000 characters, a chapter
+  rather than a note, and the link is then followed. Doing it in C++
+  spares the page fetching another file through Cousoir's scheme.
+- The box by the link, below it or above it, in the page's colours; "Go to
+  the note" follows the link, with Back. EPUB 3's footnote and endnote
+  asides are hidden by the page's style, their nodes kept, so no CFI moves.
+- A picture clicked in the middle of the page (the sides still turn it)
+  shows over the window from an image provider, "book", that `BookReader`
+  gives its engine and that reads the open books, as the page's scheme
+  does: fitted, zoomed by the wheel or the keys, moved by dragging.
+- Esc: with the page focused, Qt WebEngine keeps Esc from the window's
+  shortcut (the one key found so), so the page's Esc goes the same way:
+  the note or the picture closed first, the highlight let go, full screen
+  left, the book closed.
+- `tools/make_notes_fixture.py` writes `tests/data/reader/notes.epub`:
+  EPUB 3 noterefs to an aside, Gutenberg's [2] and a raised 3 to a page of
+  notes, a link that is no note, a picture.
+- Tests: the UI's `showsNotesInPlace` (each kind of note, its text, Esc,
+  Go to the note and Back, the picture shown and closed, a link followed,
+  the aside out of the text). All 26 tests pass.
+
+### 2026-10-25 — round 6, R7: every book of the library readable (`exp-kindle-read`)
+
+- `MobiBook` ports Calibre's MOBI reader (`ebooks/mobi/reader`, 9.16):
+  the PDB records, the MOBI and EXTH headers, the trailing entries of the
+  text records, PalmDOC and HUFF/CDIC decompression. Of KF8 (an AZW3, or
+  the KF8 half of a joint MOBI after its BOUNDARY): the FDST flows, the
+  skeleton and fragment indices put back together into pages (with
+  Calibre's own repair of insert positions inside a tag), the `kindle:pos`
+  links made file and id from the nearest id before the place, the aids
+  removed but those linked to, the styles and SVG flows inlined or made
+  files, `kindle:embed` and `kindle:flow` made addresses, pictures, fonts
+  (their XOR undone, inflated) and HD containers, and the NCX index made a
+  table of contents by levels and parents. The markup is worked on as
+  bytes, a byte a character, as Calibre works on it, and decoded once done.
+- The old kind (MOBI 6), which is Calibre's default MOBI output and so most
+  MOBIs in libraries: the file positions links go to made anchors
+  (`add_anchors()`), the markup mended as `cleanup_html()` mends it, its
+  pictures by record number, its page breaks made pages, the links between
+  pages made addresses, the contents read from the table its guide names.
+  Its HTML is no XML: `HtmlSoup` reads it into Cousoir's XML tree as a
+  browser mends tag soup (a paragraph closed by the next block, an item by
+  the next, an end tag closing what is open in it, the head's elements in
+  the head, scripts and other namespaces' tags out).
+- The EPUB made is kept in Cousoir's cache under the book's uuid, format,
+  size and time: made again only when the file changes, the old one
+  removed. Its pages are XHTML (named entities made numbers), so the search,
+  the sentences read aloud and the notes in place, all of which read the
+  page's XML, work on it.
+- The other formats (FB2, DOCX, ODT, RTF, TXT, comics…) go through
+  Calibre's `ebook-convert`, beside the `calibre-debug` Cousoir finds,
+  asynchronously, the window saying so; `COUSOIR_EBOOK_CONVERT` names a
+  stand-in for the tests.
+- Places and highlights in a book made an EPUB are Cousoir's alone, kept
+  with its positions; the library's positions of that format, Calibre's
+  viewer's, are not taken either.
+- The reading rate learned a quick flip three seconds after opening as a
+  page read at 500 bytes a second: only paces of about 30 to 1 300 words a
+  minute count now, each a tenth, from the default.
+- Found with AddressSanitizer (a build of the tests in a folder of its own,
+  removed after): a loop over a temporary's list, dangling, in a test.
+- Tests: `readsKindleBooks` (an AZW3, a joint MOBI and an old-kind MOBI that
+  Calibre made of the voyage: every paragraph the EPUB's, in order, the
+  contents, the picture, the link to the note and its paragraph),
+  `refusesKindleBooksItCannotRead` (no MOBI, DRM), and the UI's
+  `readsKindleAndOtherBooks` (the AZW3 read, a highlight and the place kept
+  by Cousoir alone and found again; a TXT made an EPUB by a stand-in for
+  Calibre, once). `tools/make_kindle_fixtures.sh` makes the Kindle books.
+  All 26 tests pass.
+- Tried on Pride and Prejudice made an AZW3 and Le Tour du monde made a
+  MOBI by Calibre: both read, with their pictures and contents.
+
+### 2026-10-25 — round 7, R8: look a word up (`exp-lookup`)
+
+- L or the globe over a selection looks the words up in a panel of the
+  sidebar, wider for it: Wiktionary and Wikipedia in the book's language
+  (`BookReader::language`, back for this), by their mobile pages and their
+  search, which goes to the page of the words when there is one whatever
+  their case; DuckDuckGo's HTML search; or an address of the reader's with
+  `{word}`. Tried on Le Tour du monde: French Wiktionary's "il".
+- The panel's view is made the first time something is looked up (a
+  Loader): its profile, from `WebEngineProfilePrototype` (Qt 6.9's; a
+  `WebEngineProfile` declared in QML is deprecated) with no storage name,
+  so off the record, cookies and cache in memory, gives no profile while
+  the window is being made, and a web view given none crashes
+  (`QQuickWebEngineView::setProfile(nullptr)`, seen in the tests).
+- Tests: the UI's `looksWordsUp` (the sources' addresses, accents encoded;
+  L on a selection, the reader's own address a data URL whose title is the
+  words, shown in the panel). No test reaches the network.
+
+### 2026-10-25 — stopped after round 7
+
+The user asked to stop after round 7. Where the reader work stands, for the
+review:
+
+- Done, each merged into `experimental` with `--no-ff` from its `exp-*`
+  branch: R1 a page made for reading (`exp-page`), R2 find in the book
+  (`exp-search`), R3 highlights to work with (`exp-annotate`), a review of
+  rounds 1 to 3 (`exp-review1`), R4 reading aloud (`exp-speech`), R5 notes
+  and pictures in place (`exp-notes-in-place`), R7 every book of the
+  library readable (`exp-kindle-read`), R8 look a word up (`exp-lookup`).
+- A review of rounds 4 to 7 by an agent was started and stopped with the
+  work, unfinished: no review of reading aloud, the notes in place, the
+  Kindle reading or the lookup has been made yet. `mobi_book.cpp` reads
+  files from anywhere; it deserves that review, fuzzed, first.
+- Not done, planned: R6 turns without a wait (the next file ready before
+  it is needed); fixed-layout books (comics, children's books).
+- Nothing was merged into `master`, pushed or published. The last full run
+  of the 26 tests, after R7, passed; after R8, the UI and EPUB tests passed.
+
+### 2026-10-25 — the user's go-ahead: the review of rounds 4 to 7 (`exp-review2`)
+
+The user asked to finish what was not done (the review, the turns without a
+wait, the fixed-layout books), then to merge into `master` and push.
+
+A fuzz test came first: `survivesDamagedKindleBooks` damages the three
+Kindle fixtures 150 times each (bytes changed, the file cut short, header
+fields and record offsets at their extremes), `COUSOIR_FUZZ_ROUNDS` and
+`COUSOIR_FUZZ_SEED` for longer runs; 6 × 1 800 of them ran under
+AddressSanitizer and UBSan (a build in `build/asan`). With a review agent's
+report (rounds 4 to 7), fixed:
+
+- The MOBI reader trusted its headers' counts and lengths: a CNCX length
+  wrapped a position negative (an out-of-bounds read, the infinite loop of
+  a length of -10); CDIC, ORDT, TAGX, IDXT, FDST and HUFF counts ran to
+  billions; negative or huge fragment lengths and insert positions doubled
+  a page at each fragment. Every count and length is bounded by the data
+  there; the text by 256 MB, a record's decompression by 1 MB, a font by
+  32 MB. 450 damaged files now take a second, not minutes.
+- Pages of a damaged book could come out nameless or under one name, an
+  EPUB with no spine; each has a name of its own, and a book with no page
+  is refused, saying it may be damaged. Text written into the package and
+  the contents is cleaned of characters XML forbids.
+- Flows inlined from flows already inlined grew without end: inlined as
+  they were, as Calibre does.
+- Two wrong ports: the contents were read after the markup had moved, so
+  an entry went to a later heading (`readNcx()` before `expandMarkup()` now,
+  as `create_ncx()` before `expand_text()`; the test now checks that each
+  section's entry is its heading); links were resolved against parts
+  already rewritten (into new parts now, as Calibre does).
+- The NCX tree no deeper than 8 levels, a parent only an earlier entry; the
+  tag soup no deeper than 256 elements, `xmlns` attributes left out, tags
+  matched within themselves (PCRE checked the whole rest of a page for
+  each), the next ">" found once for all the "<" before it. `mendsTagSoup`
+  tests it, 100 000 nested tags and 100 000 "<a" in under 5 s.
+- A Kindle book was made an EPUB on the main thread, half a second for a
+  novel: now on a thread, the window saying so, as for Calibre's
+  conversions.
+- A conversion was never stopped: closing the reader, or opening another
+  book, now stops Calibre and lets a thread's EPUB go (the window used to
+  come back when Calibre finished; tested).
+- The EPUBs kept are named after their maker's version, so that a fix of
+  the MOBI reader makes them again (`MobiBook::version`).
+- A MOBI without an EXTH language took "und", and the lookup looked up in
+  und.wiktionary.org: the header's locale is read, as `mobi2iana()` reads
+  it, and "und" looks up in English.
+- An EPUB 3 footnote is a note at any length; when one cannot be shown in
+  the box, the notes are shown in their pages, so that the link goes to a
+  note one can read.
+- Smaller: the windows-1252 decoder made once; pictures stored, not
+  deflated, in the EPUB made; `cousoir-cli epub BOOK.azw3 BOOK.epub`, which
+  served to time the slow cases.
+
+### 2026-10-25 — R6, turns without a wait (`exp-turns`)
+
+Turning past a chapter's last page loaded the next file in the one view:
+a blank page for a tenth of a second or more, a flash in the dark themes.
+A second, hidden `WebEngineView` (`readerSpareView`) now loads the next
+chapter as soon as a page is ready, laid out with the same settings and
+gone to its start. When the reader turns to that chapter's first page, the
+spare shows above the view, the view loads the same file behind it, and
+the spare steps down 150 ms after the view tells its position; then it
+loads the chapter after. A change of the settings lays it out again; one
+of the highlight colours, or another book, drops it.
+
+The spare's runJavaScript callback crashed Qt (`QJSEngine::create` from
+`didRunJavaScript`) when it came after the window closed: the spare is
+ready when its page tells its position in the console, as the view's page
+does, and is stopped when the window closes. `turnsWithoutAWait` tests the
+spare's readiness, the hand-over and that going back is no stand-in's.
+
+The library's `listsSearchesAndSortsBooks` failed once in seven runs: a
+right click on a header the row had not placed yet. It waits for the row.
+
+### 2026-10-25 — fixed-layout books (`exp-fixed`)
+
+Comics, manga and picture books are made of pages laid out once, at a
+size of their own; the reader poured them into its columns, cut and
+recoloured.
+
+- `EpubBook` reads the layout: `rendition:layout` pre-paginated for the
+  book, `rendition:layout-pre-paginated`/`-reflowable` for a page, EPUB 2's
+  `<meta name="fixed-layout">` and Apple's
+  `com.apple.ibooks.display-options.xml`; `rendition:spread` none; and
+  each fixed page's side of a spread (`page-spread-left`/`-right`,
+  `rendition:page-spread-center`, `rendition:spread-none`), a page the
+  book does not place across from the one before, the first of a run on
+  the side the book opens to, alone. `BookReader.spine` tells `fixed`,
+  `side`, `leads` (a page shown with the next one) and `follows`;
+  `rightToLeft` the book's direction.
+- The page script lays a fixed page out at its size (the viewport meta,
+  else an SVG's viewBox, else the one picture's size), scaled whole into
+  the window by a transform of the root, centred, the reader's colour
+  beyond it (the root's box-shadow), white under a page that sets no
+  colour; a page of a picture fills it. Its first words or picture are
+  its position, as no columns are scanned.
+- A spread: the page the book places first is the page shown; the other
+  is in a frame beside it, scaled to its height, clicks going through it.
+  The window turns two spine items at a time, goes back to a spread's
+  first page, shows a spread from its first page whatever page of it is
+  gone to; the stand-in view of R6 makes the next spread ready. A window
+  higher than wide shows a page at a time.
+- A book read from right to left turns leftward: the left arrow and left
+  side go on (books that flow from right to left too, which turned the
+  wrong way).
+- The footer tells "Pages 4–5 of 7" and no time left from the size of
+  pictures, which no longer counts in the reading pace.
+- `tools/make_fixed_fixture.py` makes `tests/data/reader/fixed.epub`;
+  `readsFixedLayouts` (EPUB test: the sides, five ways of saying the
+  layout) and `readsFixedLayouts` (UI test: the cover alone, two spreads,
+  back, a page of a spread gone to, a narrow window, the page that flows).
+
+
+### 2026-10-25 — merged into `master`
+
+What was left after round 7 is done: the review of rounds 4 to 7 with its
+fuzz test, R6 (turns without a wait) and fixed-layout books. The 26 tests
+passed (golden included). At the user's request, `experimental` was
+merged into `master` and pushed.

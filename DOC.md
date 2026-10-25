@@ -742,17 +742,114 @@ Cousoir departs from Calibre here:
 ## Reading in Cousoir
 
 Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
-the book in Cousoir's reader: its EPUB (or KEPUB), else its PDF. Ctrl+O still
+the book in Cousoir's reader: its EPUB (or KEPUB), else its Kindle book (AZW3,
+MOBI, AZW), else its PDF, else, when Calibre is installed, another of its
+formats (FB2, DOCX, ODT, RTF, TXT, HTMLZ, LIT, PDB, comics…). Ctrl+O still
 opens it in the desktop's reader.
 
-An EPUB shows a screen at a time, in the theme's colours and with its own
-fonts: the arrows, Space, Page Up and Page Down, the wheel or a click on
-either side turn the pages, Home and End go to the ends of the chapter, the
-next and previous chapters follow. T shows the table of contents beside the
-pages, the section being read in bold and named in the toolbar; Ctrl+Plus
-and Ctrl+Minus change the text's size. Links within the book go to their
-page; others open in the browser. The toolbar tells how far into the book
-the page is. Esc closes the book.
+A Kindle book is made an EPUB by Cousoir itself, as Calibre's MOBI reader
+extracts its files: an AZW3, the KF8 half of a MOBI that holds both kinds
+(Calibre's "both"), or a MOBI of the old kind alone (Calibre's default), its
+pages, styles, pictures, fonts, links and contents. A book with DRM, an
+Amazon Topaz or KFX book cannot be read, and says so. The other formats are
+made EPUBs by Calibre's `ebook-convert`, which can take a while: the reader
+says so meanwhile. Either EPUB is kept in Cousoir's cache, and made again
+only when the book's file changes. The place and the highlights in such a
+book are Cousoir's alone, kept with its own positions and not in the
+library: Calibre's viewer counts its places in its own conversion of the
+book, which Cousoir's does not reproduce.
+
+An EPUB shows a screen at a time: the arrows, Space, Page Up and Page
+Down, the wheel or a click on either side of the page turn the pages, Home
+and End go to the ends of the chapter, the next and previous chapters
+follow: the next one is made ready while the last pages of one are read, so
+that its first page shows at once, with no blank between. T shows the table of contents beside the pages, the section being
+read in bold. Links within the book go to their page; others open in the
+browser. F11 reads full screen, the toolbar showing with the mouse at the
+top of the screen or after a click in the middle of the page. Esc leaves
+full screen, then closes the book.
+
+The page is centred, its lines no longer than read well: about 66
+characters of the text's size, or the measure picked. When the window holds
+two such pages side by side, it shows two, as an open book. The Aa button
+picks, for every book:
+
+- the text's size (also Ctrl+Plus, Ctrl+Minus, Ctrl+0);
+- the font: the book's own, serif, sans serif or one installed;
+- the line spacing, the book's or 1.2 to 1.8;
+- the line length: short (52 characters), medium (66), long (80) or the
+  window's;
+- the alignment: the book's, ragged or justified, for the paragraphs the
+  book aligns to the start or justifies (those it centres stay so);
+- the page's colours: Cousoir's theme, light, sepia, dark or black;
+- one page, two pages side by side when the window is wide enough, or a
+  scroll, where Space and Page Down go a window down and the wheel and the
+  arrows scroll, on to the next chapter at the end of one.
+
+Each change shows at once, on the same page. The footer tells the chapter,
+the page in it, how long the rest of the chapter and of the book take at
+the reader's pace, measured as the pages are turned (250 words a minute
+until then), and how far into the book the page is, also as a bar a click
+on which goes there.
+
+The pages of comics, manga and picture books are laid out once, at a
+size of their own (EPUB 3's fixed layout, `rendition:layout` pre-paginated,
+also EPUB 2's `fixed-layout` meta and Apple's display options): each is
+shown whole, scaled into the window, in its own colours. In a window wider
+than high, with two pages shown, the pages go two by two as the book
+places them, left and right (`page-spread-left`, `page-spread-right`), a
+page it does not place across from the one before, the cover alone; a
+page the book centres, or a book that says its pages go one by one, is
+shown alone. The arrows, Space and the clicks turn a spread at a time; in
+a book read from right to left, a manga, the pages go leftward, the left
+arrow and the left side going on. The footer tells the pages shown and of
+how many. The type, line length and colours picked are for books that
+flow, not for these; the page on the side of a spread is shown, not read:
+search, highlights and reading aloud are for the page of the spread the
+book places first. Positions and highlights are kept as in any book, as
+Calibre's viewer writes them.
+
+Cousoir cannot hyphenate: Qt WebEngine, which shows the pages, has none of
+Chromium's hyphenation dictionaries; a book's own soft hyphens still break
+its words.
+
+Ctrl+F, or the search button beside Contents and Highlights, searches the
+book: Enter lists every place of the words, case and accents ignored as
+the library's search ignores them ("oeuvre" finds "Œuvre"), white space as
+one space, across italics, links and paragraphs. The places show under
+their chapters with the words around them; the first from the page read on
+is shown, marked on its page, the book's other places on that page marked
+lightly. F3 and Shift+F3, Enter again, or a click go through them. A search
+lists 1 000 places at most.
+
+A link to a note shows the note in a box by the link, the page left as it
+is: EPUB 3's noterefs (`epub:type="noteref"`, `role="doc-noteref"`) and the
+links most books have to their notes, a number, a letter or a mark alone,
+raised or in brackets ("[2]", "³", "*"). The note is the element the link
+names when it is a paragraph, an aside or an item of a list, else the
+paragraph it is in, as Gutenberg's notes start with an anchor; read from
+the same file or another of the book, its italics, bold and raised text
+kept, a link back left out. "Go to the note" goes there, Back returns. A
+link naming more than a note, or nothing, goes as any link does. EPUB 3's
+footnotes and endnotes (asides) are left out of the text they are in, shown
+from their links.
+
+A picture clicked in the middle of the page shows whole over the window,
+fitted to it; the wheel, Plus and Minus zoom it, dragging moves it, a
+click or Esc closes it. A click on either side still turns the page.
+
+L, or the globe in the bar over a selection, looks the words selected up
+beside the page, in a panel of the sidebar: Wiktionary or Wikipedia in the
+book's language (their pages for phones, which fit the panel), a web search
+(DuckDuckGo), or the reader's own address, with `{word}` where the words go;
+the source is kept. The panel's links go on in it; a button opens its page
+in the browser. It is a web view of its own, private: its cookies and its
+cache are not kept, and nothing is sent to the web but what is looked up.
+
+Back (Alt+Left, or the Back button) returns where reading was before a
+link, a search's place, an entry of the contents or of the highlights, or
+the progress bar took it elsewhere: a note read, back to the page. Forward
+(Alt+Right) goes again.
 
 Where reading stopped is kept as reading goes, and in the library when the
 book closes, where Calibre keeps its own: a CFI in `last_read_positions`, as
@@ -761,23 +858,57 @@ Calibre's viewer counts positions in its pages (from
 where the newest position left it, Cousoir's own or one Calibre's viewer or
 its content server wrote.
 
-Selected text becomes a highlight with H or the Highlight button, kept
-where Calibre's viewer keeps its highlights: a row of the library's
-`annotations` table, user `viewer`, its JSON as the viewer writes it (the
-text, its start and end CFIs, the chapter's file and titles, the yellow of
-Calibre's colours). The viewer shows Cousoir's highlights, and Cousoir the
-viewer's, in their colours; the Highlights list beside the pages goes to
-each. A Kobo's highlights show too, with the Kobo's name (see
-[Kobo](#kobo)). A highlight clicked can be removed, which Cousoir writes as
-the viewer does, as whose it was, so that the programs that have it forget
-it too and a Kobo does not bring it back.
+A bar shows over the text selected: Calibre's five colours, each making a
+highlight of it (H makes one in the colour marked, the last one used), a
+note (N), Copy, and a search of the book for it. A highlight is kept where
+Calibre's viewer keeps its own: a row of the library's `annotations`
+table, user `viewer`, its JSON as the viewer writes it (the text, its start
+and end CFIs, the chapter's file and the titles of the contents entries it
+is under, its colour, its note). The viewer shows Cousoir's highlights,
+and Cousoir the viewer's, in their colours. A Kobo's highlights show too,
+with the Kobo's name (see [Kobo](#kobo)).
+
+A highlight clicked brings the same bar: its colour changed, its note
+written or changed (N), its text copied, or the highlight removed (Del),
+which Cousoir writes as the viewer does, as whose it was, so that the
+programs that have it forget it too and a Kobo does not bring it back. A
+note is written in a box over the page, saved with Ctrl+Enter or Save; a
+highlight with a note has a dotted line under it. The highlights button
+beside Contents lists the book's highlights in its order, under their
+chapters, with their notes; a click goes to one, and the pen beside it
+writes or changes its note. Changing a note also changes the highlight's
+time, which the viewer leaves, so that the viewer, merging its own copy
+with the library's, takes the new one.
+
+Ctrl+D, or the bookmark in the toolbar, bookmarks the page, named after its
+chapter; on a page with a bookmark, the bookmark is filled and removes it.
+Bookmarks are kept as the viewer keeps its own (`bookmark` annotations,
+keyed by their titles, the place as a CFI), listed in the book's order
+beside Contents, gone to with a click, renamed with a double click or the
+pen, removed with the bin; a bookmark renamed is written removed under its
+old title and added under the new one, as the library keeps them by title.
 
 A PDF shows a page after the other, fitted to the window's width or to the
 whole page, its page kept.
 
-Cousoir departs from Calibre's viewer here: no reading aloud, no search in
-the book, no notes on highlights yet, colours other than yellow only as
-shown, and no vertical or right-to-left page order. The position and the
+R, or the speaker in the toolbar, reads the book aloud from the page shown,
+a sentence after the other, through the chapters to the end, with the
+system's voices (Qt TextToSpeech: speech-dispatcher, Flite or another
+engine installed; Cousoir built without Qt TextToSpeech has no reading
+aloud). The sentence read is marked on the page, which turns with it, and
+follows the word read when the engine tells it. Sentences are found in
+the page's text as Qt finds them, a heading or a paragraph never run into
+the next; a line with no letter is not read. The footer then holds the
+player: the sentence before or after, pause, stop, slower and faster. The
+Aa panel picks the engine and the voice, the book's language's voices
+listed; the voice, the speed and the engine are kept for every book. A
+link or an entry of the contents followed while reading goes on reading
+from there. When no engine can speak (none installed, or its service not
+running), the footer says so.
+
+Cousoir departs from Calibre's viewer here: no Piper voices of its own, no search by
+whole words or regular expressions, no underlined or struck-out highlights
+(the viewer's other styles, shown as yellow), and no vertical page order. The position and the
 highlights are written while the library can be written; when Calibre
 writes to it, they wait in Cousoir for the next time, and so do those whose
 writing failed.
@@ -906,8 +1037,12 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
 cousoir-cli download [--library PATH] [--covers] BOOK_ID
 cousoir-cli kepubify BOOK.epub BOOK.kepub
+cousoir-cli epub BOOK.azw3 BOOK.epub
 cousoir-cli kobo-highlights [--library PATH] KOBO|KoboReader.sqlite
 ```
+
+`epub` makes an EPUB of a Kindle book, AZW3 or MOBI, as Cousoir's reader
+does to read one (see [Reading in Cousoir](#reading-in-cousoir)).
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
 all` does, byte for byte. `search` prints the ids of the books an
@@ -1070,6 +1205,8 @@ neither in the library nor on the Kobo.
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
 - For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs; built
   without them, Cousoir has no reader
+- For reading them aloud, Qt TextToSpeech, and a speech engine such as
+  speech-dispatcher with a voice
 - For converting to AZW3, and KEPUB from formats other than EPUB, Calibre
 - For ejecting a Kobo, UDisks2 and Qt D-Bus
 - For a Kindle over MTP, libmtp

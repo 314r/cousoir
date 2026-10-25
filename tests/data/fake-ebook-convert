@@ -1,0 +1,11 @@
+#!/bin/sh
+# Stands in for Calibre's ebook-convert in the tests: "<book> <output>.epub"
+# writes the reader's voyage as the EPUB made. After COUSOIR_FAKE_DELAY
+# seconds if set; COUSOIR_FAKE_FAIL makes it fail, saying why.
+data=$(dirname "$(readlink -f "$0")")
+[ -n "$COUSOIR_FAKE_DELAY" ] && sleep "$COUSOIR_FAKE_DELAY"
+if [ -n "$COUSOIR_FAKE_FAIL" ]; then
+    echo "Conversion error: the book is damaged"
+    exit 1
+fi
+cp "$data/reader/voyage.epub" "$2"

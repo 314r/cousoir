@@ -14,6 +14,9 @@
 #include "book.h"
 
 class BookLibrary;
+class QProcess;
+class BookSearch;
+class BookSpeech;
 class EpubBook;
 
 // A library book read in Cousoir: its EPUB served to Qt WebEngine as
@@ -28,8 +31,19 @@ class BookReader : public QObject
     Q_PROPERTY(int bookId READ bookId NOTIFY bookChanged)
     Q_PROPERTY(QString title READ title NOTIFY bookChanged)
     Q_PROPERTY(QString format READ format NOTIFY bookChanged)
-    // { url, name, size } by spine item.
+    // The book's language, as its package gives it: "fr", "en-GB".
+    Q_PROPERTY(QString language READ language NOTIFY bookChanged)
+    // A book read from right to left, as its spine says: its pages turn
+    // leftward.
+    Q_PROPERTY(bool rightToLeft READ rightToLeft NOTIFY bookChanged)
+    // { url, name, size, fixed, side, leads, follows } by spine item: fixed
+    // for a page laid out at its own size, side its side of a spread
+    // ("left", "right", "center"), leads for one shown with the next as a
+    // spread, follows for that next one.
     Q_PROPERTY(QVariantList spine READ spine NOTIFY bookChanged)
+    // The size of all its spine items, by which how far into the book a
+    // place is counts.
+    Q_PROPERTY(qint64 totalSize READ totalSize NOTIFY bookChanged)
     // { title, spineIndex, fragment, depth }.
     Q_PROPERTY(QVariantList toc READ toc NOTIFY bookChanged)
     // Where to open: { spineIndex, cfi, device }, the newest position kept,
@@ -41,10 +55,29 @@ class BookReader : public QObject
     // The script that pages a document and finds positions in it.
     Q_PROPERTY(QString script READ script CONSTANT)
     // The highlights of Calibre's viewer and Cousoir's in the book, and the
-    // Kobos': { uuid, spineIndex, start, end, text, notes, which, timestamp,
-    // source, sourceName }, source "kobo:SERIAL" for a Kobo's, in the book's
-    // order.
+    // Kobos': { uuid, spineIndex, start, end, text, notes, chapter, which,
+    // timestamp, source, sourceName }, source "kobo:SERIAL" for a Kobo's, in
+    // the book's order.
     Q_PROPERTY(QVariantList highlights READ highlights NOTIFY highlightsChanged)
+    // The bookmarks of Calibre's viewer and Cousoir's in the book: { title,
+    // cfi, spineIndex, timestamp }, in the book's order.
+    Q_PROPERTY(QVariantList bookmarks READ bookmarks NOTIFY bookmarksChanged)
+    // The places the last search found, in the book's order: { spineIndex,
+    // start, end, text, before, after, chapter, newChapter }, start and end
+    // CFIs within the spine item, newChapter for the first of a chapter; at
+    // most 1000, searchMore telling there were more.
+    Q_PROPERTY(QVariantList searchResults READ searchResults NOTIFY searchChanged)
+    Q_PROPERTY(QString searchQuery READ searchQuery NOTIFY searchChanged)
+    Q_PROPERTY(bool searching READ searching NOTIFY searchChanged)
+    Q_PROPERTY(bool searchMore READ searchMore NOTIFY searchChanged)
+    // The book read aloud (BookSpeech); null when Cousoir is built without
+    // Qt TextToSpeech.
+    Q_PROPERTY(QObject *speech READ speech CONSTANT)
+    // An EPUB being made of the book to open, by Calibre or of a Kindle
+    // book by Cousoir: its title.
+    Q_PROPERTY(bool preparing READ preparing NOTIFY preparingChanged)
+    Q_PROPERTY(bool preparingCalibre READ preparingCalibre NOTIFY preparingChanged)
+    Q_PROPERTY(QString preparingTitle READ preparingTitle NOTIFY preparingChanged)
 
 public:
     explicit BookReader(QObject *parent = nullptr);
@@ -60,14 +93,36 @@ public:
     int bookId() const;
     QString title() const;
     QString format() const;
+    QString language() const;
+    bool rightToLeft() const;
     QVariantList spine() const;
+    qint64 totalSize() const;
     QVariantList toc() const;
     QVariantMap startPosition() const;
     QString script() const;
     QVariantList highlights() const;
+    QVariantList bookmarks() const;
     QUrl fileUrl() const;
+    QVariantList searchResults() const;
+    QString searchQuery() const;
+    bool searching() const;
+    bool searchMore() const;
+    QObject *speech() const;
+    bool preparing() const;
+    bool preparingCalibre() const;
+    QString preparingTitle() const;
 
-    // Opens the book's EPUB. Returns why it cannot, empty once open.
+    // The formats Cousoir reads once Calibre makes them EPUBs, in the order
+    // it prefers them.
+    static QStringList convertedFormats();
+    // Calibre's ebook-convert, or the program COUSOIR_EBOOK_CONVERT names
+    // (the tests'); empty without Calibre.
+    static QString converter();
+
+    // Opens the book's EPUB, KEPUB or Kindle book, else the EPUB Calibre
+    // makes of another of its formats. Returns why it cannot, empty once
+    // open, or while Calibre makes it: `preparing` is then true, and
+    // prepared() tells when it is done.
     Q_INVOKABLE QString open(int bookId);
     // Opens the book's PDF; startPosition then has its { page }.
     Q_INVOKABLE QString openPdf(int bookId);
@@ -78,6 +133,9 @@ public:
     Q_INVOKABLE int spineIndexOf(const QUrl &url) const;
     // How far into the book a position in a spine item is, from 0 to 1.
     Q_INVOKABLE double bookFraction(int spineIndex, double fileFraction) const;
+    // Where a place so far into the book is: { spineIndex, fileFraction },
+    // spineIndex -1 for a book with nothing to read.
+    Q_INVOKABLE QVariantMap locate(double bookFraction) const;
     // Keeps where reading is: a CFI in the spine item, and how far into it.
     Q_INVOKABLE void savePosition(int spineIndex, const QString &cfi, double fileFraction);
     // A highlight of the text from `start` to `end`, CFIs within the spine
@@ -88,17 +146,60 @@ public:
     // As Calibre's viewer removes one: kept, marked removed, for the
     // programs that have it to forget it too.
     Q_INVOKABLE void removeHighlight(const QString &uuid);
+    // A highlight's colour, one of Calibre's five, as the viewer's
+    // set_style_for_highlights() changes it.
+    Q_INVOKABLE void setHighlightStyle(const QString &uuid, const QString &which);
+    // A highlight's note, none when empty, as the viewer's
+    // set_notes_for_highlight() sets it; its time too, so that Calibre's
+    // viewer, merging, takes it.
+    Q_INVOKABLE void setHighlightNotes(const QString &uuid, const QString &notes);
+    // A bookmark at a CFI of the book, as the viewer's add_bookmark() adds
+    // one: one of the same title is replaced.
+    Q_INVOKABLE void addBookmark(const QString &title, const QString &cfi);
+    // As the viewer's remove_bookmark(): kept, marked removed.
+    Q_INVOKABLE void removeBookmark(const QString &title);
+    // The viewer's edit_bookmark(); false when the new title is empty or
+    // another bookmark's. The library keeps bookmarks by their titles: the
+    // old one is written as removed.
+    Q_INVOKABLE bool renameBookmark(const QString &title, const QString &newTitle);
+    // Puts text on the clipboard.
+    Q_INVOKABLE void copyText(const QString &text) const;
+    // The note an address of the book points to, for a box over the page:
+    // { html, text }, html for a Text's rich text, the element it names or
+    // the block it is in, its italics, bold and raised text kept, a link
+    // back left out. Empty when it names nothing, or more than a note.
+    Q_INVOKABLE QVariantMap note(const QUrl &url) const;
+    // The address of a picture of the book for QML's Image, through the
+    // provider "book" the reader gives its engine.
+    Q_INVOKABLE QUrl imageUrl(const QUrl &url) const;
+    // Searches the book's text, case and accents ignored, on a thread of its
+    // own; searchResults has what it finds. An empty query clears them.
+    Q_INVOKABLE void search(const QString &query);
 
 signals:
     void libraryChanged();
     void bookChanged();
     void highlightsChanged();
+    void bookmarksChanged();
+    void searchChanged();
+    void preparingChanged();
+    // The EPUB of the book `bookId` is made, or could not be: `error`.
+    void prepared(int bookId, const QString &error);
 
 private:
     QString positionsFile() const;
     QJsonObject readPositions() const;
     void writePositions(const QJsonObject &positions) const;
+    // Has Calibre make `part` of `source`, renamed `made` once done.
+    bool convert(int bookId, const QString &title, const QString &source, const QString &part, const QString &made);
+    // The same of a Kindle book, by Cousoir on a thread.
+    void convertKindle(int bookId, const QString &title, const QString &source, const QString &part, const QString &made);
+    // What is being made let go: Calibre stopped, a thread's EPUB not kept.
+    void stopPreparing();
     void queueAnnotation(const Annotation &annotation);
+    // A highlight changed, kept as it is now, as whose it is.
+    void queueHighlight(const QString &uuid);
+    void queueBookmark(const QJsonObject &bookmark);
     void keepPending() const;
     // The highlights of the book `uuid` still to be in the library.
     void keepPending(const QString &uuid) const;
@@ -115,6 +216,17 @@ private:
     QString m_uuid;
     QString m_format;
     QString m_token;
+    // A book read through an EPUB Cousoir made of it: its places and
+    // highlights kept by Cousoir alone.
+    bool m_local = false;
+    // The conversion running, if any, and its book.
+    QPointer<QProcess> m_conversion;
+    QString m_preparingPart;
+    QString m_preparingFolder;
+    // The thread making a Kindle book's EPUB, if any.
+    QObject *m_kindle = nullptr;
+    int m_preparingBook = 0;
+    QString m_preparingTitle;
     QString m_pdfPath;
     QString m_pdfTitle;
     QVariantMap m_start;
@@ -124,6 +236,8 @@ private:
     // "local" and "viewer", or a Kobo's, "kobo" and its serial.
     QMap<QString, QJsonObject> m_highlights;
     QHash<QString, QPair<QString, QString>> m_owners;
+    // By title, as the viewer keeps them.
+    QMap<QString, QJsonObject> m_bookmarks;
     // The Kobos' names, by serial.
     QHash<QString, QString> m_koboNames;
     // Those made or removed and not yet in the library, written together a
@@ -134,4 +248,13 @@ private:
     // By change on its way to the library: the book and what it writes.
     QHash<int, QPair<QString, QList<Annotation>>> m_saving;
     QTimer m_flushTimer;
+    std::shared_ptr<BookSearch> m_search;
+    BookSpeech *m_speech = nullptr;
+    QVariantList m_searchResults;
+    QString m_searchQuery;
+    bool m_searchMore = false;
+    // The search running, if any: a newer one, or another book, makes its
+    // answer stale.
+    int m_searchRun = 0;
+    bool m_searching = false;
 };

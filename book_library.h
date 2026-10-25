@@ -229,8 +229,8 @@ public:
     // or the first of EPUB, KEPUB, AZW3, MOBI and PDF it has. Returns an
     // error message, empty on success.
     Q_INVOKABLE QString openFormat(int bookId, const QString &format = {});
-    // The format Cousoir's reader reads the book in: EPUB, KEPUB, then PDF;
-    // empty for none.
+    // The format Cousoir's reader reads the book in: EPUB, KEPUB, a Kindle
+    // book (AZW3, MOBI, AZW), then PDF; empty for none.
     Q_INVOKABLE QString readableFormat(int bookId) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in
     // the book and the highlights made or removed there, as Calibre keeps its

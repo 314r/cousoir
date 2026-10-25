@@ -68,8 +68,17 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   exactly where Calibre puts them, and each app recognises the books the other
   sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and writes a
   Kindle book's metadata itself.
-- 📖 **Read in Cousoir.** EPUBs a page at a time in your theme, with their
-  table of contents, and PDFs. Your place and your highlights are kept
+- 📖 **Read in Cousoir.** EPUBs and Kindle books (AZW3, MOBI, without
+  Calibre) a page or two at a time, or as a scroll,
+  at a line length that reads well, in the font, spacing and colours you
+  like (sepia and black included), the time left in the chapter and the
+  book at your pace; their table of contents, a search of the whole book,
+  notes shown by their links and pictures zoomed, words looked up in
+  Wiktionary or Wikipedia beside the page; highlights in five colours with your notes, and
+  bookmarks; the book read aloud by your system's voices; full screen;
+  comics and picture books laid out as they were made, two pages side by
+  side as the book pairs them, right to left for manga; and PDFs.
+  Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
   and shows the other's highlights.
 - 🔎 **All your highlights in one place.** The books you highlighted in
@@ -106,7 +115,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 On Arch Linux and Omarchy:
 
 ```bash
-sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine sqlite libzip icu libstemmer xxhash libmtp calibre
+sudo pacman -S --needed base-devel cmake qt6-base qt6-declarative qt6-svg qt6-webengine qt6-speech sqlite libzip icu libstemmer xxhash libmtp calibre
 git clone https://github.com/314r/cousoir.git
 cd cousoir
 make install
@@ -114,7 +123,8 @@ make install
 
 On other distributions, you need Qt 6.9 or later, SQLite, libzip, ICU, Snowball's libstemmer, xxHash, CMake 3.21
 or later and a C++20 compiler; libmtp for a Kindle; Qt WebEngine for the
-reader. [DOC.md](DOC.md) has the details.
+reader, Qt TextToSpeech and speech-dispatcher to read aloud. [DOC.md](DOC.md)
+has the details.
 
 > **About Calibre:** Cousoir browses and edits a library, sends to a Kobo
 > or a Kindle, downloads metadata and reads books on its own. Calibre

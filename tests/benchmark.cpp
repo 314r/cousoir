@@ -323,8 +323,14 @@ struct Shot
     QStringList keys;
     QString typed;
     // The book read in Cousoir's reader, drawn instead, the keys pressed
-    // there.
+    // there; the reader's size, and its settings ("Reader/" keys).
     bool read = false;
+    QSize readerSize;
+    QStringList settings;
+    // What is done in the reader after the keys, in order: "click:NAME"
+    // clicks a control by its name, "js:SCRIPT" runs a script in its page,
+    // "key:SEQUENCE" presses keys, "type:TEXT" types.
+    QStringList readerSteps;
 };
 
 QQuickItem *visualDescendant(QQuickItem *item, const QString &name)
@@ -342,6 +348,11 @@ int screenshot(const QString &path, const Shot &shot)
 {
     if (!shot.theme.isEmpty())
         QSettings().setValue(QStringLiteral("Appearance/colorMode"), shot.theme);
+    for (const QString &setting : shot.settings) {
+        const qsizetype equals = setting.indexOf(u'=');
+        if (equals > 0)
+            QSettings().setValue(QStringLiteral("Reader/") + setting.left(equals), setting.mid(equals + 1));
+    }
     QQmlApplicationEngine engine;
     QQuickWindow *window = openWindow(engine, path, shot.size);
     if (!window)
@@ -405,14 +416,56 @@ int screenshot(const QString &path, const Shot &shot)
             return 1;
         }
         window = reader;
+        if (shot.readerSize.isValid())
+            reader->resize(shot.readerSize);
+        // The reader's shortcuts, not the library's.
+        reader->requestActivate();
+        if (!QTest::qWaitForWindowActive(reader, 2000))
+            out() << "the reader is not the active window" << Qt::endl;
         // The page laid out and its position told.
         QTest::qWait(2500);
     }
     for (const QString &key : shot.keys) {
         drawn(window);
+        // "type:words" types them, between keys.
+        if (key.startsWith(QLatin1String("type:"))) {
+            for (const QChar character : key.mid(5))
+                QTest::keyClick(window, character.toLatin1());
+            continue;
+        }
         QTest::keySequence(window, QKeySequence(key));
         if (shot.read)
             QTest::qWait(500);
+    }
+    for (const QString &step : shot.readerSteps) {
+        drawn(window);
+        if (step.startsWith(QLatin1String("key:"))) {
+            QTest::keySequence(window, QKeySequence(step.mid(4)));
+            QTest::qWait(500);
+            continue;
+        }
+        if (step.startsWith(QLatin1String("type:"))) {
+            for (const QChar character : step.mid(5))
+                QTest::keyClick(window, character.toLatin1());
+            continue;
+        }
+        if (step.startsWith(QLatin1String("js:"))) {
+            if (QObject *view = window->findChild<QObject *>(QStringLiteral("readerView")))
+                QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, step.mid(3)));
+            QTest::qWait(600);
+            continue;
+        }
+        const QString name = step.mid(step.indexOf(u':') + 1);
+        QQuickItem *item = window->findChild<QQuickItem *>(name);
+        if (!item)
+            item = visualDescendant(window->contentItem(), name);
+        if (!item) {
+            out() << "no control " << name << Qt::endl;
+            return 1;
+        }
+        QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier,
+                          item->mapToScene(QPointF(item->width() / 2, item->height() / 2)).toPoint());
+        QTest::qWait(500);
     }
     if (!shot.typed.isEmpty()) {
         drawn(window);
@@ -463,10 +516,15 @@ int main(int argc, char *argv[])
                        QStringLiteral("ms") });
     parser.addOption({ QStringLiteral("kobo"), QStringLiteral("A folder standing for a Kobo plugged in."),
                        QStringLiteral("folder") });
-    parser.addOption({ QStringLiteral("key"), QStringLiteral("Keys to press, Ctrl+K, after the clicks."),
+    parser.addOption({ QStringLiteral("key"), QStringLiteral("Keys to press, Ctrl+K, after the clicks; type:TEXT types it."),
                        QStringLiteral("sequence") });
     parser.addOption({ QStringLiteral("type"), QStringLiteral("Text to type, after the keys."), QStringLiteral("text") });
     parser.addOption({ QStringLiteral("read"), QStringLiteral("Read the book in Cousoir's reader, drawn instead.") });
+    parser.addOption({ QStringLiteral("reader-size"), QStringLiteral("The reader's size."), QStringLiteral("WxH") });
+    parser.addOption({ QStringLiteral("set"), QStringLiteral("A reader setting, key=value."), QStringLiteral("setting") });
+    parser.addOption({ QStringLiteral("reader"), QStringLiteral("In the reader, after the keys: click:NAME clicks a "
+                                                                "control, js:SCRIPT runs a script in its page, key:KEYS, type:TEXT."),
+                       QStringLiteral("step") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -494,6 +552,11 @@ int main(int argc, char *argv[])
         shot.keys = parser.values(QStringLiteral("key"));
         shot.typed = parser.value(QStringLiteral("type"));
         shot.read = parser.isSet(QStringLiteral("read"));
+        const QStringList readerSize = parser.value(QStringLiteral("reader-size")).split(u'x');
+        if (readerSize.size() == 2)
+            shot.readerSize = QSize(readerSize.at(0).toInt(), readerSize.at(1).toInt());
+        shot.settings = parser.values(QStringLiteral("set"));
+        shot.readerSteps = parser.values(QStringLiteral("reader"));
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);
