@@ -802,23 +802,42 @@ Calibre's viewer counts positions in its pages (from
 where the newest position left it, Cousoir's own or one Calibre's viewer or
 its content server wrote.
 
-Selected text becomes a highlight with H or the Highlight button, kept
-where Calibre's viewer keeps its highlights: a row of the library's
-`annotations` table, user `viewer`, its JSON as the viewer writes it (the
-text, its start and end CFIs, the chapter's file and titles, the yellow of
-Calibre's colours). The viewer shows Cousoir's highlights, and Cousoir the
-viewer's, in their colours; the Highlights list beside the pages goes to
-each. A Kobo's highlights show too, with the Kobo's name (see
-[Kobo](#kobo)). A highlight clicked can be removed, which Cousoir writes as
-the viewer does, as whose it was, so that the programs that have it forget
-it too and a Kobo does not bring it back.
+A bar shows over the text selected: Calibre's five colours, each making a
+highlight of it (H makes one in the colour marked, the last one used), a
+note (N), Copy, and a search of the book for it. A highlight is kept where
+Calibre's viewer keeps its own: a row of the library's `annotations`
+table, user `viewer`, its JSON as the viewer writes it (the text, its start
+and end CFIs, the chapter's file and the titles of the contents entries it
+is under, its colour, its note). The viewer shows Cousoir's highlights,
+and Cousoir the viewer's, in their colours. A Kobo's highlights show too,
+with the Kobo's name (see [Kobo](#kobo)).
+
+A highlight clicked brings the same bar: its colour changed, its note
+written or changed (N), its text copied, or the highlight removed (Del),
+which Cousoir writes as the viewer does, as whose it was, so that the
+programs that have it forget it too and a Kobo does not bring it back. A
+note is written in a box over the page, saved with Ctrl+Enter or Save; a
+highlight with a note has a dotted line under it. The highlights button
+beside Contents lists the book's highlights in its order, under their
+chapters, with their notes; a click goes to one, and the pen beside it
+writes or changes its note. Changing a note also changes the highlight's
+time, which the viewer leaves, so that the viewer, merging its own copy
+with the library's, takes the new one.
+
+Ctrl+D, or the bookmark in the toolbar, bookmarks the page, named after its
+chapter; on a page with a bookmark, the bookmark is filled and removes it.
+Bookmarks are kept as the viewer keeps its own (`bookmark` annotations,
+keyed by their titles, the place as a CFI), listed in the book's order
+beside Contents, gone to with a click, renamed with a double click or the
+pen, removed with the bin; a bookmark renamed is written removed under its
+old title and added under the new one, as the library keeps them by title.
 
 A PDF shows a page after the other, fitted to the window's width or to the
 whole page, its page kept.
 
 Cousoir departs from Calibre's viewer here: no reading aloud, no search by
-whole words or regular expressions, no notes on highlights yet, colours
-other than yellow only as shown, and no vertical page order. The position and the
+whole words or regular expressions, no underlined or struck-out highlights
+(the viewer's other styles, shown as yellow), and no vertical page order. The position and the
 highlights are written while the library can be written; when Calibre
 writes to it, they wait in Cousoir for the next time, and so do those whose
 writing failed.

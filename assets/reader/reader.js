@@ -13,8 +13,9 @@
 // "2", the columns a screen, or "scroll"), { event: "next" } and
 // { event: "previous" } at the ends of the page, { event: "key", key, ctrl,
 // alt, shift }, { event: "menu" } for a click in the middle,
-// { event: "selection", empty }, { event: "highlight", uuid } when one is
-// clicked, and { event: "layout" } once laid out again for a new size.
+// { event: "selection", empty, rect }, { event: "highlight", uuid, rect }
+// when one is clicked, rect where it is in the window, and { event: "layout" }
+// once laid out again for a new size.
 (function () {
     'use strict';
     if (window.cousoir)
@@ -305,7 +306,17 @@
         }
     }
 
-    function wrapRange(range, uuid, color) {
+    // How a highlight looks: its colour, and a dotted line under it when it
+    // has a note.
+    function styleWrapper(span, color, note) {
+        span.style.setProperty('background-color', color, 'important');
+        if (note)
+            span.style.setProperty('text-decoration', 'underline dotted', 'important');
+        else
+            span.style.removeProperty('text-decoration');
+    }
+
+    function wrapRange(range, uuid, color, note) {
         const root = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? range.commonAncestorContainer
                                                                                  : range.commonAncestorContainer.parentNode;
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -329,13 +340,13 @@
             span.dataset.annotId = uuid;
             // Over the page's own transparent backgrounds, as Calibre's
             // highlight_style_as_css() makes it important.
-            span.style.setProperty('background-color', color, 'important');
+            styleWrapper(span, color, note);
             node.parentNode.insertBefore(span, node);
             span.appendChild(node);
         }
     }
 
-    // Wraps the highlights of this page: { uuid, start, end, color }. Their
+    // Wraps the highlights of this page: { uuid, start, end, color, note }. Their
     // ranges are all found first, then wrapped, so that a wrapper never
     // changes the text a later CFI points to.
     function applyHighlights(list) {
@@ -346,12 +357,45 @@
                 found.push([range, highlight]);
         }
         for (const [range, highlight] of found)
-            wrapRange(range, highlight.uuid, highlight.color);
+            wrapRange(range, highlight.uuid, highlight.color, highlight.note);
         return found.length;
     }
 
+    function wrappers(uuid) {
+        return document.querySelectorAll('span[data-annot-id="' + String(uuid).replace(/"/g, '') + '"]');
+    }
+
+    function restyleHighlight(uuid, color, note) {
+        for (const span of wrappers(uuid))
+            styleWrapper(span, color, note);
+    }
+
+    // Where something is in the window: { x, y, width, height }, null when
+    // it is not on the page shown.
+    function rectOf(rects) {
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+        for (const rect of rects) {
+            if (!rect.width && !rect.height)
+                continue;
+            if (rect.right <= 0 || rect.left >= window.innerWidth || rect.bottom <= 0 || rect.top >= window.innerHeight)
+                continue;
+            left = Math.min(left, rect.left);
+            top = Math.min(top, rect.top);
+            right = Math.max(right, rect.right);
+            bottom = Math.max(bottom, rect.bottom);
+        }
+        return left === Infinity ? null : { x: left, y: top, width: right - left, height: bottom - top };
+    }
+
+    function highlightRect(uuid) {
+        const rects = [];
+        for (const span of wrappers(uuid))
+            rects.push(...span.getClientRects());
+        return rectOf(rects);
+    }
+
     function removeHighlight(uuid) {
-        for (const span of document.querySelectorAll('span[data-annot-id="' + uuid.replace(/"/g, '') + '"]')) {
+        for (const span of wrappers(uuid)) {
             const parent = span.parentNode;
             while (span.firstChild)
                 parent.insertBefore(span.firstChild, span);
@@ -758,7 +802,7 @@
             return;
         const wrapper = event.target.closest ? event.target.closest('span[data-annot-id]') : null;
         if (wrapper && window.getSelection().isCollapsed) {
-            post({ event: 'highlight', uuid: wrapper.dataset.annotId });
+            post({ event: 'highlight', uuid: wrapper.dataset.annotId, rect: highlightRect(wrapper.dataset.annotId) });
             return;
         }
         if (!window.getSelection().isCollapsed)
@@ -817,7 +861,11 @@
     let selectionTimer = 0;
     document.addEventListener('selectionchange', () => {
         clearTimeout(selectionTimer);
-        selectionTimer = setTimeout(() => post({ event: 'selection', empty: window.getSelection().isCollapsed }), 150);
+        selectionTimer = setTimeout(() => {
+            const selected = window.getSelection();
+            const empty = selected.isCollapsed || !selected.rangeCount;
+            post({ event: 'selection', empty: empty, rect: empty ? null : rectOf(selected.getRangeAt(0).getClientRects()) });
+        }, 150);
     });
 
     // Laid out again, and back where the reader was.
@@ -867,6 +915,8 @@
             });
         },
         applyHighlights: applyHighlights,
+        restyleHighlight: restyleHighlight,
+        highlightRect: highlightRect,
         markSearch: markSearch,
         removeHighlight: removeHighlight,
         selection: selection,

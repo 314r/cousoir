@@ -274,10 +274,13 @@ endif()
 set(COUSOIR_ICON_FILES
     assets/icons/arrow-left.svg
     assets/icons/book.svg
+    assets/icons/bookmark.svg
+    assets/icons/bookmark-filled.svg
     assets/icons/building.svg
     assets/icons/check.svg
     assets/icons/chevron-down.svg
     assets/icons/close.svg
+    assets/icons/copy.svg
     assets/icons/eject.svg
     assets/icons/ereader.svg
     assets/icons/external.svg
@@ -293,6 +296,7 @@ set(COUSOIR_ICON_FILES
     assets/icons/lock.svg
     assets/icons/markdown.svg
     assets/icons/more.svg
+    assets/icons/note.svg
     assets/icons/panel-right.svg
     assets/icons/plus.svg
     assets/icons/refresh.svg

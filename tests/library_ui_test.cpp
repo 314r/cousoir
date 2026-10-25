@@ -104,6 +104,7 @@ private slots:
     void readsInCousoir();
     void laysOutPagesAsAsked();
     void searchesTheBook();
+    void annotatesTheBook();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -824,7 +825,7 @@ void LibraryUiTest::readsInCousoir()
         "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 22);"
         "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
     QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
-    QMetaObject::invokeMethod(reader, "highlightSelection");
+    QMetaObject::invokeMethod(reader, "highlightSelection", Q_ARG(QVariant, QVariant()));
     QObject *bookReader = reader->property("reader").value<QObject *>();
     QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
     const QVariantMap highlight = bookReader->property("highlights").toList().first().toMap();
@@ -1074,6 +1075,144 @@ void LibraryUiTest::searchesTheBook()
     QMetaObject::invokeMethod(reader, "goBack");
     QTRY_COMPARE_WITH_TIMEOUT(reader->property("position").toString(), chapter, 20000);
     reader->close();
+#endif
+}
+
+// Highlights coloured and noted, and bookmarks, written as Calibre's viewer
+// writes them: read back from the library, renamed and removed.
+void LibraryUiTest::annotatesTheBook()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(bookReader && view);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    const int bookId = bookReader->property("bookId").toInt();
+
+    // A selection: the bar over it.
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = document.querySelector('p'); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 22);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("selectionRect").isValid()
+                                 && !reader->property("selectionRect").value<QJSValue>().isNull(),
+                             10000);
+    const QList<QQuickItem *> bars = visualDescendants(reader->contentItem(), QStringLiteral("readerAnnotationBar"));
+    QVERIFY(!bars.isEmpty());
+    QTRY_VERIFY(bars.first()->isVisible());
+
+    // Highlighted green, with a note.
+    QMetaObject::invokeMethod(reader, "highlightSelection", Q_ARG(QVariant, QStringLiteral("green")));
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
+    QVariantMap highlight = bookReader->property("highlights").toList().first().toMap();
+    const QString uuid = highlight.value(QStringLiteral("uuid")).toString();
+    QCOMPARE(highlight.value(QStringLiteral("which")).toString(), QStringLiteral("green"));
+    // Under its section, not the chapter's last.
+    QCOMPARE(highlight.value(QStringLiteral("chapter")).toString(), QStringLiteral("Arrival"));
+    QMetaObject::invokeMethod(reader, "editNote", Q_ARG(QVariant, uuid));
+    QQuickItem *noteText = nullptr;
+    QTRY_VERIFY((noteText = reader->findChild<QQuickItem *>(QStringLiteral("readerNoteText")))
+                || !visualDescendants(reader->contentItem()->parentItem(), QStringLiteral("readerNoteText")).isEmpty());
+    if (!noteText)
+        noteText = visualDescendants(reader->contentItem()->parentItem(), QStringLiteral("readerNoteText")).first();
+    QTRY_VERIFY(noteText->hasActiveFocus());
+    for (const QChar character : QStringLiteral("Rivers remember."))
+        QTest::keyClick(reader, character.toLatin1());
+    QTest::keyClick(reader, Qt::Key_Return, Qt::ControlModifier);
+    QTRY_COMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("notes")).toString(),
+                 QStringLiteral("Rivers remember."));
+    // Shown on the page by a dotted line.
+    const QString underline = QStringLiteral(
+        "document.title = getComputedStyle(document.querySelector('span[data-annot-id]')).textDecorationStyle");
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, underline));
+        QTest::qWait(100);
+        return view->property("title").toString() == QLatin1String("dotted");
+    }(), 10000);
+    // Coloured blue.
+    QMetaObject::invokeMethod(reader, "recolor", Q_ARG(QVariant, uuid), Q_ARG(QVariant, QStringLiteral("blue")));
+    QCOMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("which")).toString(),
+             QStringLiteral("blue"));
+
+    // A bookmark at the page, another renamed.
+    QMetaObject::invokeMethod(reader, "toggleBookmark");
+    QTRY_COMPARE(bookReader->property("bookmarks").toList().size(), 1);
+    QCOMPARE(bookReader->property("bookmarks").toList().first().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Arrival"));
+    QTRY_COMPARE(reader->property("pageBookmarks").toStringList(), QStringList{ QStringLiteral("Arrival") });
+    const QString bookmarked = reader->property("position").toString();
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_COMPARE(reader->property("page").toInt(), 1);
+    QTRY_VERIFY(reader->property("pageBookmarks").toStringList().isEmpty());
+    QMetaObject::invokeMethod(reader, "toggleBookmark");
+    QTRY_COMPARE(bookReader->property("bookmarks").toList().size(), 2);
+    bool renamed = false;
+    QMetaObject::invokeMethod(bookReader, "renameBookmark", Q_RETURN_ARG(bool, renamed),
+                              Q_ARG(QString, QStringLiteral("Arrival (2)")), Q_ARG(QString, QStringLiteral("Later")));
+    QVERIFY(renamed);
+
+    // In the library, as the viewer writes them.
+    reader->close();
+    waitForSave();
+    SqliteDb db;
+    QString dbError;
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QHash<QString, QJsonObject> rows;
+    QHash<QString, QString> searchable;
+    for (const QVariantList &row : db.rows(QStringLiteral("SELECT annot_type, annot_id, annot_data, searchable_text, user_type, "
+                                                        "user FROM annotations WHERE book=?"), { bookId })) {
+        QCOMPARE(row.value(4).toString(), QStringLiteral("local"));
+        QCOMPARE(row.value(5).toString(), QStringLiteral("viewer"));
+        const QString key = row.value(0).toString() + u':' + row.value(1).toString();
+        rows.insert(key, QJsonDocument::fromJson(row.value(2).toString().toUtf8()).object());
+        searchable.insert(key, row.value(3).toString());
+    }
+    db.close();
+    const QJsonObject written = rows.value(QStringLiteral("highlight:") + uuid);
+    QCOMPARE(written.value(QLatin1String("notes")).toString(), QStringLiteral("Rivers remember."));
+    QCOMPARE(written.value(QLatin1String("style")).toObject().value(QLatin1String("which")).toString(), QStringLiteral("blue"));
+    QCOMPARE(searchable.value(QStringLiteral("highlight:") + uuid),
+             QStringLiteral("Chapter 1, paragraph 0\n\x1f\nRivers remember."));
+    const QJsonObject first = rows.value(QStringLiteral("bookmark:Arrival"));
+    QCOMPARE(first.value(QLatin1String("type")).toString(), QStringLiteral("bookmark"));
+    QCOMPARE(first.value(QLatin1String("pos_type")).toString(), QStringLiteral("epubcfi"));
+    QCOMPARE(first.value(QLatin1String("pos")).toString(), bookmarked);
+    QVERIFY(rows.value(QStringLiteral("bookmark:Arrival (2)")).value(QLatin1String("removed")).toBool());
+    QVERIFY(!rows.value(QStringLiteral("bookmark:Later")).value(QLatin1String("removed")).toBool());
+    QCOMPARE(searchable.value(QStringLiteral("bookmark:Later")), QStringLiteral("Later"));
+
+    // Read back: the note, the colour, the bookmarks; one removed.
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    highlight = bookReader->property("highlights").toList().first().toMap();
+    QCOMPARE(highlight.value(QStringLiteral("notes")).toString(), QStringLiteral("Rivers remember."));
+    QCOMPARE(highlight.value(QStringLiteral("which")).toString(), QStringLiteral("blue"));
+    QStringList titles;
+    for (const QVariant &bookmark : bookReader->property("bookmarks").toList())
+        titles.append(bookmark.toMap().value(QStringLiteral("title")).toString());
+    QCOMPARE(titles, (QStringList{ QStringLiteral("Arrival"), QStringLiteral("Later") }));
+    QMetaObject::invokeMethod(bookReader, "removeBookmark", Q_ARG(QString, QStringLiteral("Later")));
+    QCOMPARE(bookReader->property("bookmarks").toList().size(), 1);
+    reader->close();
+    waitForSave();
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QVERIFY(QJsonDocument::fromJson(db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE book=%1 AND "
+                                                           "annot_id='Later'").arg(bookId)).toString().toUtf8())
+                .object().value(QLatin1String("removed")).toBool());
+    db.close();
 #endif
 }
 

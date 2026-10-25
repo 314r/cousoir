@@ -327,8 +327,10 @@ struct Shot
     bool read = false;
     QSize readerSize;
     QStringList settings;
-    // Controls of the reader clicked, by name, after the keys.
-    QStringList readerClicks;
+    // What is done in the reader after the keys, in order: "click:NAME"
+    // clicks a control by its name, "js:SCRIPT" runs a script in its page,
+    // "key:SEQUENCE" presses keys, "type:TEXT" types.
+    QStringList readerSteps;
 };
 
 QQuickItem *visualDescendant(QQuickItem *item, const QString &name)
@@ -435,8 +437,25 @@ int screenshot(const QString &path, const Shot &shot)
         if (shot.read)
             QTest::qWait(500);
     }
-    for (const QString &name : shot.readerClicks) {
+    for (const QString &step : shot.readerSteps) {
         drawn(window);
+        if (step.startsWith(QLatin1String("key:"))) {
+            QTest::keySequence(window, QKeySequence(step.mid(4)));
+            QTest::qWait(500);
+            continue;
+        }
+        if (step.startsWith(QLatin1String("type:"))) {
+            for (const QChar character : step.mid(5))
+                QTest::keyClick(window, character.toLatin1());
+            continue;
+        }
+        if (step.startsWith(QLatin1String("js:"))) {
+            if (QObject *view = window->findChild<QObject *>(QStringLiteral("readerView")))
+                QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, step.mid(3)));
+            QTest::qWait(600);
+            continue;
+        }
+        const QString name = step.mid(step.indexOf(u':') + 1);
         QQuickItem *item = window->findChild<QQuickItem *>(name);
         if (!item)
             item = visualDescendant(window->contentItem(), name);
@@ -506,8 +525,9 @@ int main(int argc, char *argv[])
     parser.addOption({ QStringLiteral("read"), QStringLiteral("Read the book in Cousoir's reader, drawn instead.") });
     parser.addOption({ QStringLiteral("reader-size"), QStringLiteral("The reader's size."), QStringLiteral("WxH") });
     parser.addOption({ QStringLiteral("set"), QStringLiteral("A reader setting, key=value."), QStringLiteral("setting") });
-    parser.addOption({ QStringLiteral("reader-click"), QStringLiteral("A control of the reader to click, after the keys."),
-                       QStringLiteral("name") });
+    parser.addOption({ QStringLiteral("reader"), QStringLiteral("In the reader, after the keys: click:NAME clicks a "
+                                                                "control, js:SCRIPT runs a script in its page, key:KEYS, type:TEXT."),
+                       QStringLiteral("step") });
     parser.process(app);
     if (parser.positionalArguments().size() != 1)
         parser.showHelp(2);
@@ -539,7 +559,7 @@ int main(int argc, char *argv[])
         if (readerSize.size() == 2)
             shot.readerSize = QSize(readerSize.at(0).toInt(), readerSize.at(1).toInt());
         shot.settings = parser.values(QStringLiteral("set"));
-        shot.readerClicks = parser.values(QStringLiteral("reader-click"));
+        shot.readerSteps = parser.values(QStringLiteral("reader"));
         return screenshot(path, shot);
     }
     int status = benchmarkModel(path);
