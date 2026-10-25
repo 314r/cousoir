@@ -362,6 +362,42 @@ the way back.
 - Bookmarks, as the viewer keeps them (`bookmark` annotations), listed and
   gone to.
 
+Left for the next round.
+
+### Round 3
+
+The reader now shows a book well and finds anything in it. What it keeps
+of the reading is still a yellow mark; and the one way to read is to read.
+
+#### R3. Highlights to work with — picked
+
+From round 2. A highlight's note is what turns highlighting into study:
+Calibre's viewer, a Kobo and Cousoir's Highlights section all show notes,
+and Cousoir's reader can neither write one nor change a colour. Bookmarks
+come with it: the viewer keeps them in the same table.
+
+- A bar over the selection: the five colours of Calibre's viewer, a note,
+  copy, search the book for it. A highlight clicked: the same bar, its
+  colour changed, its note written or changed, removed.
+- Notes kept in the viewer's JSON (`notes`, its search text with them, as
+  `annot_db_data()` makes it), shown on the page by a dotted underline,
+  in the sidebar's list, edited from there too.
+- Bookmarks as the viewer keeps them (`bookmark` annotations, by title,
+  `pos` a CFI; removed as `remove_bookmark()` removes one): one added at the
+  page with Ctrl+D or the toolbar, listed in the book's order, renamed,
+  removed, gone to; the toolbar shows when the page has one.
+
+Done when each change shows in Calibre's viewer as made there (the JSON as
+the viewer writes it), and the tests cover colours, notes and bookmarks
+written, read back and removed.
+
+#### R4. Reading aloud
+
+Qt TextToSpeech is installed with speech-dispatcher, Flite and a Kokoro
+voice plugin on this computer. The book read aloud from the page, the
+sentence read marked, the pages turned with it, a voice and a speed picked,
+as Calibre's viewer reads aloud.
+
 ## Status
 
 | Goal | State |
