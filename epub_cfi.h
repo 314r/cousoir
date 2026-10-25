@@ -56,6 +56,9 @@ struct PageText
     QList<Point> ends;
     // The page's nodes, by their place in document order.
     QHash<const XmlTree::Node *, int> order;
+    // With blockBreaks, where in the text blocks end: the index of each
+    // space between two blocks.
+    QList<qsizetype> breaks;
 
     // The text of the body of the page `root`, or of all of it without one;
     // with `blockBreaks`, a space between blocks, paragraphs and headings,

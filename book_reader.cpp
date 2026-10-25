@@ -26,6 +26,9 @@
 #include "book.h"
 #include "book_library.h"
 #include "book_search.h"
+#ifdef COUSOIR_SPEECH
+#include "book_speech.h"
+#endif
 #include "cousoir_paths.h"
 #include "epub_book.h"
 #include "epub_cfi.h"
@@ -109,6 +112,9 @@ QList<int> cfiKey(const QString &cfi)
 
 BookReader::BookReader(QObject *parent) : QObject(parent)
 {
+#ifdef COUSOIR_SPEECH
+    m_speech = new BookSpeech(this);
+#endif
     m_flushTimer.setSingleShot(true);
     m_flushTimer.setInterval(5000);
     connect(&m_flushTimer, &QTimer::timeout, this, [this] { flush(false); });
@@ -503,6 +509,11 @@ void BookReader::finishSave(int id, bool saved)
     keepPending(uuid);
 }
 
+QObject *BookReader::speech() const
+{
+    return m_speech;
+}
+
 QVariantList BookReader::searchResults() const
 {
     return m_searchResults;
@@ -597,6 +608,9 @@ QString BookReader::open(int bookId)
     installHandler();
     m_book = std::move(opened);
     m_search = std::make_shared<BookSearch>(m_book);
+#ifdef COUSOIR_SPEECH
+    m_speech->setBook(m_book, m_book->language());
+#endif
     m_bookId = bookId;
     m_uuid = book->uuid;
     m_token = QStringLiteral("book-%1").arg(bookId);
@@ -710,6 +724,9 @@ void BookReader::close()
     }
     m_book.reset();
     m_search.reset();
+#ifdef COUSOIR_SPEECH
+    m_speech->setBook(nullptr, QString());
+#endif
     m_bookId = 0;
     m_format.clear();
     m_start.clear();

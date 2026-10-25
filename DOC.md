@@ -835,7 +835,22 @@ old title and added under the new one, as the library keeps them by title.
 A PDF shows a page after the other, fitted to the window's width or to the
 whole page, its page kept.
 
-Cousoir departs from Calibre's viewer here: no reading aloud, no search by
+R, or the speaker in the toolbar, reads the book aloud from the page shown,
+a sentence after the other, through the chapters to the end, with the
+system's voices (Qt TextToSpeech: speech-dispatcher, Flite or another
+engine installed; Cousoir built without Qt TextToSpeech has no reading
+aloud). The sentence read is marked on the page, which turns with it, and
+follows the word read when the engine tells it. Sentences are found in
+the page's text as Qt finds them, a heading or a paragraph never run into
+the next; a line with no letter is not read. The footer then holds the
+player: the sentence before or after, pause, stop, slower and faster. The
+Aa panel picks the engine and the voice, the book's language's voices
+listed; the voice, the speed and the engine are kept for every book. A
+link or an entry of the contents followed while reading goes on reading
+from there. When no engine can speak (none installed, or its service not
+running), the footer says so.
+
+Cousoir departs from Calibre's viewer here: no Piper voices of its own, no search by
 whole words or regular expressions, no underlined or struck-out highlights
 (the viewer's other styles, shown as yellow), and no vertical page order. The position and the
 highlights are written while the library can be written; when Calibre
@@ -1130,6 +1145,8 @@ neither in the library nor on the Kobo.
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
 - For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs; built
   without them, Cousoir has no reader
+- For reading them aloud, Qt TextToSpeech, and a speech engine such as
+  speech-dispatcher with a voice
 - For converting to AZW3, and KEPUB from formats other than EPUB, Calibre
 - For ejecting a Kobo, UDisks2 and Qt D-Bus
 - For a Kindle over MTP, libmtp

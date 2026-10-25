@@ -28,7 +28,6 @@ bool writeEpub(const QString &path, const QList<QPair<QString, QByteArray>> &fil
     }
     return zip_close(archive) == 0;
 }
-
 } // namespace
 
 class EpubBookTest : public QObject
@@ -41,7 +40,36 @@ private slots:
     void resolvesPaths();
     void refusesWhatIsNoEpub();
     void searchesTheText();
+    void findsTheSentences();
 };
+
+namespace {
+// A book of two chapters for the search and the sentences: accents, a
+// ligature, italics, white space, a soft hyphen, headings without white
+// space before the paragraph after them, a style. After the test's class:
+// moc misreads the raw strings before it.
+bool writeTextEpub(const QString &path)
+{
+    const QByteArray chapter1 = R"(<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Un</title><style>p { color: red }</style></head>
+<body><h1 id="un">L'Écume</h1>
+<p>Les <i>jours</i> passent, deux
+     mots et une lan&#173;terne.</p>
+<h2 id="deux">Suite</h2><p>Une Œuvre, l'écume des JOURS.</p></body></html>)";
+    const QByteArray chapter2 = R"(<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Deux</title></head>
+<body><p>Encore l’écume, écume, écume.</p></body></html>)";
+    return writeEpub(path, {
+        { QStringLiteral("mimetype"), "application/epub+zip" },
+        { QStringLiteral("META-INF/container.xml"), R"(<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>)" },
+        { QStringLiteral("content.opf"), R"(<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Recherche</dc:title><dc:identifier id="id">x</dc:identifier></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest><spine toc="ncx"><itemref idref="c1"/><itemref idref="c2"/></spine></package>)" },
+        { QStringLiteral("toc.ncx"), R"(<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap><navPoint id="n1"><navLabel><text>Premier</text></navLabel><content src="c1.xhtml#un"/><navPoint id="n2"><navLabel><text>Suite</text></navLabel><content src="c1.xhtml#deux"/></navPoint></navPoint><navPoint id="n3"><navLabel><text>Second</text></navLabel><content src="c2.xhtml"/></navPoint></navMap></ncx>)" },
+        { QStringLiteral("c1.xhtml"), chapter1 },
+        { QStringLiteral("c2.xhtml"), chapter2 },
+    });
+}
+
+} // namespace
 
 void EpubBookTest::readsAnEpub3()
 {
@@ -148,23 +176,7 @@ void EpubBookTest::searchesTheText()
 {
     QTemporaryDir dir;
     const QString path = dir.filePath(QStringLiteral("search.epub"));
-    const QByteArray chapter1 = R"(<?xml version="1.0" encoding="utf-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Un</title><style>p { color: red }</style></head>
-<body><h1 id="un">L'Écume</h1>
-<p>Les <i>jours</i> passent, deux
-     mots et une lan&#173;terne.</p>
-<h2 id="deux">Suite</h2><p>Une Œuvre, l'écume des JOURS.</p></body></html>)";
-    const QByteArray chapter2 = R"(<?xml version="1.0" encoding="utf-8"?>
-<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Deux</title></head>
-<body><p>Encore l’écume, écume, écume.</p></body></html>)";
-    QVERIFY(writeEpub(path, {
-        { QStringLiteral("mimetype"), "application/epub+zip" },
-        { QStringLiteral("META-INF/container.xml"), R"(<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>)" },
-        { QStringLiteral("content.opf"), R"(<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Recherche</dc:title><dc:identifier id="id">x</dc:identifier></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/><item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest><spine toc="ncx"><itemref idref="c1"/><itemref idref="c2"/></spine></package>)" },
-        { QStringLiteral("toc.ncx"), R"(<?xml version="1.0"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap><navPoint id="n1"><navLabel><text>Premier</text></navLabel><content src="c1.xhtml#un"/><navPoint id="n2"><navLabel><text>Suite</text></navLabel><content src="c1.xhtml#deux"/></navPoint></navPoint><navPoint id="n3"><navLabel><text>Second</text></navLabel><content src="c2.xhtml"/></navPoint></navMap></ncx>)" },
-        { QStringLiteral("c1.xhtml"), chapter1 },
-        { QStringLiteral("c2.xhtml"), chapter2 },
-    }));
+    QVERIFY(writeTextEpub(path));
     QString error;
     std::shared_ptr<const EpubBook> book = EpubBook::open(path, &error);
     QVERIFY2(book, qPrintable(error));
@@ -218,6 +230,40 @@ void EpubBookTest::searchesTheText()
     found = search.find(QStringLiteral("écume"), 2, &more);
     QCOMPARE(found.size(), 2);
     QVERIFY(more);
+}
+
+// The sentences read aloud: each block on its own, those with no letter
+// left out, each with the CFIs naming its text; the one a place is in.
+void EpubBookTest::findsTheSentences()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("sentences.epub"));
+    QVERIFY(writeTextEpub(path));
+    QString error;
+    const std::unique_ptr<EpubBook> book = EpubBook::open(path, &error);
+    QVERIFY2(book, qPrintable(error));
+    const BookSentences sentences(*book, 0);
+    QStringList texts;
+    for (const BookSentences::Sentence &sentence : sentences.sentences())
+        texts.append(sentence.text);
+    QCOMPARE(texts, (QStringList{ QStringLiteral("L'Écume"), QStringLiteral("Les jours passent, deux mots et une lanterne."),
+                                  QStringLiteral("Suite"), QStringLiteral("Une Œuvre, l'écume des JOURS.") }));
+    const std::unique_ptr<XmlTree::Node> root = XmlTree::parse(book->read(book->spine().at(0).name));
+    const EpubCfi::Document document(*root);
+    for (const BookSentences::Sentence &sentence : sentences.sentences()) {
+        QString text = document.textBetween(document.decode(sentence.start), document.decode(sentence.end));
+        text.remove(QChar(0x00ad));
+        QCOMPARE(text.simplified(), sentence.text);
+    }
+    // A place in the second sentence, and before all of them.
+    const BookSentences::Sentence &second = sentences.sentences().at(1);
+    QCOMPARE(sentences.sentenceAt(sentences.cfiAt(second.at + 10)), 1);
+    QCOMPARE(sentences.sentenceAt(sentences.cfiAt(sentences.sentences().at(3).at)), 3);
+    QCOMPARE(sentences.sentenceAt(QStringLiteral("/2")), 0);
+    QCOMPARE(sentences.sentenceAt(QString()), 0);
+    // The second chapter: one block, three sentences; a file that is not.
+    QCOMPARE(BookSentences(*book, 1).sentences().size(), 1);
+    QVERIFY(BookSentences(*book, 7).sentences().isEmpty());
 }
 
 #include "epub_book_test.moc"

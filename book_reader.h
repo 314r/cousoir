@@ -15,6 +15,7 @@
 
 class BookLibrary;
 class BookSearch;
+class BookSpeech;
 class EpubBook;
 
 // A library book read in Cousoir: its EPUB served to Qt WebEngine as
@@ -60,6 +61,9 @@ class BookReader : public QObject
     Q_PROPERTY(QString searchQuery READ searchQuery NOTIFY searchChanged)
     Q_PROPERTY(bool searching READ searching NOTIFY searchChanged)
     Q_PROPERTY(bool searchMore READ searchMore NOTIFY searchChanged)
+    // The book read aloud (BookSpeech); null when Cousoir is built without
+    // Qt TextToSpeech.
+    Q_PROPERTY(QObject *speech READ speech CONSTANT)
 
 public:
     explicit BookReader(QObject *parent = nullptr);
@@ -87,6 +91,7 @@ public:
     QString searchQuery() const;
     bool searching() const;
     bool searchMore() const;
+    QObject *speech() const;
 
     // Opens the book's EPUB. Returns why it cannot, empty once open.
     Q_INVOKABLE QString open(int bookId);
@@ -187,6 +192,7 @@ private:
     QHash<int, QPair<QString, QList<Annotation>>> m_saving;
     QTimer m_flushTimer;
     std::shared_ptr<BookSearch> m_search;
+    BookSpeech *m_speech = nullptr;
     QVariantList m_searchResults;
     QString m_searchQuery;
     bool m_searchMore = false;

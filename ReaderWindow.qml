@@ -65,6 +65,11 @@ ThemedWindow {
     property string noteFor: ""
     // The titles of the bookmarks on the page shown.
     property var pageBookmarks: []
+    // The book read aloud; null when Cousoir cannot.
+    readonly property var speech: bookReader.speech
+    readonly property bool speaking: speech !== null && speech.state !== "stopped"
+    // Reading aloud on from where a link or an entry of the contents goes.
+    property bool speakAfterJump: false
     // The search's place shown, in bookReader.searchResults; -1 for none.
     property int searchIndex: -1
     // Where reading was before a link, a search's place or an entry of the
@@ -163,6 +168,10 @@ ThemedWindow {
 
     // Somewhere else in the book, where reading was kept for Back.
     function jump(index, action) {
+        if (speaking) {
+            speech.stop()
+            speakAfterJump = true
+        }
         if (position) {
             backStack = backStack.concat([{ spineIndex: spineIndex, cfi: position }]).slice(-50)
             forwardStack = []
@@ -298,6 +307,7 @@ ThemedWindow {
         selectionRect = null
         highlightRect = null
         markSearch()
+        markSpoken()
         if (!searchField.activeFocus)
             view.forceActiveFocus()
     }
@@ -424,6 +434,35 @@ ThemedWindow {
         chosenHighlight = ""
         highlightRect = null
         highlightsShown = Math.max(0, highlightsShown - 1)
+    }
+
+    // Reading aloud from the page shown, or no more.
+    function toggleSpeech() {
+        if (!speech || spineIndex < 0)
+            return
+        if (speaking)
+            speech.stop()
+        else
+            speech.start(spineIndex, position.replace(/^epubcfi\(\/\d+/, "").replace(/\)$/, ""))
+    }
+
+    // The sentence read marked on its page, turned to; another file's
+    // loaded.
+    function showSpoken() {
+        const sentence = speech ? speech.sentence : null
+        if (sentence && sentence.start !== undefined && sentence.spineIndex !== spineIndex) {
+            load(sentence.spineIndex, "cfi:epubcfi(/" + 2 * (sentence.spineIndex + 1) + sentence.start + ")")
+            return
+        }
+        markSpoken()
+    }
+
+    function markSpoken() {
+        if (spineIndex < 0 || view.loading)
+            return
+        const sentence = speech ? speech.sentence : null
+        const place = sentence && sentence.spineIndex === spineIndex ? { start: sentence.start, end: sentence.end } : null
+        view.runJavaScript("window.cousoir.speak(" + JSON.stringify(place) + ")")
     }
 
     // Which bookmarks the page shown has.
@@ -561,6 +600,11 @@ ThemedWindow {
         property double readingRate: 0
         // The colour of the last highlight made or coloured.
         property string highlightColor: "yellow"
+        // Reading aloud: the engine and the voice, empty for the system's,
+        // and the speed, from -1 to 1.
+        property string speechEngine: ""
+        property string speechVoice: ""
+        property real speechRate: 0
     }
 
     // The page laid out again when a setting or the room changes.
@@ -625,6 +669,43 @@ ThemedWindow {
         function onBookmarksChanged() {
             readerWindow.updatePageBookmarks()
         }
+    }
+
+    Connections {
+        target: readerWindow.speech
+        ignoreUnknownSignals: true
+
+        function onSentenceChanged() {
+            readerWindow.showSpoken()
+        }
+
+        function onWordChanged() {
+            if (readerWindow.speech.word && readerWindow.speech.sentence.spineIndex === readerWindow.spineIndex
+                && !view.loading)
+                view.runJavaScript("window.cousoir.follow(" + JSON.stringify(readerWindow.speech.word) + ")")
+        }
+    }
+
+    // The voice, its speed and the engine, kept for every book.
+    Binding {
+        target: readerWindow.speech
+        property: "engine"
+        value: readerSettings.speechEngine
+        when: readerWindow.speech !== null
+    }
+
+    Binding {
+        target: readerWindow.speech
+        property: "voice"
+        value: readerSettings.speechVoice
+        when: readerWindow.speech !== null
+    }
+
+    Binding {
+        target: readerWindow.speech
+        property: "rate"
+        value: readerSettings.speechRate
+        when: readerWindow.speech !== null
     }
 
     // A new search's places: the first from the page read on shown.
@@ -710,6 +791,18 @@ ThemedWindow {
                     text: bookReader.title
                     elide: Text.ElideRight
                     color: Theme.textMuted
+                }
+
+                FlatButton {
+                    objectName: "readerSpeechButton"
+
+                    visible: readerWindow.speech !== null && readerWindow.speech.engines.length > 0
+                    enabled: readerWindow.spineIndex >= 0
+                    iconOnly: true
+                    selected: readerWindow.speaking
+                    text: readerWindow.speaking ? qsTr("Stop reading aloud (R)") : qsTr("Read aloud from here (R)")
+                    icon.source: "assets/icons/speaker.svg"
+                    onClicked: readerWindow.toggleSpeech()
                 }
 
                 FlatButton {
@@ -1268,6 +1361,10 @@ ThemedWindow {
                                 readerWindow.noteTurn(readerWindow.spineIndex, event.page, event.pages)
                                 readerWindow.chromeAsked = false
                             }
+                            if (readerWindow.speakAfterJump) {
+                                readerWindow.speakAfterJump = false
+                                readerWindow.speech.start(readerWindow.spineIndex, event.cfi)
+                            }
                             const turned = event.page !== readerWindow.page
                             readerWindow.page = event.page
                             readerWindow.pages = event.pages
@@ -1326,6 +1423,8 @@ ThemedWindow {
                                 readerWindow.noteSelection()
                             else if (event.ctrl && (event.key === "d" || event.key === "D"))
                                 readerWindow.toggleBookmark()
+                            else if (!event.ctrl && !event.alt && (event.key === "r" || event.key === "R"))
+                                readerWindow.toggleSpeech()
                             else if (event.key === "Delete" && readerWindow.chosenHighlight)
                                 readerWindow.removeChosenHighlight()
                             else if (!event.ctrl && (event.key === "t" || event.key === "T"))
@@ -1481,7 +1580,7 @@ ThemedWindow {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    height: Theme.statusHeight + 8
+                    height: playerRow.visible ? Theme.rowHeight + 10 : Theme.statusHeight + 8
 
                     Rectangle {
                         id: track
@@ -1520,7 +1619,7 @@ ThemedWindow {
                         x: track.x
                         width: track.width
                         anchors.bottom: parent.bottom
-                        height: Theme.statusHeight
+                        height: footer.height - track.height
                         spacing: Theme.gutter * 2
 
                         Label {
@@ -1529,6 +1628,111 @@ ThemedWindow {
                             color: readerWindow.pageFaint
                             font.pointSize: Theme.fontPointSizeCaption
                             elide: Text.ElideRight
+                        }
+
+                        // While reading aloud: the sentence before or after,
+                        // pause, stop, slower or faster.
+                        RowLayout {
+                            id: playerRow
+                            objectName: "readerPlayer"
+
+                            visible: readerWindow.speaking || (readerWindow.speech !== null && readerWindow.speech.error !== "")
+                            spacing: Math.round(4 * Theme.spacingScale)
+
+                            Label {
+                                visible: readerWindow.speech !== null && readerWindow.speech.error !== "" && !readerWindow.speaking
+                                Layout.maximumWidth: Math.round(40 * Theme.charWidth)
+                                text: readerWindow.speech ? qsTr("The voice cannot speak: %1").arg(readerWindow.speech.error) : ""
+                                color: Theme.danger
+                                elide: Text.ElideRight
+                            }
+
+                            FlatButton {
+                                visible: readerWindow.speaking
+                                iconOnly: true
+                                focusPolicy: Qt.NoFocus
+                                // In the page's colours, as the footer.
+                                icon.color: readerWindow.pageText
+                                palette.buttonText: readerWindow.pageText
+                                text: qsTr("The sentence before")
+                                icon.source: "assets/icons/skip-back.svg"
+                                onClicked: readerWindow.speech.skip(-1)
+                            }
+
+                            FlatButton {
+                                objectName: "readerPauseButton"
+
+                                visible: readerWindow.speaking
+                                iconOnly: true
+                                focusPolicy: Qt.NoFocus
+                                // In the page's colours, as the footer.
+                                icon.color: readerWindow.pageText
+                                palette.buttonText: readerWindow.pageText
+                                text: readerWindow.speaking && readerWindow.speech.state === "paused" ? qsTr("Go on") : qsTr("Pause")
+                                icon.source: readerWindow.speaking && readerWindow.speech.state === "paused"
+                                    ? "assets/icons/play.svg" : "assets/icons/pause.svg"
+                                onClicked: readerWindow.speech.state === "paused" ? readerWindow.speech.resume()
+                                                                                  : readerWindow.speech.pause()
+                            }
+
+                            FlatButton {
+                                visible: readerWindow.speaking
+                                iconOnly: true
+                                focusPolicy: Qt.NoFocus
+                                // In the page's colours, as the footer.
+                                icon.color: readerWindow.pageText
+                                palette.buttonText: readerWindow.pageText
+                                text: qsTr("The sentence after")
+                                icon.source: "assets/icons/skip-forward.svg"
+                                onClicked: readerWindow.speech.skip(1)
+                            }
+
+                            FlatButton {
+                                iconOnly: true
+                                focusPolicy: Qt.NoFocus
+                                // In the page's colours, as the footer.
+                                icon.color: readerWindow.pageText
+                                palette.buttonText: readerWindow.pageText
+                                text: qsTr("Stop (R)")
+                                icon.source: "assets/icons/stop.svg"
+                                onClicked: readerWindow.speech.stop()
+                            }
+
+                            Divider {
+                                visible: readerWindow.speaking
+                                color: Theme.withAlpha(readerWindow.pageText, 0.15)
+                                Layout.preferredWidth: 1
+                                Layout.preferredHeight: Theme.rowHeight * 0.7
+                            }
+
+                            FlatButton {
+                                visible: readerWindow.speaking
+                                focusPolicy: Qt.NoFocus
+                                // In the page's colours, as the footer.
+                                icon.color: readerWindow.pageText
+                                palette.buttonText: readerWindow.pageText
+                                text: qsTr("Slower")
+                                enabled: readerSettings.speechRate > -1
+                                onClicked: readerSettings.speechRate = Math.max(-1, Math.round(readerSettings.speechRate * 10 - 1) / 10)
+                            }
+
+                            Label {
+                                visible: readerWindow.speaking
+                                text: readerSettings.speechRate === 0 ? qsTr("Normal")
+                                    : (readerSettings.speechRate > 0 ? "+" : "−") + Math.abs(Math.round(readerSettings.speechRate * 10))
+                                color: readerWindow.pageFaint
+                            }
+
+                            FlatButton {
+                                visible: readerWindow.speaking
+                                focusPolicy: Qt.NoFocus
+                                // In the page's colours, as the footer.
+                                icon.color: readerWindow.pageText
+                                palette.buttonText: readerWindow.pageText
+                                text: qsTr("Faster")
+                                enabled: readerSettings.speechRate < 1
+                                onClicked: readerSettings.speechRate = Math.min(1, Math.round(readerSettings.speechRate * 10 + 1) / 10)
+                            }
                         }
 
                         Label {
@@ -1591,6 +1795,10 @@ ThemedWindow {
         y: bar.y + bar.height
         width: Math.min(readerWindow.width - 2 * Theme.gutter, Math.round(44 * Theme.charWidth))
         padding: Theme.panePadding
+        onOpened: {
+            if (readerWindow.speech)
+                readerWindow.speech.loadVoices()
+        }
         onClosed: view.forceActiveFocus()
 
         background: Rectangle {
@@ -1747,6 +1955,42 @@ ThemedWindow {
                     if (value !== "scroll")
                         readerSettings.spreads = value === "spreads"
                 }
+            }
+
+            HeadingLabel {
+                Layout.topMargin: Theme.gutter
+                visible: readerWindow.speech !== null
+                text: qsTr("Reading aloud")
+            }
+
+            ChoiceBox {
+                objectName: "readerSpeechEngine"
+
+                readonly property var choices: [{ value: "", label: qsTr("The system's voice") }].concat(
+                    readerWindow.speech ? readerWindow.speech.engines.map(engine => ({ value: engine, label: engine })) : [])
+
+                Layout.fillWidth: true
+                visible: readerWindow.speech !== null && readerWindow.speech.engines.length > 1
+                model: choices
+                currentIndex: Math.max(0, choices.findIndex(choice => choice.value === readerSettings.speechEngine))
+                onActivated: function(index) {
+                    readerSettings.speechVoice = ""
+                    readerSettings.speechEngine = choices[index].value
+                    readerWindow.speech.loadVoices()
+                }
+            }
+
+            ChoiceBox {
+                objectName: "readerSpeechVoice"
+
+                readonly property var choices: [{ value: "", label: qsTr("The engine's voice") }].concat(
+                    readerWindow.speech ? readerWindow.speech.voices.map(voice => ({ value: voice.name, label: voice.label })) : [])
+
+                Layout.fillWidth: true
+                visible: readerWindow.speech !== null
+                model: choices
+                currentIndex: Math.max(0, choices.findIndex(choice => choice.value === readerSettings.speechVoice))
+                onActivated: function(index) { readerSettings.speechVoice = choices[index].value }
             }
 
             Label {

@@ -36,6 +36,7 @@
 #include "kobo_placement.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
+#include "book_search.h"
 #endif
 #include "sqlite_db.h"
 #include "cover_cache.h"
@@ -105,6 +106,7 @@ private slots:
     void laysOutPagesAsAsked();
     void searchesTheBook();
     void annotatesTheBook();
+    void readsAloud();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -1213,6 +1215,93 @@ void LibraryUiTest::annotatesTheBook()
                                                            "annot_id='Later'").arg(bookId)).toString().toUtf8())
                 .object().value(QLatin1String("removed")).toBool());
     db.close();
+#endif
+}
+
+// The book read aloud by Qt's mock engine: the sentence read marked on the
+// page, the next ones after it, into the next chapter, the page following;
+// paused, resumed and stopped.
+void LibraryUiTest::readsAloud()
+{
+#if !defined(COUSOIR_READER) || !defined(COUSOIR_SPEECH)
+    QSKIP("Built without Qt WebEngine or Qt TextToSpeech");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *settings = reader->property("settings").value<QObject *>();
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QObject *speech = bookReader->property("speech").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(settings && speech && view);
+    settings->setProperty("speechEngine", QStringLiteral("mock"));
+    QCOMPARE(speech->property("engine").toString(), QStringLiteral("mock"));
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+
+    const auto sentence = [speech] { return speech->property("sentence").toMap(); };
+    const QString marked = QStringLiteral(
+        "(function () { const h = CSS.highlights.get('cousoir-speech');"
+        "document.title = h && h.size === 1 ? [...h][0].toString().replace(/\\s+/g, ' ').trim() : 'none'; })()");
+    const auto markedText = [&] {
+        QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, marked));
+        QTest::qWait(50);
+        return view->property("title").toString();
+    };
+
+    // From the page: the chapter's title first, marked; paused there, as
+    // Qt's mock engine speaks fast.
+    QMetaObject::invokeMethod(reader, "toggleSpeech");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("speaking"));
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), QStringLiteral("The Harbour"));
+    QMetaObject::invokeMethod(speech, "pause");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("paused"));
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), QStringLiteral("The Harbour"), 10000);
+    // The next.
+    QMetaObject::invokeMethod(speech, "skip", Q_ARG(int, 1));
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), QStringLiteral("Arrival"));
+    QMetaObject::invokeMethod(speech, "pause");
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), QStringLiteral("Arrival"), 10000);
+    // On again, and on by itself to the ones after.
+    QMetaObject::invokeMethod(speech, "resume");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("speaking"));
+    QTRY_VERIFY_WITH_TIMEOUT(sentence().value(QStringLiteral("text")).toString().startsWith(QLatin1String("Chapter 1, paragraph")),
+                             20000);
+
+    // Past the chapter's last sentence: the next chapter, loaded and marked.
+    QString error;
+    const std::unique_ptr<EpubBook> book = EpubBook::open(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), &error);
+    QVERIFY2(book, qPrintable(error));
+    const QList<BookSentences::Sentence> chapter1 = BookSentences(*book, 1).sentences();
+    const QList<BookSentences::Sentence> chapter2 = BookSentences(*book, 2).sentences();
+    QVERIFY(chapter1.size() > 2 && !chapter2.isEmpty());
+    const QString now = sentence().value(QStringLiteral("text")).toString();
+    int at = 0;
+    while (at < chapter1.size() && chapter1.at(at).text != now)
+        ++at;
+    QVERIFY(at < chapter1.size());
+    QMetaObject::invokeMethod(speech, "skip", Q_ARG(int, int(chapter1.size()) - at));
+    QMetaObject::invokeMethod(speech, "pause");
+    QCOMPARE(sentence().value(QStringLiteral("spineIndex")).toInt(), 2);
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), chapter2.first().text);
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("spineIndex").toInt(), 2, 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), chapter2.first().text, 20000);
+    // And back to the first chapter's last.
+    QMetaObject::invokeMethod(speech, "skip", Q_ARG(int, -1));
+    QMetaObject::invokeMethod(speech, "pause");
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("spineIndex").toInt(), 1, 20000);
+    QCOMPARE(sentence().value(QStringLiteral("text")).toString(), chapter1.last().text);
+    // The page the sentence is on, shown.
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("page").toInt() > 0, 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), chapter1.last().text, 10000);
+
+    // Stopped: nothing marked.
+    QMetaObject::invokeMethod(reader, "toggleSpeech");
+    QCOMPARE(speech->property("state").toString(), QStringLiteral("stopped"));
+    QVERIFY(sentence().isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(markedText(), QStringLiteral("none"), 10000);
+    reader->close();
 #endif
 }
 

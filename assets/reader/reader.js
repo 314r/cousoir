@@ -447,6 +447,54 @@
         return count;
     }
 
+    // --- Reading aloud ------------------------------------------------------
+
+    // A place brought into sight: its page turned to, or in a scroll, the
+    // window moved for it to be a third down.
+    function bringIntoView(node, offset) {
+        if (!scrolled()) {
+            const shown = pageOf(node, offset);
+            if (shown !== page())
+                show(shown);
+            return;
+        }
+        let rect = null;
+        if (isText(node)) {
+            const range = document.createRange();
+            const at = Math.min(offset || 0, node.nodeValue.length);
+            range.setStart(node, at);
+            range.setEnd(node, Math.min(at + 1, node.nodeValue.length));
+            rect = range.getBoundingClientRect();
+        } else if (node.getBoundingClientRect) {
+            rect = node.getBoundingClientRect();
+        }
+        if (rect && (rect.top < 0 || rect.bottom > window.innerHeight * 0.85)) {
+            setScrollTop(Math.max(0, scroller().scrollTop + rect.top - window.innerHeight / 3));
+            report();
+        }
+    }
+
+    // The sentence read, { start, end }, marked and in sight; null for none.
+    function speak(place) {
+        if (!window.CSS || !CSS.highlights)
+            return false;
+        const range = place ? rangeOf(place.start, place.end) : null;
+        if (!range) {
+            CSS.highlights.delete('cousoir-speech');
+            return false;
+        }
+        CSS.highlights.set('cousoir-speech', new Highlight(range));
+        bringIntoView(range.startContainer, range.startOffset);
+        return true;
+    }
+
+    // The word read, by its CFI, in sight.
+    function follow(cfi) {
+        const decoded = cfi ? decode(cfi, document) : null;
+        if (decoded && decoded.node && decoded.node !== document)
+            bringIntoView(decoded.node, decoded.offset);
+    }
+
     // --- Pages ------------------------------------------------------------
 
     function scroller() {
@@ -581,6 +629,10 @@
             ::selection { background: ${settings.link}; color: ${settings.background}; }
             ::highlight(cousoir-search) { background-color: color-mix(in srgb, ${settings.link} 30%, transparent); }
             ::highlight(cousoir-search-shown) { background-color: ${settings.link}; color: ${settings.background}; }
+            ::highlight(cousoir-speech) {
+                background-color: color-mix(in srgb, ${settings.link} 20%, transparent);
+                text-decoration: underline ${settings.link};
+            }
             ${typeRules()}
         `;
     }
@@ -918,6 +970,8 @@
         restyleHighlight: restyleHighlight,
         highlightRect: highlightRect,
         markSearch: markSearch,
+        speak: speak,
+        follow: follow,
         removeHighlight: removeHighlight,
         selection: selection,
         clearSelection() { window.getSelection().removeAllRanges(); },

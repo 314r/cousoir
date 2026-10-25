@@ -406,7 +406,7 @@ Reading, finding, keeping: the reader does what a reader app does. Two
 ways further: listening to the book, and the parts of a book a reader
 leaves the page for.
 
-#### R4. Reading aloud — picked
+#### R4. Reading aloud — picked, done
 
 From round 3. A book read aloud is a new way to read it, while walking,
 for eyes that tire, for a language learned; Calibre's viewer has it, and
@@ -1551,4 +1551,39 @@ now takes the reader's size, its settings and clicks on its controls).
   the section, the page's own told, one renamed; the rows in the library
   as the viewer writes them (the note in the search text, the old title
   removed); read back; a bookmark removed.
+
+### 2026-10-25 — round 4, R4: reading aloud (`exp-speech`)
+
+- `BookSentences` finds a spine item's sentences in the page's XML:
+  `EpubCfi::PageText` now notes where blocks end, each block is split by
+  Qt's sentence boundaries (`QTextBoundaryFinder`), a line without a letter
+  is left out; each sentence has its CFIs and its place in the page's text,
+  for the CFI of a word read in it.
+- `BookSpeech` (built with Qt TextToSpeech) reads from the sentence a place
+  is in, a sentence after the other, across spine items to the book's end;
+  the sentence read and the word read, when the engine tells it, by their
+  CFIs. `BookReader::speech` gives it the book open and its language,
+  whose voices come first.
+- Qt's queue of texts (`enqueue()`) was tried first, for no pause between
+  sentences, and left: `aboutToSynthesize()` fires inside `enqueue()`,
+  before its id is returned, repeats ids, and a text given from within it
+  is said out of turn. Each sentence is said once the one before is over.
+- Engines: the one picked, else Qt's first, else the others; a plug-in
+  whose library is missing (Flite here) loads no engine and Qt does not
+  try another; speech-dispatcher's fails when its service is not there.
+  When none works, the footer says so. On this computer none speaks:
+  Calibre reads aloud with Piper voices of its own, which Cousoir has not.
+  The tests use Qt's mock engine; nothing was heard.
+- Engines pause at the end of a word: a one-word sentence ends instead, and
+  resuming then reads on from the next.
+- The window: R or the speaker starts and stops; the sentence marked by the
+  CSS Custom Highlight API, its page turned to, and in a scroll the window
+  moved for it to be a third down; the player in the footer, in the page's
+  colours (the footer grows for it); the engine and the voice in the Aa
+  panel; a jump while reading reads on from there.
+- Tests: `findsTheSentences` (blocks, CFIs naming the text, the sentence a
+  place is in) and the UI's `readsAloud` (the title read and marked, the
+  next, on by itself, into the next chapter and back, the page following,
+  paused, stopped). The probe scripts of the UI tests are functions: a
+  `const` declared twice at a page's top level stops the second run.
 
