@@ -31,7 +31,8 @@ if(UNIX AND NOT APPLE)
 endif()
 # libmtp, to reach a Kindle Paperwhite; without it, Cousoir sees no MTP device.
 # Qt WebEngine, to read books in Cousoir; without it, there is no reader.
-find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick)
+# Qt TextToSpeech, to read them aloud.
+find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick TextToSpeech)
 find_package(PkgConfig)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIBMTP IMPORTED_TARGET libmtp)
@@ -220,6 +221,11 @@ if(TARGET Qt6::WebEngineQuick)
     target_sources(cousoir_models PRIVATE book_reader.cpp book_reader.h)
     target_link_libraries(cousoir_models PUBLIC Qt6::WebEngineQuick)
     target_compile_definitions(cousoir_models PUBLIC COUSOIR_READER)
+    if(TARGET Qt6::TextToSpeech)
+        target_sources(cousoir_models PRIVATE book_speech.cpp book_speech.h)
+        target_link_libraries(cousoir_models PUBLIC Qt6::TextToSpeech)
+        target_compile_definitions(cousoir_models PUBLIC COUSOIR_SPEECH)
+    endif()
 endif()
 
 qt_add_executable(cousoir main.cpp)
@@ -298,11 +304,17 @@ set(COUSOIR_ICON_FILES
     assets/icons/more.svg
     assets/icons/note.svg
     assets/icons/panel-right.svg
+    assets/icons/pause.svg
+    assets/icons/play.svg
     assets/icons/plus.svg
     assets/icons/refresh.svg
     assets/icons/search.svg
     assets/icons/settings-appearance.svg
     assets/icons/settings.svg
+    assets/icons/skip-back.svg
+    assets/icons/skip-forward.svg
+    assets/icons/speaker.svg
+    assets/icons/stop.svg
     assets/icons/tag.svg
     assets/icons/theme-dark.svg
     assets/icons/theme-light.svg

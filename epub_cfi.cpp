@@ -252,8 +252,13 @@ PageText PageText::of(const Node &root, bool blockBreaks)
     bool space = false;
     // Where the white space began; none for a break between blocks.
     Point spaceStart;
+    // A block ended or began since the last character.
+    bool broken = false;
     const auto blockBreak = [&](const Node &node) {
-        if (blockBreaks && !space && isElement(node) && blocks.contains(node.localName.toLower())) {
+        if (!blockBreaks || !isElement(node) || !blocks.contains(node.localName.toLower()))
+            return;
+        broken = true;
+        if (!space) {
             space = true;
             spaceStart = {};
         }
@@ -275,11 +280,14 @@ PageText PageText::of(const Node &root, bool blockBreaks)
                     continue;
                 }
                 if (space && !page.text.isEmpty()) {
+                    if (broken)
+                        page.breaks.append(page.text.size());
                     page.text += u' ';
                     page.starts.append(spaceStart.node ? spaceStart : Point{ &node, i });
                     page.ends.append({ &node, i });
                 }
                 space = false;
+                broken = false;
                 page.text += c;
                 page.starts.append({ &node, i });
                 page.ends.append({ &node, i + 1 });
