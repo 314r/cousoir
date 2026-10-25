@@ -5,9 +5,11 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QHash>
 #include <QJsonArray>
+#include <QProcess>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMutex>
@@ -27,15 +29,18 @@
 
 #include "book.h"
 #include "book_library.h"
+#include "book_import.h"
 #include "book_search.h"
 #ifdef COUSOIR_SPEECH
 #include "book_speech.h"
 #endif
+#include "calibre_job.h"
 #include "cousoir_paths.h"
 #include "epub_book.h"
 #include "epub_cfi.h"
 #include "highlight_json.h"
 #include "kobo_highlights.h"
+#include "mobi_book.h"
 #include "xml_tree.h"
 
 namespace {
@@ -539,6 +544,27 @@ void BookReader::flush(bool withPosition)
     m_flushTimer.stop();
     if (!m_library || m_bookId <= 0)
         return;
+    // A Kindle book's highlights and bookmarks are Cousoir's own, kept with
+    // its positions: Calibre's viewer would look for them in its own
+    // conversion of the book.
+    if (m_local) {
+        if (m_pending.isEmpty())
+            return;
+        QJsonObject positions = readPositions();
+        const QString key = QStringLiteral("annotations:%1:%2").arg(m_uuid, m_format);
+        QJsonObject kept = positions.value(key).toObject();
+        for (const Annotation &annotation : std::as_const(m_pending)) {
+            kept.insert(annotation.type + u':' + annotation.id,
+                        QJsonObject{ { QStringLiteral("type"), annotation.type },
+                                     { QStringLiteral("id"), annotation.id },
+                                     { QStringLiteral("data"), QString::fromUtf8(annotation.data) } });
+        }
+        positions.insert(key, kept);
+        positions.remove(QStringLiteral("pending:") + m_uuid);
+        writePositions(positions);
+        m_pending.clear();
+        return;
+    }
     std::optional<ReadPosition> position;
     if (withPosition && !m_lastCfi.isEmpty() && m_lastCfi != m_start.value(QStringLiteral("cfi")).toString())
         position = ReadPosition{ m_format, QStringLiteral("local"), QStringLiteral("cousoir"), m_lastCfi,
@@ -619,6 +645,39 @@ QUrl BookReader::imageUrl(const QUrl &url) const
     if (!m_book || url.scheme() != QLatin1String(scheme) || url.host() != m_token)
         return {};
     return QUrl(QStringLiteral("image://book/") + m_token + url.path(QUrl::FullyEncoded));
+}
+
+bool BookReader::preparing() const
+{
+    return m_conversion != nullptr;
+}
+
+QString BookReader::preparingTitle() const
+{
+    return m_preparingTitle;
+}
+
+QStringList BookReader::convertedFormats()
+{
+    return { QStringLiteral("FB2"),  QStringLiteral("FBZ"),  QStringLiteral("DOCX"), QStringLiteral("ODT"),
+             QStringLiteral("RTF"),  QStringLiteral("HTMLZ"), QStringLiteral("HTML"), QStringLiteral("TXTZ"),
+             QStringLiteral("TXT"),  QStringLiteral("LIT"),  QStringLiteral("PDB"),  QStringLiteral("PRC"),
+             QStringLiteral("LRF"),  QStringLiteral("CHM"),  QStringLiteral("SNB"),  QStringLiteral("RB"),
+             QStringLiteral("TCR"),  QStringLiteral("PML"),  QStringLiteral("CBZ"),  QStringLiteral("CBR"),
+             QStringLiteral("CB7"),  QStringLiteral("CBC") };
+}
+
+QString BookReader::converter()
+{
+    const QString fake = qEnvironmentVariable("COUSOIR_EBOOK_CONVERT");
+    if (!fake.isEmpty())
+        return fake;
+    const QString debug = BookImport::calibreDebug();
+    if (debug.isEmpty())
+        return {};
+    const QString program = QFileInfo(debug).dir().filePath(
+        QStringLiteral("ebook-convert") + (debug.endsWith(QLatin1String(".exe")) ? QStringLiteral(".exe") : QString()));
+    return QFileInfo(program).isExecutable() ? program : QString();
 }
 
 QObject *BookReader::speech() const
@@ -703,9 +762,13 @@ QString BookReader::open(int bookId)
     if (!book)
         return tr("This book is no longer in the library.");
     QString path;
-    for (const char *wanted : { "EPUB", "KEPUB" }) {
+    QStringList wanted{ QStringLiteral("EPUB"), QStringLiteral("KEPUB"), QStringLiteral("AZW3"), QStringLiteral("MOBI"),
+                        QStringLiteral("AZW") };
+    if (!converter().isEmpty())
+        wanted += convertedFormats();
+    for (const QString &name : std::as_const(wanted)) {
         for (const BookFormat &format : book->formats) {
-            if (path.isEmpty() && format.format == QLatin1String(wanted) && !format.file.isEmpty()) {
+            if (path.isEmpty() && format.format == name && !format.file.isEmpty()) {
                 path = format.file;
                 m_format = format.format;
             }
@@ -714,6 +777,32 @@ QString BookReader::open(int bookId)
     if (path.isEmpty())
         return tr("“%1” has no EPUB to read.").arg(book->title);
     QString error;
+    // Another format, made an EPUB once, by Cousoir for a Kindle book, by
+    // Calibre for the others, kept in the cache while the book is
+    // unchanged.
+    m_local = m_format != QLatin1String("EPUB") && m_format != QLatin1String("KEPUB");
+    if (m_local) {
+        const QFileInfo info(path);
+        const QDir cache(CousoirPaths::cacheFolder(m_library->libraryPath()) + QStringLiteral("/reader"));
+        const QString prefix = QStringLiteral("%1-%2-").arg(book->uuid, m_format);
+        const QString made = cache.filePath(prefix + QStringLiteral("%1-%2.epub").arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch()));
+        if (!QFileInfo::exists(made)) {
+            QDir().mkpath(cache.path());
+            for (const QString &old : cache.entryList({ prefix + u'*' }, QDir::Files))
+                QFile::remove(cache.filePath(old));
+            const QString part = made + QStringLiteral(".part.epub");
+            if (convertedFormats().contains(m_format)) {
+                m_format.clear();
+                return convert(bookId, book->title, path, part, made) ? QString() : tr("Calibre cannot be run.");
+            }
+            if (!MobiBook::toEpub(path, part, &error) || !QFile::rename(part, made)) {
+                QFile::remove(part);
+                m_format.clear();
+                return error.isEmpty() ? tr("“%1” cannot be read.").arg(book->title) : error;
+            }
+        }
+        path = made;
+    }
     std::unique_ptr<EpubBook> opened = EpubBook::open(path, &error);
     if (!opened)
         return error;
@@ -737,7 +826,9 @@ QString BookReader::open(int bookId)
     // the library, of Calibre's viewer or its content server.
     const QJsonObject positions = readPositions();
     const QJsonObject kept = positions.value(m_uuid).toObject();
-    QList<ReadPosition> candidates = m_library->data().readPositions.value(bookId);
+    // A Kindle book's: Cousoir's alone, Calibre's viewer counting its places
+    // in its own conversion.
+    QList<ReadPosition> candidates = m_local ? QList<ReadPosition>() : m_library->data().readPositions.value(bookId);
     if (kept.value(QLatin1String("format")).toString() == m_format)
         candidates.append({ m_format, QStringLiteral("local"), QStringLiteral("cousoir"),
                             kept.value(QLatin1String("cfi")).toString(), kept.value(QLatin1String("epoch")).toDouble(),
@@ -762,7 +853,19 @@ QString BookReader::open(int bookId)
     const auto isViewers = [](const Annotation &annotation) {
         return annotation.userType == QLatin1String("local") && annotation.user == QLatin1String("viewer");
     };
-    for (const Annotation &annotation : m_library->annotations(bookId, m_format)) {
+    QList<Annotation> annotations;
+    if (m_local) {
+        const QJsonObject kept = positions.value(QStringLiteral("annotations:%1:%2").arg(m_uuid, m_format)).toObject();
+        for (const QJsonValue &value : kept) {
+            const QJsonObject entry = value.toObject();
+            annotations.append({ m_format, entry.value(QLatin1String("type")).toString(),
+                                 entry.value(QLatin1String("id")).toString(), 0,
+                                 entry.value(QLatin1String("data")).toString().toUtf8(), QString() });
+        }
+    } else {
+        annotations = m_library->annotations(bookId, m_format);
+    }
+    for (const Annotation &annotation : std::as_const(annotations)) {
         const QJsonObject highlight = QJsonDocument::fromJson(annotation.data).object();
         if (highlight.value(QLatin1String("removed")).toBool())
             continue;
@@ -853,6 +956,59 @@ void BookReader::close()
 QUrl BookReader::fileUrl() const
 {
     return m_pdfPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(m_pdfPath);
+}
+
+bool BookReader::convert(int bookId, const QString &title, const QString &source, const QString &part, const QString &made)
+{
+    if (m_conversion) {
+        m_conversion->disconnect(this);
+        CalibreJob::stopProcessGroup(m_conversion);
+    }
+    const QString program = converter();
+    if (program.isEmpty())
+        return false;
+    auto *process = new QProcess(this);
+    const QString folder = QFileInfo(made).dir().filePath(QStringLiteral("job-") + QFileInfo(made).completeBaseName());
+    QDir().mkpath(folder);
+    process->setProcessEnvironment(
+        CalibreJob::environment(folder, m_library ? m_library->interfaceLanguage() : QString()));
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    process->setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
+    m_conversion = process;
+    m_preparingBook = bookId;
+    m_preparingTitle = title;
+    const auto finish = [this, process, bookId, part, made, folder, title](const QString &failure) {
+        if (m_conversion != process)
+            return;
+        m_conversion = nullptr;
+        m_preparingBook = 0;
+        m_preparingTitle.clear();
+        QString error = failure;
+        if (error.isEmpty() && !QFile::rename(part, made))
+            error = tr("Calibre could not make an EPUB of “%1”.").arg(title);
+        if (!error.isEmpty())
+            QFile::remove(part);
+        QDir(folder).removeRecursively();
+        process->deleteLater();
+        emit preparingChanged();
+        emit prepared(bookId, error);
+    };
+    connect(process, &QProcess::finished, this, [process, finish, title, part](int code, QProcess::ExitStatus status) {
+        if (status == QProcess::NormalExit && code == 0 && QFileInfo::exists(part)) {
+            finish(QString());
+            return;
+        }
+        // Calibre's last words say why.
+        const QStringList lines = QString::fromUtf8(process->readAll()).trimmed().split(u'\n');
+        finish(tr("Calibre could not make an EPUB of “%1”: %2").arg(title, lines.isEmpty() ? QString() : lines.last().trimmed()));
+    });
+    connect(process, &QProcess::errorOccurred, this, [finish, title](QProcess::ProcessError processError) {
+        if (processError == QProcess::FailedToStart)
+            finish(tr("Calibre cannot be run to read “%1”.").arg(title));
+    });
+    process->start(program, { source, part });
+    emit preparingChanged();
+    return true;
 }
 
 QString BookReader::openPdf(int bookId)

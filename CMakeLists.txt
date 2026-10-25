@@ -137,6 +137,8 @@ qt_add_library(cousoir_core STATIC
     library_check.h
     metadata_download.cpp
     metadata_download.h
+    mobi_book.cpp
+    mobi_book.h
     mobi_metadata.cpp
     mobi_metadata.h
     mtp.cpp
@@ -167,6 +169,8 @@ qt_add_library(cousoir_core STATIC
     epub_cfi.h
     highlight_formats.cpp
     highlight_formats.h
+    html_soup.cpp
+    html_soup.h
     highlight_json.cpp
     highlight_json.h
     kobo_highlights.cpp

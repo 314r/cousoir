@@ -108,6 +108,7 @@ private slots:
     void annotatesTheBook();
     void readsAloud();
     void showsNotesInPlace();
+    void readsKindleAndOtherBooks();
     void encodesCfisAsTheReader();
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
@@ -1416,6 +1417,105 @@ void LibraryUiTest::showsNotesInPlace()
                              20000);
     QVERIFY(!shown(QStringLiteral("readerNoteBoxText")));
     reader->close();
+#endif
+}
+
+// A Kindle book read by Cousoir itself, its place and highlights kept by
+// Cousoir alone; a book in another format made an EPUB by Calibre first.
+void LibraryUiTest::readsKindleAndOtherBooks()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    makeWritable();
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.azw3"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QCOMPARE(bookReader->property("format").toString(), QStringLiteral("AZW3"));
+    const int bookId = bookReader->property("bookId").toInt();
+    QVERIFY(bookReader->property("toc").toList().size() >= 6);
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    // The chapter "The Valley": a highlight there, a page on.
+    int valley = -1;
+    for (const QVariant &entry : bookReader->property("toc").toList()) {
+        if (entry.toMap().value(QStringLiteral("title")).toString() == QLatin1String("The Valley"))
+            valley = entry.toMap().value(QStringLiteral("spineIndex")).toInt();
+    }
+    QVERIFY(valley > 0);
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, valley), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == valley
+                                 && !reader->property("position").toString().isEmpty(),
+                             20000);
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = [...document.querySelectorAll('p')].find(p => p.textContent.startsWith('Chapter 2')); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 9);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
+    QMetaObject::invokeMethod(reader, "highlightSelection", Q_ARG(QVariant, QStringLiteral("purple")));
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
+    QTest::keyClick(reader, Qt::Key_Right);
+    QTRY_COMPARE(reader->property("page").toInt(), 1);
+    const QString place = reader->property("position").toString();
+    reader->close();
+    waitForSave();
+    // Nothing of it in the library: Calibre's viewer has its own places.
+    SqliteDb db;
+    QString dbError;
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QCOMPARE(db.value(QStringLiteral("SELECT count(*) FROM annotations WHERE book=%1").arg(bookId)).toInt(), 0);
+    QCOMPARE(db.value(QStringLiteral("SELECT count(*) FROM last_read_positions WHERE book=%1").arg(bookId)).toInt(), 0);
+    db.close();
+    // Read again where it was left, its highlight there.
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && reader->property("position").toString() == place, 20000);
+    QCOMPARE(bookReader->property("highlights").toList().size(), 1);
+    QCOMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("which")).toString(),
+             QStringLiteral("purple"));
+    reader->close();
+
+    // A text file, made an EPUB by Calibre, here a stand-in, once.
+    qputenv("COUSOIR_EBOOK_CONVERT", COUSOIR_TEST_DATA_DIR "/fake-ebook-convert");
+    qputenv("COUSOIR_FAKE_DELAY", "1");
+    const QString text = m_libraryDir->filePath(QStringLiteral("Notes of a voyage.txt"));
+    QFile file(text);
+    QVERIFY(file.open(QIODevice::WriteOnly) && file.write("A voyage, told in plain text.\n") > 0);
+    file.close();
+    QString error;
+    QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
+                              Q_ARG(QVariantList, QVariantList{ QUrl::fromLocalFile(text) }));
+    QCOMPARE(error, QString());
+    waitForSave();
+    int textBook = 0;
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &row : bookRows()) {
+            if (row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("Notes of a voyage"))
+                textBook = row.toMap().value(QStringLiteral("id")).toInt();
+        }
+        return textBook > 0;
+    }(), 15000);
+    library()->setProperty("currentBookId", textBook);
+    QString format;
+    QMetaObject::invokeMethod(library(), "readableFormat", Q_RETURN_ARG(QString, format), Q_ARG(int, textBook));
+    QCOMPARE(format, QStringLiteral("TXT"));
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(bookReader->property("preparing").toBool());
+    QCOMPARE(bookReader->property("preparingTitle").toString(), QStringLiteral("Notes of a voyage"));
+    QTRY_VERIFY_WITH_TIMEOUT(!bookReader->property("preparing").toBool() && reader->isVisible()
+                                 && !reader->property("position").toString().isEmpty(),
+                             20000);
+    QCOMPARE(bookReader->property("format").toString(), QStringLiteral("TXT"));
+    QCOMPARE(bookReader->property("title").toString(), QStringLiteral("The Voyage"));
+    reader->close();
+    // Kept: no conversion the next time.
+    qputenv("COUSOIR_FAKE_FAIL", "1");
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QVERIFY(!bookReader->property("preparing").toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    reader->close();
+    qunsetenv("COUSOIR_FAKE_FAIL");
+    qunsetenv("COUSOIR_FAKE_DELAY");
+    qunsetenv("COUSOIR_EBOOK_CONVERT");
 #endif
 }
 

@@ -1873,9 +1873,15 @@ QString BookLibrary::readableFormat(int bookId) const
     const Book *book = findBook(bookId);
     if (!book || !readerAvailable())
         return {};
-    for (const char *wanted : { "EPUB", "KEPUB", "PDF" }) {
+    QStringList wanted{ QStringLiteral("EPUB"), QStringLiteral("KEPUB"), QStringLiteral("AZW3"), QStringLiteral("MOBI"),
+                        QStringLiteral("AZW"), QStringLiteral("PDF") };
+#ifdef COUSOIR_READER
+    if (!BookReader::converter().isEmpty())
+        wanted += BookReader::convertedFormats();
+#endif
+    for (const QString &name : std::as_const(wanted)) {
         for (const BookFormat &format : book->formats) {
-            if (format.format == QLatin1String(wanted) && !format.file.isEmpty())
+            if (format.format == name && !format.file.isEmpty())
                 return format.format;
         }
     }

@@ -14,6 +14,7 @@
 #include "book.h"
 
 class BookLibrary;
+class QProcess;
 class BookSearch;
 class BookSpeech;
 class EpubBook;
@@ -64,6 +65,9 @@ class BookReader : public QObject
     // The book read aloud (BookSpeech); null when Cousoir is built without
     // Qt TextToSpeech.
     Q_PROPERTY(QObject *speech READ speech CONSTANT)
+    // Calibre making an EPUB of the book to open: its title.
+    Q_PROPERTY(bool preparing READ preparing NOTIFY preparingChanged)
+    Q_PROPERTY(QString preparingTitle READ preparingTitle NOTIFY preparingChanged)
 
 public:
     explicit BookReader(QObject *parent = nullptr);
@@ -92,8 +96,20 @@ public:
     bool searching() const;
     bool searchMore() const;
     QObject *speech() const;
+    bool preparing() const;
+    QString preparingTitle() const;
 
-    // Opens the book's EPUB. Returns why it cannot, empty once open.
+    // The formats Cousoir reads once Calibre makes them EPUBs, in the order
+    // it prefers them.
+    static QStringList convertedFormats();
+    // Calibre's ebook-convert, or the program COUSOIR_EBOOK_CONVERT names
+    // (the tests'); empty without Calibre.
+    static QString converter();
+
+    // Opens the book's EPUB, KEPUB or Kindle book, else the EPUB Calibre
+    // makes of another of its formats. Returns why it cannot, empty once
+    // open, or while Calibre makes it: `preparing` is then true, and
+    // prepared() tells when it is done.
     Q_INVOKABLE QString open(int bookId);
     // Opens the book's PDF; startPosition then has its { page }.
     Q_INVOKABLE QString openPdf(int bookId);
@@ -153,11 +169,16 @@ signals:
     void highlightsChanged();
     void bookmarksChanged();
     void searchChanged();
+    void preparingChanged();
+    // The EPUB of the book `bookId` is made, or could not be: `error`.
+    void prepared(int bookId, const QString &error);
 
 private:
     QString positionsFile() const;
     QJsonObject readPositions() const;
     void writePositions(const QJsonObject &positions) const;
+    // Has Calibre make `part` of `source`, renamed `made` once done.
+    bool convert(int bookId, const QString &title, const QString &source, const QString &part, const QString &made);
     void queueAnnotation(const Annotation &annotation);
     // A highlight changed, kept as it is now, as whose it is.
     void queueHighlight(const QString &uuid);
@@ -178,6 +199,13 @@ private:
     QString m_uuid;
     QString m_format;
     QString m_token;
+    // A book read through an EPUB Cousoir made of it: its places and
+    // highlights kept by Cousoir alone.
+    bool m_local = false;
+    // The conversion running, if any, and its book.
+    QPointer<QProcess> m_conversion;
+    int m_preparingBook = 0;
+    QString m_preparingTitle;
     QString m_pdfPath;
     QString m_pdfTitle;
     QVariantMap m_start;

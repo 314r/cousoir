@@ -742,8 +742,22 @@ Cousoir departs from Calibre here:
 ## Reading in Cousoir
 
 Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
-the book in Cousoir's reader: its EPUB (or KEPUB), else its PDF. Ctrl+O still
+the book in Cousoir's reader: its EPUB (or KEPUB), else its Kindle book (AZW3,
+MOBI, AZW), else its PDF, else, when Calibre is installed, another of its
+formats (FB2, DOCX, ODT, RTF, TXT, HTMLZ, LIT, PDB, comics…). Ctrl+O still
 opens it in the desktop's reader.
+
+A Kindle book is made an EPUB by Cousoir itself, as Calibre's MOBI reader
+extracts its files: an AZW3, the KF8 half of a MOBI that holds both kinds
+(Calibre's "both"), or a MOBI of the old kind alone (Calibre's default), its
+pages, styles, pictures, fonts, links and contents. A book with DRM, an
+Amazon Topaz or KFX book cannot be read, and says so. The other formats are
+made EPUBs by Calibre's `ebook-convert`, which can take a while: the reader
+says so meanwhile. Either EPUB is kept in Cousoir's cache, and made again
+only when the book's file changes. The place and the highlights in such a
+book are Cousoir's alone, kept with its own positions and not in the
+library: Calibre's viewer counts its places in its own conversion of the
+book, which Cousoir's does not reproduce.
 
 An EPUB shows a screen at a time: the arrows, Space, Page Up and Page
 Down, the wheel or a click on either side of the page turn the pages, Home
