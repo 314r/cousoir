@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -52,6 +53,10 @@ int usbProductId(const QString &node, const QString &sysRoot = QStringLiteral("/
 QString modelName(int productId, const QString &modelId);
 // The firmware version as numbers, (0, 0, 0) when unknown.
 QList<int> firmwareVersion(const Device &device);
+
+// The columns of a table of the Kobo's database, lower case: each firmware
+// has its own.
+QSet<QString> columnsOf(SqliteDb &db, const QString &table);
 
 // Opens the Kobo's database at `path` to read it: as it is, unless the Kobo
 // left a write-ahead log beside it, which only a copy, in `copy`, can take

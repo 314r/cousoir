@@ -5,9 +5,10 @@
 #include <QDir>
 #include <QHash>
 #include <QRegularExpression>
-#include <QTimeZone>
 #include <QUrl>
 
+#include <algorithm>
+#include <functional>
 #include <optional>
 
 #include "book.h"
@@ -28,9 +29,49 @@ bool isText(const Node &node)
     return node.kind == Node::Kind::Text || node.kind == Node::Kind::Cdata;
 }
 
-// The file of the book a Kobo's id names: "OEBPS/Text/c1.xhtml" of a KEPUB's
-// "…/book.kepub.epub!OEBPS!Text/c1.xhtml", of an EPUB's
-// "…/book.epub#(3)OEBPS/Text/c1.xhtml".
+// "span#kobo\.3\.1": the id of Kobo's span, "kobo.3.1".
+QString spanIdOf(const QString &path)
+{
+    static const QRegularExpression span(QStringLiteral("kobo\\\\?\\.(\\d+)\\\\?\\.(\\d+)"));
+    const QRegularExpressionMatch match = span.match(path);
+    return match.hasMatch() ? QStringLiteral("kobo.%1.%2").arg(match.captured(1), match.captured(2)) : QString();
+}
+
+// The span of Kobo's a node is in, null for none.
+const Node *spanOf(const Node *node)
+{
+    for (; node; node = node->parent) {
+        if (node->isElement("span") && node->attribute(QStringLiteral("id")).startsWith(QLatin1String("kobo.")))
+            return node;
+    }
+    return nullptr;
+}
+
+// How far into the text of `span` a place in one of its texts is.
+qint64 offsetIn(const Node &span, const EpubCfi::Point &point)
+{
+    qint64 offset = 0;
+    const std::function<bool(const Node &)> walk = [&](const Node &node) {
+        if (&node == point.node) {
+            offset += point.offset;
+            return true;
+        }
+        if (isText(node)) {
+            offset += node.text.size();
+            return false;
+        }
+        for (const auto &child : node.children) {
+            if (walk(*child))
+                return true;
+        }
+        return false;
+    };
+    walk(span);
+    return offset;
+}
+
+} // namespace
+
 QString fileOf(const QString &contentId)
 {
     const qsizetype open = contentId.indexOf(QLatin1String("#("));
@@ -43,18 +84,14 @@ QString fileOf(const QString &contentId)
         return {};
     parts.removeFirst();
     parts.removeAll(QString());
-    return QDir::cleanPath(parts.join(u'/'));
+    // A highlight's may name the section of the file it is in: "#d14e4446".
+    return QDir::cleanPath(parts.join(u'/').section(u'#', 0, 0));
 }
 
-// "span#kobo\.3\.1": the id of Kobo's span, "kobo.3.1".
-QString spanIdOf(const QString &path)
+QString spanPath(const QString &id)
 {
-    static const QRegularExpression span(QStringLiteral("kobo\\\\?\\.(\\d+)\\\\?\\.(\\d+)"));
-    const QRegularExpressionMatch match = span.match(path);
-    return match.hasMatch() ? QStringLiteral("kobo.%1.%2").arg(match.captured(1), match.captured(2)) : QString();
+    return QStringLiteral("span#") + QString(id).replace(u'.', QLatin1String("\\."));
 }
-
-} // namespace
 
 QString folded(const QString &text)
 {
@@ -111,6 +148,15 @@ struct PlacementBook::Page
     // The body's text, white space folded, and where each of its characters
     // is in the page.
     std::optional<EpubCfi::PageText> folded;
+    // In a KEPUB, Kobo's spans of the page in order.
+    std::optional<QList<Node *>> koboSpans;
+
+    const QList<Node *> &spansInOrder()
+    {
+        if (!koboSpans)
+            koboSpans = XmlTree::findAll(root.get(), [](const Node &node) { return spanOf(&node) == &node; });
+        return *koboSpans;
+    }
 
     const EpubCfi::PageText &text()
     {
@@ -169,7 +215,11 @@ PlacementBook::Page *PlacementBook::page(int spineIndex)
 
 int PlacementBook::spineIndexOf(const QString &contentId) const
 {
-    const QString name = fileOf(contentId);
+    return spineIndexOfFile(fileOf(contentId));
+}
+
+int PlacementBook::spineIndexOfFile(const QString &name) const
+{
     if (name.isEmpty())
         return -1;
     for (const QString &candidate : { name, QUrl::fromPercentEncoding(name.toUtf8()) }) {
@@ -284,17 +334,143 @@ Placement PlacementBook::place(const KoboHighlights::Highlight &highlight)
     return placement;
 }
 
+Spot PlacementBook::placePoint(const QString &bookmark, double chapterProgress)
+{
+    Spot spot;
+    const qsizetype hash = bookmark.indexOf(u'#');
+    const int spineIndex = spineIndexOfFile(QDir::cleanPath(hash < 0 ? bookmark : bookmark.left(hash)));
+    Page *page = this->page(spineIndex);
+    if (!page)
+        return spot;
+    std::optional<EpubCfi::Point> point;
+    const QString id = hash < 0 ? QString() : spanIdOf(bookmark.mid(hash + 1));
+    if (!id.isEmpty()) {
+        if (m_format == QLatin1String("KEPUB")) {
+            const Node *span = page->cfi->element(id);
+            if (span && !span->children.empty() && isText(*span->children.front()))
+                point = EpubCfi::Point{ span->children.front().get(), 0 };
+        } else {
+            if (!page->spans)
+                page->spans = Kepub::spanStarts(*page->root);
+            const auto found = page->spans->constFind(id);
+            if (found != page->spans->cend())
+                point = EpubCfi::Point{ found->text, found->offset };
+        }
+        if (point)
+            spot.method = Method::Spans;
+    }
+    // Without its span, as far into the file as the Kobo was; a file with
+    // no text, a picture, at its start.
+    if (!point && !page->text().text.isEmpty()) {
+        const qsizetype length = page->text().text.size();
+        point = page->text().starts.at(std::clamp(qsizetype(chapterProgress * double(length)), qsizetype(0), length - 1));
+        spot.method = Method::Text;
+    }
+    if (!point) {
+        const QList<Node *> bodies = XmlTree::findAll(page->root.get(), [](const Node &node) { return node.isElement("body"); });
+        if (bodies.isEmpty())
+            return spot;
+        point = EpubCfi::Point{ bodies.first(), -1 };
+        spot.method = Method::Text;
+    }
+    spot.spineIndex = spineIndex;
+    spot.spineName = m_book->spine().at(spineIndex).name;
+    spot.cfi = page->cfi->encode(*point->node, point->offset);
+    return spot;
+}
+
+std::optional<TextSpot> PlacementBook::textAt(int spineIndex, const QString &startCfi, const QString &endCfi)
+{
+    Page *page = this->page(spineIndex);
+    if (!page)
+        return std::nullopt;
+    const EpubCfi::Point start = page->cfi->decode(startCfi);
+    if (!start.node)
+        return std::nullopt;
+    const EpubCfi::PageText &text = page->text();
+    TextSpot spot;
+    spot.spineName = m_book->spine().at(spineIndex).name;
+    spot.length = text.text.size();
+    spot.at = text.indexOf(start);
+    if (endCfi.isEmpty()) {
+        // Enough of what follows to be found again, some words; at the end
+        // of the file, what comes before; in a file with no text, nothing.
+        if (spot.at < 0)
+            spot.at = std::max(qsizetype(0), spot.length - 80);
+        spot.text = text.text.mid(spot.at, 80).trimmed();
+        return spot;
+    }
+    const EpubCfi::Point end = page->cfi->decode(endCfi);
+    if (spot.at < 0 || !end.node)
+        return std::nullopt;
+    spot.text = folded(page->cfi->textBetween(start, end));
+    if (spot.text.isEmpty())
+        return std::nullopt;
+    return spot;
+}
+
+std::optional<SpanRange> PlacementBook::spansAt(const TextSpot &spot)
+{
+    if (spot.text.isEmpty())
+        return startOf(spot.spineName);
+    const int spineIndex = spineIndexOfFile(spot.spineName);
+    Page *page = this->page(spineIndex);
+    if (!page)
+        return std::nullopt;
+    const EpubCfi::PageText &text = page->text();
+    const qsizetype hint = spot.length > 0 ? qsizetype(double(spot.at) * double(text.text.size()) / double(spot.length)) : 0;
+    const qsizetype at = page->find(spot.text, hint);
+    if (at < 0)
+        return std::nullopt;
+    const qsizetype last = at + spot.text.size() - 1;
+    // A place in no span, white space between them, is the next span's.
+    const auto spanFrom = [&](qsizetype index, qsizetype step, qsizetype stop) -> const Node * {
+        for (qsizetype i = index; i != stop; i += step) {
+            if (const Node *span = spanOf(text.starts.at(i).node))
+                return span;
+        }
+        return nullptr;
+    };
+    const Node *startSpan = spanFrom(at, 1, last + 1);
+    const Node *endSpan = spanFrom(last, -1, at - 1);
+    if (!startSpan || !endSpan)
+        return std::nullopt;
+    // From the first character in a span to the last.
+    qsizetype first = at;
+    while (spanOf(text.starts.at(first).node) != startSpan)
+        ++first;
+    qsizetype final = last;
+    while (spanOf(text.starts.at(final).node) != endSpan)
+        --final;
+    SpanRange range;
+    range.spineName = m_book->spine().at(spineIndex).name;
+    range.startSpan = startSpan->attribute(QStringLiteral("id"));
+    range.startOffset = offsetIn(*startSpan, text.starts.at(first));
+    range.endSpan = endSpan->attribute(QStringLiteral("id"));
+    range.endOffset = offsetIn(*endSpan, text.ends.at(final));
+    range.progress = text.text.isEmpty() ? 0 : double(at) / double(text.text.size());
+    return range;
+}
+
+SpanRange PlacementBook::startOf(const QString &spineName)
+{
+    SpanRange range;
+    const int spineIndex = spineIndexOfFile(spineName);
+    Page *page = this->page(spineIndex);
+    range.spineName = spineIndex < 0 ? spineName : m_book->spine().at(spineIndex).name;
+    // As the Kobo has it where a file has no span of its.
+    range.startSpan = page && !page->spansInOrder().isEmpty() ? page->spansInOrder().first()->attribute(QStringLiteral("id"))
+                                                               : QStringLiteral("kobo.1.1");
+    range.endSpan = range.startSpan;
+    return range;
+}
+
 QDateTime changedAt(const KoboHighlights::Highlight &highlight)
 {
-    static const QRegularExpression zoned(QStringLiteral("(Z|[+-]\\d\\d:?\\d\\d)$"));
     for (const QString &written : { highlight.modified, highlight.created }) {
-        const QString text = written.trimmed();
-        QDateTime time = QDateTime::fromString(text, Qt::ISODateWithMs);
-        if (!time.isValid())
-            continue;
-        if (!zoned.match(text).hasMatch())
-            time = QDateTime(time.date(), time.time(), QTimeZone::UTC);
-        return time.toUTC();
+        const QDateTime time = KoboHighlights::koboTime(written);
+        if (time.isValid())
+            return time;
     }
     return {};
 }

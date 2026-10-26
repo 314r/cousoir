@@ -654,16 +654,57 @@ Kobo was last read as is kept in `~/.local/share/cousoir/kobo/`, a file
 per Kobo: its highlights go into the library again when it opens, and
 what the library cannot hold still shows in Highlights: books it has not,
 highlights not found in its copy, notes made on no text. The Kobo's
-database is only read for any of this. The golden test has Calibre list,
-search and change the highlights `cousoir-cli apply` put in, and checks
-that a second sync keeps what Calibre changed
-(`tools/oracle/kobo_highlights_check.py`).
+database is only read for any of this; Sync reading, below, writes to it.
+The golden test has Calibre list, search and change the highlights
+`cousoir-cli apply` put in, and checks that a second sync keeps what
+Calibre changed (`tools/oracle/kobo_highlights_check.py`).
+
+Where reading stopped goes into the library too, each time the Kobo is read:
+where it stopped in a KEPUB put on it by hand, when the Kobo was read since
+the library last heard of the book's reading. It is a row of
+`last_read_positions`, user `kobo` and the Kobo's serial number as the
+device, at the place of the Kobo's span in the library's copy of the book,
+found as its highlights are; Cousoir's reader then opens the book there,
+and says so. A book bought from Kobo keeps its place in Kobo's cloud and is
+left alone.
+
+Sync reading, on the Kobo's page or in Ctrl+K, goes the other way, and only
+when asked. For each KEPUB on the Kobo that is a book of the library:
+
+- Where the library stopped (Cousoir's reader, Calibre's viewer), when
+  newer than where the Kobo did, written in the book's row of `content` as
+  the Kobo keeps its own place: `ChapterIDBookmarked`, the file and Kobo's
+  span, `___PercentRead`, `CurrentChapterProgress` and `DateLastRead`.
+- The highlights and notes of Cousoir's reader and Calibre's viewer the Kobo
+  has not, as rows of `Bookmark` written as the Kobo writes its own: Kobo's
+  spans and offsets in them, the file's row, the Kobo's user, each a UUID
+  made of the highlight's own id. A highlight removed in the library goes
+  from the Kobo; a Kobo's own whose note was changed in Cousoir, or that
+  was removed there, is changed or removed on the Kobo too.
+
+Each place is found in the KEPUB on the Kobo itself, by the library's text
+there, so that a KEPUB another converter made works too; what is not found
+is left out, and the notice says what. Ejected, the Kobo opens the book
+where you stopped, with your highlights. Plugged in again, what became of
+them there comes back, a note written on the Kobo or a highlight removed
+there, and none comes back as the Kobo's own; a second sync writes nothing.
+When all those of a book are gone from the Kobo, the Kobo lost them taking
+the book in again rather than you removing them: they stay in the library,
+and the next sync puts them back.
+Before writing, Cousoir keeps a copy of the Kobo's database in
+`~/.local/share/cousoir/kobo/backups/`, the last five of each Kobo, and
+writes nothing if the database changed since it was read, while Calibre is
+open or books are being sent, or to a database or firmware newer than
+Calibre's Kobo driver writes to. The highlights put on a Kobo are noted
+beside its snapshot, so that one removed there is removed here rather than
+put back.
 
 Cousoir departs from Calibre here:
 
-- It never writes to the Kobo's own database, `.kobo/KoboReader.sqlite`,
-  which it only reads. The Kobo takes in the books sent, and forgets the
-  books removed, once unplugged. Calibre also edits the database: it puts its
+- It writes to the Kobo's own database, `.kobo/KoboReader.sqlite`, only
+  when Sync reading is pressed, and then only where reading stopped and the
+  highlights. The Kobo takes in the books sent, and forgets the books
+  removed, once unplugged. Calibre also edits the database: it puts its
   series and collections there, clears the record of a book deleted on the
   Kobo before sending it again, and records a new file's size so that the
   Kobo keeps the reading position of a book replaced. A book sent again with
@@ -855,8 +896,11 @@ Where reading stopped is kept as reading goes, and in the library when the
 book closes, where Calibre keeps its own: a CFI in `last_read_positions`, as
 Calibre's viewer counts positions in its pages (from
 `src/pyj/read_book/cfi.pyj`), user `local`, device `cousoir`. A book opens
-where the newest position left it, Cousoir's own or one Calibre's viewer or
-its content server wrote.
+where the newest position left it, Cousoir's own or one Calibre's viewer,
+its content server or a Kobo wrote; a Kobo's is said a moment in place of
+the title, "Opened where Kobo Libra 2 stopped". Sync reading, on a Kobo's
+page, puts where you stopped and your highlights on the Kobo (see
+[Kobo](#kobo)).
 
 A bar shows over the text selected: Calibre's five colours, each making a
 highlight of it (H makes one in the colour marked, the last one used), a
@@ -1446,6 +1490,18 @@ The tests check the port against Calibre itself:
   fake Kobo into a library: waiting while it cannot be written, then in,
   nothing written when unchanged, hidden on the Kobo removed, taken out and
   left out; `commit_engine_tests` checks every rule of the merge.
+- `kobo_placement_tests` also finds the library's highlights again by
+  Kobo's spans in the KEPUB on a Kobo, places where a Kobo stopped, and
+  reads the files a Kobo's ids name, a section of the file included.
+  `kobo_write_tests` syncs The Voyage with a fake Kobo whose rows are
+  written as a Kobo Libra 2 with firmware 4.38 writes them
+  (`tests/data/kobo-sync.sql`): the Kobo's place into the library only when
+  newer; the library's place and highlights to the Kobo, read back as the
+  Kobo's and placed where they were made; a note written and a highlight
+  removed on the Kobo brought back, never one put there after the Kobo was
+  read; a second sync writing nothing; the refusals; and the copies kept.
+  `book_library_tests` does it all through the Kobo's page, and the UI
+  tests open a book where a Kobo stopped.
 - `epub_book_tests` reads EPUB 3 and EPUB 2 books: their spine, their table
   of contents from nav or NCX, nested, and paths resolved. The UI tests read
   `tests/data/reader/voyage.epub` (`tools/make_reader_fixture.py`) in the

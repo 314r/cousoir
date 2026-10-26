@@ -46,9 +46,9 @@ class BookReader : public QObject
     Q_PROPERTY(qint64 totalSize READ totalSize NOTIFY bookChanged)
     // { title, spineIndex, fragment, depth }.
     Q_PROPERTY(QVariantList toc READ toc NOTIFY bookChanged)
-    // Where to open: { spineIndex, cfi, device }, the newest position kept,
-    // Cousoir's own or one in the library's, of Calibre's viewer for
-    // instance.
+    // Where to open: { spineIndex, cfi, device, kobo }, the newest position
+    // kept, Cousoir's own or one in the library's, of Calibre's viewer for
+    // instance; kobo the name of the Kobo it comes from, else empty.
     Q_PROPERTY(QVariantMap startPosition READ startPosition NOTIFY bookChanged)
     // A PDF's file, which Qt Pdf shows.
     Q_PROPERTY(QUrl fileUrl READ fileUrl NOTIFY bookChanged)

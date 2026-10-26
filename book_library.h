@@ -241,10 +241,11 @@ public:
     // and the Kobos', as last read from the library.
     QList<Annotation> annotations(int bookId, const QString &format) const;
     // Merges readers' highlights into the library's annotations of their
-    // users, in one change, or takes all of a user's out. The change's id,
-    // which changeFinished() tells; -1, and nothing done, while the library
-    // cannot be written.
-    int saveDeviceAnnotations(const QList<DeviceAnnotations> &changes);
+    // users, with where they stopped in books, in one change, or takes all
+    // of a user's out. The change's id, which changeFinished() tells; -1,
+    // and nothing done, while the library cannot be written.
+    int saveDeviceAnnotations(const QList<DeviceAnnotations> &changes,
+                              const QList<QPair<int, ReadPosition>> &positions = {});
     int removeAnnotationUser(const QString &userType, const QString &user);
     // Shows the book's folder in the file manager. Returns an error message,
     // empty on success.

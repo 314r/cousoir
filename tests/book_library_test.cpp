@@ -20,6 +20,12 @@
 #include "fake_open_library.h"
 #include "highlight_sync.h"
 #include "cousoir_paths.h"
+#include "epub_book.h"
+#include "epub_cfi.h"
+#include "highlight_json.h"
+#include "kepub.h"
+#include "kobo_highlights.h"
+#include "xml_tree.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -105,6 +111,7 @@ private slots:
     void sendsToKindles();
     void readsKindleClippings();
     void syncsKoboHighlights();
+    void syncsReadingWithAKobo();
     void tellsWhetherChangesWentIn();
     void checksLibrary();
     void mergesAuthorVariants();
@@ -1642,6 +1649,122 @@ void BookLibraryTest::syncsKoboHighlights()
     QVERIFY(QDir(CousoirPaths::koboFolder()).removeRecursively());
 }
 
+
+// The Kobo's place comes into the library when it is read; where the library
+// stopped, and its highlights, go to the Kobo when asked: then the Kobo read
+// again brings back nothing of them as its own, and a second sync writes
+// nothing.
+void BookLibraryTest::syncsReadingWithAKobo()
+{
+    QVERIFY(QDir(CousoirPaths::koboFolder()).removeRecursively());
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QSignalSpy added(library.get(), &BookLibrary::booksAdded);
+    const QString epub = QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub");
+    QCOMPARE(library->addBooks({ QUrl::fromLocalFile(epub) }), QString());
+    QVERIFY(added.wait(15000));
+    const int voyage = added.first().first().toList().first().toInt();
+    QVERIFY(waitForSave(library.get()));
+
+    QTemporaryDir kobo;
+    QString error;
+    QVERIFY(makeKobo(kobo.path(), &error));
+    const QString database = QDir(kobo.path()).filePath(QStringLiteral(".kobo/KoboReader.sqlite"));
+    {
+        SqliteDb db;
+        QVERIFY(db.open(database, SqliteDb::Mode::ReadWrite, &error));
+        QVERIFY2(db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo-sync.sql"))), &error), qPrintable(error));
+    }
+    const QString kepub = QDir(kobo.path()).filePath(QStringLiteral("Ann Example/The Voyage.kepub.epub"));
+    QVERIFY(QDir().mkpath(QFileInfo(kepub).path()));
+    QVERIFY2(Kepub::kepubify(epub, kepub, {}, &error), qPrintable(error));
+    QTemporaryDir config;
+    QList<Volume> volumes{ { kobo.path(), QStringLiteral("/dev/sdz") } };
+    DeviceLibrary devices;
+    devices.setNative(true);
+    devices.setConfigDirectory(config.path());
+    HighlightSync sync;
+    sync.setLibrary(library.get());
+    sync.setDevices(&devices);
+    devices.setVolumeProvider([&volumes] { return volumes; }, 20);
+    devices.setLibrary(library.get());
+
+    // The Kobo read: where it stopped, in the library.
+    const auto koboPlace = [&library, voyage] {
+        for (const ReadPosition &position : library->data().readPositions.value(voyage)) {
+            if (position.user == QLatin1String("kobo"))
+                return position;
+        }
+        return ReadPosition();
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(!koboPlace().cfi.isEmpty(), 15000);
+    QCOMPARE(koboPlace().device, QStringLiteral("N418000000000"));
+    QVERIFY(koboPlace().cfi.startsWith(QLatin1String("epubcfi(/6/")));
+    QTRY_VERIFY_WITH_TIMEOUT(!devices.loading() && !sync.busy(), 15000);
+
+    // Read here since, and highlighted.
+    QString text;
+    {
+        const std::unique_ptr<EpubBook> book = EpubBook::open(epub, &error);
+        const std::unique_ptr<XmlTree::Node> root = XmlTree::parse(book->read(QStringLiteral("OEBPS/text/chapter1.xhtml")));
+        const EpubCfi::Document document(*root);
+        text = document.textBetween(document.decode(QStringLiteral("/2/4/8/1:2")), document.decode(QStringLiteral("/2/4/8/1:30")));
+    }
+    const QJsonObject mine = HighlightJson::highlight(QStringLiteral("mine"), HighlightJson::isoTimestamp(QDateTime::currentDateTimeUtc()),
+                                                      text, QStringLiteral("/2/4/8/1:2"), QStringLiteral("/2/4/8/1:30"),
+                                                      QStringLiteral("yellow"), QStringLiteral("OEBPS/text/chapter1.xhtml"), 1, {},
+                                                      QStringLiteral("Mine"));
+    const double now = double(QDateTime::currentMSecsSinceEpoch()) / 1000;
+    QVERIFY(library->saveReading(voyage,
+                                 ReadPosition{ QStringLiteral("EPUB"), QStringLiteral("local"), QStringLiteral("cousoir"),
+                                               QStringLiteral("epubcfi(/4/2/4/10/2[noteref]/1:0)"), now, 0.2 },
+                                 { Annotation{ QStringLiteral("EPUB"), QStringLiteral("highlight"), QStringLiteral("mine"), now,
+                                               QJsonDocument(mine).toJson(QJsonDocument::Compact), HighlightJson::searchableText(mine) } })
+            > 0);
+    QVERIFY(waitForSave(library.get()));
+
+    // Synced when asked: the place and the highlight on the Kobo.
+    QSignalSpy syncedReading(&devices, &DeviceLibrary::readingSynced);
+    QCOMPARE(devices.syncReading(kobo.path()), QString());
+    QVERIFY(syncedReading.wait(15000));
+    QCOMPARE(syncedReading.first().first().toString(),
+             QStringLiteral("Kobo eReader has where you stopped in 1 book and 1 highlight now. Eject it to read on."));
+    {
+        SqliteDb db;
+        QVERIFY(db.open(database, SqliteDb::Mode::Immutable, &error));
+        QCOMPARE(db.value(QStringLiteral("SELECT ChapterIDBookmarked FROM content WHERE ContentID LIKE 'file:///mnt/onboard/Ann%Voyage.kepub.epub'"))
+                     .toString(),
+                 QStringLiteral("OEBPS/text/chapter1.xhtml#kobo.5.2"));
+        QCOMPARE(db.value(QStringLiteral("SELECT Annotation FROM Bookmark WHERE BookmarkID = '%1'")
+                              .arg(KoboHighlights::bookmarkIdFor(QStringLiteral("mine"))))
+                     .toString(),
+                 QStringLiteral("Mine"));
+    }
+    // Read again after: none of it comes back as the Kobo's own, and the
+    // Kobo's place, as old as the library's, stays as it was.
+    QTRY_VERIFY_WITH_TIMEOUT(!devices.loading() && !sync.busy(), 15000);
+    QTest::qWait(300);
+    {
+        SqliteDb db;
+        QVERIFY(db.open(copy->filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::Immutable, &error));
+        QCOMPARE(db.value(QStringLiteral("SELECT COUNT(*) FROM annotations WHERE user_type='kobo' AND annot_id='%1'")
+                              .arg(KoboHighlights::bookmarkIdFor(QStringLiteral("mine"))))
+                     .toInt(),
+                 0);
+        QCOMPARE(db.value(QStringLiteral("SELECT annot_data FROM annotations WHERE annot_id='mine'")).toString().contains(QLatin1String("removed")),
+                 false);
+    }
+    QCOMPARE(koboPlace().epoch, 1792962000.0);
+
+    // A second time, nothing to write.
+    syncedReading.clear();
+    QCOMPARE(devices.syncReading(kobo.path()), QString());
+    QVERIFY(syncedReading.wait(15000));
+    QCOMPARE(syncedReading.first().first().toString(), QStringLiteral("Kobo eReader already has your reading."));
+    QVERIFY(QDir(CousoirPaths::koboFolder()).removeRecursively());
+}
 
 // Whoever queues a change hears whether it went in, a failed one too: the
 // reader keeps its highlights until they are in.

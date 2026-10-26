@@ -76,6 +76,8 @@ class DeviceLibrary : public QObject
     // root, running, progress } with progress from 0 to 1.
     Q_PROPERTY(QVariantList jobs READ jobs NOTIFY jobsChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY jobsChanged)
+    // The Kobo whose reading is being synced, empty for none.
+    Q_PROPERTY(QString syncing READ syncing NOTIFY jobsChanged)
 
 public:
     using VolumeProvider = std::function<QList<Volume>()>;
@@ -101,6 +103,7 @@ public:
     QString readOnlyReason() const;
     QVariantList jobs() const;
     bool busy() const;
+    QString syncing() const;
 
     // The format of the book Calibre would send to the reader on `root`,
     // empty for none.
@@ -116,6 +119,11 @@ public:
     Q_INVOKABLE QString remove(const QStringList &lpaths);
     // Unmounts a Kobo and powers it off, so it can be unplugged.
     Q_INVOKABLE QString eject(const QString &root);
+    // Puts on the Kobo on `root` where reading stopped in the library's
+    // books and their highlights, as KoboWrite does, then reads it again.
+    // Returns an error message, empty once on its way; readingSynced() or
+    // failed() tell how it went.
+    Q_INVOKABLE QString syncReading(const QString &root);
     // Stops the batches with the book in them, or all of them for 0: those
     // waiting and Calibre's work on the running one; its copy to the reader,
     // once begun, ends.
@@ -158,6 +166,8 @@ signals:
     // Books arrived on a reader.
     void sent(const QStringList &titles, const QString &deviceName);
     void ejected(const QString &deviceName);
+    // A Kobo has the library's reading: what went, and what could not.
+    void readingSynced(const QString &message, const QStringList &skipped);
     void failed(const QString &message);
     // A Kobo read: all its highlights and notes, and its books'.
     void koboHighlightsRead(const KoboHighlights::Snapshot &snapshot);
@@ -244,6 +254,7 @@ private:
     QFutureWatcher<QString> *m_copy = nullptr;
     // Kobos being ejected: they stay out until unplugged.
     QStringList m_ejected;
+    QString m_syncing;
     // MTP, one thing at a time.
     QThreadPool m_kindlePool;
 };

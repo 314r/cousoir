@@ -37,6 +37,7 @@
 #include "kindle.h"
 #include "kindle_send.h"
 #include "kobo_send.h"
+#include "kobo_write.h"
 #include "mtp.h"
 
 namespace {
@@ -567,6 +568,11 @@ bool DeviceLibrary::busy() const
     return !m_jobs.isEmpty();
 }
 
+QString DeviceLibrary::syncing() const
+{
+    return m_syncing;
+}
+
 QStringList DeviceLibrary::formatMap(const Connected &connected) const
 {
     return connected.kind == Kind::Kobo ? Kobo::formatMap(m_configDirectory)
@@ -642,6 +648,8 @@ QString DeviceLibrary::remove(const QStringList &lpaths)
         if (job.root == m_currentRoot)
             return tr("Wait until the books being sent to %1 are there.").arg(connected->name);
     }
+    if (m_syncing == m_currentRoot)
+        return tr("Wait until %1 has your reading.").arg(connected->name);
     QList<DeviceBook> books;
     for (const DeviceBook &book : connected->books) {
         if (lpaths.contains(book.lpath)) {
@@ -678,6 +686,61 @@ QString DeviceLibrary::remove(const QStringList &lpaths)
     return {};
 }
 
+QString DeviceLibrary::syncReading(const QString &root)
+{
+    if (!m_library || !m_library->loaded())
+        return tr("No library is open.");
+    if (!m_writable)
+        return readOnlyReason();
+    const Connected *connected = find(root);
+    if (!connected || connected->kind != Kind::Kobo)
+        return tr("The Kobo is no longer connected.");
+    const QString name = connected->name;
+    if (connected->loading)
+        return tr("Wait until %1 is read.").arg(name);
+    for (const Job &job : std::as_const(m_jobs)) {
+        if (job.root == root)
+            return tr("Wait until the books being sent to %1 are there.").arg(name);
+    }
+    if (!m_syncing.isEmpty())
+        return tr("Wait until %1 has your reading.").arg(name);
+    KoboWrite::Input input;
+    input.root = root;
+    input.device = deviceId(*connected);
+    input.books = connected->books;
+    input.data = m_library->data();
+    input.snapshotDb = CousoirPaths::cacheFolder(m_library->libraryPath()) + QStringLiteral("/snapshot.db");
+    input.positionsFile = CousoirPaths::positionsFile(m_library->libraryPath());
+    input.sent = KoboHighlights::readSent(input.device);
+    m_syncing = root;
+    emit jobsChanged();
+    auto *watcher = new QFutureWatcher<KoboWrite::Result>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, root, name] {
+        watcher->deleteLater();
+        m_syncing.clear();
+        emit jobsChanged();
+        const KoboWrite::Result result = watcher->result();
+        if (!result.ok) {
+            emit failed(result.error);
+        } else {
+            const QString places = result.places == 1 ? tr("where you stopped in 1 book") : tr("where you stopped in %1 books").arg(result.places);
+            const QString highlights = result.highlights == 1 ? tr("1 highlight") : tr("%1 highlights").arg(result.highlights);
+            const QString message = result.places == 0 && result.highlights == 0
+                ? tr("%1 already has your reading.").arg(name)
+                : result.highlights == 0 ? tr("%1 has %2 now. Eject it to read on.").arg(name, places)
+                : result.places == 0     ? tr("%1 has %2 now. Eject it to read on.").arg(name, highlights)
+                                         : tr("%1 has %2 and %3 now. Eject it to read on.").arg(name, places, highlights);
+            emit readingSynced(message, result.skipped);
+        }
+        // What it has now; and the sends that waited.
+        if (find(root))
+            load(root);
+        startNext();
+    });
+    watcher->setFuture(QtConcurrent::run([input] { return KoboWrite::sync(input); }));
+    return {};
+}
+
 QString DeviceLibrary::eject(const QString &root)
 {
     const Connected *connected = find(root);
@@ -689,6 +752,8 @@ QString DeviceLibrary::eject(const QString &root)
         if (job.root == root)
             return tr("Wait until the books being sent to %1 are there.").arg(connected->name);
     }
+    if (m_syncing == root)
+        return tr("Wait until %1 has your reading.").arg(connected->name);
     const Kobo::Device device = connected->kobo;
     // Out of sight at once, back if ejecting fails.
     m_ejected.append(root);
@@ -828,7 +893,8 @@ void DeviceLibrary::scan()
 void DeviceLibrary::load(const QString &root)
 {
     Connected *connected = find(root);
-    if (!connected)
+    // A Kobo being written to is read once the sync is done.
+    if (!connected || m_syncing == root)
         return;
     if (connected->kind == Kind::Kobo) {
         connected->loading = true;
@@ -993,7 +1059,7 @@ DeviceLibrary::Connected *DeviceLibrary::find(const QString &root)
 void DeviceLibrary::startNext()
 {
     if (m_process || m_copy || m_folder || m_jobs.isEmpty() || !m_library || m_library->saving()
-        || m_library->loading())
+        || m_library->loading() || !m_syncing.isEmpty())
         return;
     const Job job = m_jobs.first();
     const Connected *connected = find(job.root);

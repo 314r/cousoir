@@ -340,6 +340,13 @@ ThemedWindow {
             showNotice(error)
     }
 
+    // Puts where you stopped and your highlights on the Kobo.
+    function syncReading(root) {
+        const error = devices.syncReading(root)
+        if (error)
+            showNotice(error)
+    }
+
     // Reads the library again, or the reader the device page shows.
     function reload() {
         if (deviceShown)
@@ -443,6 +450,8 @@ ThemedWindow {
                                                  : qsTr("Send to %1").arg(device.name),
                 device === devices.devices[0] ? "Ctrl+D" : "", "ereader",
                 books > 0 && devices.writable)
+            add("sync:" + device.root, qsTr("Sync reading with %1").arg(device.name), "", "refresh",
+                device.kind === "kobo" && devices.writable && !devices.syncing)
             add("eject:" + device.root, qsTr("Eject %1").arg(device.name), "", "eject", device.ejectable === true)
         }
         add("trash", books > 1 ? qsTr("Move %1 books to the trash").arg(books) : qsTr("Move to the trash"), "Del",
@@ -508,6 +517,8 @@ ThemedWindow {
             convertBooks(targetIds(), hit.key.toUpperCase())
         } else if (hit.key.startsWith("send:")) {
             sendBooks(targetIds(), hit.key.slice(5))
+        } else if (hit.key.startsWith("sync:")) {
+            syncReading(hit.key.slice(5))
         } else if (hit.key.startsWith("eject:")) {
             ejectDevice(hit.key.slice(6))
         } else if (hit.key === "trash") {
@@ -786,6 +797,13 @@ ThemedWindow {
 
         function onEjected(name) {
             window.showNotice(qsTr("%1 can be unplugged.").arg(name), false)
+        }
+
+        function onReadingSynced(message, skipped) {
+            window.showNotice(skipped.length === 0 ? message
+                                                   : skipped.length === 1 ? qsTr("%1 Left out: %2.").arg(message).arg(skipped[0])
+                                                   : qsTr("%1 Left out: %2, and %3 more.").arg(message).arg(skipped[0]).arg(skipped.length - 1),
+                              false)
         }
 
         function onFailed(message) {
@@ -1546,13 +1564,29 @@ ThemedWindow {
                         onClicked: window.openInReader()
                     }
 
+                    // Where you stopped and your highlights, put on the Kobo
+                    // when asked and only then.
+                    FlatButton {
+                        objectName: "syncReadingButton"
+
+                        visible: window.deviceShown && window.devices.current.kind === "kobo"
+                        enabled: !window.devices.busy && !window.devices.syncing && window.devices.writable
+                        variant: "outline"
+                        text: window.devices.syncing ? qsTr("Syncing…") : qsTr("Sync reading")
+                        tip: window.devices.writable
+                             ? qsTr("Put where you stopped in your books, and your highlights, on %1").arg(window.devices.current.name || "")
+                             : window.devices.readOnlyReason
+                        icon.source: "assets/icons/refresh.svg"
+                        onClicked: window.syncReading(window.devices.currentRoot)
+                    }
+
                     // While a Kobo is mounted, Calibre's way of letting it
                     // go: unmounted and powered off. A Kindle needs none.
                     FlatButton {
                         objectName: "ejectButton"
 
                         visible: window.deviceShown && window.devices.current.ejectable === true
-                        enabled: !window.devices.busy
+                        enabled: !window.devices.busy && !window.devices.syncing
                         variant: "outline"
                         text: qsTr("Eject")
                         tip: qsTr("Eject %1 so it can be unplugged").arg(window.devices.current.name || "")

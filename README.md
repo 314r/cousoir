@@ -81,6 +81,12 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
   and shows the other's highlights.
+- 🔁 **Read on, Kobo or computer.** Press Sync reading on your Kobo's page:
+  ejected, it opens the book at the sentence you stopped at in Cousoir, with
+  your highlights and notes. Plug it back in and its own place comes home,
+  with the notes you wrote and the highlights you removed on it: Cousoir
+  opens where the Kobo stopped. No account, no cloud, a copy of the Kobo's
+  database kept each time.
 - 🔎 **All your highlights in one place.** The books you highlighted in
   Cousoir's reader, Calibre's viewer or on your Kobo, each one's highlights
   and notes typeset as a page by chapter, as kbextract2 shows them, and

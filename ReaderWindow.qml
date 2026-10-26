@@ -33,6 +33,9 @@ ThemedWindow {
     // "scroll".
     property string shownLayout: ""
     property bool tocVisible: false
+    // Said a moment in place of the title: the Kobo the book opened where
+    // it stopped.
+    property string arrival: ""
     // The sidebar's list: "toc", "highlights" or "search".
     property string sidebar: "toc"
     property bool hasSelection: false
@@ -226,6 +229,9 @@ ThemedWindow {
         notesShown = false
         dropSpare()
         load(start.spineIndex || 0, start.cfi ? "cfi:" + start.cfi : "start")
+        arrival = start.kobo ? qsTr("Opened where %1 stopped").arg(start.kobo) : ""
+        if (arrival)
+            arrivalTimer.restart()
         return true
     }
 
@@ -846,6 +852,12 @@ ThemedWindow {
     readonly property string layoutKey: JSON.stringify(pageSettings())
     onLayoutKeyChanged: Qt.callLater(relayout)
 
+    Timer {
+        id: arrivalTimer
+        interval: 6000
+        onTriggered: readerWindow.arrival = ""
+    }
+
     // Saved as reading goes, a little after each turn.
     Timer {
         id: saveTimer
@@ -1055,10 +1067,12 @@ ThemedWindow {
                 }
 
                 Label {
+                    objectName: "readerTitle"
+
                     Layout.fillWidth: true
-                    text: bookReader.title
+                    text: readerWindow.arrival || bookReader.title
                     elide: Text.ElideRight
-                    color: Theme.textMuted
+                    color: readerWindow.arrival ? Theme.accent : Theme.textMuted
                 }
 
                 FlatButton {

@@ -179,6 +179,8 @@ qt_add_library(cousoir_core STATIC
     kobo_placement.h
     kobo_sync.cpp
     kobo_sync.h
+    kobo_write.cpp
+    kobo_write.h
     xml_tree.cpp
     xml_tree.h
 )
@@ -469,7 +471,7 @@ if(BUILD_TESTING)
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
                           kindle library_check metadata_web mobi_metadata epub_book epub_cfi calibre_fts calibre_notes annotation_search
-                          kobo_highlights kobo_placement test_tool)
+                          kobo_highlights kobo_placement kobo_write test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)

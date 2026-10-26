@@ -822,6 +822,27 @@ void LibraryUiTest::readsInCousoir()
     reader = openReader();
     QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
     QTRY_COMPARE(reader->property("spineIndex").toInt(), 3);
+    const auto title = [&reader] {
+        const QList<QQuickItem *> found = visualDescendants(reader->contentItem(), QStringLiteral("readerTitle"));
+        return found.isEmpty() ? QString() : found.first()->property("text").toString();
+    };
+    QCOMPARE(title(), QStringLiteral("The Voyage"));
+
+    // A Kobo read on since: where the book opens, and said so.
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    QVERIFY2(db.open(database, SqliteDb::Mode::ReadWrite, &dbError), qPrintable(dbError));
+    QVERIFY(db.run(QStringLiteral("INSERT INTO last_read_positions(book,format,user,device,cfi,epoch,pos_frac) "
+                                  "VALUES (?,'EPUB','kobo','N418000000999',?,?,0.5)"),
+                   { bookId, section, double(QDateTime::currentSecsSinceEpoch() + 120) }, &dbError));
+    db.close();
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    reader = openReader();
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && !reader->property("position").toString().isEmpty(), 20000);
+    QTRY_COMPARE(reader->property("spineIndex").toInt(), 2);
+    QCOMPARE(title(), QStringLiteral("Opened where N418000000999 stopped"));
+    QTRY_COMPARE_WITH_TIMEOUT(title(), QStringLiteral("The Voyage"), 10000);
 
     // A highlight of the first paragraph's start, kept as Calibre's viewer
     // keeps its own.
@@ -3092,6 +3113,7 @@ void LibraryUiTest::sendsToKobo()
     click(entry.toLatin1().constData());
     QTRY_VERIFY(control("devicePage")->isVisible());
     QCOMPARE(text("pageTitle"), QStringLiteral("Kobo eReader"));
+    QVERIFY(control("syncReadingButton")->isVisible());
     QTRY_VERIFY(control("deviceRow0"));
     QVERIFY(text("bookCount").startsWith(QStringLiteral("1 book · ")));
     QVERIFY(!control("searchField")->isVisible());
@@ -3110,6 +3132,10 @@ void LibraryUiTest::sendsToKobo()
     clickVisible("confirmAccept");
     QTRY_VERIFY(control("deviceEmpty") && control("deviceEmpty")->isVisible());
     QCOMPARE(text("deviceEmpty"), QStringLiteral("No books on Kobo eReader"));
+
+    // Its reading synced when asked: nothing of the library's to put there.
+    click("syncReadingButton");
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("Kobo eReader already has your reading."));
 
     click("ejectButton");
     QTRY_COMPARE(text("keyHints"), QStringLiteral("Kobo eReader can be unplugged."));

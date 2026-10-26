@@ -530,6 +530,35 @@ for it beside the page, and the tests cover the sources and the panel.
   books, art books): each page whole, fitted to the window, two side by
   side when it is wide.
 
+### Round 8, on `master`: in step with the Kobo
+
+On 2026-10-26 the user asked for five ideas that would make the reader a
+hit, and picked the first: the reader and the Kobo in step, both ways.
+
+#### R9. In step with the Kobo — picked, done
+
+Kobo's own sync leaves out books put on a Kobo by hand, and Calibre syncs
+no place at all. Cousoir makes the KEPUBs and already places a Kobo's
+highlights in the library's books; it could not give the Kobo anything
+back: plugging a Kobo in changed nothing on it, as DOC.md said.
+
+- The user's choices: the Kobo's database written only on demand ("Sync
+  reading"), positions and highlights both ways, and a real Kobo to take the
+  formats from first, read-only.
+- Kobo to library, each time the Kobo is read: where it stopped in a KEPUB
+  (`ChapterIDBookmarked`), when read since the library last heard of the
+  book, into `last_read_positions` as user `kobo`; the reader opens there
+  and says so. What became on the Kobo of the library's own highlights put
+  there: a note written there, a highlight removed (the Kobo deletes them).
+- Library to Kobo, when asked: the newest place and the highlights of
+  Cousoir's reader and Calibre's viewer, found in the KEPUB on the Kobo by
+  their text, written as the Kobo writes its own; a copy of the database
+  first, nothing written if it changed since it was read.
+
+Done when a place and a highlight made in Cousoir open on the Kobo, a note
+written on the Kobo comes back, and the tests cover both ways, the
+refusals and the copies.
+
 ## Status
 
 | Goal | State |
@@ -1982,3 +2011,33 @@ the page visible.
 - `cousoir-benchmark` reader steps: `qml:` prints the expression's value,
   `wait:MS` waits (to look at the window from outside), and
   `COUSOIR_OMARCHY_STATE` gives it an Omarchy theme's folder.
+
+### 2026-10-26 — on `kobo-sync`: in step with the Kobo (R9)
+
+The user's Kobo Libra 2 (firmware 4.38.23828, database 174) was read
+first, into the sandbox, read-only: its KEPUBs keep their place as
+`OEBPS/p2chap4.xhtml#kobo.1.1` (a span, no offset), its plain EPUBs as an
+Adobe point, `OPS/chapter-3.xhtml#point(/1/2/1/60/1/1:0)`; its files are
+rows of type 9, `/mnt/onboard/…kepub.epub!!OEBPS/x.xhtml`; its highlights
+have a child index of -99, both dates in UTC, and no `Color` on a Libra 2;
+none of its 655 rows is hidden: the Kobo deletes a highlight removed.
+
+- `KoboHighlights` reads each book's place with its highlights, a book with
+  only a place kept too; `KoboPlacement` places it (`placePoint()`), and
+  finds a place of the library's copy again in a KEPUB by its text
+  (`textAt()`, `spansAt()`); `KoboSync` gives the library the Kobo's place
+  when newer and brings back what the Kobo did to the library's own
+  highlights; `KoboWrite` plans and writes the other way, as
+  `KoboSend` does, with Calibre's limits of database and firmware, a copy
+  of the database kept, and the database's size and time unchanged since it
+  was read; `DeviceLibrary::syncReading()` behind the Kobo page's button.
+- Tried on all of the user's Kobo, read-only, its 435 highlights in its
+  KEPUBs: each found again by spans where the Kobo has it, 246 at the same
+  offsets, the others at the same text (the Kobo starts on the space before
+  a sentence, and ends a highlight at a span's end or the next one's start,
+  as dragged). It showed a bug of the import, fixed: the Kobo names a
+  highlight's file with the section it is in, `c09.xhtml#d14e4446`, and 68
+  highlights were found by their text in the whole book instead.
+- Not done: the plain EPUBs' Adobe points, which look like CFIs counted by
+  elements, left for later; bookmarks (dogears); a golden test of Calibre
+  reading the rows written, which are as the Kobo writes its own.
