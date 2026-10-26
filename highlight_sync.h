@@ -78,6 +78,8 @@ private:
         QString device;
         QString digest;
         int placed = 0;
+        // Books whose place it gave.
+        int places = 0;
     };
 
     QString libraryKey() const;

@@ -40,6 +40,7 @@
 #include "epub_cfi.h"
 #include "highlight_json.h"
 #include "kobo_highlights.h"
+#include "kobo_sync.h"
 #include "mobi_book.h"
 #include "xml_tree.h"
 
@@ -924,14 +925,21 @@ QString BookReader::open(int bookId)
                             kept.value(QLatin1String("fraction")).toDouble() });
     m_start = { { QStringLiteral("spineIndex"), 0 }, { QStringLiteral("cfi"), QString() }, { QStringLiteral("device"), QString() } };
     double newest = -1;
+    const ReadPosition *chosen = nullptr;
     for (const ReadPosition &position : std::as_const(candidates)) {
         const int index = spineStep(position.cfi);
         if (position.format != m_format || index < 0 || index >= m_book->spine().size() || position.epoch <= newest)
             continue;
         newest = position.epoch;
+        chosen = &position;
         m_start = { { QStringLiteral("spineIndex"), index },
                     { QStringLiteral("cfi"), position.cfi },
                     { QStringLiteral("device"), position.device } };
+    }
+    // A Kobo's place, read there since: said so.
+    if (chosen && chosen->user == KoboSync::userType) {
+        const std::optional<KoboHighlights::Snapshot> kobo = KoboHighlights::readSnapshot(chosen->device);
+        m_start.insert(QStringLiteral("kobo"), kobo && !kobo->name.isEmpty() ? kobo->name : chosen->device);
     }
     m_lastCfi.clear();
     // Calibre's viewer's highlights, those made here before, and the Kobos';
@@ -1211,10 +1219,5 @@ void BookReader::writePositions(const QJsonObject &positions) const
 
 QString BookReader::positionsFile() const
 {
-    if (!m_library)
-        return {};
-    // Beside what the readers told of the books' reading.
-    QString file = CousoirPaths::readingFile(m_library->libraryPath());
-    file.replace(QRegularExpression(QStringLiteral("\\.json$")), QStringLiteral("-positions.json"));
-    return file;
+    return m_library ? CousoirPaths::positionsFile(m_library->libraryPath()) : QString();
 }

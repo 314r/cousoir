@@ -296,6 +296,7 @@ void HighlightSync::runNext()
     input.snapshotDb = cache + QStringLiteral("/snapshot.db");
     input.cacheFile = cache + QStringLiteral("/kobo-placements.json");
     input.snapshot = m_planning;
+    input.sent = KoboHighlights::readSent(m_planning.device);
     setStatus(tr("Reading the highlights of %1…").arg(nameOf(m_planning.device)));
     m_watcher.setFuture(QtConcurrent::run([input] { return KoboSync::plan(input); }));
     emit stateChanged();
@@ -312,16 +313,16 @@ void HighlightSync::finishPlan()
     }
     m_left.insert(planned.device, plan.left);
     emit leftChanged();
-    if (plan.changes.isEmpty()) {
+    if (plan.changes.isEmpty() && plan.positions.isEmpty()) {
         markSynced(planned.device, digest);
         setStatus({});
     } else {
-        const int id = m_library->saveDeviceAnnotations(plan.changes);
+        const int id = m_library->saveDeviceAnnotations(plan.changes, plan.positions);
         if (id < 0) {
             m_pending = true;
             setStatus(tr("The highlights of %1 wait until the library can be changed.").arg(nameOf(planned.device)));
         } else {
-            m_waiting.insert(id, { planned.device, digest, plan.placed });
+            m_waiting.insert(id, { planned.device, digest, plan.placed, int(plan.positions.size()) });
         }
     }
     emit stateChanged();
@@ -340,6 +341,10 @@ void HighlightSync::finishChange(int id, bool saved, const QString &error)
         const QString message = waiting.placed > 0
             ? (waiting.placed == 1 ? tr("%1 highlight from %2 in the library") : tr("%1 highlights from %2 in the library"))
                   .arg(waiting.placed)
+                  .arg(name)
+            : waiting.places > 0
+            ? (waiting.places == 1 ? tr("Where %2 stopped in %1 book, in the library") : tr("Where %2 stopped in %1 books, in the library"))
+                  .arg(waiting.places)
                   .arg(name)
             : tr("The highlights of %1 updated in the library").arg(name);
         setStatus(message);

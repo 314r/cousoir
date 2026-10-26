@@ -12,6 +12,8 @@ QString cacheFolder(const QString &libraryPath);
 QString backupFolder(const QString &libraryPath);
 // What the readers last told of the reading of the library's books.
 QString readingFile(const QString &libraryPath);
+// Where Cousoir's reader stopped in the library's books, beside it.
+QString positionsFile(const QString &libraryPath);
 // The highlights each Kobo met last had, one file each, whatever the
 // library.
 QString koboFolder();

@@ -63,6 +63,9 @@ private slots:
     void placesHighlights();
     void placesInAKepub();
     void writesCalibresHighlight();
+    void namesFiles();
+    void placesTheKobosPlace();
+    void findsSpansAgain();
 };
 
 void KoboPlacementTest::replaysKepubifySpans_data()
@@ -222,6 +225,90 @@ void KoboPlacementTest::writesCalibresHighlight()
         return;
     }
     QFAIL("No v4 in the fixture");
+}
+
+// The file a Kobo's id names, as firmware 4.38 and older ones write them.
+void KoboPlacementTest::namesFiles()
+{
+    QCOMPARE(KoboPlacement::fileOf(QStringLiteral("/mnt/onboard/A/B.kepub.epub!!OEBPS/Text/c1.xhtml")), QStringLiteral("OEBPS/Text/c1.xhtml"));
+    // The section of the file a highlight is in.
+    QCOMPARE(KoboPlacement::fileOf(QStringLiteral("/mnt/onboard/A/B.kepub.epub!!OEBPS/XHTML/c09.xhtml#d14e4446")),
+             QStringLiteral("OEBPS/XHTML/c09.xhtml"));
+    QCOMPARE(KoboPlacement::fileOf(QStringLiteral("file:///mnt/onboard/A/B.kepub.epub!OEBPS!text/c1.xhtml")), QStringLiteral("OEBPS/text/c1.xhtml"));
+    QCOMPARE(KoboPlacement::fileOf(QStringLiteral("file:///mnt/onboard/A/B.epub#(2)OEBPS/text/c2.xhtml")), QStringLiteral("OEBPS/text/c2.xhtml"));
+    QCOMPARE(KoboPlacement::spanPath(QStringLiteral("kobo.12.3")), QStringLiteral("span#kobo\\.12\\.3"));
+}
+
+// Where a Kobo stopped, by its span, in the EPUB and in a KEPUB; without its
+// span, as far into the file; in a file of no text, at its start.
+void KoboPlacementTest::placesTheKobosPlace()
+{
+    QTemporaryDir folder;
+    QString error;
+    const QString kepub = folder.filePath(QStringLiteral("voyage.kepub"));
+    QVERIFY2(Kepub::kepubify(voyage, kepub, {}, &error), qPrintable(error));
+    for (const auto &[path, format] : { std::pair(voyage, QStringLiteral("EPUB")), std::pair(kepub, QStringLiteral("KEPUB")) }) {
+        const std::unique_ptr<KoboPlacement::PlacementBook> book = KoboPlacement::PlacementBook::open(path, format, &error);
+        QVERIFY2(book, qPrintable(error));
+        const KoboPlacement::Spot spot = book->placePoint(QStringLiteral("OEBPS/text/chapter1.xhtml#kobo.5.2"), 0);
+        QCOMPARE(KoboPlacement::methodName(spot.method), QStringLiteral("spans"));
+        QCOMPARE(spot.spineIndex, 1);
+        QCOMPARE(spot.spineName, QStringLiteral("OEBPS/text/chapter1.xhtml"));
+        if (format == QLatin1String("EPUB"))
+            QCOMPARE(spot.cfi, QStringLiteral("/2/4/10/2[noteref]/1:0"));
+        // And back, by the text there, to the span.
+        const std::optional<KoboPlacement::TextSpot> text = book->textAt(spot.spineIndex, spot.cfi, QString());
+        QVERIFY(text);
+        QCOMPARE(text->text.left(13), QStringLiteral("See the note."));
+    }
+    const std::unique_ptr<KoboPlacement::PlacementBook> book = KoboPlacement::PlacementBook::open(voyage, QStringLiteral("EPUB"), &error);
+    const KoboPlacement::Spot far = book->placePoint(QStringLiteral("OEBPS/text/chapter2.xhtml#kobo.99.1"), 0.5);
+    QCOMPARE(KoboPlacement::methodName(far.method), QStringLiteral("text"));
+    QCOMPARE(far.spineIndex, 2);
+    QCOMPARE(KoboPlacement::methodName(book->placePoint(QStringLiteral("OEBPS/text/nowhere.xhtml#kobo.1.1"), 0).method),
+             QStringLiteral("none"));
+}
+
+// The library's highlights found again by Kobo's spans in the KEPUB a Kobo
+// reads: each where the Kobo would have it.
+void KoboPlacementTest::findsSpansAgain()
+{
+    QTemporaryDir folder;
+    QString error;
+    const QString kepub = folder.filePath(QStringLiteral("voyage.kepub"));
+    QVERIFY2(Kepub::kepubify(voyage, kepub, {}, &error), qPrintable(error));
+    const QList<KoboHighlights::Highlight> highlights = voyageHighlights(&error);
+    const std::unique_ptr<KoboPlacement::PlacementBook> library = KoboPlacement::PlacementBook::open(voyage, QStringLiteral("EPUB"), &error);
+    const std::unique_ptr<KoboPlacement::PlacementBook> kobo = KoboPlacement::PlacementBook::open(kepub, QStringLiteral("KEPUB"), &error);
+    QVERIFY(library && kobo);
+    int found = 0;
+    for (const KoboHighlights::Highlight &highlight : highlights) {
+        const KoboPlacement::Placement placement = library->place(highlight);
+        if (placement.method != KoboPlacement::Method::Spans)
+            continue;
+        const std::optional<KoboPlacement::TextSpot> text = library->textAt(placement.spineIndex, placement.startCfi, placement.endCfi);
+        QVERIFY(text);
+        const std::optional<KoboPlacement::SpanRange> range = kobo->spansAt(*text);
+        QVERIFY2(range, qPrintable(highlight.id));
+        // The same text between the spans found as between the Kobo's.
+        KoboHighlights::Highlight again = highlight;
+        again.startPath = KoboPlacement::spanPath(range->startSpan);
+        again.startOffset = range->startOffset;
+        again.endPath = KoboPlacement::spanPath(range->endSpan);
+        again.endOffset = range->endOffset;
+        const KoboPlacement::Placement placed = kobo->place(again);
+        QCOMPARE(KoboPlacement::methodName(placed.method), QStringLiteral("spans"));
+        QCOMPARE(range->spineName, placement.spineName);
+        if (highlight.id == QLatin1String("v1")) {
+            QCOMPARE(range->startSpan, QStringLiteral("kobo.3.1"));
+            QCOMPARE(range->startOffset, 24);
+            QCOMPARE(range->endOffset, 52);
+        }
+        ++found;
+    }
+    QCOMPARE(found, 6);
+    // Text the Kobo's copy has not.
+    QVERIFY(!kobo->spansAt({ QStringLiteral("OEBPS/text/chapter1.xhtml"), 0, 100, QStringLiteral("Words this book has not") }));
 }
 
 QTEST_GUILESS_MAIN(KoboPlacementTest)

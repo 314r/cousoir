@@ -14,28 +14,23 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
 #include <QTextStream>
+#include <QTimeZone>
+#include <QUuid>
 
 #include <algorithm>
 
 #include "cousoir_paths.h"
 #include "device_books.h"
+#include "kobo.h"
 #include "sqlite_db.h"
 
 namespace KoboHighlights {
 
 namespace {
-
-QSet<QString> columnsOf(SqliteDb &db, const QString &table)
-{
-    QSet<QString> columns;
-    SqliteStatement info(db, QStringLiteral("PRAGMA table_info(%1)").arg(table));
-    while (info.step())
-        columns.insert(info.text(1).toLower());
-    return columns;
-}
 
 struct Chapter
 {
@@ -104,11 +99,11 @@ std::optional<qint64> numberOf(const QJsonValue &value)
     return value.isDouble() ? std::optional<qint64>(qint64(value.toDouble())) : std::nullopt;
 }
 
-QString snapshotFile(const QString &device)
+QString snapshotFile(const QString &device, const QString &suffix = QString())
 {
     const QString key = QString::fromLatin1(
         QCryptographicHash::hash(device.toUtf8(), QCryptographicHash::Sha1).toHex().left(16));
-    return QDir(CousoirPaths::koboFolder()).filePath(key + QStringLiteral(".json"));
+    return QDir(CousoirPaths::koboFolder()).filePath(key + suffix + QStringLiteral(".json"));
 }
 
 QJsonArray bookArray(const QList<Book> &books)
@@ -136,7 +131,7 @@ QJsonArray bookArray(const QList<Book> &books)
                 { QStringLiteral("chapter_order"), optionalNumber(highlight.chapterOrder) },
             });
         }
-        array.append(QJsonObject{
+        QJsonObject object{
             { QStringLiteral("volume_id"), book.volumeId },
             { QStringLiteral("title"), book.title },
             { QStringLiteral("authors"), QJsonArray::fromStringList(book.authors) },
@@ -147,7 +142,17 @@ QJsonArray bookArray(const QList<Book> &books)
             { QStringLiteral("purchased"), book.purchased },
             { QStringLiteral("on_device"), book.onDevice },
             { QStringLiteral("highlights"), highlights },
-        });
+        };
+        if (book.place) {
+            object.insert(QStringLiteral("place"), QJsonObject{
+                                                       { QStringLiteral("bookmark"), book.place->bookmark },
+                                                       { QStringLiteral("percent"), book.place->percent },
+                                                       { QStringLiteral("chapter_progress"), book.place->chapterProgress },
+                                                       { QStringLiteral("last_read"), book.place->lastRead },
+                                                       { QStringLiteral("status"), book.place->status },
+                                                   });
+        }
+        array.append(object);
     }
     return array;
 }
@@ -190,6 +195,13 @@ QList<Book> booksFrom(const QJsonArray &array)
             highlight.chapterOrder = numberOf(h.value(QLatin1String("chapter_order")));
             book.highlights.append(highlight);
         }
+        const QJsonValue place = object.value(QLatin1String("place"));
+        if (place.isObject()) {
+            const QJsonObject p = place.toObject();
+            book.place = Place{ p.value(QLatin1String("bookmark")).toString(), p.value(QLatin1String("percent")).toInt(),
+                                p.value(QLatin1String("chapter_progress")).toDouble(),
+                                p.value(QLatin1String("last_read")).toString(), p.value(QLatin1String("status")).toInt() };
+        }
         books.append(book);
     }
     return books;
@@ -204,6 +216,42 @@ QString Snapshot::digest() const
                                    .toHex());
 }
 
+QString bookmarkIdFor(const QString &annotationId)
+{
+    // Cousoir's own namespace for them.
+    static const QUuid space(QStringLiteral("6f1c2a52-3b7e-4d0a-9c55-2f6a1e0b8d47"));
+    return QUuid::createUuidV5(space, annotationId).toString(QUuid::WithoutBraces);
+}
+
+QHash<QString, QDateTime> readSent(const QString &device)
+{
+    QHash<QString, QDateTime> sent;
+    QFile file(snapshotFile(device, QStringLiteral("-sent")));
+    if (!file.open(QIODevice::ReadOnly))
+        return sent;
+    const QJsonObject object = QJsonDocument::fromJson(file.readAll()).object();
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it)
+        sent.insert(it.key(), QDateTime::fromString(it.value().toString(), Qt::ISODateWithMs));
+    return sent;
+}
+
+bool writeSent(const QString &device, const QHash<QString, QDateTime> &sent, QString *error)
+{
+    QJsonObject object;
+    for (auto it = sent.cbegin(); it != sent.cend(); ++it)
+        object.insert(it.key(), it.value().toUTC().toString(Qt::ISODateWithMs));
+    const QString path = snapshotFile(device, QStringLiteral("-sent"));
+    QDir().mkpath(QFileInfo(path).path());
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(object).toJson(QJsonDocument::Compact)) < 0
+        || !file.commit()) {
+        if (error)
+            *error = QObject::tr("Cannot keep what went to the Kobo in %1.").arg(path);
+        return false;
+    }
+    return true;
+}
+
 QString chapterIdOf(const QString &contentId)
 {
     const qsizetype dash = contentId.lastIndexOf(u'-');
@@ -212,8 +260,8 @@ QString chapterIdOf(const QString &contentId)
 
 QList<Book> read(SqliteDb &db, QString *error)
 {
-    const QSet<QString> bookmark = columnsOf(db, QStringLiteral("Bookmark"));
-    const QSet<QString> content = columnsOf(db, QStringLiteral("content"));
+    const QSet<QString> bookmark = Kobo::columnsOf(db, QStringLiteral("Bookmark"));
+    const QSet<QString> content = Kobo::columnsOf(db, QStringLiteral("content"));
     for (const char *name : { "bookmarkid", "volumeid", "contentid", "text", "annotation" }) {
         if (!bookmark.contains(QLatin1String(name))) {
             if (error)
@@ -314,6 +362,32 @@ QList<Book> read(SqliteDb &db, QString *error)
         }
         books.last().highlights.append(highlight);
     }
+    // Where reading stopped in the books put on the Kobo by hand: the
+    // books bought from Kobo keep theirs in Kobo's cloud.
+    if (typed && bookmarked) {
+        const auto contentColumn = [&content](const char *name) {
+            return content.contains(QString::fromLatin1(name).toLower()) ? QString::fromLatin1(name) : QStringLiteral("NULL");
+        };
+        SqliteStatement places(db, QStringLiteral("SELECT ContentID, ChapterIDBookmarked, %1, %2, %3, %4 FROM content "
+                                                  "WHERE CAST(ContentType AS INTEGER) = 6 AND BookID IS NULL "
+                                                  "AND ContentID LIKE 'file:///mnt/onboard/%' "
+                                                  "AND TRIM(COALESCE(ChapterIDBookmarked, '')) <> ''")
+                                       .arg(contentColumn("___PercentRead"), contentColumn("DateLastRead"),
+                                            contentColumn("ReadStatus"), contentColumn("CurrentChapterProgress")));
+        while (places.step()) {
+            const QString volumeId = HighlightFormats::normalizedText(places.text(0));
+            auto found = std::find_if(books.begin(), books.end(), [&volumeId](const Book &book) { return book.volumeId == volumeId; });
+            if (found == books.end()) {
+                Book book;
+                book.volumeId = volumeId;
+                book.format = formatOfVolume(volumeId);
+                books.append(book);
+                found = books.end() - 1;
+            }
+            found->place = Place{ places.text(1).trimmed(), int(places.integer(2)), places.real(5), places.text(3).trimmed(),
+                                  int(places.integer(4)) };
+        }
+    }
     // Each book's title and authors, the book's own row of the database.
     for (Book &book : books) {
         const QList<QVariantList> found = db.rows(
@@ -332,7 +406,7 @@ QList<Book> read(SqliteDb &db, QString *error)
         if (book.title.isEmpty())
             book.title = book.volumeId;
     }
-    books.removeIf([](const Book &book) { return book.highlights.isEmpty(); });
+    books.removeIf([](const Book &book) { return book.highlights.isEmpty() && !book.place; });
     std::stable_sort(books.begin(), books.end(), [](const Book &a, const Book &b) {
         const int byTitle = a.title.compare(b.title, Qt::CaseInsensitive);
         return byTitle != 0 ? byTitle < 0 : a.authors.join(u'&').compare(b.authors.join(u'&'), Qt::CaseInsensitive) < 0;
@@ -397,6 +471,37 @@ QString calibreColor(int color)
     default:
         return QStringLiteral("yellow");
     }
+}
+
+int koboColor(const QString &calibreColor)
+{
+    for (int color = 1; color <= 3; ++color) {
+        if (KoboHighlights::calibreColor(color) == calibreColor)
+            return color;
+    }
+    return 0;
+}
+
+QDateTime koboTime(const QString &written)
+{
+    static const QRegularExpression zoned(QStringLiteral("(Z|[+-]\\d\\d:?\\d\\d)$"));
+    const QString text = written.trimmed();
+    QDateTime time = QDateTime::fromString(text, Qt::ISODateWithMs);
+    if (!time.isValid())
+        return {};
+    if (!zoned.match(text).hasMatch())
+        time = QDateTime(time.date(), time.time(), QTimeZone::UTC);
+    return time.toUTC();
+}
+
+QString koboTimeText(const QDateTime &time)
+{
+    return time.toUTC().toString(QStringLiteral("yyyy-MM-ddTHH:mm:ss'Z'"));
+}
+
+QString koboCreatedText(const QDateTime &time)
+{
+    return time.toUTC().toString(QStringLiteral("yyyy-MM-ddTHH:mm:ss.zzz"));
 }
 
 QString readSerialNumber(const QString &confPath)
@@ -502,6 +607,8 @@ QList<Snapshot> snapshots()
     QList<Snapshot> found;
     const QDir folder(CousoirPaths::koboFolder());
     for (const QString &name : folder.entryList({ QStringLiteral("*.json") }, QDir::Files, QDir::Name)) {
+        if (name.endsWith(QLatin1String("-sent.json")))
+            continue;
         QFile file(folder.filePath(name));
         if (!file.open(QIODevice::ReadOnly))
             continue;

@@ -1934,10 +1934,11 @@ QString BookLibrary::queueChange(const CommitEngine::Request &change)
     return {};
 }
 
-int BookLibrary::saveDeviceAnnotations(const QList<DeviceAnnotations> &changes)
+int BookLibrary::saveDeviceAnnotations(const QList<DeviceAnnotations> &changes, const QList<QPair<int, ReadPosition>> &positions)
 {
     CommitEngine::Request request;
     request.deviceAnnotations = changes;
+    request.readPositions = positions;
     return queueChange(request).isEmpty() ? m_lastChangeId : -1;
 }
 

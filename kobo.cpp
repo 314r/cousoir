@@ -92,15 +92,6 @@ QString before(const QString &text, qsizetype index)
     return index < 0 ? text.left(text.size() - 1) : text.left(index);
 }
 
-QSet<QString> columnsOf(SqliteDb &db, const QString &table)
-{
-    QSet<QString> columns;
-    SqliteStatement info(db, QStringLiteral("PRAGMA table_info(%1)").arg(table));
-    while (info.step())
-        columns.insert(info.text(1).toLower());
-    return columns;
-}
-
 // Bookmark.get_bookmark_data(): the highlights, notes and bookmarks of the
 // book `contentId` the Kobo shows, by Calibre's key. A KEPUB's chapters come
 // from its rows of type 899, whose ids lose their last "-" part.
@@ -348,6 +339,15 @@ QList<int> firmwareVersion(const Device &device)
         version.append(number);
     }
     return version.size() >= 3 ? version : QList<int>{ 0, 0, 0 };
+}
+
+QSet<QString> columnsOf(SqliteDb &db, const QString &table)
+{
+    QSet<QString> columns;
+    SqliteStatement info(db, QStringLiteral("PRAGMA table_info(%1)").arg(table));
+    while (info.step())
+        columns.insert(info.text(1).toLower());
+    return columns;
 }
 
 bool openDatabase(const QString &path, SqliteDb *db, QTemporaryDir *copy, QString *error)

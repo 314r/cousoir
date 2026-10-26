@@ -30,6 +30,12 @@ QString readingFile(const QString &libraryPath)
         + libraryKey(libraryPath) + QStringLiteral(".json");
 }
 
+QString positionsFile(const QString &libraryPath)
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/cousoir/reading/")
+        + libraryKey(libraryPath) + QStringLiteral("-positions.json");
+}
+
 QString koboFolder()
 {
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/cousoir/kobo");
