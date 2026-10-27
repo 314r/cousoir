@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 
 #include "calibre_db.h"
+#include "conversion.h"
 #include "device_files.h"
 #include "kindle.h"
 #include "kindle_clippings.h"
@@ -116,6 +117,50 @@ private slots:
         QCOMPARE(info.value(QLatin1String("device_name")).toString(), QStringLiteral("Kindle"));
         QCOMPARE(info.value(QLatin1String("last_library_uuid")).toString(), m_data.uuid);
         QVERIFY(info.value(QLatin1String("mtp_prefix")).toString().startsWith(QLatin1String("mtp:::")));
+    }
+
+    // A book with an EPUB alone, converted by Cousoir to AZW3 as the window
+    // does before sending it, goes to the Kindle as a book Calibre made:
+    // the library's metadata, its cover's thumbnail, its page numbers.
+    void sendsBooksConvertedWithoutCalibre()
+    {
+        LibraryData data = m_data;
+        const auto shadows = std::find_if(data.books.begin(), data.books.end(), [](const Book &book) { return book.id == 3; });
+        QVERIFY(shadows != data.books.end());
+        QCOMPARE(shadows->formats.size(), 1);
+        QTemporaryDir job;
+        const Conversion::Outcome converted = Conversion::convertNatively(*shadows, QStringLiteral("AZW3"), job.path(), QStringLiteral("fr"));
+        QVERIFY2(converted.ok, qPrintable(converted.error));
+        shadows->formats.append({ QStringLiteral("AZW3"), shadows->formats.first().name, QFileInfo(converted.file).size(), converted.file });
+
+        QTemporaryDir root;
+        QTemporaryDir config;
+        QVERIFY(makeKindle(root.path()));
+        FolderFiles files(root.path(), true);
+        QString error;
+        QVERIFY2(files.scan(&error), qPrintable(error));
+        QTemporaryDir send;
+        QVERIFY2(KindleSend::prepareNatively(data, { 3 }, files, KindleSend::standIn(),
+                                             Kindle::formatMap(config.path(), QStringLiteral("G000000000000000")), config.path(),
+                                             QStringLiteral("fr"), send.path(), &error),
+                 qPrintable(error));
+        const KindleSend::Outcome outcome = KindleSend::outcome(send.path(), 0);
+        QVERIFY2(outcome.ok, qPrintable(outcome.error));
+        QCOMPARE(outcome.sent.size(), 1);
+        QVERIFY2(outcome.sent.first().lpath.endsWith(QLatin1String(".azw3")), qPrintable(outcome.sent.first().lpath));
+        QVERIFY2(KindleSend::apply(send.path(), outcome, files, &error), qPrintable(error));
+
+        const QByteArray book = readAll(root.filePath(outcome.sent.first().lpath));
+        QHash<quint32, QByteArray> exth;
+        for (const auto &[id, content] : MobiMetadata::exthRecords(book))
+            exth.insert(id, content);
+        QCOMPARE(exth.value(503), shadows->title.toUtf8());
+        QCOMPARE(exth.value(112), QStringLiteral("calibre:%1").arg(shadows->uuid).toUtf8());
+        const QString thumbnail = MobiMetadata::thumbnailName(book);
+        QVERIFY(!thumbnail.isEmpty());
+        QVERIFY(!QImage(root.filePath(QStringLiteral("system/thumbnails/") + thumbnail)).isNull());
+        const QString sdr = outcome.sent.first().lpath.chopped(5) + QStringLiteral(".sdr/");
+        QVERIFY(QFileInfo::exists(root.filePath(sdr + QFileInfo(outcome.sent.first().lpath).completeBaseName() + QStringLiteral(".apnx"))));
     }
 
     // A metadata.calibre that cannot be read stops the send rather than be

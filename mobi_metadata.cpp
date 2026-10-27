@@ -27,8 +27,10 @@
 #include <algorithm>
 #include <map>
 
+#include "book.h"
 #include "calibre_db.h"
 #include "calibre_text.h"
+#include "mobi_format.h"
 
 namespace MobiMetadata {
 
@@ -38,27 +40,10 @@ namespace {
 constexpr int thumbWidth = 180;
 constexpr int thumbHeight = 240;
 
-quint32 u32(const QByteArray &data, qsizetype at)
-{
-    return at >= 0 && at + 4 <= data.size() ? qFromBigEndian<quint32>(data.constData() + at) : 0;
-}
-
-quint16 u16(const QByteArray &data, qsizetype at)
-{
-    return at >= 0 && at + 2 <= data.size() ? qFromBigEndian<quint16>(data.constData() + at) : 0;
-}
-
-QByteArray pack32(quint32 value)
-{
-    QByteArray bytes(4, '\0');
-    qToBigEndian(value, bytes.data());
-    return bytes;
-}
-
-void put32(QByteArray *data, qsizetype at, quint32 value)
-{
-    qToBigEndian(value, data->data() + at);
-}
+using MobiFormat::pack32;
+using MobiFormat::put32;
+using MobiFormat::u16;
+using MobiFormat::u32;
 
 // The text as Calibre encodes it into the book: UTF-8, or cp1252 with "?"
 // for what it lacks.
@@ -257,10 +242,35 @@ bool createExth(Book *book, const QByteArray &exth, const QByteArray &newTitle, 
 
 } // namespace
 
-Options Options::load(const QString &calibreConfigDirectory)
+Metadata metadataFor(const ::Book &book, const QByteArray &cover)
+{
+    Metadata metadata;
+    metadata.title = book.title;
+    metadata.authors = book.authors;
+    metadata.authorSort = book.authorSort;
+    metadata.publisher = book.publisher;
+    metadata.comments = book.comments;
+    for (const auto &[type, value] : book.identifiers) {
+        if (type == QLatin1String("isbn"))
+            metadata.isbn = value;
+    }
+    metadata.tags = book.tags;
+    metadata.pubdate = book.pubdate;
+    metadata.uuid = book.uuid;
+    metadata.languages = book.languages;
+    metadata.cover = cover;
+    return metadata;
+}
+
+QByteArray thumbnail(const QByteArray &cover)
+{
+    return rescale(cover, 16 * 1024, thumbWidth, thumbHeight);
+}
+
+Options Options::load(const QString &calibreConfigDirectory, const QString &output)
 {
     Options options;
-    QFile file(QDir(calibreConfigDirectory).filePath(QStringLiteral("conversion/mobi_output.py")));
+    QFile file(QDir(calibreConfigDirectory).filePath(QStringLiteral("conversion/%1.py").arg(output)));
     if (calibreConfigDirectory.isEmpty() || !file.open(QIODevice::ReadOnly))
         return options;
     const QJsonObject saved = QJsonDocument::fromJson(file.readAll()).object();

@@ -80,8 +80,7 @@ Rectangle {
     }))).concat([
         { key: "trash", title: menuOnSelection ? qsTr("Move %1 books to Trash").arg(selectedCount) : qsTr("Move to Trash") }
     ]).filter(action => action.key === "trash" ? page.library.writable
-                        : action.key === "convert:AZW3" ? page.canConvert && page.conversions.calibre
-                        : action.key === "convert:KEPUB" ? page.canConvert : true)
+                        : action.key.startsWith("convert:") ? page.canConvert : true)
     // The pane that edits the books selected together, beside the list.
     property bool paneShown: true
     readonly property var view: gridMode ? coverGrid : bookTable

@@ -121,6 +121,8 @@ qt_add_library(cousoir_core STATIC
     book_search.h
     epub_book.cpp
     epub_book.h
+    epub_package.cpp
+    epub_package.h
     kepub.cpp
     kepub.h
     kindle.cpp
@@ -129,6 +131,14 @@ qt_add_library(cousoir_core STATIC
     kindle_clippings.h
     kindle_send.cpp
     kindle_send.h
+    kf8_book.cpp
+    kf8_book.h
+    kf8_index.cpp
+    kf8_index.h
+    kf8_skeleton.cpp
+    kf8_skeleton.h
+    kf8_writer.cpp
+    kf8_writer.h
     kobo.cpp
     kobo.h
     kobo_send.cpp
@@ -139,6 +149,8 @@ qt_add_library(cousoir_core STATIC
     metadata_download.h
     mobi_book.cpp
     mobi_book.h
+    mobi_format.cpp
+    mobi_format.h
     mobi_metadata.cpp
     mobi_metadata.h
     mtp.cpp
@@ -470,7 +482,7 @@ if(BUILD_TESTING)
     endfunction()
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
-                          kindle library_check metadata_web mobi_metadata epub_book epub_cfi calibre_fts calibre_notes annotation_search
+                          kindle kf8 library_check metadata_web mobi_metadata epub_book epub_cfi calibre_fts calibre_notes annotation_search
                           kobo_highlights kobo_placement kobo_write test_tool)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)

@@ -11,6 +11,7 @@
 #include "commit_engine.h"
 #include "conversion.h"
 #include "kepub.h"
+#include "mobi_metadata.h"
 #include "sqlite_db.h"
 #include "test_support.h"
 
@@ -82,7 +83,7 @@ private slots:
 
     void offersCalibresInputFormats()
     {
-        QCOMPARE(Conversion::outputFormats(), QStringList({ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
+        QCOMPARE(Conversion::outputFormats(), QStringList({ QStringLiteral("KEPUB"), QStringLiteral("AZW3"), QStringLiteral("EPUB") }));
         QCOMPARE(Conversion::inputFormats(*m_data.book(2)),
                  QStringList({ QStringLiteral("AZW3"), QStringLiteral("EPUB") }));
         QCOMPARE(Conversion::inputFormats(*m_data.book(5)), QStringList({ QStringLiteral("PDF") }));
@@ -329,6 +330,38 @@ private slots:
         QVERIFY(!Kepub::kepubify(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kepub/chapter 1 by calibre.xhtml"),
                                  folder.filePath(QStringLiteral("none.kepub")), {}, &error));
         QVERIFY(!error.isEmpty());
+    }
+
+    // What Cousoir converts itself: a KEPUB and an AZW3 of an EPUB, the
+    // library's metadata in them, and an EPUB of a Kindle book without one.
+    void convertsNatively()
+    {
+        const Book &black = *m_data.book(2);
+        QCOMPARE(Conversion::nativeFormats(black), (QStringList{ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
+        QVERIFY(Conversion::nativeFormats(*m_data.book(5)).isEmpty());
+        QTemporaryDir folder;
+        Conversion::Outcome outcome = Conversion::convertNatively(black, QStringLiteral("AZW3"), folder.path(), QStringLiteral("fr"));
+        QVERIFY2(outcome.ok, qPrintable(outcome.error));
+        QCOMPARE(outcome.inputFormat, QStringLiteral("epub"));
+        QCOMPARE(outcome.file, folder.filePath(QStringLiteral("output.azw3")));
+        bool titled = false;
+        for (const auto &[id, content] : MobiMetadata::exthRecords(readAll(outcome.file)))
+            titled = titled || (id == 503 && content == black.title.toUtf8());
+        QVERIFY(titled);
+        outcome = Conversion::convertNatively(black, QStringLiteral("EPUB"), folder.path(), QStringLiteral("fr"));
+        QVERIFY(!outcome.ok);
+        QVERIFY(!outcome.error.isEmpty());
+
+        // A Kindle book alone.
+        Book kindle;
+        kindle.id = 7;
+        kindle.title = QStringLiteral("The Voyage");
+        kindle.formats = { { QStringLiteral("AZW3"), QStringLiteral("voyage"), 0, QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.azw3") } };
+        QCOMPARE(Conversion::nativeFormats(kindle), QStringList{ QStringLiteral("EPUB") });
+        outcome = Conversion::convertNatively(kindle, QStringLiteral("EPUB"), folder.path(), QStringLiteral("fr"));
+        QVERIFY2(outcome.ok, qPrintable(outcome.error));
+        QCOMPARE(outcome.inputFormat, QStringLiteral("azw3"));
+        QVERIFY(entries(outcome.file).contains(QStringLiteral("mimetype")));
     }
 };
 

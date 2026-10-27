@@ -559,6 +559,36 @@ Done when a place and a highlight made in Cousoir open on the Kobo, a note
 written on the Kobo comes back, and the tests cover both ways, the
 refusals and the copies.
 
+### On `master`: any book to a Kindle
+
+On 2026-10-27 the user asked for five major improvements to Cousoir, to
+pick one: a search of the books' text sharing Calibre's index, a Kindle
+without Calibre for every book, a reading journal, the Kobo finished
+(collections, bookmarks, plain EPUBs), and metadata for a whole library at
+once. The user picked the second.
+
+#### 23. Any book to a Kindle without Calibre — picked, done
+
+Without Calibre, Cousoir sent to a Kindle only the books that had an AZW3
+or a MOBI; a book with an EPUB alone was offered "Convert and send", which
+then failed: converting to AZW3 needed Calibre. It was the last big reason
+a Kindle owner needed Calibre.
+
+- A port of Calibre's AZW3 output (`ebooks/mobi/writer8/`, with what
+  `mobi_output.py`, `writer2/resources.py`, `mobi/utils.py` and `palmdoc.c`
+  do for it), from the EPUB as it is: Calibre's CSS flattening and
+  splitting at page breaks left out, which a Kindle does not need.
+- Convert to AZW3, Ctrl+Shift+A and "Convert and send" without Calibre;
+  an EPUB of a Kindle book without one, from the reader's `MobiBook`.
+- What is a pure function of its input byte for byte as Calibre's code
+  makes it; the books themselves read again by Calibre and by Cousoir as
+  the EPUB they came from.
+
+Done when every word, link and entry of the table of contents of real books
+comes back through Calibre's reading of the AZW3 and Cousoir's, the library's
+metadata is in it, and a book with an EPUB alone reaches a Kindle without
+Calibre.
+
 ## Status
 
 | Goal | State |
@@ -586,6 +616,7 @@ refusals and the copies.
 | 20. Reader apps over the network | reverted on 2026-10-23 |
 | 21. The library's highlights | done; the readers' notes and editing a note later |
 | 22. Searching the books' text | planned |
+| 23. Any book to a Kindle without Calibre | done; tried on Calibre's tools, not yet on a Kindle |
 
 ## Journal
 
@@ -2041,3 +2072,47 @@ none of its 655 rows is hidden: the Kobo deletes a highlight removed.
 - Not done: the plain EPUBs' Adobe points, which look like CFIs counted by
   elements, left for later; bookmarks (dogears); a golden test of Calibre
   reading the rows written, which are as the Kobo writes its own.
+
+### 2026-10-27 — on `kindle-azw3`: any book to a Kindle (goal 23)
+
+Calibre 9.16's `writer8`, `writer2/resources.py`, `palmdoc.c`,
+`mobi_output.py`, `epub_input.py` and `data_url.py` were fetched into
+`build/sandbox/calibre-src`, and Calibre's own AZW3 of the reader's voyage
+(`tests/data/reader/voyage.azw3`) inspected first, for the layout to match.
+
+- `mobi_format.cpp`: the codecs the MOBI reader and the metadata writer had
+  each a copy of, and what writing needs: `encint()` both ways, base 32,
+  trailing entries, text records cut between characters, font records,
+  CNCX. PalmDoc compression finds the earlier copies of three bytes by
+  hash chains, not by Calibre's search back from each place: the same
+  bytes (checked against a port of Calibre's search on random texts), and
+  Verne's novel in 0.09 s instead of 6.
+- `kf8_index.cpp`, `kf8_skeleton.cpp`, `kf8_book.cpp`: the indices with
+  their trailing byte sequences, the chunker with lxml's serialization as
+  Calibre measures it, the records, MOBI header and EXTH.
+- `kf8_writer.cpp`: the EPUB read with `epub_package.cpp` (the zip and href
+  helpers moved out of `kepub.cpp`) and `EpubBook`'s table of contents, then
+  what Calibre does before and in `KF8Writer`. Two things learnt on the way:
+  a rewritten `url()` must go without quotes, as css_parser writes it,
+  for Calibre's reader and Cousoir's add their own; an `@import` of a flow
+  must be `url(kindle:flow:…)`, which both readers resolve and a string
+  they do not.
+- `Conversion::nativeFormats()` and `convertNatively()`, used by the window's
+  `ConversionService` and `cousoir-cli apply` (`COUSOIR_NATIVE_CONVERT`
+  forces them); `cousoir-cli azw3`. The QML stops hiding AZW3 without
+  Calibre, and offers "Convert and send" only when the reader's format is
+  one the book converts to.
+- Tried on Alice, Pride and Prejudice (25 MB, 5.4 s of pictures), Verne and
+  every EPUB of the tests: Calibre's inspector reads every record, and no
+  word is lost through Calibre's reading or Cousoir's, but those drawn in
+  SVG pictures, which become flows as Calibre's conversion makes them; links
+  land on their targets, into tables too.
+- Tests: `kf8_tests` (byte for byte against `tools/oracle/kf8_oracle.py`,
+  round trips, a book made for it, metadata, DRM, damaged EPUBs);
+  `conversion_tests`, `book_library_tests`, `kindle_tests` (an EPUB alone
+  converted then sent natively, thumbnail and APNX) and the UI test; the
+  golden test converts the fixture both ways and compares the words and
+  tables of contents.
+- Not done: tried on a real Kindle; fixed-layout EPUBs go reflowable, as
+  Calibre's AZW3 makes them; the inline table of contents is titled in
+  English, where Calibre uses its interface language.

@@ -63,11 +63,11 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   take beside your values, and a cover among those found. Revert undoes it.
 - 🔄 **Convert for your reader.** KEPUB for a Kobo, AZW3 for a Kindle, with
   Calibre and your conversion settings. Without Calibre, Cousoir makes the
-  KEPUB of an EPUB itself.
+  KEPUB and the AZW3 of an EPUB itself, and an EPUB of a Kindle book.
 - 📲 **Send to your Kobo or Kindle.** Plug it in and press Ctrl+D. Books land
   exactly where Calibre puts them, and each app recognises the books the other
-  sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and writes a
-  Kindle book's metadata itself.
+  sent. Neither needs Calibre: Cousoir makes a Kobo's KEPUBs and a Kindle's
+  AZW3s, with the library's metadata, itself.
 - 📖 **Read in Cousoir.** EPUBs and Kindle books (AZW3, MOBI, without
   Calibre) a page or two at a time, or as a scroll,
   at a line length that reads well, in the font, spacing and colours you
@@ -110,7 +110,7 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   tag, section or action by a few letters.
 - 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
   exactly as `calibredb list` and `calibredb search` do, checks its health,
-  applies changes from a JSON file, and makes KEPUBs.
+  applies changes from a JSON file, and makes KEPUBs and AZW3s.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -132,11 +132,12 @@ or later and a C++20 compiler; libmtp for a Kindle; Qt WebEngine for the
 reader, Qt TextToSpeech and speech-dispatcher to read aloud. [DOC.md](DOC.md)
 has the details.
 
-> **About Calibre:** Cousoir browses and edits a library, sends to a Kobo
-> or a Kindle, downloads metadata and reads books on its own. Calibre
-> itself converts to AZW3, downloads metadata from its own sources, and reads
-> the metadata of formats other than EPUB, KEPUB, MOBI, AZW3 and PDF: install
-> it too if you need those.
+> **About Calibre:** Cousoir browses and edits a library, converts an EPUB
+> for a Kobo or a Kindle, sends to them, downloads metadata and reads books
+> on its own. Calibre itself converts from other formats (PDF, DOCX...),
+> downloads metadata from its own sources, and reads the metadata of formats
+> other than EPUB, KEPUB, MOBI, AZW3 and PDF: install it too if you need
+> those.
 
 Cousoir installs under `~/.local` and appears in your app launcher. Set
 `PREFIX` to install it somewhere else.
@@ -273,12 +274,12 @@ Python to C++:
   CFIs it places them by, and the notes Calibre keeps on authors, series,
   tags and publishers;
 - 📲 **how books are sent to a Kobo or a Kindle**, found there and matched
-  with the library, from Calibre's device drivers, and how a KEPUB is made,
-  from its kepubify. The Kobo driver is the work of Timothy Legge, Kovid
-  Goyal and David Forrester.
+  with the library, from Calibre's device drivers, and how a KEPUB and an
+  AZW3 are made, from its kepubify and its KF8 writer. The Kobo driver is
+  the work of Timothy Legge, Kovid Goyal and David Forrester.
 
-And when Cousoir converts a book or sends it to a reader, Calibre itself does
-the work. [CREDITS.md](CREDITS.md) lists every piece of Calibre in Cousoir,
+And when Cousoir converts a book or sends it to a reader with Calibre
+installed, Calibre itself does the work. [CREDITS.md](CREDITS.md) lists every piece of Calibre in Cousoir,
 file by file, with its authors.
 
 If Cousoir is useful to you, please

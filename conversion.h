@@ -70,6 +70,16 @@ Outcome outcome(const QString &folder, int exitCode);
 // far it got: for the command line and the tests.
 Outcome run(const QString &folder, const QString &interfaceLanguage, const std::function<void(double)> &progress = {});
 
+// The formats Cousoir converts `book` to itself, without Calibre: KEPUB and
+// AZW3 of its EPUB, an EPUB of its Kindle book (AZW3 or MOBI) when it has no
+// EPUB.
+QStringList nativeFormats(const Book &book);
+
+// Converts `book` to `format` itself, into output.<format> of `folder`, with
+// the library's metadata and cover for a KEPUB or an AZW3. Reads only the
+// book's files: safe on any thread with a copy of the book.
+Outcome convertNatively(const Book &book, const QString &format, const QString &folder, const QString &interfaceLanguage);
+
 // Adds the converted file to `request` as book_converted() of Calibre's
 // convert action adds it: after ORIGINAL_<format>, when Calibre would keep
 // it, and with the settings for the book's next conversion.

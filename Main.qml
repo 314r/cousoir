@@ -220,7 +220,8 @@ ThemedWindow {
         convertManyDialog.title = qsTr("Convert %1 books to %2?").arg(bookIds.length).arg(format)
         convertManyDialog.message = having > 0
             ? qsTr("%1 of them have a %2 file already, which the new one replaces.").arg(having).arg(format)
-            : qsTr("Calibre converts them one after the other, each with its own settings.")
+            : conversions.calibre ? qsTr("Calibre converts them one after the other, each with its own settings.")
+            : qsTr("Cousoir converts them one after the other.")
         convertManyDialog.ask()
     }
 
@@ -255,14 +256,15 @@ ThemedWindow {
             return
         const format = devices.convertFormat(target)
         if (devices.sendFormat(bookId, target) === "" && format && library.writable
-            && conversions.formatsFor(bookId).length > 0) {
+            && conversions.formatsFor(bookId).includes(format)) {
             const row = bookRow(bookId)
             convertAndSendDialog.bookIds = [bookId]
             convertAndSendDialog.root = target
             convertAndSendDialog.format = format
             convertAndSendDialog.title = qsTr("Convert “%1” to %2 for %3?").arg(row ? row.title : "").arg(format)
                 .arg(device.name)
-            convertAndSendDialog.message = qsTr("%1 reads none of its formats. Calibre converts it first, then it is sent.")
+            convertAndSendDialog.message = (conversions.calibre ? qsTr("%1 reads none of its formats. Calibre converts it first, then it is sent.")
+                                                                : qsTr("%1 reads none of its formats. Cousoir converts it first, then it is sent."))
                 .arg(device.name)
             convertAndSendDialog.ask()
             return
@@ -289,7 +291,7 @@ ThemedWindow {
         const format = devices.convertFormat(target)
         const sendable = bookIds.filter(id => devices.sendFormat(id, target) !== "")
         const convertible = bookIds.filter(id => devices.sendFormat(id, target) === "" && format && library.writable
-                                               && conversions.formatsFor(id).length > 0)
+                                               && conversions.formatsFor(id).includes(format))
         if (sendable.length > 0) {
             const error = devices.send(sendable, target)
             if (error)
@@ -303,7 +305,8 @@ ThemedWindow {
             convertAndSendDialog.format = format
             convertAndSendDialog.title = qsTr("Convert %1 books to %2 for %3?").arg(convertible.length).arg(format)
                 .arg(device.name)
-            convertAndSendDialog.message = qsTr("%1 reads none of their formats. Calibre converts them first, then they are sent.")
+            convertAndSendDialog.message = (conversions.calibre ? qsTr("%1 reads none of their formats. Calibre converts them first, then they are sent.")
+                                                                : qsTr("%1 reads none of their formats. Cousoir converts them first, then they are sent."))
                 .arg(device.name)
             convertAndSendDialog.ask()
         }
@@ -444,7 +447,7 @@ ThemedWindow {
         add("kepub", books > 1 ? qsTr("Convert %1 books to KEPUB").arg(books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
             "refresh", books > 0 && library.writable)
         add("azw3", books > 1 ? qsTr("Convert %1 books to AZW3").arg(books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
-            "refresh", books > 0 && library.writable && conversions.calibre)
+            "refresh", books > 0 && library.writable)
         for (const device of devices.devices) {
             add("send:" + device.root, books > 1 ? qsTr("Send %1 books to %2").arg(books).arg(device.name)
                                                  : qsTr("Send to %1").arg(device.name),
@@ -1043,7 +1046,7 @@ ThemedWindow {
 
     Shortcut {
         sequence: "Ctrl+Shift+A"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable && window.conversions.calibre
+        enabled: (session.bookOpen || window.booksShown) && window.library.writable
         onActivated: window.convertBooks(window.targetIds(), "AZW3")
     }
 

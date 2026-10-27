@@ -3012,6 +3012,17 @@ void LibraryUiTest::convertsBooks()
     QTRY_VERIFY(!control("conversionState")->isVisible());
     QCOMPARE(formatsOf(library()->property("currentBook").toMap()),
              (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+
+    // Without Calibre, Cousoir makes the AZW3 itself.
+    conversions->setNative(true);
+    openWritable(1);
+    QTRY_VERIFY(control("convert_AZW3") && control("convert_AZW3")->isVisible());
+    click("convert_AZW3");
+    waitForSave();
+    QTRY_COMPARE(formatsOf(library()->property("currentBook").toMap()),
+                 (QStringList{ QStringLiteral("AZW3"), QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("“L'Écume des jours” converted to AZW3."));
+    conversions->setNative(false);
 }
 
 // Metadata from the web, with a stand-in for Calibre: the books found, a

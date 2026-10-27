@@ -11,21 +11,24 @@
 
 #include <memory>
 
+#include "conversion.h"
+
 class BookLibrary;
 struct Book;
 
 // The conversions asked for in the window, one after the other. Each runs
 // Calibre in a process of its own, as Conversion describes, from a folder in
-// the library's cache; without Calibre, Cousoir makes a KEPUB of the book's
-// EPUB itself (Kepub). The file then goes into the library through the
-// library's changes, after those before it. A conversion reads the book as
-// it starts, once the changes saved before it are in.
+// the library's cache; without Calibre, Cousoir converts itself: a KEPUB or
+// an AZW3 of the book's EPUB, an EPUB of its Kindle book. The file then goes
+// into the library through the library's changes, after those before it. A
+// conversion reads the book as it starts, once the changes saved before it
+// are in.
 class ConversionService : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
-    // Calibre is there to convert, to every format; without it, Cousoir
-    // converts an EPUB to KEPUB itself.
+    // Calibre is there to convert, from every format; without it, Cousoir
+    // converts an EPUB to KEPUB and AZW3, and a Kindle book to EPUB, itself.
     Q_PROPERTY(bool calibre READ calibre NOTIFY calibreChanged)
     // The conversions, the running one first: { bookId, title, format,
     // running, progress } with progress from 0 to 1.
@@ -43,8 +46,8 @@ public:
     bool busy() const;
 
     // The formats the book can be converted to: Cousoir's output formats
-    // when the book has a format Calibre converts from, KEPUB from an EPUB
-    // without Calibre; none otherwise.
+    // when the book has a format Calibre converts from, EPUB only for a book
+    // without one; without Calibre, those Cousoir converts it to itself.
     Q_INVOKABLE QStringList formatsFor(int bookId) const;
     // Converts the book to `format` after the conversions before it.
     // Returns an error message, empty once the conversion waits its turn.
@@ -55,7 +58,7 @@ public:
     // For the tests: a program run in place of calibre-debug, with its
     // arguments; empty to find Calibre again.
     void setProgram(const QString &program);
-    // For the tests: Cousoir's own KEPUB conversion even with Calibre.
+    // For the tests: Cousoir's own conversions even with Calibre.
     void setNative(bool native);
 
 signals:
@@ -80,7 +83,7 @@ private:
     void finishJob();
     void stopProcess();
     void releaseFolders();
-    void startNative(const Book &book);
+    void startNative(const Book &book, const QString &format);
     void finishNative();
 
     QPointer<BookLibrary> m_library;
@@ -89,8 +92,8 @@ private:
     QList<Job> m_jobs;
     QProcess *m_process = nullptr;
     bool m_native = false;
-    // Cousoir's own conversion, running: its error, empty once done.
-    QFutureWatcher<QString> *m_nativeJob = nullptr;
+    // Cousoir's own conversion, running.
+    QFutureWatcher<Conversion::Outcome> *m_nativeJob = nullptr;
     std::shared_ptr<QTemporaryDir> m_folder;
     // The folders of conversions whose files the library has yet to add.
     QList<std::shared_ptr<QTemporaryDir>> m_handedOver;
