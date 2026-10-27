@@ -342,9 +342,11 @@ cross ops-custom-1 ops-custom-2
 
 # Books converted by Calibre's convert action and by cousoir-cli, compared:
 # the files of conversions by their content, without the time each stamps
-# or the ids it draws. `prepare`, if given, runs on each copy first.
+# or the ids it draws. `prepare`, if given, runs on each copy first. With
+# `native`, cousoir-cli converts itself, as without Calibre, and the files
+# are compared by what they read as: their words and table of contents.
 conversions() {
-    local name=$1 source=$2 ops=$3 converted=$4 prepare=${5:-}
+    local name=$1 source=$2 ops=$3 converted=$4 prepare=${5:-} native=${6:-}
     for side in calibre cousoir; do
         rm -rf "$work/$name-$side"
         cp -a --reflink=auto "$source" "$work/$name-$side"
@@ -353,13 +355,13 @@ conversions() {
         fi
     done
     oracle "$root/tools/oracle/convert_books.py" -- "$work/$name-calibre" "$ops" || return 0
-    if ! "$cli" apply --force --library "$work/$name-cousoir" "$ops" > "$work/$name.log" 2>&1; then
+    if ! COUSOIR_NATIVE_CONVERT=$native "$cli" apply --force --library "$work/$name-cousoir" "$ops" > "$work/$name.log" 2>&1; then
         echo "$name: cousoir-cli apply failed:"
         tail -20 "$work/$name.log"
         status=1
         return 0
     fi
-    if "$tool" compare-libraries --converted "$converted" "$work/$name-calibre" \
+    if "$tool" compare-libraries ${native:+--native} --converted "$converted" "$work/$name-calibre" \
         "$work/$name-cousoir" > "$work/$name.txt"; then
         echo "$name: $(tail -1 "$work/$name.txt")"
     else
@@ -380,6 +382,10 @@ printf 'json:{\n  "output_profile": "tablet"\n}' > "$work/config/conversion/page
 conversion_settings() { "$tool" conversion-settings "$1"; }
 conversions conversions "$root/tests/data/library" "$root/tests/data/edits/convert.json" 1:KEPUB,2:AZW3,3:AZW3,5:KEPUB \
     conversion_settings
+# The same made by Cousoir itself, as without Calibre, of books with an
+# EPUB alone: Calibre converts an AZW3 to itself, which Cousoir does not.
+conversions native-conversions "$root/tests/data/library" "$root/tests/data/edits/convert-native.json" \
+    1:KEPUB,3:AZW3,4:AZW3 conversion_settings native
 
 # The round trip, on the custom library edited last: Calibre writes again the
 # metadata.opf files of the books Cousoir changed, as its GUI does when it

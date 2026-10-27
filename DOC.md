@@ -517,19 +517,40 @@ Cousoir departs from Calibre here:
 
 ## Converting books
 
-Without Calibre, Convert to KEPUB still works on a book with an EPUB:
-Cousoir makes the KEPUB itself, as Calibre's KEPUB conversion of an EPUB
-does (`ebooks/oeb/polish/kepubify.py`): each sentence of each page in
-Kobo's numbered spans, the body in Kobo's `book-columns` and `book-inner`
-divisions, Kobo's styles and script, a title page when the book opens on
-none, and the library's metadata and cover in the copy. Its pages come out
-byte for byte as Calibre's. `cousoir-cli kepubify BOOK.epub BOOK.kepub` does
-it on a file.
+Without Calibre, Cousoir converts a book with an EPUB to KEPUB and to AZW3
+itself, and a Kindle book without an EPUB to EPUB:
+
+- **KEPUB**, as Calibre's KEPUB conversion of an EPUB does
+  (`ebooks/oeb/polish/kepubify.py`): each sentence of each page in Kobo's
+  numbered spans, the body in Kobo's `book-columns` and `book-inner`
+  divisions, Kobo's styles and script, a title page when the book opens on
+  none, and the library's metadata and cover in the copy. Its pages come out
+  byte for byte as Calibre's. `cousoir-cli kepubify BOOK.epub BOOK.kepub`
+  does it on a file.
+- **AZW3**, as Calibre's AZW3 output writes a KF8 book
+  (`ebooks/mobi/writer8/`): the pages cut into skeletons and chunks, their
+  links pointing into them, the styles, SVG pictures and fonts as flows and
+  records, the table of contents as the Kindle's NCX index with its
+  trailing bytes, the guide, and the library's metadata, cover and its
+  thumbnail in the EXTH header. Its indices and compressed text come out
+  byte for byte as Calibre's for the same input. Before writing, Cousoir
+  does what Calibre's conversion does that a Kindle needs: the HTML cover
+  page left out when there is a cover (the Kindle shows it), duplicate
+  anchors left out, pictures written into a page as `data:` URLs made files,
+  WebP and AVIF pictures made PNG, a JPEG without JFIF or with EXIF written
+  again, fonts obfuscated by IDPF or Adobe made whole, and a page of the
+  table of contents added at the end. `cousoir-cli azw3 BOOK.epub BOOK.azw3`
+  does it on a file, with the EPUB's own metadata.
+- **EPUB**, of an AZW3 or a MOBI holding KF8, as Cousoir's reader reads a
+  Kindle book (Reading in Cousoir, below), with the metadata the Kindle book
+  holds. `cousoir-cli epub BOOK.azw3 BOOK.epub` does it on a file.
+
+A book protected by DRM is refused.
 
 The Convert to buttons of the Files section of a book's details, the row menu
 or Ctrl+Shift+K and Ctrl+Shift+A convert the book to KEPUB, for a Kobo, or
-AZW3, for a Kindle; Cousoir asks first when the book has a file of that
-format. Conversions run one after the other, each once the changes before it
+AZW3, for a Kindle, and the Files section a book without an EPUB to EPUB;
+Cousoir asks first when the book has a file of that format. Conversions run one after the other, each once the changes before it
 are saved; the status bar and the Files section show how far it got, and Stop
 in the Files section or the × of the status bar stops it. The converted file
 goes into the library as one of the book's formats.
@@ -543,9 +564,9 @@ metadata and cover put into the new file; the conversion in a Calibre worker
 process of its own. The file is added as Calibre adds it, and the settings
 are saved in `conversion_options` for the book's next conversion, as
 Calibre saves them; a format converted to itself keeps its old file as
-`ORIGINAL_AZW3` or `ORIGINAL_KEPUB`, as in Calibre. Without Calibre, only
-Convert to KEPUB of a book with an EPUB shows, which Cousoir does itself;
-AZW3, and KEPUB from other formats, need Calibre.
+`ORIGINAL_AZW3` or `ORIGINAL_KEPUB`, as in Calibre. Without Calibre, the
+conversions Cousoir does itself show, as above; from the other formats,
+PDF or DOCX for instance, converting needs Calibre.
 
 Cousoir departs from Calibre here too:
 
@@ -557,8 +578,13 @@ Cousoir departs from Calibre here too:
   Calibre's bulk conversion applies one set of settings to all.
 - The settings are saved only with the converted file; Calibre saves them as
   its dialog closes, even when the conversion then fails.
-- KEPUB and AZW3 only. The quick KEPUB Calibre makes from an EPUB when it
-  sends it to a Kobo comes with sending, below.
+- KEPUB, AZW3 and EPUB only, EPUB for a book without one. The quick KEPUB
+  Calibre makes from an EPUB when it sends it to a Kobo comes with sending,
+  below.
+- Cousoir's own AZW3 keeps the EPUB's styles as they are, where Calibre's
+  conversion first rewrites them into classes of its own and cuts pages at
+  their page breaks; a Kindle reads both. It has none of Calibre's
+  conversion settings: no jacket, no other margins or fonts.
 
 ## Sending to a reader
 
@@ -752,7 +778,9 @@ page numbers too, and Calibre, connecting, knows the books Cousoir sent. A
 PDF goes as it is, without the library's metadata. A book without a cover
 gets no thumbnail, where Calibre puts its default cover. Page numbers are
 always counted the fast way: Calibre's other methods, and a page count
-from a column, need Calibre.
+from a column, need Calibre. A book with only an EPUB is converted to AZW3
+first, after asking, by Cousoir itself (Converting books, above), then sent
+the same way.
 
 The highlights, notes and bookmarks made on the Kindle show as the Kobo's
 do, read from `documents/My Clippings.txt`, which the Kindle writes in its
@@ -1081,12 +1109,16 @@ cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
 cousoir-cli template [--library PATH] templates.json
 cousoir-cli download [--library PATH] [--covers] BOOK_ID
 cousoir-cli kepubify BOOK.epub BOOK.kepub
+cousoir-cli azw3 BOOK.epub BOOK.azw3
 cousoir-cli epub BOOK.azw3 BOOK.epub
 cousoir-cli kobo-highlights [--library PATH] KOBO|KoboReader.sqlite
 ```
 
-`epub` makes an EPUB of a Kindle book, AZW3 or MOBI, as Cousoir's reader
-does to read one (see [Reading in Cousoir](#reading-in-cousoir)).
+`kepubify` and `azw3` make a KEPUB and an AZW3 of an EPUB as Cousoir does
+without Calibre (see [Converting books](#converting-books)), with the
+EPUB's own metadata. `epub` makes an EPUB of a Kindle book, AZW3 or MOBI,
+as Cousoir's reader does to read one (see
+[Reading in Cousoir](#reading-in-cousoir)).
 
 `list` prints the books exactly as `calibredb list --for-machine --fields
 all` does, byte for byte. `search` prints the ids of the books an
@@ -1144,7 +1176,9 @@ and name; an empty `html` removes it:
 ```
 
 Conversions run first, on the books as the
-library has them, and their files are added with the formats added:
+library has them, and their files are added with the formats added; by
+Calibre, or by Cousoir itself without Calibre or with
+`COUSOIR_NATIVE_CONVERT` set:
 
 ```json
 [{ "convert": { "book": 1, "format": "KEPUB" } }]
@@ -1394,7 +1428,10 @@ The tests check the port against Calibre itself:
   Calibre explodes it to, without the time stamped in them, the random ids
   Calibre gives the anchors it adds, and the order of an AZW3's stylesheets
   and images and of an element's classes, which change from one Calibre
-  process to the next. Calibre draws a book's missing cover in a random
+  process to the next. The same books converted by Cousoir itself
+  (`tests/data/edits/convert-native.json`, `COUSOIR_NATIVE_CONVERT`) compare
+  with Calibre's conversions by what they read as: the words of their pages,
+  in order, and their table of contents. Calibre draws a book's missing cover in a random
   style: the tests leave it one. Then it sends books of the fixture to fake
   readers, with Calibre's GUI (`tools/oracle/send_books.py`) and with
   `cousoir-cli apply`: Kobos, a folder each with a `.kobo/KoboReader.sqlite`
@@ -1422,8 +1459,9 @@ The tests check the port against Calibre itself:
 - `conversion_tests` checks the OPF a conversion reads against Calibre's
   (`tests/data/oracle/conversion.json`, from `make oracle`), the job's files,
   how its outcome is read and added, and, with Calibre installed, converts a
-  book of the fixture to KEPUB. `book_library_tests` and the UI tests drive
-  conversions with `tests/data/fake-calibre-debug` standing in for Calibre.
+  book of the fixture to KEPUB; and Cousoir's own KEPUB, AZW3 and EPUB.
+  `book_library_tests` and the UI tests drive conversions with
+  `tests/data/fake-calibre-debug` standing in for Calibre, and without it.
 - `kobo_tests` reads fake Kobos: the model from a fake `/sys`, the books from
   their database and `metadata.calibre`, their reading and notes, the log
   kept of them, Calibre's matching with the library,
@@ -1508,6 +1546,16 @@ The tests check the port against Calibre itself:
   reader: pages turned, the position written to the library and found
   again, a newer one of Calibre's viewer taken, a highlight made, kept as
   the viewer keeps it, shown again and removed; and a PDF.
+- `kf8_tests` checks Cousoir's AZW3 writer: PalmDoc compression, the text
+  records, the skeleton, chunk, guide and NCX indices past 64 KB and their
+  trailing bytes, byte for byte against Calibre's own code
+  (`tests/data/kf8/oracle.json`, from `tools/oracle/kf8_oracle.py` in `make
+  oracle`); then books of the tests and one made for it (an HTML cover, an
+  obfuscated font, `data:` and WebP pictures, SVG, a table with ids, styles
+  that import and embed, a paragraph longer than a chunk) converted and
+  read again by Cousoir's Kindle reader, every word, link, font and the
+  table of contents found again; the library's metadata in the EXTH; DRM
+  refused; and damaged EPUBs converted or refused, never a crash.
 - `mobi_metadata_tests` writes metadata into MOBI and AZW3 books, Calibre's
   conversions and two it never makes, and compares them byte for byte with
   what Calibre's own writer made of them (`tools/oracle/mobi_oracle.py`),

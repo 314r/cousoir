@@ -31,6 +31,7 @@
 #include "conversion.h"
 #include "device_files.h"
 #include "kepub.h"
+#include "kf8_writer.h"
 #include "mobi_book.h"
 #include "kindle.h"
 #include "kindle_send.h"
@@ -340,9 +341,10 @@ QString readOnlyReason(const QString &libraryPath)
 }
 
 // Converts the books to the formats, as Calibre's convert action does, and
-// adds what it adds to `request`. The jobs' folders stay until the process
-// ends, with the files the request adds; with COUSOIR_KEEP_JOBS set, after,
-// for a look at Calibre's log.
+// adds what it adds to `request`; without Calibre, or with
+// COUSOIR_NATIVE_CONVERT set, as Cousoir converts itself. The jobs' folders
+// stay until the process ends, with the files the request adds; with
+// COUSOIR_KEEP_JOBS set, after, for a look at Calibre's log.
 bool convert(const QString &libraryPath, const CalibreConfig &config, const QList<QPair<int, QString>> &conversions,
              CommitEngine::Request *request)
 {
@@ -358,13 +360,15 @@ bool convert(const QString &libraryPath, const CalibreConfig &config, const QLis
             return false;
         }
         const QString folder = jobs.filePath(QStringLiteral("%1-%2").arg(bookId).arg(format));
+        const bool native = Conversion::program().isEmpty() || !qEnvironmentVariableIsEmpty("COUSOIR_NATIVE_CONVERT");
         QString error;
         if (!jobs.isValid() || !QDir().mkpath(folder)
-            || !Conversion::prepare(data, *book, format, config.interfaceLanguage, folder, &error)) {
+            || (!native && !Conversion::prepare(data, *book, format, config.interfaceLanguage, folder, &error))) {
             err() << (error.isEmpty() ? QStringLiteral("Cannot create a temporary folder.") : error) << Qt::endl;
             return false;
         }
-        const Conversion::Outcome outcome = Conversion::run(folder, config.interfaceLanguage);
+        const Conversion::Outcome outcome = native ? Conversion::convertNatively(*book, format, folder, config.interfaceLanguage)
+                                                   : Conversion::run(folder, config.interfaceLanguage);
         if (!outcome.ok) {
             err() << book->title << QStringLiteral(": ") << outcome.error << Qt::endl;
             return false;
@@ -1204,6 +1208,8 @@ int main(int argc, char *argv[])
         "          covers found. Without Calibre, Open Library is asked.\n"
         "  kepubify  Make a KEPUB of an EPUB, as Calibre does, without Calibre:\n"
         "          kepubify BOOK.epub BOOK.kepub\n"
+        "  azw3    Make an AZW3 of an EPUB for a Kindle, as Calibre's conversion\n"
+        "          does, without Calibre: azw3 BOOK.epub BOOK.azw3\n"
         "  epub    Make an EPUB of a Kindle book, AZW3 or MOBI, as Cousoir's reader\n"
         "          reads one, without Calibre: epub BOOK.azw3 BOOK.epub\n"
         "  kobo-highlights  Print the highlights and notes of a Kobo, by the folder it\n"
@@ -1229,7 +1235,7 @@ int main(int argc, char *argv[])
     parser.addOption(coversOption);
     parser.addPositionalArgument(QStringLiteral("command"),
                                  QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify, "
-                                                "epub or kobo-highlights"));
+                                                "azw3, epub or kobo-highlights"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1254,6 +1260,14 @@ int main(int argc, char *argv[])
         QString error;
         Kepub::Options options;
         if (!Kepub::kepubify(arguments.at(1), arguments.at(2), options, &error)) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+        return 0;
+    }
+    if (arguments.value(0) == QLatin1String("azw3") && arguments.size() == 3) {
+        QString error;
+        if (!Kf8::write(arguments.at(1), arguments.at(2), Kf8::Options(), &error)) {
             err() << error << Qt::endl;
             return 1;
         }

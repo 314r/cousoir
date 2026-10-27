@@ -9,7 +9,7 @@ import Cousoir
 
 // A book's metadata as Calibre keeps it, and its files, each of which opens
 // in the desktop's reader for it, goes to the library's trash, or is added
-// from a file; Calibre converts the book to KEPUB or AZW3. While the library
+// from a file; the book converts to KEPUB, AZW3 or EPUB. While the library
 // may be written the metadata edits in place: a field saves when you leave
 // it, with Enter or Tab; Esc puts the stored value back; a value the field
 // cannot take shows in red and is not saved.
@@ -43,8 +43,8 @@ FocusScope {
         { key: "modified", label: qsTr("Modified"), value: book.modified || "" }
     ]
 
-    // The formats Calibre can convert the book to, and its conversion, if
-    // one runs or waits.
+    // The formats the book can be converted to, by Calibre or by Cousoir, and
+    // its conversion, if one runs or waits.
     readonly property var convertFormats: conversions && (book.id || 0) > 0
         ? conversions.formatsFor(book.id) : []
     readonly property var conversion: (conversions ? conversions.jobs : []).find(job => job.bookId === book.id) || null
@@ -602,7 +602,8 @@ FocusScope {
                 }
             }
 
-            // Calibre makes the files a Kobo or a Kindle reads best.
+            // The files a Kobo or a Kindle reads best, and an EPUB of a Kindle
+            // book.
             Flow {
                 Layout.fillWidth: true
                 visible: pane.editable && pane.convertFormats.length > 0 && !pane.conversion
@@ -624,8 +625,8 @@ FocusScope {
                         objectName: "convert_" + modelData
                         variant: "outline"
                         text: modelData
-                        tip: qsTr("Convert to %1 (%2)").arg(modelData)
-                            .arg(modelData === "KEPUB" ? "Ctrl+Shift+K" : "Ctrl+Shift+A")
+                        tip: modelData === "EPUB" ? qsTr("Convert to %1").arg(modelData)
+                            : qsTr("Convert to %1 (%2)").arg(modelData).arg(modelData === "KEPUB" ? "Ctrl+Shift+K" : "Ctrl+Shift+A")
                         onClicked: pane.convertRequested(modelData)
                     }
                 }
@@ -667,7 +668,8 @@ FocusScope {
                 wrapMode: Text.Wrap
             }
 
-            // What a reader connected now reads of the book, made by Calibre.
+            // What a reader connected now reads of the book, converted first
+            // when it reads none of its formats.
             Flow {
                 id: sendFlow
 
@@ -692,11 +694,11 @@ FocusScope {
 
                         required property var modelData
                         required property int index
-                        // A book the reader reads, or one Calibre can make
-                        // it a format the reader reads.
+                        // A book the reader reads, or one that converts to a
+                        // format the reader reads.
                         readonly property bool reads: pane.devices.sendFormat(pane.book.id, modelData.root) !== ""
-                        readonly property bool convertible: pane.editable && pane.convertFormats.length > 0
-                            && pane.devices.convertFormat(modelData.root) !== ""
+                        readonly property bool convertible: pane.editable
+                            && pane.convertFormats.includes(pane.devices.convertFormat(modelData.root))
 
                         objectName: "sendTo_" + index
                         enabled: reads || convertible

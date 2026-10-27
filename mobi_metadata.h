@@ -13,6 +13,8 @@
 // record, the title after them, the cover and its thumbnail replaced where
 // they fit. And what Calibre's Kindle driver reads of a book: the name of
 // its cover thumbnail, its APNX page numbers.
+struct Book;
+
 namespace MobiMetadata {
 
 struct Metadata
@@ -44,8 +46,18 @@ struct Options
     QString personalDoc;
     bool shareNotSync = false;
 
-    static Options load(const QString &calibreConfigDirectory);
+    // Of `output`, "mobi_output" or "azw3_output", the conversion's settings
+    // of that format.
+    static Options load(const QString &calibreConfigDirectory, const QString &output = QStringLiteral("mobi_output"));
 };
+
+// The library's metadata of `book`, with `cover`, as Calibre writes it into
+// a Kindle book.
+Metadata metadataFor(const ::Book &book, const QByteArray &cover);
+
+// rescale_image() of a cover for its thumbnail record: a JPEG of at most
+// 16 KB, within 180 by 240.
+QByteArray thumbnail(const QByteArray &cover);
 
 // MetadataUpdater.update(): `book`, a MOBI file's bytes, with `metadata`.
 // `uuid4` makes the ASIN Calibre adds to a book Amazon would not sync

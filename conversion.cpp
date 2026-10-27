@@ -14,13 +14,19 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QObject>
 
 #include "book_import.h"
+#include "calibre_config.h"
 #include "calibre_job.h"
+#include "calibre_text.h"
 #include "commit_engine.h"
+#include "kepub.h"
+#include "kf8_writer.h"
+#include "mobi_book.h"
 #include "opf.h"
 
 namespace {
@@ -294,7 +300,63 @@ namespace Conversion {
 
 QStringList outputFormats()
 {
-    return { QStringLiteral("KEPUB"), QStringLiteral("AZW3") };
+    return { QStringLiteral("KEPUB"), QStringLiteral("AZW3"), QStringLiteral("EPUB") };
+}
+
+namespace {
+
+// The book's file of the first of `formats` it has.
+QString fileOf(const Book &book, const QStringList &formats)
+{
+    for (const QString &wanted : formats) {
+        for (const BookFormat &format : book.formats) {
+            if (format.format == wanted && !format.file.isEmpty())
+                return format.file;
+        }
+    }
+    return {};
+}
+
+const QStringList kindleFormats{ QStringLiteral("AZW3"), QStringLiteral("MOBI"), QStringLiteral("AZW") };
+
+} // namespace
+
+QStringList nativeFormats(const Book &book)
+{
+    if (!fileOf(book, { QStringLiteral("EPUB") }).isEmpty())
+        return { QStringLiteral("KEPUB"), QStringLiteral("AZW3") };
+    if (!fileOf(book, kindleFormats).isEmpty())
+        return { QStringLiteral("EPUB") };
+    return {};
+}
+
+Outcome convertNatively(const Book &book, const QString &format, const QString &folder, const QString &interfaceLanguage)
+{
+    Outcome result;
+    const QString upper = format.toUpper();
+    const QString output = QDir(folder).filePath(QStringLiteral("output.") + upper.toLower());
+    if (!nativeFormats(book).contains(upper)) {
+        result.error = upper == QLatin1String("EPUB") ? QObject::tr("Without Calibre, Cousoir makes an EPUB of an AZW3 or a MOBI only.")
+                                                      : QObject::tr("Without Calibre, Cousoir makes a %1 of an EPUB only.").arg(upper);
+        return result;
+    }
+    if (upper == QLatin1String("EPUB")) {
+        const QString source = fileOf(book, kindleFormats);
+        result.inputFormat = QFileInfo(source).suffix().toLower();
+        result.ok = MobiBook::toEpub(source, output, &result.error);
+    } else if (upper == QLatin1String("AZW3")) {
+        result.inputFormat = QStringLiteral("epub");
+        Kf8::Options options = Kf8::optionsFor(book);
+        options.mobi = MobiMetadata::Options::load(CalibreConfig::configDirectory(), QStringLiteral("azw3_output"));
+        options.unknown = CalibreText::unknownText(interfaceLanguage);
+        result.ok = Kf8::write(fileOf(book, { QStringLiteral("EPUB") }), output, options, &result.error);
+    } else {
+        result.inputFormat = QStringLiteral("epub");
+        result.ok = Kepub::kepubify(fileOf(book, { QStringLiteral("EPUB") }), output, Kepub::optionsFor(book), &result.error);
+    }
+    if (result.ok)
+        result.file = output;
+    return result;
 }
 
 QStringList inputFormats(const Book &book)

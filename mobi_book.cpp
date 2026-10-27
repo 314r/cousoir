@@ -16,9 +16,8 @@
 // - src/calibre/ebooks/mobi/reader/ncx.py: read_ncx(), build_toc()
 // - src/calibre/ebooks/mobi/reader/containers.py: Container
 // - src/calibre/ebooks/mobi/huffcdic.py: HuffReader
-// - src/calibre/ebooks/compression/palmdoc.c: cpalmdoc_decompress()
-// - src/calibre/ebooks/mobi/utils.py: decint(), decode_string(),
-//   read_font_record()
+// - src/calibre/ebooks/mobi/utils.py: decode_string()
+// The decompression, decint() and read_font_record() are MobiFormat's.
 //
 // CREDITS.md lists all of the Calibre code in Cousoir.
 
@@ -40,6 +39,7 @@
 
 #include "calibre_text.h"
 #include "html_soup.h"
+#include "mobi_format.h"
 #include "xml_tree.h"
 
 namespace MobiBook {
@@ -47,20 +47,12 @@ namespace {
 
 constexpr quint32 nullIndex = 0xFFFFFFFF;
 
-quint32 u32(const QByteArray &data, qsizetype at)
-{
-    return at >= 0 && at + 4 <= data.size() ? qFromBigEndian<quint32>(data.constData() + at) : 0;
-}
-
-quint16 u16(const QByteArray &data, qsizetype at)
-{
-    return at >= 0 && at + 2 <= data.size() ? qFromBigEndian<quint16>(data.constData() + at) : 0;
-}
-
-quint8 u8(const QByteArray &data, qsizetype at)
-{
-    return at >= 0 && at < data.size() ? quint8(data.at(at)) : 0;
-}
+using MobiFormat::base32;
+using MobiFormat::decint;
+using MobiFormat::readFont;
+using MobiFormat::u16;
+using MobiFormat::u32;
+using MobiFormat::u8;
 
 // The markup is worked on as bytes, as Calibre works on it: a byte a
 // character, its ASCII markup matched by the expressions, decoded once done.
@@ -69,43 +61,7 @@ QString bytes(const QByteArray &data)
     return QString::fromLatin1(data);
 }
 
-// A number in base 32, its digits 0-9 and A-V.
-qint64 base32(const QString &digits)
-{
-    bool ok = false;
-    const qint64 value = digits.toLongLong(&ok, 32);
-    return ok ? value : -1;
-}
-
 // --- Decompression ----------------------------------------------------------
-
-// cpalmdoc_decompress().
-QByteArray palmdoc(const QByteArray &input)
-{
-    QByteArray out;
-    out.reserve(input.size() * 2);
-    qsizetype i = 0;
-    while (i < input.size() && out.size() < (1 << 20)) {
-        quint32 c = quint8(input.at(i++));
-        if (c >= 1 && c <= 8) {
-            while (c-- && i < input.size())
-                out.append(input.at(i++));
-        } else if (c <= 0x7F) {
-            out.append(char(c));
-        } else if (c >= 0xC0) {
-            out.append(' ');
-            out.append(char(c ^ 0x80));
-        } else if (i < input.size()) {
-            c = (c << 8) + quint8(input.at(i++));
-            const qsizetype distance = (c & 0x3FFF) >> 3;
-            if (distance <= out.size() && distance > 0) {
-                for (quint32 n = (c & 7) + 3; n--;)
-                    out.append(out.at(out.size() - distance));
-            }
-        }
-    }
-    return out;
-}
 
 // HuffReader: the HUFF record's codes, the CDIC records' phrases.
 class Huff
@@ -333,24 +289,6 @@ QString mobiLanguage(quint32 code)
 }
 
 // --- Indices ----------------------------------------------------------------
-
-// decint(): a number of 7 bits a byte, the last byte's high bit set.
-quint64 decint(const QByteArray &data, qsizetype at, qsizetype *consumed)
-{
-    quint64 value = 0;
-    qsizetype i = std::max<qsizetype>(at, 0);
-    *consumed = 0;
-    if (at < 0 || at >= data.size())
-        return 0;
-    while (i < data.size()) {
-        const quint8 byte = quint8(data.at(i++));
-        value = (value << 7) | (byte & 0x7F);
-        if (byte & 0x80)
-            break;
-    }
-    *consumed = i - at;
-    return value;
-}
 
 struct Entry
 {
@@ -598,38 +536,6 @@ QString mediaTypeOf(const QString &name)
     return types.value(name.section(u'.', -1).toLower(), QStringLiteral("application/octet-stream"));
 }
 
-// read_font_record(): the font, its XOR obfuscation undone and inflated.
-QPair<QByteArray, QString> readFont(const QByteArray &data)
-{
-    const quint32 size = u32(data, 4);
-    const quint32 flags = u32(data, 8);
-    const quint32 start = u32(data, 12);
-    const quint32 keyLength = u32(data, 16);
-    const quint32 keyStart = u32(data, 20);
-    QByteArray font = data.mid(start);
-    if ((flags & 0b10) && keyLength > 0) {
-        const QByteArray key = data.mid(keyStart, keyLength);
-        const qsizetype extent = std::min<qsizetype>(1040, font.size());
-        for (qsizetype n = 0; n < extent && !key.isEmpty(); ++n)
-            font[n] = char(font.at(n) ^ key.at(n % key.size()));
-    }
-    if (flags & 0b1) {
-        // A font is some megabytes at most.
-        if (size > (32u << 20))
-            return {};
-        QByteArray sized(4, '\0');
-        qToBigEndian(size, sized.data());
-        font = qUncompress(sized + font);
-        if (font.size() != qsizetype(size))
-            return {};
-    }
-    const QByteArray signature = font.left(4);
-    const QString ext = signature == QByteArray("\0\1\0\0", 4) || signature == "true" || signature == "ttcf" ? QStringLiteral("ttf")
-                        : signature == "OTTO" ? QStringLiteral("otf")
-                                              : QStringLiteral("dat");
-    return { font, ext };
-}
-
 // Named characters of HTML as numbers, XML's own five aside: an XHTML page
 // read as XML knows no others.
 QString xmlEntities(const QString &text)
@@ -843,7 +749,7 @@ bool Reader::extractText(qsizetype offset, QString *error)
             return false;
         unpack = [&huff](const QByteArray &data) { return huff.unpack(data); };
     } else if (m_header.compression == QByteArray("\0\2", 2)) {
-        unpack = palmdoc;
+        unpack = MobiFormat::palmdocDecompress;
     } else if (m_header.compression == QByteArray("\0\1", 2)) {
         unpack = [](const QByteArray &data) { return data; };
     } else {

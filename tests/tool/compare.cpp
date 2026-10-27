@@ -12,6 +12,7 @@
 #include <QSet>
 #include <QTemporaryDir>
 #include <QtEndian>
+#include <QUrl>
 #include <QXmlStreamReader>
 
 #include <algorithm>
@@ -19,6 +20,9 @@
 #include <functional>
 
 #include "common.h"
+#include "epub_book.h"
+#include "html_soup.h"
+#include "xml_tree.h"
 #include "sqlite_db.h"
 
 namespace Tool {
@@ -42,13 +46,18 @@ namespace {
 //   explodes it to, without the time it was made, the random ids of the
 //   anchors Calibre adds or the order of an AZW3's stylesheets and images,
 //   which varies from one of Calibre's processes to the next. Their sizes in
-//   the data table, which those change, are left out.
+//   the data table, which those change, are left out. With --native, for
+//   Cousoir's own conversions, which make other markup than Calibre's: by
+//   the words of their pages in order and their table of contents, the
+//   table of contents a conversion adds and the settings Calibre keeps for
+//   the book's next conversion left out.
 //
 // Prints each difference and exits with 1 when there is one.
 
 struct LibraryOptions
 {
     bool filesOnly = false;
+    bool native = false;
     std::optional<qint64> addedFrom;
     QSet<std::pair<qint64, QString>> converted;
 };
@@ -151,7 +160,8 @@ std::optional<QMap<QString, Table>> tables(const QString &path, const LibraryOpt
         names.append(list.text(0));
     QMap<QString, Table> result;
     for (const QString &name : std::as_const(names)) {
-        if (name == QLatin1String("preferences") || name.startsWith(QLatin1String("annotations_fts")))
+        if (name == QLatin1String("preferences") || name.startsWith(QLatin1String("annotations_fts"))
+            || (options.native && name == QLatin1String("conversion_options")))
             continue;
         Table table;
         SqliteStatement columns(db, QStringLiteral("SELECT name FROM pragma_table_info(?) ORDER BY cid"));
@@ -532,6 +542,106 @@ std::optional<QString> conversion(const QString &path)
     return sha256(raw);
 }
 
+// The words of a page's body, without its pictures in SVG, styles and
+// scripts; none for the table of contents a conversion adds.
+void pageWords(const QByteArray &data, QStringList *words)
+{
+    std::unique_ptr<XmlTree::Node> page = XmlTree::parse(data);
+    if (!page)
+        page = HtmlSoup::parse(XmlTree::xmlText(data));
+    if (!page)
+        return;
+    const QList<XmlTree::Node *> bodies = XmlTree::findAll(page.get(), [](const XmlTree::Node &n) { return n.isElement("body"); });
+    if (bodies.isEmpty() || bodies.first()->attribute(QStringLiteral("id")) == QLatin1String("calibre_generated_inline_toc"))
+        return;
+    QString text;
+    std::function<void(const XmlTree::Node &)> collect = [&](const XmlTree::Node &node) {
+        if (node.kind == XmlTree::Node::Kind::Text || node.kind == XmlTree::Node::Kind::Cdata) {
+            text += node.text;
+            return;
+        }
+        if (node.kind != XmlTree::Node::Kind::Element || node.isElement("svg") || node.isElement("style") || node.isElement("script"))
+            return;
+        // A block's words apart from the next's; the pieces of a long text
+        // a Kindle book keeps apart one.
+        const bool block = node.isElement("p") || node.isElement("div") || node.isElement("li") || node.isElement("td")
+                        || node.isElement("br") || node.localName.startsWith(u'h');
+        if (block)
+            text += u' ';
+        for (const auto &child : node.children)
+            collect(*child);
+        if (block)
+            text += u' ';
+    };
+    collect(*bodies.first());
+    static const QRegularExpression spaces(QStringLiteral("\\s+"));
+    *words += text.split(spaces, Qt::SkipEmptyParts);
+}
+
+// A converted book by what it reads as: its words in the order of its
+// pages and the titles of its table of contents. An AZW3 or a MOBI as
+// Calibre explodes it.
+std::optional<QString> conversionWords(const QString &path)
+{
+    QStringList words;
+    QStringList titles;
+    const QByteArray raw = readFile(path).value_or(QByteArray());
+    if (raw.startsWith("PK")) {
+        QString error;
+        const std::unique_ptr<EpubBook> book = EpubBook::open(path, &error);
+        if (!book)
+            return std::nullopt;
+        for (const EpubBook::SpineItem &item : book->spine())
+            pageWords(book->read(item.name), &words);
+        for (const EpubBook::TocEntry &entry : book->toc())
+            titles.append(entry.title);
+    } else if (raw.mid(60, 8) == "BOOKMOBI") {
+        QTemporaryDir folder;
+        QProcess explode;
+        explode.start(QStringLiteral("calibre-debug"), { QStringLiteral("--explode-book"), path, folder.path() });
+        if (!folder.isValid() || !explode.waitForFinished(-1) || explode.exitStatus() != QProcess::NormalExit
+            || explode.exitCode() != 0)
+            return std::nullopt;
+        const QMap<QString, QString> exploded = files(folder.path());
+        QString opfName;
+        for (auto it = exploded.cbegin(); it != exploded.cend(); ++it) {
+            if (it.key().endsWith(QLatin1String(".opf")))
+                opfName = it.key();
+        }
+        const std::unique_ptr<XmlTree::Node> opf = XmlTree::parse(readFile(exploded.value(opfName)).value_or(QByteArray()));
+        if (!opf)
+            return std::nullopt;
+        QHash<QString, QString> items;
+        for (const XmlTree::Node *item : XmlTree::findAll(opf.get(), [](const XmlTree::Node &n) { return n.isElement("item"); }))
+            items.insert(item->attribute(QStringLiteral("id")), item->attribute(QStringLiteral("href")));
+        const QString base = opfName.contains(u'/') ? opfName.section(u'/', 0, -2) + u'/' : QString();
+        for (const XmlTree::Node *itemref : XmlTree::findAll(opf.get(), [](const XmlTree::Node &n) { return n.isElement("itemref"); })) {
+            const QString name = QDir::cleanPath(base + QUrl::fromPercentEncoding(items.value(itemref->attribute(QStringLiteral("idref"))).toUtf8()));
+            pageWords(readFile(exploded.value(name)).value_or(QByteArray()), &words);
+        }
+        for (auto it = exploded.cbegin(); it != exploded.cend(); ++it) {
+            if (!it.key().endsWith(QLatin1String(".ncx")))
+                continue;
+            const std::unique_ptr<XmlTree::Node> ncx = XmlTree::parse(readFile(it.value()).value_or(QByteArray()));
+            for (const XmlTree::Node *label : ncx ? XmlTree::findAll(ncx.get(), [](const XmlTree::Node &n) { return n.isElement("text"); })
+                                                 : QList<XmlTree::Node *>()) {
+                QString title;
+                for (const auto &child : label->children)
+                    title += child->text;
+                titles.append(title.simplified());
+            }
+            // The book's title comes first in an NCX.
+            if (!titles.isEmpty())
+                titles.removeFirst();
+        }
+    } else {
+        return std::nullopt;
+    }
+    return QStringLiteral("%1 words (%2), table of contents: %3")
+        .arg(words.size())
+        .arg(sha256(words.join(u' ').toUtf8()).left(16), titles.join(QStringLiteral(" | ")));
+}
+
 // The mean difference of two images of one size, from 0 to 1, as
 // ImageMagick's normalised MAE measures it.
 double meanDifference(const QImage &a, const QImage &b)
@@ -565,6 +675,8 @@ int compareLibraries(const QStringList &arguments)
         const QString &argument = arguments.at(i);
         if (argument == QLatin1String("--files-only")) {
             options.filesOnly = true;
+        } else if (argument == QLatin1String("--native")) {
+            options.native = true;
         } else if (argument == QLatin1String("--added-from") && i + 1 < arguments.size()) {
             options.addedFrom = arguments.at(++i).toLongLong();
         } else if (argument == QLatin1String("--converted") && i + 1 < arguments.size()) {
@@ -649,8 +761,8 @@ int compareLibraries(const QStringList &arguments)
                 problems.append(QStringLiteral("%1: covers differ by %2").arg(rel).arg(mean, 0, 'f', 4));
             }
         } else if (const auto format = bookFormat(rel); format && options.converted.contains(*format)) {
-            const std::optional<QString> x = conversion(fa[rel]);
-            const std::optional<QString> y = conversion(fb[rel]);
+            const std::optional<QString> x = options.native ? conversionWords(fa[rel]) : conversion(fa[rel]);
+            const std::optional<QString> y = options.native ? conversionWords(fb[rel]) : conversion(fb[rel]);
             if (!x || !y)
                 problems.append(QStringLiteral("%1 cannot be read as a conversion").arg(rel));
             else if (*x != *y)

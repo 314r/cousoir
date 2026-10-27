@@ -487,21 +487,7 @@ bool prepareNatively(const LibraryData &data, const QList<int> &bookIds, DeviceF
         }
         if (mobi) {
             // The library's metadata in the copy, as Calibre's send writes it.
-            MobiMetadata::Metadata metadata;
-            metadata.title = book->title;
-            metadata.authors = book->authors;
-            metadata.authorSort = book->authorSort;
-            metadata.publisher = book->publisher;
-            metadata.comments = book->comments;
-            for (const auto &[type, value] : book->identifiers) {
-                if (type == QLatin1String("isbn"))
-                    metadata.isbn = value;
-            }
-            metadata.tags = book->tags;
-            metadata.pubdate = book->pubdate;
-            metadata.uuid = book->uuid;
-            metadata.languages = book->languages;
-            metadata.cover = cover;
+            const MobiMetadata::Metadata metadata = MobiMetadata::metadataFor(*book, cover);
             // A book the writer refuses goes as it is, as Calibre's send
             // goes on when set_metadata() fails.
             QByteArray updated = bytes;

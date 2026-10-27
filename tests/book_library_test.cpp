@@ -27,6 +27,7 @@
 #include "kobo_highlights.h"
 #include "xml_tree.h"
 #include "sqlite_db.h"
+#include "mobi_metadata.h"
 #include "test_support.h"
 
 namespace {
@@ -1210,8 +1211,8 @@ void BookLibraryTest::downloadsMetadata()
     QTRY_VERIFY(jobs.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
 }
 
-// Without Calibre, a KEPUB made by Cousoir of the book's EPUB goes into the
-// library as Calibre's would.
+// Without Calibre, a KEPUB and an AZW3 made by Cousoir of the book's EPUB
+// go into the library as Calibre's would.
 void BookLibraryTest::convertsWithoutCalibre()
 {
     auto copy = writableCopy();
@@ -1222,17 +1223,26 @@ void BookLibraryTest::convertsWithoutCalibre()
     service.setNative(true);
     service.setLibrary(library.get());
     QVERIFY(!service.calibre());
-    QCOMPARE(service.formatsFor(1), QStringList{ QStringLiteral("KEPUB") });
-    // A PDF alone, nothing.
+    QCOMPARE(service.formatsFor(1), (QStringList{ QStringLiteral("KEPUB"), QStringLiteral("AZW3") }));
+    // A PDF alone, nothing; an EPUB only for a book without one.
     QVERIFY(service.formatsFor(5).isEmpty());
-    QVERIFY(!service.convert(1, QStringLiteral("AZW3")).isEmpty());
+    QVERIFY(!service.convert(1, QStringLiteral("EPUB")).isEmpty());
     QSignalSpy converted(&service, &ConversionService::converted);
     QCOMPARE(service.convert(1, QStringLiteral("KEPUB")), QString());
-    QVERIFY(converted.wait(10000));
+    QCOMPARE(service.convert(1, QStringLiteral("AZW3")), QString());
+    QTRY_COMPARE_WITH_TIMEOUT(converted.size(), 2, 20000);
     QVERIFY(waitForSave(library.get()));
     library->setCurrentBookId(1);
-    QTRY_COMPARE(formatsOf(library->currentBook()), (QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
-    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/L'Ecume des jours - Boris Vian.kepub"))));
+    QTRY_COMPARE(formatsOf(library->currentBook()),
+                 (QStringList{ QStringLiteral("AZW3"), QStringLiteral("EPUB"), QStringLiteral("KEPUB") }));
+    const QString folder = copy->filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/"));
+    QVERIFY(QFileInfo::exists(folder + QStringLiteral("L'Ecume des jours - Boris Vian.kepub")));
+    // The library's title in the Kindle book.
+    const QByteArray azw3 = readAll(folder + QStringLiteral("L'Ecume des jours - Boris Vian.azw3"));
+    bool titled = false;
+    for (const auto &[id, content] : MobiMetadata::exthRecords(azw3))
+        titled = titled || (id == 503 && content == QStringLiteral("L'Écume des jours").toUtf8());
+    QVERIFY(titled);
 }
 
 // A Kobo shows up while mounted, with its books matched with the library's;
