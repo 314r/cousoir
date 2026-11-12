@@ -377,6 +377,12 @@ ThemedWindow {
             return
         }
         bookPage.finishEditing()
+        // The readers close first, so that the place and the highlights of
+        // the book being read are handed to the library before it goes.
+        if (readerLoader.item)
+            readerLoader.item.close()
+        if (pdfReaderLoader.item)
+            pdfReaderLoader.item.close()
         Qt.quit()
     }
 

@@ -443,6 +443,8 @@ private:
     void scheduleCheck();
     void finishCheck();
     void rebuildCheck();
+    // A change waiting its turn, with what a save needs besides it.
+    CommitEngine::Request prepared(CommitEngine::Request request) const;
     void startCommit();
     void finishCommit();
     void applyData(LibraryData data, BookIndex index);

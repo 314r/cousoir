@@ -278,7 +278,22 @@ BookLibrary::~BookLibrary()
     m_checkWatcher.cancel();
     m_checkWatcher.waitForFinished();
     m_loadWatcher.waitForFinished();
-    m_commitWatcher.waitForFinished();
+    // The changes still waiting their turn are saved before the library
+    // goes, so that quitting loses none: unless the one being saved failed,
+    // what follows having been made on it.
+    bool saved = m_writable;
+    const QFuture<CommitResult> running = m_commitWatcher.future();
+    if (running.isValid() && !running.isCanceled()) {
+        m_commitWatcher.waitForFinished();
+        // Not taken by finishCommit(): the save ended with no one to hear.
+        if (running.isValid() && running.resultCount() > 0)
+            saved = saved && running.result().result.ok;
+    }
+    while (saved && !m_pending.isEmpty()) {
+        const CommitEngine::Result result = CommitEngine::commit(prepared(m_pending.takeFirst()));
+        saved = result.ok;
+        m_backedUp = m_backedUp || !result.backup.isEmpty();
+    }
     m_importWatcher.waitForFinished();
 }
 
@@ -1958,6 +1973,19 @@ void BookLibrary::dropPending(const QString &error)
         emit changeFinished(request.id, false, error);
 }
 
+CommitEngine::Request BookLibrary::prepared(CommitEngine::Request request) const
+{
+    request.libraryPath = m_libraryPath;
+    request.cacheFolder = cacheFolder(m_libraryPath);
+    // One copy of the database before the session's first change.
+    request.backupFolder = m_backedUp ? QString() : backupFolder();
+    request.config = effectiveConfig();
+    const QString version = QCoreApplication::applicationVersion();
+    request.producer = version.isEmpty() ? QStringLiteral("Cousoir") : QStringLiteral("Cousoir (%1)").arg(version);
+    request.producerId = QStringLiteral("cousoir");
+    return request;
+}
+
 void BookLibrary::startCommit()
 {
     // A load writes the snapshot a save replaces: one at a time.
@@ -1969,15 +1997,7 @@ void BookLibrary::startCommit()
         emit saveFailed(tr("The library cannot be changed right now."));
         return;
     }
-    CommitEngine::Request request = m_pending.takeFirst();
-    request.libraryPath = m_libraryPath;
-    request.cacheFolder = cacheFolder(m_libraryPath);
-    // One copy of the database before the session's first change.
-    request.backupFolder = m_backedUp ? QString() : backupFolder();
-    request.config = effectiveConfig();
-    const QString version = QCoreApplication::applicationVersion();
-    request.producer = version.isEmpty() ? QStringLiteral("Cousoir") : QStringLiteral("Cousoir (%1)").arg(version);
-    request.producerId = QStringLiteral("cousoir");
+    const CommitEngine::Request request = prepared(m_pending.takeFirst());
     const QStringList sortFields = this->sortFields();
     m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
         CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits, request.id };

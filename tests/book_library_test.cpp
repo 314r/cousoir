@@ -99,6 +99,7 @@ private slots:
     void followsCalibreOnReload();
     void editsBooks();
     void keepsCompositesOfOtherBooks();
+    void savesWhatWaitsWhenClosed();
     void followsSortsLikeCalibre();
     void refusesWhileReadOnly();
     void revertsCurrentBook();
@@ -671,6 +672,30 @@ void BookLibraryTest::editsBooks()
     QVERIFY(!library->updateBook(2, { { QStringLiteral("pubdate"), QStringLiteral("someday") } }).isEmpty());
     QVERIFY(!library->updateBook(2, { { QStringLiteral("colour"), QStringLiteral("red") } }).isEmpty());
     QVERIFY(!library->updateBook(99, { { QStringLiteral("title"), QStringLiteral("X") } }).isEmpty());
+}
+
+// Quitting while a save runs: the changes waiting behind it are written
+// too, not dropped with the library.
+void BookLibraryTest::savesWhatWaitsWhenClosed()
+{
+    auto copy = writableCopy();
+    {
+        auto library = open(copy->path());
+        QVERIFY(library);
+        library->setWritable(true);
+        QCOMPARE(library->updateBook(2, { { QStringLiteral("title"), QStringLiteral("The White Rose") } }), QString());
+        QVERIFY(library->saving());
+        // These wait their turn: one joins the other, the trash comes after.
+        QCOMPARE(library->updateBook(2, { { QStringLiteral("publisher"), QStringLiteral("Tor") } }), QString());
+        QCOMPARE(library->updateBook(1, { { QStringLiteral("rating"), 4 } }), QString());
+    }
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setCurrentBookId(2);
+    QCOMPARE(title(library.get()), QStringLiteral("The White Rose"));
+    QCOMPARE(library->currentBook().value(QStringLiteral("publisher")).toString(), QStringLiteral("Tor"));
+    library->setCurrentBookId(1);
+    QCOMPARE(library->currentBook().value(QStringLiteral("rating")).toString(), QStringLiteral("★★"));
 }
 
 // A save reads the library again: the composite columns of the books it
