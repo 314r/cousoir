@@ -12,6 +12,7 @@
 #include <QBuffer>
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QDesktopServices>
 #include <QGuiApplication>
 #include <QImage>
@@ -2001,8 +2002,12 @@ void BookLibrary::startCommit()
     const QStringList sortFields = this->sortFields();
     m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
         CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits, request.id };
-        if (committed.result.ok && committed.result.written)
+        if (committed.result.ok && committed.result.written) {
+            QElapsedTimer clock;
+            clock.start();
             committed.index = indexBooks(committed.result.data, request.config, sortFields);
+            committed.result.timings.append({ QStringLiteral("index the books"), clock.nsecsElapsed() });
+        }
         return committed;
     }));
     // The files move meanwhile: the check waits for the library saved.
@@ -2043,7 +2048,11 @@ void BookLibrary::finishCommit()
         if (result.written) {
             m_loaded = true;
             m_lastError.clear();
+            QElapsedTimer clock;
+            clock.start();
             applyData(result.data, std::move(committed.index));
+            m_saveTimings = result.timings;
+            m_saveTimings.append({ QStringLiteral("show it (the window's thread)"), clock.nsecsElapsed() });
             if (!committed.bulkEdits.isEmpty())
                 keepBulkUndo(committed.bulkEdits, result.bulkBefore);
             m_publishedKey = ConcurrencyGuard::changeKey(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")));

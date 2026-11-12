@@ -12,6 +12,7 @@
 #include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -161,6 +162,13 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         result->notesWritten = true;
     }
 
+    QElapsedTimer clock;
+    clock.start();
+    const auto lap = [&](const char *step) {
+        result->timings.append({ QString::fromLatin1(step), clock.nsecsElapsed() });
+        clock.restart();
+    };
+
     const FileIdentity before = CalibreDb::identify(database);
     const QByteArray original = readFile(database, &error);
     if (original.isEmpty() || CalibreDb::identify(database) != before)
@@ -176,10 +184,12 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         pruneBackups(request.backupFolder);
     }
 
+    lap("read the database, back it up");
     QDir().mkpath(request.cacheFolder);
     QFile::remove(work + QStringLiteral("-journal"));
     if (!FileTransaction::writeDurably(work, original, &error))
         return fail(error);
+    lap("write the working copy");
 
     SqliteDb db;
     if (!db.open(work, SqliteDb::Mode::ReadWrite, &error)
@@ -199,6 +209,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     context.now = now;
     context.notes = readNotes(request.libraryPath, request.cacheFolder);
 
+    lap("open it, check its structure");
     FileTransaction files(journalPath(request.cacheFolder));
     FieldWriters::Result state;
     QSet<int> moved;
@@ -324,6 +335,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     if (!FieldWriters::markDirtied(db, dirtied, now, &error) || !FieldWriters::touch(db, touched, now, &error)
         || !db.exec(QStringLiteral("COMMIT"), &error))
         return undo(error);
+    lap("apply the changes");
     const QString check = db.value(QStringLiteral("PRAGMA quick_check")).toString();
     const bool keysOk = !db.value(QStringLiteral("SELECT count(*) FROM pragma_foreign_key_check")).toLongLong();
     if (check != QLatin1String("ok") || !keysOk) {
@@ -331,6 +343,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         return fail(QObject::tr("The changed database fails its checks (%1); nothing was written.").arg(check));
     }
 
+    lap("check the database");
     // The library as written, for the covers and metadata.opf files; the
     // dates of the books added and restored as Calibre holds them then.
     LibraryData data;
@@ -340,6 +353,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         return fail(error);
     }
     withComposites(&data, request.config.interfaceLanguage, dirtied);
+    lap("read the library back");
     QHash<int, Opf::ExactDates> exactDates;
     for (const int id : done.added + done.restored) {
         SqliteStatement dates(db, QStringLiteral("SELECT pubdate, timestamp FROM books WHERE id=?"));
@@ -382,6 +396,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         }
     }
 
+    lap("write the metadata.opf files");
     // Publishing: the copy goes beside metadata.db, then over it, unless
     // metadata.db changed meanwhile.
     const QByteArray written = readFile(work, &error);
@@ -408,6 +423,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     }
     FileTransaction::sync(request.libraryPath);
     files.finish();
+    lap("publish the database");
 
     // The copy is now what the library reads from.
     const QString snapshot = QDir(request.cacheFolder).filePath(QStringLiteral("snapshot.db"));
@@ -419,6 +435,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     // the library the window shows from now on, and so far only the books
     // whose metadata.opf was written had theirs.
     CalibreTemplate::computeComposites(&data, request.config.interfaceLanguage);
+    lap("find the files, compute the composites");
     result->data = data;
     result->written = true;
     result->dirtied = dirtied;

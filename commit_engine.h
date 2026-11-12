@@ -105,6 +105,9 @@ struct Result
     QString backup;
     // Whether notes were written.
     bool notesWritten = false;
+    // How long each step of the save took, in nanoseconds and in order,
+    // for the benchmark: what a save costs is measured, not guessed.
+    QList<std::pair<QString, qint64>> timings;
 };
 
 Result commit(const Request &request);

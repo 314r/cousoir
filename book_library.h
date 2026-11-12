@@ -205,6 +205,9 @@ public:
     bool canRevert() const;
     int bulkUndoCount() const;
     QString publishedKey() const;
+    // How long each step of the last save took, in nanoseconds: the commit's
+    // own steps, then the index and what the window's thread did after.
+    QList<std::pair<QString, qint64>> saveTimings() const { return m_saveTimings; }
     QString calibreLanguage() const;
     void setCalibreLanguage(const QString &language);
     QString interfaceLanguage() const;
@@ -556,6 +559,7 @@ private:
     QDateTime m_checkedAt;
     QVariantMap m_check;
     bool m_backedUp = false;
+    QList<std::pair<QString, qint64>> m_saveTimings;
     QString m_publishedKey;
     QString m_calibreLanguage;
     // The books of the last bulk edit, in the fields it set.
