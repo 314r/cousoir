@@ -454,7 +454,10 @@ private:
     // The undo of a bulk edit just saved: the fields it set, before and
     // after, by book.
     void keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before);
-    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config, const QStringList &sortFields);
+    // With `previous`, the search index of the library before a change,
+    // only the books in `changed` are indexed again.
+    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config, const QStringList &sortFields,
+                                const CalibreSearch::Index *previous = nullptr, const QSet<int> &changed = {});
     // The fields of the sort history, whose keys a load makes.
     QStringList sortFields() const;
     // The columns and sort kept for the library, else Calibre's.

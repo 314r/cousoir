@@ -799,6 +799,78 @@ Index::Index(const LibraryData &data, const Preferences &preferences, const Cali
     }
 }
 
+Index::Index(const Index &previous, const LibraryData &data, const QSet<int> &changed, const Preferences &preferences,
+             const CalibreText::Tweaks &tweaks, const QString &interfaceLanguage)
+    : m_data(data)
+    , m_preferences(preferences)
+    , m_tweaks(tweaks)
+    , m_interfaceLanguage(interfaceLanguage)
+{
+    const QList<Book> &before = previous.m_data.books;
+    const qsizetype count = data.books.size();
+    m_titles.reserve(count);
+    m_comments.reserve(count);
+    m_authorSorts.reserve(count);
+    m_sorts.reserve(count);
+    m_uuids.reserve(count);
+    for (const Book &book : data.books) {
+        const Book *kept = changed.contains(book.id) ? nullptr : previous.m_data.book(book.id);
+        if (kept) {
+            const qsizetype row = kept - before.constData();
+            m_titles.append(previous.m_titles.at(row));
+            m_comments.append(previous.m_comments.at(row));
+            m_authorSorts.append(previous.m_authorSorts.at(row));
+            m_sorts.append(previous.m_sorts.at(row));
+            m_uuids.append(previous.m_uuids.at(row));
+        } else {
+            m_titles.append(fold(book.title));
+            m_comments.append(fold(book.comments));
+            m_authorSorts.append(fold(book.authorSort));
+            m_sorts.append(fold(book.sort));
+            m_uuids.append(fold(book.uuid));
+        }
+    }
+    const auto items = [](const QList<FacetItem> &list, const QList<FacetItem> &was, const QList<Folded> &folded,
+                          QList<Folded> *names) {
+        if (list == was) {
+            *names = folded;
+            return;
+        }
+        names->reserve(list.size());
+        for (const FacetItem &item : list)
+            names->append(fold(item.name));
+    };
+    items(data.authors, previous.m_data.authors, previous.m_authorNames, &m_authorNames);
+    items(data.tags, previous.m_data.tags, previous.m_tagNames, &m_tagNames);
+    items(data.series, previous.m_data.series, previous.m_seriesNames, &m_seriesNames);
+    items(data.publishers, previous.m_data.publishers, previous.m_publisherNames, &m_publisherNames);
+    if (data.authors == previous.m_data.authors) {
+        m_authorRows = previous.m_authorRows;
+    } else {
+        for (qsizetype row = 0; row < data.authors.size(); ++row)
+            m_authorRows.insert(data.authors.at(row).id, row);
+    }
+    for (const CustomColumn &column : data.customColumns) {
+        m_customTerms.append(u'#' + column.label);
+        if (column.datatype == QLatin1String("series"))
+            m_customTerms.append(u'#' + column.label + QStringLiteral("_index"));
+    }
+}
+
+bool Index::sameAs(const Index &other) const
+{
+    const auto same = [](const QList<Folded> &a, const QList<Folded> &b) {
+        return a.size() == b.size()
+            && std::equal(a.cbegin(), a.cend(), b.cbegin(),
+                          [](const Folded &x, const Folded &y) { return x.text == y.text && x.inside == y.inside; });
+    };
+    return same(m_titles, other.m_titles) && same(m_comments, other.m_comments)
+        && same(m_authorSorts, other.m_authorSorts) && same(m_sorts, other.m_sorts) && same(m_uuids, other.m_uuids)
+        && same(m_authorNames, other.m_authorNames) && same(m_tagNames, other.m_tagNames)
+        && same(m_seriesNames, other.m_seriesNames) && same(m_publisherNames, other.m_publisherNames)
+        && m_authorRows == other.m_authorRows && m_customTerms == other.m_customTerms;
+}
+
 // Parser of db/search.py: a search over the books of an index, among a
 // universal set, the books of the search restriction.
 class Search

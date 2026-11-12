@@ -72,6 +72,14 @@ public:
     Index() = default;
     Index(const LibraryData &data, const Preferences &preferences, const CalibreText::Tweaks &tweaks,
           const QString &interfaceLanguage);
+    // The index of `data`, made from `previous`, the index of the library
+    // before a change: only the books in `changed` are folded again, and
+    // the items' names only when the items changed.
+    Index(const Index &previous, const LibraryData &data, const QSet<int> &changed, const Preferences &preferences,
+          const CalibreText::Tweaks &tweaks, const QString &interfaceLanguage);
+
+    // Whether both fold the same texts, for the checks of a change.
+    bool sameAs(const Index &other) const;
 
     const LibraryData &data() const { return m_data; }
     const Preferences &preferences() const { return m_preferences; }

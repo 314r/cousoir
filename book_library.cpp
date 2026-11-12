@@ -1070,11 +1070,14 @@ void BookLibrary::finishLoad()
 }
 
 BookLibrary::BookIndex BookLibrary::indexBooks(const LibraryData &data, const CalibreConfig &config,
-                                               const QStringList &sortFields)
+                                               const QStringList &sortFields, const CalibreSearch::Index *previous,
+                                               const QSet<int> &changed)
 {
     BookIndex index;
-    index.search = CalibreSearch::Index(data, CalibreSearch::Preferences::fromRows(data.preferences), config.tweaks,
-                                        config.interfaceLanguage);
+    const CalibreSearch::Preferences preferences = CalibreSearch::Preferences::fromRows(data.preferences);
+    index.search = previous ? CalibreSearch::Index(*previous, data, changed, preferences, config.tweaks,
+                                                   config.interfaceLanguage)
+                            : CalibreSearch::Index(data, preferences, config.tweaks, config.interfaceLanguage);
     const auto sorter = std::make_shared<BookSort::Sorter>(data, config);
     sorter->prepare(sortFields);
     index.sorter = sorter;
@@ -2003,13 +2006,25 @@ void BookLibrary::startCommit()
     if (m_loaded && m_data.libraryPath == QDir::cleanPath(QFileInfo(m_libraryPath).absoluteFilePath()))
         request.base = m_data;
     const QStringList sortFields = this->sortFields();
-    m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
+    // The index of the library as shown, for a save that reads again only
+    // the books it changes.
+    const CalibreSearch::Index previous = m_index.search;
+    m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields, previous] {
         CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits, request.id };
-        if (committed.result.ok && committed.result.written) {
+        CommitEngine::Result &result = committed.result;
+        if (result.ok && result.written) {
             QElapsedTimer clock;
             clock.start();
-            committed.index = indexBooks(committed.result.data, request.config, sortFields);
-            committed.result.timings.append({ QStringLiteral("index the books"), clock.nsecsElapsed() });
+            committed.index = indexBooks(result.data, request.config, sortFields,
+                                         result.incremental ? &previous : nullptr, result.changed);
+            result.timings.append({ QStringLiteral("index the books"), clock.nsecsElapsed() });
+            if (request.verify && result.incremental
+                && !committed.index.search.sameAs(indexBooks(result.data, request.config, {}).search)) {
+                // Saved, but the window would search another library: it
+                // reads the library again.
+                result.ok = false;
+                result.error = QStringLiteral("The search index made again in part differs from the index made whole.");
+            }
         }
         return committed;
     }));
