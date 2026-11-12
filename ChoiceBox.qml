@@ -38,6 +38,7 @@ ComboBox {
     }
 
     background: Rectangle {
+        radius: Theme.radius
         color: control.down ? Theme.pressed
             : control.hovered ? Theme.hover : Theme.fill
         border.width: 1
@@ -68,6 +69,7 @@ ComboBox {
         }
 
         background: Rectangle {
+            radius: Theme.innerRadius
             color: option.down ? Theme.pressed
                 : option.highlighted ? Theme.selected
                 : option.hovered ? Theme.hover : "transparent"
@@ -93,6 +95,7 @@ ComboBox {
         }
 
         background: Rectangle {
+            radius: Theme.radius
             color: Theme.canvas
             border.width: 1
             border.color: Theme.controlBorder

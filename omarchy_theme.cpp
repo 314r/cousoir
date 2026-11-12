@@ -4,6 +4,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QStandardPaths>
 #include <QTextStream>
 
 namespace {
@@ -69,18 +72,70 @@ QVariantMap fallbackPalette()
 
 } // namespace
 
+// Under Hyprland, its own hyprctl: themes and the user's settings can both
+// round the windows, so the value in effect is asked for rather than read
+// from a configuration file.
 OmarchyTheme::OmarchyTheme(QObject *parent)
-    : OmarchyTheme(defaultOmarchyStateRoot(), parent)
+    : OmarchyTheme(defaultOmarchyStateRoot(), parent,
+                   qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE")
+                       ? QString() : QStandardPaths::findExecutable(QStringLiteral("hyprctl")))
 {
 }
 
-OmarchyTheme::OmarchyTheme(const QString &stateRoot, QObject *parent)
+OmarchyTheme::OmarchyTheme(const QString &stateRoot, QObject *parent, const QString &hyprctl)
     : QObject(parent)
     , m_stateRoot(QDir::cleanPath(stateRoot))
 {
     connect(&m_refreshTimer, &QTimer::timeout, this, &OmarchyTheme::reload);
     m_refreshTimer.setInterval(1500);
+    watchRounding(hyprctl);
     reload();
+}
+
+OmarchyTheme::~OmarchyTheme()
+{
+    if (m_roundingProcess.state() != QProcess::NotRunning) {
+        m_roundingProcess.kill();
+        m_roundingProcess.waitForFinished(1000);
+    }
+}
+
+// The rounding follows whatever theme Cousoir wears: the windows are
+// Hyprland's in every one. As Omarchy's own apps ask for it (Omacut, MIT,
+// David Heinemeier Hansson).
+void OmarchyTheme::watchRounding(const QString &hyprctl)
+{
+    m_hyprctl = hyprctl;
+    if (m_hyprctl.isEmpty())
+        return;
+    m_roundingTimeout.setSingleShot(true);
+    m_roundingTimeout.setInterval(500);
+    connect(&m_roundingTimeout, &QTimer::timeout, &m_roundingProcess, &QProcess::kill);
+    connect(&m_roundingProcess, &QProcess::errorOccurred, this, [this] { m_roundingTimeout.stop(); });
+    connect(&m_roundingProcess, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
+        m_roundingTimeout.stop();
+        const QJsonValue value = QJsonDocument::fromJson(m_roundingProcess.readAllStandardOutput()).object()
+                                     .value(QLatin1String("int"));
+        if (code != 0 || status != QProcess::NormalExit || !value.isDouble() || value.toInt(-1) < 0)
+            return;
+        if (value.toInt() != m_rounding) {
+            m_rounding = value.toInt();
+            emit roundingChanged();
+        }
+    });
+    m_roundingPoll.setInterval(1000);
+    connect(&m_roundingPoll, &QTimer::timeout, this, &OmarchyTheme::refreshRounding);
+    m_roundingPoll.start();
+    refreshRounding();
+}
+
+void OmarchyTheme::refreshRounding()
+{
+    if (m_hyprctl.isEmpty() || m_roundingProcess.state() != QProcess::NotRunning)
+        return;
+    m_roundingProcess.start(m_hyprctl, { QStringLiteral("-j"), QStringLiteral("getoption"),
+                                         QStringLiteral("decoration:rounding") });
+    m_roundingTimeout.start();
 }
 
 QVariantMap OmarchyTheme::palette() const
@@ -96,6 +151,21 @@ bool OmarchyTheme::available() const
 bool OmarchyTheme::active() const
 {
     return m_active;
+}
+
+int OmarchyTheme::rounding() const
+{
+    return m_rounding;
+}
+
+QString OmarchyTheme::windowOpacity() const
+{
+    return m_windowOpacity;
+}
+
+bool OmarchyTheme::present()
+{
+    return QFileInfo::exists(defaultOmarchyStateRoot());
 }
 
 void OmarchyTheme::setActive(bool active)
@@ -144,6 +214,16 @@ void OmarchyTheme::reload()
         }
     }
 
+    // The window opacity is a toggle file beside the current theme's folder,
+    // as omarchy-hyprland-window-transparency leaves it: opaque or glassy,
+    // and transparent without either.
+    const QDir toggles(QDir::cleanPath(m_stateRoot + QStringLiteral("/../toggles/hypr")));
+    const QString windowOpacity = toggles.exists(QStringLiteral("window-opaque.lua")) ? QStringLiteral("opaque")
+        : toggles.exists(QStringLiteral("window-glassy.lua"))                         ? QStringLiteral("glassy")
+                                                                                       : QStringLiteral("transparent");
+    const bool windowOpacityDidChange = m_windowOpacity != windowOpacity;
+    m_windowOpacity = windowOpacity;
+
     const bool paletteDidChange = m_palette != palette;
     const bool availabilityDidChange = m_available != available;
 
@@ -154,4 +234,6 @@ void OmarchyTheme::reload()
         emit paletteChanged();
     if (availabilityDidChange)
         emit availableChanged();
+    if (windowOpacityDidChange)
+        emit windowOpacityChanged();
 }

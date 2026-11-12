@@ -15,6 +15,7 @@ ScrollBar {
     padding: 2
 
     contentItem: Rectangle {
+        radius: Theme.smallRadius
         implicitWidth: 6
         implicitHeight: 6
         color: scrollBar.solid ? Theme.mix(Theme.canvas, Theme.text, scrollBar.strength)

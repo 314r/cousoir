@@ -180,6 +180,7 @@ Popup {
     }
 
     background: Rectangle {
+        radius: Theme.radius
         color: Theme.canvas
         border.width: 1
         border.color: Theme.controlBorder
@@ -189,6 +190,7 @@ Popup {
     component Tick: Rectangle {
         property bool checked: false
 
+        radius: Theme.smallRadius
         implicitWidth: Math.round(Theme.iconSize * 1.1)
         implicitHeight: implicitWidth
         color: checked ? Theme.accent : "transparent"
@@ -563,6 +565,7 @@ Popup {
                     height: coverGrid.cellHeight
 
                     Rectangle {
+                        radius: Theme.radius
                         anchors.fill: parent
                         anchors.margins: 2
                         color: coverCell.isCurrent ? Theme.selected : coverMouse.containsMouse ? Theme.hover : "transparent"

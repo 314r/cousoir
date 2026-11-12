@@ -18,6 +18,7 @@ Menu {
     padding: 1
 
     background: Rectangle {
+        radius: Theme.radius
         implicitWidth: Math.ceil((actionMenu.actions.reduce((longest, action) => Math.max(longest, action.title.length), 0) + 4)
             * Theme.charWidth) + 2 * Theme.controlInset
         color: Theme.canvas
@@ -49,6 +50,7 @@ Menu {
             }
 
             background: Rectangle {
+                radius: Theme.innerRadius
                 color: item.down ? Theme.pressed
                     : item.highlighted ? Theme.selected : "transparent"
             }

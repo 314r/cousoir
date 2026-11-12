@@ -237,8 +237,40 @@ ThemedWindow {
 
     // Esc: what is over the page closed, the highlight chosen let go, full
     // screen left, else the book closed.
+    // "?": every shortcut of the reader.
+    function shortcutSections() {
+        const row = (keys, action) => ({ keys: keys, action: action })
+        return [
+            { title: qsTr("Reading"), rows: [
+                row("→ ↓ Space, Page Down", qsTr("Next page")),
+                row("← ↑ Shift+Space, Page Up", qsTr("Previous page")),
+                row("Home, End", qsTr("Go to the start or the end of the chapter")),
+                row("Alt+←, Alt+→", qsTr("Go back where you were before a link, and forward again")),
+                row("T", qsTr("Show or hide the table of contents")),
+                row("Ctrl+F", qsTr("Search the book")),
+                row("F3, Shift+F3", qsTr("Go to the next or the previous place found")),
+                row("Ctrl+D", qsTr("Bookmark the page, or remove its bookmark")),
+                row("R", qsTr("Read aloud, or stop")),
+                row("F11", qsTr("Full screen")),
+                row("Ctrl++, Ctrl+-, Ctrl+0", qsTr("Text size")),
+                row("Esc", qsTr("Close what is open, leave full screen, then close the book")),
+                row("Ctrl+W", qsTr("Close the book")),
+                row("?", qsTr("Show or hide these shortcuts"))
+            ] },
+            { title: qsTr("Highlights and notes"), rows: [
+                row("H", qsTr("Highlight the selection")),
+                row("N", qsTr("Write a note on the selection or the highlight")),
+                row("L", qsTr("Look the selection up")),
+                row("Del", qsTr("Remove the highlight")),
+                row("Ctrl+Enter", qsTr("Save the note"))
+            ] }
+        ]
+    }
+
     function pressEscape() {
-        if (noteBox.opened) {
+        if (shortcutsOverlay.opened) {
+            shortcutsOverlay.close()
+        } else if (noteBox.opened) {
             noteBox.close()
         } else if (imageViewer.opened) {
             imageViewer.close()
@@ -881,6 +913,13 @@ ThemedWindow {
         onActivated: readerWindow.close()
     }
 
+    // In a field, "?" is typed; over the page, the page's keys bring it.
+    Shortcut {
+        sequence: "?"
+        enabled: !readerWindow.editingText
+        onActivated: shortcutsOverlay.toggle()
+    }
+
     Shortcut {
         sequences: ["Ctrl++", "Ctrl+="]
         onActivated: readerWindow.setZoom(readerSettings.zoom + 0.1)
@@ -1031,7 +1070,7 @@ ThemedWindow {
             anchors.right: parent.right
             y: readerWindow.chromeShown ? 0 : -height
             height: Theme.toolbarHeight
-            color: Theme.canvas
+            color: readerWindow.fullScreen ? Theme.canvas : Theme.surface
 
             Behavior on y { NumberAnimation { duration: 120 } }
 
@@ -1161,7 +1200,7 @@ ThemedWindow {
                 Layout.fillWidth: false
                 Layout.fillHeight: true
                 visible: readerWindow.tocVisible
-                color: Theme.canvas
+                color: Theme.surface
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1843,6 +1882,8 @@ ThemedWindow {
                                 readerWindow.removeChosenHighlight()
                             else if (event.key === "t" || event.key === "T")
                                 readerWindow.tocVisible = !readerWindow.tocVisible
+                            else if (event.key === "?")
+                                shortcutsOverlay.toggle()
                         }
                     }
                 }
@@ -1889,6 +1930,7 @@ ThemedWindow {
                     readonly property var target: chosen ? readerWindow.highlightRect
                         : readerWindow.hasSelection ? readerWindow.selectionRect : null
 
+                    radius: Theme.radius
                     z: 3
                     visible: target !== null && !noteEditor.opened
                     width: barRow.implicitWidth + Theme.gutter
@@ -2259,6 +2301,7 @@ ThemedWindow {
         onClosed: view.forceActiveFocus()
 
         background: Rectangle {
+            radius: Theme.radius
             color: Theme.canvas
             border.width: 1
             border.color: Theme.controlBorder
@@ -2393,6 +2436,7 @@ ThemedWindow {
                         }
 
                         background: Rectangle {
+                            radius: Theme.radius
                             color: swatch.colors.background
                             border.width: readerSettings.pageTheme === swatch.modelData.value || swatch.visualFocus ? 2 : 1
                             border.color: readerSettings.pageTheme === swatch.modelData.value || swatch.visualFocus
@@ -2490,6 +2534,7 @@ ThemedWindow {
         onClosed: view.forceActiveFocus()
 
         background: Rectangle {
+            radius: Theme.radius
             color: Theme.canvas
             border.width: 1
             border.color: Theme.controlBorder
@@ -2542,6 +2587,7 @@ ThemedWindow {
                     }
 
                     background: Rectangle {
+                        radius: Theme.radius
                         color: Theme.fill
                         border.width: 1
                         border.color: noteText.activeFocus ? Theme.accent : Theme.controlBorder
@@ -2576,6 +2622,13 @@ ThemedWindow {
     }
 
     // A note, by the link to it, the page left as it is.
+    ShortcutsOverlay {
+        id: shortcutsOverlay
+
+        sections: readerWindow.shortcutSections()
+        onClosed: view.forceActiveFocus()
+    }
+
     Popup {
         id: noteBox
         objectName: "readerNoteBox"
@@ -2607,6 +2660,7 @@ ThemedWindow {
         onClosed: view.forceActiveFocus()
 
         background: Rectangle {
+            radius: Theme.radius
             color: readerWindow.pageBackground
             border.width: 1
             border.color: Theme.mix(readerWindow.pageBackground, readerWindow.pageText, 0.3)

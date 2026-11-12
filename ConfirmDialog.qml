@@ -50,6 +50,7 @@ Popup {
     }
 
     background: Rectangle {
+        radius: Theme.radius
         color: Theme.canvas
         border.width: 1
         border.color: Theme.controlBorder

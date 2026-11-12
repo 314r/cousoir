@@ -89,6 +89,23 @@ ThemedWindow {
     }
 
     Shortcut {
+        sequence: "?"
+        onActivated: shortcutsOverlay.toggle()
+    }
+
+    ShortcutsOverlay {
+        id: shortcutsOverlay
+
+        sections: [{ title: qsTr("Reading"), rows: [
+            { keys: "→ Space, Page Down", action: qsTr("Next page") },
+            { keys: "← Shift+Space, Page Up", action: qsTr("Previous page") },
+            { keys: "Ctrl++, Ctrl+-", action: qsTr("Zoom in or out") },
+            { keys: "Esc, Ctrl+W", action: qsTr("Close the book") },
+            { keys: "?", action: qsTr("Show or hide these shortcuts") }
+        ] }]
+    }
+
+    Shortcut {
         sequences: ["Right", "PgDown", "Space"]
         onActivated: view.goToPage(Math.min(view.currentPage + 1, document.pageCount - 1))
     }
@@ -110,7 +127,7 @@ ThemedWindow {
 
     header: Rectangle {
         implicitHeight: Theme.toolbarHeight
-        color: Theme.canvas
+        color: Theme.surface
 
         RowLayout {
             anchors.fill: parent

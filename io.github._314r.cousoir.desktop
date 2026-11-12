@@ -2,10 +2,12 @@
 Type=Application
 Name=Cousoir
 Comment=Browse your Calibre ebook library
+Comment[fr]=Parcourez votre bibliothèque de livres numériques Calibre
 Exec=cousoir
 Icon=io.github._314r.cousoir
 Terminal=false
 Categories=Office;Viewer;
 Keywords=ebook;calibre;library;epub;kobo;kindle;
+Keywords[fr]=livre numérique;ebook;calibre;bibliothèque;epub;kobo;kindle;liseuse;
 StartupNotify=true
 StartupWMClass=cousoir

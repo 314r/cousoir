@@ -5,6 +5,7 @@
   <project_license>GPL-3.0-only</project_license>
   <name>Cousoir</name>
   <summary>Browse your Calibre ebook library</summary>
+  <summary xml:lang="fr">Parcourez votre bibliothèque de livres numériques Calibre</summary>
   <description>
     <p>
       Cousoir works on the library of the Calibre ebook manager. It lists its

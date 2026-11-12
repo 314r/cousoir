@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtCore
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 
@@ -57,7 +56,7 @@ Rectangle {
     // The notes the save dialog writes, as Markdown.
     property string savingNotes: ""
 
-    color: Theme.canvas
+    color: Theme.surface
 
     function setCover(url) {
         const error = page.library.setCover(page.book.id, url.toString())
@@ -317,6 +316,7 @@ Rectangle {
                             Accessible.name: qsTr("Description")
 
                             background: Rectangle {
+                                radius: Theme.radius
                                 color: Theme.fill
                                 border.width: 1
                                 border.color: descriptionArea.activeFocus ? Theme.accent : Theme.controlBorder
@@ -441,8 +441,8 @@ Rectangle {
                                 tip: qsTr("Save the highlights and notes as a Markdown file")
                                 onClicked: {
                                     page.savingNotes = copy.modelData.markdown
-                                    notesDialog.selectedFile = notesDialog.currentFolder + "/" + encodeURIComponent(
-                                        (page.book.title || "notes").replace(/[\\/:*?"<>|]/g, "_") + ".md")
+                                    notesDialog.suggestedName = (page.book.title || "notes").replace(/[\\/:*?"<>|]/g, "_")
+                                        + ".md"
                                     notesDialog.open()
                                 }
                             }
@@ -457,8 +457,7 @@ Rectangle {
                                    copy.modelData.lastRead ? qsTr("last read %1").arg(copy.modelData.lastRead) : "",
                                    copy.modelData.timeSpent,
                                    copy.modelData.notes.length > 0
-                                       ? (copy.modelData.notes.length === 1 ? qsTr("1 note")
-                                                                            : qsTr("%1 notes").arg(copy.modelData.notes.length))
+                                       ? qsTr("%n notes", "", copy.modelData.notes.length)
                                        : ""].filter(part => part.length > 0).join("  ·  ")
                             color: Theme.textMuted
                             wrapMode: Text.Wrap
@@ -586,28 +585,30 @@ Rectangle {
         onChosen: function(key) { page.runCoverAction(key) }
     }
 
-    FileDialog {
+    FilePicker {
         id: notesDialog
 
         title: qsTr("Save the highlights and notes")
-        fileMode: FileDialog.SaveFile
+        mode: PortalFileChooser.SaveFile
         defaultSuffix: "md"
         nameFilters: [qsTr("Markdown (*.md)")]
-        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
-        onAccepted: {
-            const error = page.devices.saveNotes(page.savingNotes, selectedFile)
+        folder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: function(files) {
+            const error = page.devices.saveNotes(page.savingNotes, files[0])
             if (error)
                 page.failed(error)
             else
                 page.noticed(qsTr("Highlights and notes saved"))
         }
+        onFailed: function(message) { page.failed(message) }
     }
 
-    FileDialog {
+    FilePicker {
         id: coverDialog
 
         title: qsTr("Choose a cover")
         nameFilters: [qsTr("Images (*.jpg *.jpeg *.png *.webp *.gif *.bmp)")]
-        onAccepted: page.setCover(selectedFile)
+        onAccepted: function(files) { page.setCover(files[0]) }
+        onFailed: function(message) { page.failed(message) }
     }
 }

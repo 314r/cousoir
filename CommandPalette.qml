@@ -83,6 +83,7 @@ Popup {
     }
 
     background: Rectangle {
+        radius: Theme.radius
         color: Theme.canvas
         border.width: 1
         border.color: Theme.controlBorder
@@ -136,6 +137,7 @@ Popup {
                 readonly property bool isCurrent: index === palette.current
 
                 objectName: "paletteHit" + index
+                radius: Theme.smallRadius
                 width: list.width
                 height: Theme.rowHeight
                 color: row.isCurrent ? Theme.selected : rowMouse.containsMouse ? Theme.hover : "transparent"

@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtCore
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import Cousoir
@@ -55,7 +54,7 @@ Rectangle {
     signal failed(string message)
     signal noticed(string message)
 
-    color: Theme.canvas
+    color: Theme.surface
 
     function focusList() {
         page.reading = false
@@ -313,7 +312,7 @@ Rectangle {
                             Layout.preferredWidth: row.tileWidth
                             Layout.preferredHeight: Math.round(row.tileWidth * 4 / 3)
                             Layout.alignment: Qt.AlignTop
-                            radius: Math.round(4 * Theme.spacingScale)
+                            radius: Theme.smallRadius
                             color: row.modelData.cover ? Theme.fill : page.tileColors[row.modelData.tint]
                             border.width: 1
                             border.color: Qt.rgba(0, 0, 0, 0.08)
@@ -739,14 +738,15 @@ Rectangle {
         }
     }
 
-    FileDialog {
+    FilePicker {
         id: importDialog
 
         title: qsTr("Import a Kobo's highlights")
         nameFilters: [qsTr("Kobo database (KoboReader.sqlite)"), qsTr("SQLite databases (*.sqlite *.db)")]
-        currentFolder: StandardPaths.writableLocation(StandardPaths.HomeLocation)
-        onAccepted: {
-            const error = page.sync.importDatabase(selectedFile)
+        folder: StandardPaths.writableLocation(StandardPaths.HomeLocation)
+        onFailed: function(message) { page.failed(message) }
+        onAccepted: function(files) {
+            const error = page.sync.importDatabase(files[0])
             if (error)
                 page.failed(error)
             else

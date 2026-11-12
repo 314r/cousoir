@@ -16,14 +16,10 @@ Rectangle {
 
     signal failed(string message)
 
-    color: Theme.canvas
+    color: Theme.surface
 
     function focusList() {
         trashList.forceActiveFocus()
-    }
-
-    function plural(count, one, many) {
-        return (count === 1 ? one : many).arg(count)
     }
 
     function restore(entry) {
@@ -44,8 +40,7 @@ Rectangle {
             rightPadding: Theme.pagePadding
             topPadding: Theme.gutter
             bottomPadding: Theme.gutter
-            text: page.plural(page.library.trashExpiryDays, qsTr("Calibre deletes books from the trash after %1 day."),
-                              qsTr("Calibre deletes books from the trash after %1 days."))
+            text: qsTr("Calibre deletes books from the trash after %n days.", "", page.library.trashExpiryDays)
             color: Theme.textMuted
             wrapMode: Text.Wrap
         }
@@ -166,7 +161,7 @@ Rectangle {
                                     ? qsTr("%1 removed on %2").arg(entry.modelData.formats.join(", "))
                                         .arg(entry.modelData.removed)
                                     : qsTr("Removed on %1").arg(entry.modelData.removed))
-                                + " · " + page.plural(entry.modelData.daysLeft, qsTr("%1 day left"), qsTr("%1 days left"))
+                                + " · " + qsTr("%n days left", "", entry.modelData.daysLeft)
                             color: Theme.textFaint
                             font.pointSize: Theme.fontPointSizeCaption
                             elide: Text.ElideRight

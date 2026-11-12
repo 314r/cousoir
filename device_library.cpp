@@ -723,8 +723,8 @@ QString DeviceLibrary::syncReading(const QString &root)
         if (!result.ok) {
             emit failed(result.error);
         } else {
-            const QString places = result.places == 1 ? tr("where you stopped in 1 book") : tr("where you stopped in %1 books").arg(result.places);
-            const QString highlights = result.highlights == 1 ? tr("1 highlight") : tr("%1 highlights").arg(result.highlights);
+            const QString places = tr("where you stopped in %n books", nullptr, result.places);
+            const QString highlights = tr("%n highlights", nullptr, result.highlights);
             const QString message = result.places == 0 && result.highlights == 0
                 ? tr("%1 already has your reading.").arg(name)
                 : result.highlights == 0 ? tr("%1 has %2 now. Eject it to read on.").arg(name, places)

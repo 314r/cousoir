@@ -42,21 +42,28 @@
 #include "sqlite_db.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
+#include "portal_file_chooser.h"
 #include "system_appearance.h"
 #include "test_support.h"
+#include "test_translator.h"
 
 // Cousoir's interface, its QML compiled as Cousoir runs it.
 Q_IMPORT_QML_PLUGIN(CousoirPlugin)
 
 namespace {
 QString themeStateRoot;
+// The hyprctl a test stands in for Hyprland's; none by default.
+QString fakeHyprctl;
+// The language file Cousoir follows here, as Omarchy writes its own.
+QString languageFile;
+Translator *translator = nullptr;
 
 // Keep the user's Omarchy configuration out of the test.
 class IsolatedTheme : public OmarchyTheme
 {
 public:
     explicit IsolatedTheme(QObject *parent = nullptr)
-        : OmarchyTheme(themeStateRoot, parent) {}
+        : OmarchyTheme(themeStateRoot, parent, fakeHyprctl) {}
 };
 
 QList<QQuickItem *> visualDescendants(QQuickItem *parent, const QString &name)
@@ -123,6 +130,7 @@ private slots:
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
     void welcomesWithoutLibrary();
+    void followsOmarchy();
     void editsDetailsInPlace();
     void revertsBookChanges();
     void keepsWhatIsTyped();
@@ -187,6 +195,7 @@ void LibraryUiTest::initTestCase()
     // Calibre is installed.
     CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));
     qmlRegisterType<IsolatedTheme>("Cousoir", 1, 0, "OmarchyTheme");
+    qmlRegisterType<PortalFileChooser>("Cousoir", 1, 0, "PortalFileChooser");
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
@@ -2726,14 +2735,85 @@ int main(int argc, char **argv)
     QTemporaryDir settingsDir;
     if (!settingsDir.isValid())
         return 1;
-    themeStateRoot = settingsDir.filePath(QStringLiteral("omarchy"));
+    themeStateRoot = settingsDir.filePath(QStringLiteral("omarchy/current"));
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsDir.path());
     app.setOrganizationName(QStringLiteral("cousoir-tests"));
     app.setApplicationName(QStringLiteral("library-ui"));
     app.setApplicationVersion(QStringLiteral(COUSOIR_VERSION));
+    translator = installTranslator(settingsDir.path());
+    languageFile = settingsDir.filePath(QStringLiteral("language"));
     LibraryUiTest test;
     return QTest::qExec(&test, argc, argv);
+}
+
+// The language picked in Omarchy, Hyprland's window rounding, and "?" for
+// the shortcuts.
+void LibraryUiTest::followsOmarchy()
+{
+    // "?" lists the window's shortcuts, and closes the list.
+    QObject *overlay = object("shortcutsOverlay");
+    QVERIFY(overlay);
+    QMetaObject::invokeMethod(m_window, "focusCurrentList");
+    QTest::keyClick(m_window, Qt::Key_Question);
+    QTRY_VERIFY(overlay->property("opened").toBool());
+    QVERIFY(overlay->property("sections").toList().size() >= 4);
+    QTest::keyClick(m_window, Qt::Key_Question);
+    QTRY_VERIFY(!overlay->property("opened").toBool());
+
+    // Q asks before quitting only while something is being made; nothing
+    // is, so the question stays closed (and the test's window open: the
+    // application quits when asked to).
+    QVERIFY(!m_window->property("working").toBool());
+    QVERIFY(!object("quitDialog")->property("opened").toBool());
+
+    // French picked under Setup > Language: the words follow at once, the
+    // counted ones with French's forms, and back.
+    connect(translator, &Translator::changed, m_engine.get(), &QQmlEngine::retranslate);
+    QCOMPARE(object("quitDialog")->property("acceptText").toString(), QStringLiteral("Quit"));
+    QCOMPARE(text("bookCount"), QStringLiteral("6 books"));
+    const auto english = qScopeGuard([] {
+        writeAll(languageFile, "en\n");
+        QTRY_COMPARE(translator->language(), QStringLiteral("en"));
+    });
+    QVERIFY(writeAll(languageFile, "fr\n"));
+    QTRY_COMPARE(translator->language(), QStringLiteral("fr"));
+    QTRY_COMPARE(object("quitDialog")->property("acceptText").toString(), QStringLiteral("Quitter"));
+    QCOMPARE(text("bookCount"), QStringLiteral("6 livres"));
+    QVERIFY(writeAll(languageFile, "en\n"));
+    QTRY_COMPARE(object("quitDialog")->property("acceptText").toString(), QStringLiteral("Quit"));
+
+    // Glassy windows, with the Omarchy theme: the window's background lets
+    // the desktop through, the bars over it add nothing, a dialog stays
+    // solid.
+    QCOMPARE(m_window->property("color").value<QColor>().alphaF(), 1.0);
+    const auto removeTheme = qScopeGuard([] { QDir(themeStateRoot + QStringLiteral("/..")).removeRecursively(); });
+    QVERIFY(writeAll(themeStateRoot + QStringLiteral("/theme/colors.toml"), "background = \"#1e1e2e\"\n"));
+    QVERIFY(writeAll(themeStateRoot + QStringLiteral("/../toggles/hypr/window-glassy.lua"), "-- glassy\n"));
+    m_engine.reset();
+    QVERIFY(loadUi());
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
+    // A colour keeps its alpha in 16 bits.
+    QVERIFY(qAbs(m_window->property("color").value<QColor>().alphaF() - 0.65) < 0.001);
+    QCOMPARE(m_window->property("color").value<QColor>().name(), QStringLiteral("#1e1e2e"));
+    QCOMPARE(control("toolbar")->property("color").value<QColor>().alpha(), 0);
+    QCOMPARE(control("statusBar")->property("color").value<QColor>().alpha(), 0);
+    QCOMPARE(object("quitDialog")->property("background").value<QQuickItem *>()->property("color").value<QColor>().alpha(), 255);
+
+    // Square corners until Hyprland rounds its windows.
+    const auto radius = [this] {
+        return control("searchField")->property("background").value<QQuickItem *>()->property("radius").toReal();
+    };
+    QCOMPARE(radius(), 0.0);
+    QTemporaryDir dir;
+    fakeHyprctl = dir.filePath(QStringLiteral("hyprctl"));
+    const auto noHyprctl = qScopeGuard([] { fakeHyprctl.clear(); });
+    QVERIFY(writeAll(fakeHyprctl, "#!/bin/sh\necho '{\"option\": \"decoration:rounding\", \"int\": 6, \"set\": true}'\n"));
+    QVERIFY(QFile::setPermissions(fakeHyprctl, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+    m_engine.reset();
+    QVERIFY(loadUi());
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
+    QTRY_COMPARE(radius(), 6.0);
 }
 
 void LibraryUiTest::movesBooksToTrashAndBack()
