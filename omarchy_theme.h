@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QLocalSocket>
 #include <QProcess>
 #include <QTimer>
 #include <QVariantMap>
@@ -48,6 +49,9 @@ signals:
 
 private:
     void watchRounding(const QString &hyprctl);
+    // Hyprland's events, a reload of its configuration among them, instead
+    // of asking hyprctl every second.
+    void listenToHyprland();
     void refreshRounding();
 
     QVariantMap m_palette;
@@ -60,5 +64,7 @@ private:
     QString m_windowOpacity = QStringLiteral("transparent");
     QProcess m_roundingProcess;
     QTimer m_roundingPoll;
+    QLocalSocket *m_events = nullptr;
+    QByteArray m_eventLine;
     QTimer m_roundingTimeout;
 };

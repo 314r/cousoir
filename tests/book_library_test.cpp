@@ -115,6 +115,7 @@ private slots:
     void downloadsFromOpenLibrary();
     void sendsToKobos();
     void sendsToKobosWithoutCalibre();
+    void findsReadersAmongTheMounts();
     void sendsToKindles();
     void readsKindleClippings();
     void syncsKoboHighlights();
@@ -1388,6 +1389,25 @@ void BookLibraryTest::convertsWithoutCalibre()
 // Without Calibre, Cousoir sends to a Kobo itself: the EPUB as a KEPUB at
 // the driver's place, the book in metadata.calibre, and the Kobo's list
 // with it, matched with the library's book.
+// The mounts a reader may be: FAT and exFAT ones only, network shares left
+// out unasked, spaces in their paths as the kernel escapes them.
+void BookLibraryTest::findsReadersAmongTheMounts()
+{
+    const QByteArray mountInfo =
+        "22 1 0:21 / /proc rw,nosuid shared:5 - proc proc rw\n"
+        "61 25 0:52 / /mnt/share rw,relatime shared:40 - nfs4 server:/export rw,vers=4.2\n"
+        "70 25 8:17 / /run/media/reader/KOBOeReader rw,nosuid shared:44 - vfat /dev/sdb1 rw,uid=1000\n"
+        "71 25 8:33 / /run/media/reader/My\\040Kindle rw,nosuid shared:45 - exfat /dev/sdc1 rw\n"
+        "72 25 8:49 / /run/media/reader/ntfs rw shared:46 master:1 - fuseblk /dev/sdd1 rw\n"
+        "broken line\n";
+    const QList<Volume> volumes = DeviceLibrary::removableMounts(mountInfo);
+    QCOMPARE(volumes.size(), 3);
+    QCOMPARE(volumes.at(0).root, QStringLiteral("/run/media/reader/KOBOeReader"));
+    QCOMPARE(volumes.at(0).node, QStringLiteral("/dev/sdb1"));
+    QCOMPARE(volumes.at(1).root, QStringLiteral("/run/media/reader/My Kindle"));
+    QCOMPARE(volumes.at(2).node, QStringLiteral("/dev/sdd1"));
+}
+
 void BookLibraryTest::sendsToKobosWithoutCalibre()
 {
     auto library = open();

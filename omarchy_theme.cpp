@@ -80,6 +80,40 @@ OmarchyTheme::OmarchyTheme(QObject *parent)
                    qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE")
                        ? QString() : QStandardPaths::findExecutable(QStringLiteral("hyprctl")))
 {
+    listenToHyprland();
+}
+
+// Hyprland tells on its second socket each time it reloads its
+// configuration, which a theme switch or a change of the user's settings
+// does: the rounding is asked for then. Asked every second again should the
+// socket close.
+void OmarchyTheme::listenToHyprland()
+{
+    const QString signature = qEnvironmentVariable("HYPRLAND_INSTANCE_SIGNATURE");
+    const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    if (m_hyprctl.isEmpty() || signature.isEmpty() || runtime.isEmpty())
+        return;
+    const QString path = QStringLiteral("%1/hypr/%2/.socket2.sock").arg(runtime, signature);
+    if (!QFileInfo::exists(path))
+        return;
+    m_events = new QLocalSocket(this);
+    connect(m_events, &QLocalSocket::connected, this, [this] { m_roundingPoll.stop(); });
+    connect(m_events, &QLocalSocket::readyRead, this, [this] {
+        m_eventLine += m_events->readAll();
+        bool reloaded = false;
+        qsizetype end;
+        while ((end = m_eventLine.indexOf('\n')) >= 0) {
+            reloaded = reloaded || m_eventLine.startsWith("configreloaded>>");
+            m_eventLine.remove(0, end + 1);
+        }
+        if (reloaded)
+            refreshRounding();
+    });
+    connect(m_events, &QLocalSocket::disconnected, this, [this] {
+        if (!m_hyprctl.isEmpty())
+            m_roundingPoll.start();
+    });
+    m_events->connectToServer(path);
 }
 
 OmarchyTheme::OmarchyTheme(const QString &stateRoot, QObject *parent, const QString &hyprctl)
