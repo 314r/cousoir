@@ -251,7 +251,8 @@ void CommitEngineTest::cleansValues()
     QCOMPARE(book(4, QStringLiteral("series_index")).toDouble(), 3.5);
     QCOMPARE(value(QStringLiteral("SELECT ratings.rating FROM books_ratings_link l JOIN ratings ON ratings.id=l.rating "
                                   "WHERE l.book=4")).toInt(), 7);
-    QCOMPARE(value(QStringLiteral("SELECT text FROM comments WHERE book=4")).toString(), QStringLiteral("<p>One two</p>"));
+    QCOMPARE(value(QStringLiteral("SELECT text FROM comments WHERE book=4")).toString(),
+             QStringLiteral("<p>One\n\n   two</p>"));
     // A "|" in a name is a comma; Calibre stores a comma as "|".
     QCOMPARE(value(QStringLiteral("SELECT name FROM authors WHERE name LIKE 'A%B'")).toString(), QStringLiteral("A|B"));
     QCOMPARE(book(4, QStringLiteral("author_sort")), QStringLiteral("Pratchett, Terry & Gaiman, Neil & A,B"));

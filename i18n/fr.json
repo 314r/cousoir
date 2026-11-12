@@ -276,7 +276,7 @@
   "Find": "Trouver",
   "Nothing found for “%1”": "Rien trouvé pour « %1 »",
   "Read-only: the library cannot be read": "Lecture seule : la bibliothèque ne peut pas être lue",
-  "Read-only: the database is from a Calibre version Cousoir does not know": "Lecture seule : la base de données provient d’une version de Calibre que Cousoir ne connaît pas",
+  "Read-only: the database is from a Calibre newer than this Cousoir knows; update Cousoir to change it": "Lecture seule : la base de données provient d’un Calibre plus récent que ce Cousoir ne connaît ; mettez Cousoir à jour pour la modifier",
   "Read-only: Calibre is open on this computer": "Lecture seule : Calibre est ouvert sur cet ordinateur",
   "Read-only: Calibre is writing to the library": "Lecture seule : Calibre écrit dans la bibliothèque",
   "Read-only: waiting for Dropbox": "Lecture seule : en attente de Dropbox",

@@ -554,7 +554,7 @@ void ConcurrencyGuard::evaluate()
         reason = tr("Read-only: the library cannot be read");
     } else if (!m_schemaKnown) {
         state = QStringLiteral("schema");
-        reason = tr("Read-only: the database is from a Calibre version Cousoir does not know");
+        reason = tr("Read-only: the database is from a Calibre newer than this Cousoir knows; update Cousoir to change it");
     } else if (calibreRunning(m_environment.procNetUnix, currentUid()) && !CalibreLock::heldHere()) {
         state = QStringLiteral("calibre");
         reason = tr("Read-only: Calibre is open on this computer");

@@ -41,6 +41,15 @@ std::optional<QString> singleText(const QString &text)
     return collapsed.isEmpty() ? std::nullopt : std::optional<QString>(collapsed);
 }
 
+// long_text(): stripped, its line breaks and spaces kept; nothing when
+// empty. A description's since Calibre 9.17, which folded it as a title
+// before.
+std::optional<QString> longText(const QString &text)
+{
+    const QString stripped = CalibreText::strip(text);
+    return stripped.isEmpty() ? std::nullopt : std::optional<QString>(stripped);
+}
+
 // multiple_text() given a list: a value containing the separator the user
 // types between values gets another one instead.
 QStringList multipleText(const QStringList &values, QChar uiSeparator)
@@ -700,7 +709,7 @@ bool apply(SqliteDb &db, const BookEdit &edit, const Context &context, Result *r
     }
     if (edit.tags && !setManyMany(db, tagTable, book, multipleText(*edit.tags, u','), context, result, error))
         return false;
-    if (edit.comments && !setComments(db, book, singleText(*edit.comments), result, error))
+    if (edit.comments && !setComments(db, book, longText(*edit.comments), result, error))
         return false;
     if (edit.languages) {
         // adapt_languages(): Calibre's codes, without duplicates or the codes
