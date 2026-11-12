@@ -411,10 +411,14 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
 
     // The copy is now what the library reads from.
     const QString snapshot = QDir(request.cacheFolder).filePath(QStringLiteral("snapshot.db"));
-    QFile::remove(snapshot);
-    QFile::rename(work, snapshot);
+    // In one step: the window may be reading it.
+    result->snapshotStale = std::rename(QFile::encodeName(work).constData(), QFile::encodeName(snapshot).constData()) != 0;
     data.source = CalibreDb::identify(database);
     CalibreDb::findFiles(&data);
+    // The composite columns of every book, as a load makes them: this is
+    // the library the window shows from now on, and so far only the books
+    // whose metadata.opf was written had theirs.
+    CalibreTemplate::computeComposites(&data, request.config.interfaceLanguage);
     result->data = data;
     result->written = true;
     result->dirtied = dirtied;
@@ -429,10 +433,16 @@ namespace CommitEngine {
 Result commit(const Request &request)
 {
     Result result;
-    QString done;
-    if (!recover(request.libraryPath, request.cacheFolder, &done, &result.error))
-        return result;
+    // The lock first: what a crash left is put right only while nothing
+    // else may be writing to the library. Without it the attempt refuses,
+    // and the journal waits.
     CalibreLock lock;
+    QString done;
+    if (lock.acquire()
+        && !FileTransaction::recover(journalPath(request.cacheFolder),
+                                     QDir(request.libraryPath).filePath(QStringLiteral("metadata.db")), &done,
+                                     &result.error))
+        return result;
     bool retry = false;
     for (int round = 0; round < 3; ++round) {
         result = Result();
@@ -443,8 +453,18 @@ Result commit(const Request &request)
     return result;
 }
 
-bool recover(const QString &libraryPath, const QString &cacheFolder, QString *done, QString *error)
+bool recover(const QString &libraryPath, const QString &cacheFolder, QString *done, QString *error, bool *waiting)
 {
+    if (waiting)
+        *waiting = false;
+    if (!QFileInfo::exists(journalPath(cacheFolder)))
+        return true;
+    CalibreLock lock;
+    if (!lock.acquire()) {
+        if (waiting)
+            *waiting = true;
+        return true;
+    }
     return FileTransaction::recover(journalPath(cacheFolder), QDir(libraryPath).filePath(QStringLiteral("metadata.db")),
                                     done, error);
 }

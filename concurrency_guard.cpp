@@ -387,7 +387,7 @@ bool ConcurrencyGuard::calibreRunning(const QString &procNetUnix, uint uid)
         return false;
     // create_single_instance_mutex() in utils/lock.py binds
     // "\0calibre-singleinstance-<uid>-db", which /proc lists with an "@".
-    const QByteArray name = "@calibre-singleinstance-" + QByteArray::number(uid) + "-db";
+    const QByteArray name = '@' + CalibreLock::name(uid);
     while (!file.atEnd()) {
         const QByteArray line = file.readLine().trimmed();
         if (line.endsWith(name) && (line.size() == name.size() || line.at(line.size() - name.size() - 1) == ' '))
@@ -554,7 +554,7 @@ void ConcurrencyGuard::evaluate()
         reason = tr("Read-only: the library cannot be read");
     } else if (!m_schemaKnown) {
         state = QStringLiteral("schema");
-        reason = tr("Read-only: the database is from a Calibre version Cousoir does not know");
+        reason = tr("Read-only: the database is from a Calibre newer than this Cousoir knows; update Cousoir to change it");
     } else if (calibreRunning(m_environment.procNetUnix, currentUid()) && !CalibreLock::heldHere()) {
         state = QStringLiteral("calibre");
         reason = tr("Read-only: Calibre is open on this computer");

@@ -364,6 +364,9 @@ signals:
     void changeFinished(int id, bool saved, const QString &error);
     // Something left by an interrupted change was put right.
     void recovered(const QString &message);
+    // An interrupted change could not be put right yet: Calibre, or another
+    // Cousoir, holds the library.
+    void recoveryWaiting();
     void trashChanged();
     void importChanged();
     void checkChanged();
@@ -396,6 +399,8 @@ private:
         BookIndex index;
         QString error;
         QString recovered;
+        // An interrupted change was left as it is, the library being held.
+        bool recoveryWaits = false;
         bool ok = false;
     };
 
@@ -438,6 +443,8 @@ private:
     void scheduleCheck();
     void finishCheck();
     void rebuildCheck();
+    // A change waiting its turn, with what a save needs besides it.
+    CommitEngine::Request prepared(CommitEngine::Request request) const;
     void startCommit();
     void finishCommit();
     void applyData(LibraryData data, BookIndex index);

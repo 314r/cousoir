@@ -261,7 +261,9 @@ class Gui(DeviceMixin):
     def __init__(self):
         self.current_db = db
         self.device_manager = Manager(dev)
-        view = types.SimpleNamespace(_model=Model(db), preserve_state=contextlib.nullcontext,
+        model = Model(db)
+        # Calibre 9.17 reads a view's model as device_model, 9.16 as _model.
+        view = types.SimpleNamespace(_model=model, device_model=model, preserve_state=contextlib.nullcontext,
                                      currentIndex=lambda: types.SimpleNamespace(row=lambda: -1, isValid=lambda: True),
                                      refresh_book_details=lambda: None)
         self.library_view = self.memory_view = self.card_a_view = self.card_b_view = view

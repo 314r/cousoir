@@ -99,6 +99,8 @@ void ConcurrencyGuardTest::initTestCase()
 {
     QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
     QCoreApplication::setApplicationName(QStringLiteral("concurrency-guard"));
+    // Calibre's own lock here, looked for in made-up lists of sockets.
+    CalibreLock::setNameForTests({});
 }
 
 void ConcurrencyGuardTest::init()
@@ -285,7 +287,7 @@ void ConcurrencyGuardTest::readOnlyUntilLoadedAndKnown()
     QCOMPARE(checks->state(), QStringLiteral("unreadable"));
     checks->setLibraryReadable(true);
     QCOMPARE(checks->state(), QStringLiteral("schema"));
-    QVERIFY(checks->readOnlyReason().contains(QStringLiteral("Calibre version")));
+    QVERIFY(checks->readOnlyReason().contains(QStringLiteral("newer than this Cousoir knows")));
     checks->setSchemaKnown(true);
     QTRY_COMPARE(checks->state(), QStringLiteral("writable"));
 }

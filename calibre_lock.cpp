@@ -16,6 +16,13 @@ namespace {
 
 std::atomic<int> locksHeld{ 0 };
 
+// Empty outside the tests: Calibre's own name.
+QByteArray &testName()
+{
+    static QByteArray name;
+    return name;
+}
+
 } // namespace
 
 CalibreLock::~CalibreLock()
@@ -30,7 +37,7 @@ bool CalibreLock::acquire()
 #ifdef Q_OS_LINUX
     // create_single_instance_mutex('db') in utils/lock.py: an abstract socket
     // only one process can bind.
-    const QByteArray name = "calibre-singleinstance-" + QByteArray::number(::getuid()) + "-db";
+    const QByteArray name = CalibreLock::name(::getuid());
     sockaddr_un address{};
     address.sun_family = AF_UNIX;
     std::memcpy(address.sun_path + 1, name.constData(), size_t(name.size()));
@@ -66,4 +73,15 @@ void CalibreLock::release()
 bool CalibreLock::heldHere()
 {
     return locksHeld > 0;
+}
+
+QByteArray CalibreLock::name(unsigned int uid)
+{
+    // create_single_instance_mutex('db') in utils/lock.py.
+    return testName().isEmpty() ? "calibre-singleinstance-" + QByteArray::number(uid) + "-db" : testName();
+}
+
+void CalibreLock::setNameForTests(const QByteArray &name)
+{
+    testName() = name;
 }

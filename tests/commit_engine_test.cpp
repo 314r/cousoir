@@ -83,6 +83,7 @@ private slots:
     void rebasesOnConcurrentChange();
     void recoversInterruptedChange();
     void finishesPublishedChange();
+    void leavesTheJournalWhileTheLibraryIsHeld();
     void addsAndTrashesBooks();
     void addsCustomValues();
     void undoesFailedOperations();
@@ -250,7 +251,8 @@ void CommitEngineTest::cleansValues()
     QCOMPARE(book(4, QStringLiteral("series_index")).toDouble(), 3.5);
     QCOMPARE(value(QStringLiteral("SELECT ratings.rating FROM books_ratings_link l JOIN ratings ON ratings.id=l.rating "
                                   "WHERE l.book=4")).toInt(), 7);
-    QCOMPARE(value(QStringLiteral("SELECT text FROM comments WHERE book=4")).toString(), QStringLiteral("<p>One two</p>"));
+    QCOMPARE(value(QStringLiteral("SELECT text FROM comments WHERE book=4")).toString(),
+             QStringLiteral("<p>One\n\n   two</p>"));
     // A "|" in a name is a comma; Calibre stores a comma as "|".
     QCOMPARE(value(QStringLiteral("SELECT name FROM authors WHERE name LIKE 'A%B'")).toString(), QStringLiteral("A|B"));
     QCOMPARE(book(4, QStringLiteral("author_sort")), QStringLiteral("Pratchett, Terry & Gaiman, Neil & A,B"));
@@ -480,6 +482,48 @@ void CommitEngineTest::recoversInterruptedChange()
     QString done;
     QString error;
     QVERIFY2(CommitEngine::recover(m_library, m_cache, &done, &error), qPrintable(error));
+    QVERIFY(done.contains(QStringLiteral("undid")));
+    QCOMPARE(tree(m_library), before);
+    QVERIFY(!QFileInfo::exists(journal));
+}
+
+// Calibre open, or another Cousoir in the middle of the change the journal
+// is of: nothing in the library moves until the lock is free.
+void CommitEngineTest::leavesTheJournalWhileTheLibraryIsHeld()
+{
+    const QStringList before = tree(m_library);
+    const QString journal = QDir(m_cache).filePath(QStringLiteral("ops.journal"));
+    const QDir library(m_library);
+    {
+        FileTransaction files(journal);
+        QString error;
+        QVERIFY(files.move(library.filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)")),
+                           library.filePath(QStringLiteral("Vian/Ecume (1)")), &error));
+        files.abandon();
+    }
+    const QStringList interrupted = tree(m_library);
+    QVERIFY(interrupted != before);
+
+    QString done;
+    QString error;
+    bool waiting = false;
+    {
+        CalibreLock held;
+        QVERIFY(held.acquire());
+        QVERIFY(CommitEngine::recover(m_library, m_cache, &done, &error, &waiting));
+        QVERIFY(waiting);
+        QVERIFY(done.isEmpty());
+        QVERIFY(QFileInfo::exists(journal));
+        QCOMPARE(tree(m_library), interrupted);
+
+        // A change asked for meanwhile is refused, and recovers nothing either.
+        const CommitEngine::Result result = commit({ edit(1, { { QStringLiteral("title"), QStringLiteral("X") } }) });
+        QVERIFY(!result.ok);
+        QVERIFY(QFileInfo::exists(journal));
+        QCOMPARE(tree(m_library), interrupted);
+    }
+    QVERIFY(CommitEngine::recover(m_library, m_cache, &done, &error, &waiting));
+    QVERIFY(!waiting);
     QVERIFY(done.contains(QStringLiteral("undid")));
     QCOMPARE(tree(m_library), before);
     QVERIFY(!QFileInfo::exists(journal));

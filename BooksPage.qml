@@ -67,6 +67,7 @@ Rectangle {
     property var menuTargets: []
     readonly property var actions: (menuOnSelection ? [] : [
         { key: "open", title: qsTr("Open") },
+        { key: "cousoir", title: qsTr("Read in Cousoir") },
         { key: "read", title: qsTr("Open in reader") },
         { key: "folder", title: qsTr("Show in folder") }
     ]).concat([
@@ -80,6 +81,7 @@ Rectangle {
     }))).concat([
         { key: "trash", title: menuOnSelection ? qsTr("Move %1 books to Trash").arg(selectedCount) : qsTr("Move to Trash") }
     ]).filter(action => action.key === "trash" ? page.library.writable
+                        : action.key === "cousoir" ? page.library.readerAvailable
                         : action.key.startsWith("convert:") ? page.canConvert : true)
     // The pane that edits the books selected together, beside the list.
     property bool paneShown: true
@@ -91,6 +93,8 @@ Rectangle {
     signal bookActivated(int bookId)
     // Move to Trash, chosen in a row's menu, for one book or several.
     signal trashRequested(var bookIds)
+    // Read in Cousoir's own reader.
+    signal readRequested(int bookId)
     // Convert to a format, chosen in a row's menu.
     signal convertRequested(var bookIds, string format)
     // Send to the reader on `root`, chosen in a row's menu.
@@ -205,6 +209,10 @@ Rectangle {
             return
         if (key === "open") {
             page.activate(page.library.books.indexOf(bookId))
+            return
+        }
+        if (key === "cousoir") {
+            page.readRequested(bookId)
             return
         }
         if (key === "trash") {

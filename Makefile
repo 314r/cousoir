@@ -10,15 +10,21 @@ else
 RUN_EXECUTABLE = $(BUILD_DIR)/cousoir
 endif
 
-.PHONY: all build install package package-install clean run test fixtures oracle
+.PHONY: all build app install package package-install clean run test fixtures oracle
 
 all: build
 
 build:
-	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release
+	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_FLAGS)
 	cmake --build $(BUILD_DIR) --parallel $(or $(JOBS),1)
 
-install: build
+# Cousoir and cousoir-cli alone, without the thirty programs of the tests:
+# all that installing and packaging need.
+app:
+	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_FLAGS)
+	cmake --build $(BUILD_DIR) --parallel $(or $(JOBS),1) --target cousoir cousoir-cli
+
+install: app
 	cmake --install $(BUILD_DIR) --prefix $(PREFIX)
 
 # An Arch package of this working tree, as Omarchy's apps ship; the second

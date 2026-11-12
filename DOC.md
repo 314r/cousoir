@@ -9,8 +9,8 @@ sorted and searched as a table or as covers, the authors, series, tags,
 languages and publishers that browse them, and each book's metadata,
 description and files, which open in the desktop's reader. A book's metadata
 and cover edit in place; books and files are added, moved to the library's
-trash and restored from it; Calibre converts books to KEPUB for a Kobo and
-AZW3 for a Kindle; books go to a Kobo or a Kindle plugged in, and come off
+trash and restored from it; books convert to KEPUB for a Kobo and AZW3 for a
+Kindle, and are read in Cousoir; books go to a Kobo or a Kindle plugged in, and come off
 it, and what a Kobo knows of their reading, highlights and notes included,
 comes back. Ctrl+K finds a book, an item, a section or an action by a few
 letters. Calibre's templates run, for composite columns and searches.
@@ -18,8 +18,9 @@ letters. Calibre's templates run, for composite columns and searches.
 Calibre stays the library's owner and keeps working as before. Cousoir reads
 and writes Calibre's own `metadata.db` and, wherever it computes something
 Calibre computes, follows Calibre's rules, ported from Calibre's own code, so
-both always agree; the tests compare its writes with Calibre's own. Calibre
-itself converts the books and sends them to the readers.
+both always agree; the tests compare its writes with Calibre's own. With
+Calibre installed, Calibre itself converts the books and sends them to the
+readers; without it, Cousoir does both for EPUBs and Kindle books.
 [CREDITS.md](CREDITS.md) lists the Calibre code in Cousoir, file by file.
 
 The project structure, theming (system, light, dark and Omarchy) and Settings
@@ -1166,7 +1167,9 @@ The database must have Calibre's schema version 28 and a structure Cousoir
 knows: a fingerprint of its tables, columns, indexes, triggers and views,
 custom columns left out. Libraries created by Calibre 9.16 and libraries
 created years ago and upgraded since have the same one. Any other structure
-keeps the library read-only.
+keeps the library read-only, with the status bar saying that the database is
+from a Calibre newer than this Cousoir knows; `cousoir-cli doctor` prints the
+schema and the fingerprint. See [When Calibre updates](#when-calibre-updates).
 
 Cousoir finds each book's cover and files the way `calibredb list` does,
 including a file whose name differs from the one Calibre expects. Calibre
@@ -1370,7 +1373,7 @@ neither in the library nor on the Kobo.
   without them, Cousoir has no reader
 - For reading them aloud, Qt TextToSpeech, and a speech engine such as
   speech-dispatcher with a voice
-- For converting to AZW3, and KEPUB from formats other than EPUB, Calibre
+- For converting from formats other than EPUB and Kindle books, Calibre
 - For ejecting a Kobo, UDisks2 and Qt D-Bus
 - For a Kindle over MTP, libmtp
 - CMake 3.21 or later
@@ -1390,9 +1393,34 @@ memory. `tools/build_jobs.sh` gives as many as the cores and the free memory
 allow.
 
 `make build`, `make run`, `make test` and `make install` (under `~/.local`)
-are available as shortcuts. They pick the number the same way, and
+are available as shortcuts. `make install` builds Cousoir and `cousoir-cli`
+only (`make app`), not the tests' programs. They pick the number the same way, and
 `make JOBS=4` sets it. `make package` and `make package-install` build and
 install an Arch package of the working tree (see [On Omarchy](#on-omarchy)).
+
+## When Calibre updates
+
+Cousoir follows Calibre's code as it was in one release, and Calibre moves
+on: a rule changes, or the database gains a column. After a new Calibre:
+
+1. Run the golden test (`tools/sandbox.sh ctest --test-dir build -R
+   golden_list --output-on-failure`). It compares what Calibre and Cousoir
+   write and list on the same libraries, so a changed rule shows as a
+   difference, with the table and the values of each. Calibre must be closed.
+2. For each difference, read what Calibre does now, in its source or by
+   asking it (`calibre-debug -c "…"`), follow it in Cousoir, and update the
+   test that held the old behaviour. Calibre 9.17, for one, keeps the line
+   breaks of a description, which 9.16 folded into spaces
+   (`longText()` in `field_writers.cpp`).
+3. `make oracle` records again what Calibre computes for the other tests
+   (sorts, names, tables, search, templates); `git diff tests/data` shows
+   what moved.
+4. If Calibre changed the database's structure, every library it opens
+   becomes read-only in Cousoir until its fingerprint is known. Check that
+   the writers still fit the new tables, then add the fingerprint that
+   `cousoir-cli doctor` prints to `knownSchemas` in `calibre_db.cpp`.
+5. Note the release the change follows where the code says which Calibre it
+   was ported from.
 
 ## Testing
 
@@ -1592,8 +1620,8 @@ The tests check the port against Calibre itself:
   `tools/oracle/annotations_oracle.py`): all of them and ten searches,
   stemmed or not, phrases, prefixes, by kind, must find what Calibre's
   browser finds, in its order, with its snippets, for all users or one, a
-  Kobo's among them; and the export is Calibre's. The UI tests browse,
-  search and filter them, by kind and by whose, open one, copy a book's as
+  Kobo's among them; and the export is Calibre's. The UI tests browse
+  them, open one, copy a book's as
   kbextract2 does, show its Markdown, and import a Kobo's database whose
   books the library has not.
 - `epub_cfi_tests` works out CFIs by hand-made examples, and for every place

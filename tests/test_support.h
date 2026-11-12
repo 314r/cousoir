@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -15,11 +16,20 @@
 #include <zip.h>
 
 #include "calibre_config.h"
+#include "calibre_lock.h"
 #include "sqlite_db.h"
 
 // What the tests share: the fixture library, Calibre in French, reading and
 // writing a file whole, copying and listing a folder, the text of an EPUB, a
 // book's formats, a JSON array of strings and a fake Kobo.
+
+// The tests change copies of a library under a lock of their own, one for
+// each test program: with Calibre's, a Calibre open on the computer would
+// refuse every one of those changes.
+inline const bool ownCalibreLock = [] {
+    CalibreLock::setNameForTests("cousoir-tests-" + QByteArray::number(QCoreApplication::applicationPid()));
+    return true;
+}();
 
 inline QString fixtureLibrary()
 {

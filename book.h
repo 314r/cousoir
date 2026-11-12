@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QVariant>
 
+#include <algorithm>
 #include <optional>
 
 // One file of a book, from Calibre's data table.
@@ -229,9 +230,15 @@ struct LibraryData
     // columns and sort Calibre's list last had.
     QHash<QString, QString> preferences;
 
-    // The book with that id, or nullptr.
+    // The book with that id, or nullptr. A library is read in the order of
+    // its ids, so the book is looked for where it should be first: a list
+    // made otherwise is gone through.
     const Book *book(int id) const
     {
+        const auto found = std::lower_bound(books.cbegin(), books.cend(), id,
+                                            [](const Book &candidate, int wanted) { return candidate.id < wanted; });
+        if (found != books.cend() && found->id == id)
+            return &*found;
         for (const Book &candidate : books) {
             if (candidate.id == id)
                 return &candidate;
