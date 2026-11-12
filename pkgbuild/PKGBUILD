@@ -17,11 +17,13 @@ optdepends=('calibre: conversions from other formats, its metadata sources and d
 source=()
 sha256sums=()
 
+# In a build folder of its own, without the tests: the package is made of
+# what it is built from, not of what a day's work left in build/.
 build() {
-  make -C "$startdir/.." build
+  make -C "$startdir/.." app BUILD_DIR=build/package CMAKE_FLAGS=-DBUILD_TESTING=OFF
 }
 
 package() {
-  DESTDIR="$pkgdir" cmake --install "$startdir/../build" --prefix /usr
+  DESTDIR="$pkgdir" cmake --install "$startdir/../build/package" --prefix /usr
   install -Dm644 "$startdir/../LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

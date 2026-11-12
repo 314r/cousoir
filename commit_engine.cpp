@@ -411,8 +411,8 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
 
     // The copy is now what the library reads from.
     const QString snapshot = QDir(request.cacheFolder).filePath(QStringLiteral("snapshot.db"));
-    QFile::remove(snapshot);
-    QFile::rename(work, snapshot);
+    // In one step: the window may be reading it.
+    result->snapshotStale = std::rename(QFile::encodeName(work).constData(), QFile::encodeName(snapshot).constData()) != 0;
     data.source = CalibreDb::identify(database);
     CalibreDb::findFiles(&data);
     // The composite columns of every book, as a load makes them: this is

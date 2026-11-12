@@ -482,7 +482,10 @@ ThemedWindow {
     // Reads the open book, or the current row's, in Cousoir's own reader:
     // its EPUB, else its PDF.
     function readBook() {
-        const bookId = currentBookId()
+        readBookOf(currentBookId())
+    }
+
+    function readBookOf(bookId) {
         if (!bookId || !library.readerAvailable)
             return
         const format = library.readableFormat(bookId)
@@ -1687,8 +1690,9 @@ ThemedWindow {
                         objectName: "readButton"
 
                         visible: session.bookOpen && !bookPage.confirmingRevert && library.readerAvailable
-                        enabled: (window.book.formats || []).some(format => !format.missing
-                                                                   && ["EPUB", "KEPUB", "PDF"].includes(format.format))
+                        // Whatever Ctrl+Shift+O reads: Kindle books and
+                        // those Calibre makes readable too.
+                        enabled: window.book.id > 0 && window.library.readableFormat(window.book.id) !== ""
                         variant: "outline"
                         text: qsTr("Read")
                         tip: qsTr("Read in Cousoir (Ctrl+Shift+O)")
@@ -1865,6 +1869,7 @@ ThemedWindow {
                         }
                         paneShown: window.detailsVisible
                         onTrashRequested: function(bookIds) { window.trashBooks(bookIds) }
+                        onReadRequested: function(bookId) { window.readBookOf(bookId) }
                         onConvertRequested: function(bookIds, format) { window.convertBooks(bookIds, format) }
                         onSendRequested: function(bookIds, root) { window.sendBooks(bookIds, root) }
                         onReloadRequested: session.reload()

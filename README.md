@@ -241,7 +241,8 @@ The few places where Cousoir departs from Calibre on purpose are listed in
   syncs in progress. For OneDrive, Google Drive and the like, say so in the
   library settings. A library only this computer changes is ready as soon as
   Calibre closes.
-- **Hands off your Kobo's database.** Cousoir only reads it.
+- **Careful with your Kobo's database.** Cousoir only reads it, except
+  when you press Sync reading, which keeps a copy of it first.
 - **Nothing leaves your computer.** No accounts, no telemetry; the web only
   when you download a book's metadata and covers.
 

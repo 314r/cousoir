@@ -2036,6 +2036,10 @@ void BookLibrary::finishCommit()
         // Not when another library was picked meanwhile: its load, waiting
         // for this save, shows it.
         m_backedUp = m_backedUp || !result.backup.isEmpty();
+        // The highlights and notes are read from the snapshot: one that
+        // stayed behind is made again by a reload.
+        if (result.snapshotStale)
+            m_reloadPending = true;
         if (result.written) {
             m_loaded = true;
             m_lastError.clear();

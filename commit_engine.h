@@ -90,6 +90,9 @@ struct Result
     // Whether the library changed: false when there was nothing to write.
     bool written = false;
     QString error;
+    // The copy the library reads from could not be replaced by the database
+    // written: it is of the library as it was, until a reload.
+    bool snapshotStale = false;
     // The library as it now is, read from the database written; without
     // books when nothing changed and nothing was written.
     LibraryData data;

@@ -4,7 +4,9 @@ Autonomous work on Cousoir, started on 2026-10-22, for review before any of
 it goes to `master`. This file holds the goals, how the work is done, where
 each goal stands, and a journal of what was done and why.
 
-Nothing here is merged into `master`, pushed or published: the review decides.
+Both rounds were reviewed and merged into `master` (2026-10-23 and
+2026-10-25); this file stays as their record. What comes after them is
+planned and done on `master`'s own branches.
 
 ## How the work is done
 
@@ -612,7 +614,7 @@ Calibre.
 | 17. Kindle highlights | done |
 | 13. Notes | done; notes with images are read, left to Calibre to change |
 | 18. A Kindle without Calibre | done; a PDF goes without metadata |
-| 19. Reading in Cousoir | done; notes on highlights, search and other colours later |
+| 19. Reading in Cousoir | done, with notes on highlights, search and five colours |
 | 20. Reader apps over the network | reverted on 2026-10-23 |
 | 21. The library's highlights | done; the readers' notes and editing a note later |
 | 22. Searching the books' text | planned |
