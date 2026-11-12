@@ -287,7 +287,7 @@ void ConcurrencyGuardTest::readOnlyUntilLoadedAndKnown()
     QCOMPARE(checks->state(), QStringLiteral("unreadable"));
     checks->setLibraryReadable(true);
     QCOMPARE(checks->state(), QStringLiteral("schema"));
-    QVERIFY(checks->readOnlyReason().contains(QStringLiteral("Calibre version")));
+    QVERIFY(checks->readOnlyReason().contains(QStringLiteral("newer than this Cousoir knows")));
     checks->setSchemaKnown(true);
     QTRY_COMPARE(checks->state(), QStringLiteral("writable"));
 }
