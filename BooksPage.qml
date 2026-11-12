@@ -292,15 +292,19 @@ Rectangle {
         }
     }
 
-    // Both views follow the same row, so switching keeps the selection.
+    // The row of the view shown, which the other takes when it shows: only
+    // the view shown has the books, so a search or a sort lays out one.
+    property int shownIndex: -1
+
     onGridModeChanged: {
-        if (gridMode)
-            coverGrid.currentIndex = bookTable.currentIndex
-        else
-            bookTable.currentIndex = coverGrid.currentIndex
-        // Once the other view shows: a hidden item cannot take the focus.
-        if (visible)
-            Qt.callLater(() => page.view.focusList())
+        const index = shownIndex
+        // Once the other view has the books, and shows: a hidden item cannot
+        // take the focus.
+        Qt.callLater(() => {
+            page.view.currentIndex = index
+            if (page.visible)
+                page.view.focusList()
+        })
     }
 
     RowLayout {
@@ -318,7 +322,11 @@ Rectangle {
                 visible: !page.gridMode
                 name: "book"
                 columns: page.columns
-                rows: page.library.books
+                rows: page.gridMode ? [] : page.library.books
+                onCurrentIndexChanged: {
+                    if (!page.gridMode)
+                        page.shownIndex = currentIndex
+                }
                 sortOption: page.library.sortOption
                 selectionCount: page.selectedCount
                 selectable: true
@@ -340,7 +348,11 @@ Rectangle {
                 anchors.fill: parent
                 visible: page.gridMode
                 name: "cover"
-                rows: page.library.books
+                rows: page.gridMode ? page.library.books : []
+                onCurrentIndexChanged: {
+                    if (page.gridMode)
+                        page.shownIndex = currentIndex
+                }
                 selectable: true
                 Accessible.name: qsTr("Book covers")
                 onActivated: function(index) { page.activate(index) }
