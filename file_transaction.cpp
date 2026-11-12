@@ -17,6 +17,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #endif
+#ifdef Q_OS_LINUX
+#include <linux/fs.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#endif
+
+#include <xxhash.h>
 
 namespace {
 
@@ -260,9 +267,9 @@ bool FileTransaction::rollback(QString *error)
     return ok;
 }
 
-bool FileTransaction::aboutToPublish(const QByteArray &sha256, QString *error)
+bool FileTransaction::aboutToPublish(const QString &hash, QString *error)
 {
-    return log({ QStringLiteral("publish"), {}, QString::fromLatin1(sha256.toHex()) }, error);
+    return log({ QStringLiteral("publish"), {}, hash }, error);
 }
 
 void FileTransaction::finish()
@@ -307,10 +314,14 @@ bool FileTransaction::recover(const QString &journal, const QString &database, Q
     file.close();
 
     QByteArray current;
-    if (!published.isEmpty()) {
+    if (published.startsWith("xxh3:")) {
+        current = contentHash(database).toLatin1();
+    } else if (!published.isEmpty()) {
+        // Written by a Cousoir before 2026-11-13.
         QFile db(database);
-        if (db.open(QIODevice::ReadOnly))
-            current = QCryptographicHash::hash(db.readAll(), QCryptographicHash::Sha256).toHex();
+        QCryptographicHash sha256(QCryptographicHash::Sha256);
+        if (db.open(QIODevice::ReadOnly) && sha256.addData(&db))
+            current = sha256.result().toHex();
     }
     if (!published.isEmpty() && current == published) {
         cleanUp(steps);
@@ -340,6 +351,111 @@ bool FileTransaction::writeDurably(const QString &path, const QByteArray &conten
     ::fsync(file.handle());
 #endif
     return true;
+}
+
+namespace {
+
+QString hashText(const XXH128_hash_t &hash)
+{
+    return QStringLiteral("xxh3:%1%2").arg(hash.high64, 16, 16, QLatin1Char('0')).arg(hash.low64, 16, 16, QLatin1Char('0'));
+}
+
+} // namespace
+
+bool FileTransaction::copyFile(const QString &from, const QString &to, Copy how, bool durable, QString *error,
+                               QString *hash)
+{
+    const auto fail = [&](const QString &why) {
+        if (error)
+            *error = QObject::tr("Cannot copy %1 to %2: %3")
+                         .arg(QDir::toNativeSeparators(from), QDir::toNativeSeparators(to), why);
+        return false;
+    };
+    QFile in(from);
+    if (!in.open(QIODevice::ReadOnly))
+        return fail(in.errorString());
+    QFile out(to);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return fail(out.errorString());
+    bool copied = false;
+#ifdef Q_OS_LINUX
+    if (how == Copy::SharingBlocks) {
+        // The blocks shared, at once; else the kernel copies them, in the
+        // file system where it can.
+        copied = ::ioctl(out.handle(), FICLONE, in.handle()) == 0;
+        if (!copied) {
+            qint64 left = in.size();
+            while (left > 0) {
+                const ssize_t sent = ::copy_file_range(in.handle(), nullptr, out.handle(), nullptr, size_t(left), 0);
+                if (sent <= 0)
+                    break;
+                left -= sent;
+            }
+            copied = left == 0;
+            if (!copied && (!out.resize(0) || !in.seek(0) || !out.seek(0)))
+                return fail(out.errorString());
+        }
+    }
+#endif
+    if (!copied) {
+        XXH3_state_t *state = hash ? XXH3_createState() : nullptr;
+        if (state)
+            XXH3_128bits_reset(state);
+        QByteArray buffer(1 << 20, Qt::Uninitialized);
+        copied = true;
+        for (;;) {
+            const qint64 read = in.read(buffer.data(), buffer.size());
+            if (read <= 0) {
+                copied = read == 0;
+                break;
+            }
+            if (out.write(buffer.constData(), read) != read) {
+                copied = false;
+                break;
+            }
+            if (state)
+                XXH3_128bits_update(state, buffer.constData(), size_t(read));
+        }
+        if (state) {
+            *hash = copied ? hashText(XXH3_128bits_digest(state)) : QString();
+            XXH3_freeState(state);
+        }
+    } else if (hash) {
+        *hash = contentHash(to);
+    }
+    if (!copied || !out.flush())
+        return fail(out.errorString());
+#ifdef Q_OS_UNIX
+    if (durable && ::fsync(out.handle()) != 0)
+        return fail(QString::fromLocal8Bit(std::strerror(errno)));
+#else
+    Q_UNUSED(durable);
+#endif
+    return true;
+}
+
+QString FileTransaction::contentHash(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    XXH3_state_t *state = XXH3_createState();
+    XXH3_128bits_reset(state);
+    QByteArray buffer(1 << 20, Qt::Uninitialized);
+    bool ok = true;
+    for (;;) {
+        const qint64 read = file.read(buffer.data(), buffer.size());
+        if (read < 0)
+            ok = false;
+        if (read <= 0)
+            break;
+        XXH3_128bits_update(state, buffer.constData(), size_t(read));
+    }
+    const XXH128_hash_t hash = XXH3_128bits_digest(state);
+    XXH3_freeState(state);
+    if (!ok)
+        return {};
+    return QStringLiteral("xxh3:%1%2").arg(hash.high64, 16, 16, QLatin1Char('0')).arg(hash.low64, 16, 16, QLatin1Char('0'));
 }
 
 void FileTransaction::sync(const QString &path)

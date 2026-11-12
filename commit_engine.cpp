@@ -169,27 +169,29 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         clock.restart();
     };
 
+    // The working copy, a chunk at a time, read at once after; scratch,
+    // rewritten by each attempt and read by no recovery, it need not reach
+    // the disk. The backup before the session's first change, kept and not
+    // read, shares its blocks where the file system can.
     const FileIdentity before = CalibreDb::identify(database);
-    const QByteArray original = readFile(database, &error);
-    if (original.isEmpty() || CalibreDb::identify(database) != before)
-        return fail(error.isEmpty() ? QObject::tr("The library changed while it was read. Try again.") : error);
+    QDir().mkpath(request.cacheFolder);
+    QFile::remove(work + QStringLiteral("-journal"));
+    if (!FileTransaction::copyFile(database, work, FileTransaction::Copy::ThroughMemory, false, &error))
+        return fail(error);
+    if (CalibreDb::identify(database) != before)
+        return fail(QObject::tr("The library changed while it was read. Try again."));
+    lap("copy the database");
 
     if (backup && !request.backupFolder.isEmpty()) {
         QDir().mkpath(request.backupFolder);
         const QString copy = QDir(request.backupFolder).filePath(
             QStringLiteral("metadata-%1.db").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz"))));
-        if (!FileTransaction::writeDurably(copy, original, &error))
+        if (!FileTransaction::copyFile(work, copy, FileTransaction::Copy::SharingBlocks, true, &error))
             return fail(error);
         result->backup = copy;
         pruneBackups(request.backupFolder);
     }
-
-    lap("read the database, back it up");
-    QDir().mkpath(request.cacheFolder);
-    QFile::remove(work + QStringLiteral("-journal"));
-    if (!FileTransaction::writeDurably(work, original, &error))
-        return fail(error);
-    lap("write the working copy");
+    lap("back it up");
 
     SqliteDb db;
     if (!db.open(work, SqliteDb::Mode::ReadWrite, &error)
@@ -444,11 +446,13 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     lap("write the metadata.opf files");
     // Publishing: the copy goes beside metadata.db, then over it, unless
     // metadata.db changed meanwhile.
-    const QByteArray written = readFile(work, &error);
-    const QByteArray sha256 = QCryptographicHash::hash(written, QCryptographicHash::Sha256);
+    // Hashed as it is copied, for the journal.
+    QString hash;
     const QString incoming = library.filePath(QStringLiteral(".~cousoir-%1-metadata.db")
                                                   .arg(QRandomGenerator::global()->generate(), 0, 16));
-    if (written.isEmpty() || !files.addScratch(incoming, &error) || !FileTransaction::writeDurably(incoming, written, &error)) {
+    if (!files.addScratch(incoming, &error)
+        || !FileTransaction::copyFile(work, incoming, FileTransaction::Copy::ThroughMemory, true, &error, &hash)
+        || hash.isEmpty()) {
         files.rollback(nullptr);
         return fail(error);
     }
@@ -461,7 +465,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         *retry = true;
         return fail(QObject::tr("The library changed while it was being saved."));
     }
-    if (!files.aboutToPublish(sha256, &error)
+    if (!files.aboutToPublish(hash, &error)
         || std::rename(QFile::encodeName(incoming).constData(), QFile::encodeName(database).constData()) != 0) {
         files.rollback(nullptr);
         return fail(error.isEmpty() ? QObject::tr("Cannot replace %1.").arg(database) : error);

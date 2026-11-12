@@ -23,6 +23,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <tuple>
@@ -37,6 +38,7 @@
 #include "calibre_date.h"
 #include "calibre_fts.h"
 #include "calibre_template.h"
+#include "file_transaction.h"
 #include "sqlite_db.h"
 
 namespace {
@@ -336,24 +338,21 @@ bool takeSnapshot(const QString &libraryPath, const QString &snapshotPath, FileI
             continue;
         }
 
-        QFile file(database);
-        if (!file.open(QIODevice::ReadOnly)) {
-            if (error)
-                *error = QObject::tr("Cannot read %1: %2").arg(QDir::toNativeSeparators(database), file.errorString());
+        // Copied beside the snapshot, a chunk at a time, then put in its
+        // place in one step: the window may be reading the snapshot.
+        QDir().mkpath(QFileInfo(snapshotPath).absolutePath());
+        const QString incoming = snapshotPath + QStringLiteral(".incoming");
+        if (!FileTransaction::copyFile(database, incoming, FileTransaction::Copy::ThroughMemory, false, error))
             return false;
-        }
-        const QByteArray contents = file.readAll();
-        file.close();
-        if (identify(database) != before || contents.size() != before.size) {
+        if (identify(database) != before || QFileInfo(incoming).size() != before.size) {
+            QFile::remove(incoming);
             reason = QObject::tr("The library kept changing while it was read. Try again in a moment.");
             continue;
         }
-
-        QDir().mkpath(QFileInfo(snapshotPath).absolutePath());
-        QSaveFile copy(snapshotPath);
-        if (!copy.open(QIODevice::WriteOnly) || copy.write(contents) != contents.size() || !copy.commit()) {
+        if (std::rename(QFile::encodeName(incoming).constData(), QFile::encodeName(snapshotPath).constData()) != 0) {
+            QFile::remove(incoming);
             if (error)
-                *error = QObject::tr("Cannot write %1: %2").arg(QDir::toNativeSeparators(snapshotPath), copy.errorString());
+                *error = QObject::tr("Cannot write %1.").arg(QDir::toNativeSeparators(snapshotPath));
             return false;
         }
 
