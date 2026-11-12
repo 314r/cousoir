@@ -520,7 +520,9 @@ if(BUILD_TESTING)
     target_link_libraries(book_library_tests PRIVATE cousoir_models Qt6::Test)
     cousoir_configure_test_executable(book_library_tests)
     cousoir_add_logged_test(book_library_tests book_library_tests)
-    set_tests_properties(book_library_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # Each save that reads the library again in part checks it against the
+    # library read whole.
+    set_tests_properties(book_library_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;COUSOIR_VERIFY_COMMITS=1")
 
     # The language and the window rounding Cousoir follows on Omarchy.
     qt_add_executable(omarchy_tests tests/omarchy_test.cpp)
@@ -537,7 +539,7 @@ if(BUILD_TESTING)
     foreach(scale IN ITEMS 1 2)
         cousoir_add_logged_test(library_ui_tests_scale_${scale} library_ui_tests)
         set_tests_properties(library_ui_tests_scale_${scale} PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale};QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=;QT_QUICK_BACKEND=software;QT_SCALE_FACTOR=${scale};QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu;COUSOIR_VERIFY_COMMITS=1"
         )
     endforeach()
 

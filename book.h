@@ -22,6 +22,8 @@ struct BookFormat
     qint64 size = 0;
     // The file found in the book's folder; empty when it is missing.
     QString file;
+
+    bool operator==(const BookFormat &) const = default;
 };
 
 // A custom column of the library, as custom_columns describes it.
@@ -42,6 +44,8 @@ struct CustomColumn
     // How Calibre shows it, as JSON: the template of a composite, the values
     // of an enumeration, half stars.
     QByteArray display;
+
+    bool operator==(const CustomColumn &) const = default;
 };
 
 // A book's value of a custom column: null when it has none. A list for a
@@ -51,6 +55,8 @@ struct CustomValue
     QVariant value;
     // The book's number in a series column.
     double seriesIndex = 1;
+
+    bool operator==(const CustomValue &) const = default;
 };
 
 // A row of Calibre's books table and the items linked to it. Ids are those
@@ -116,6 +122,8 @@ struct FacetItem
     int count = 0;
     // The item's link column: a web page about it, empty for most.
     QString link;
+
+    bool operator==(const FacetItem &) const = default;
 };
 
 // Enough of a file to notice that it changed: size, modification time and,
@@ -144,6 +152,8 @@ struct ReadPosition
     double epoch = 0;
     // How far into the book, 0 to 1.
     double fraction = 0;
+
+    bool operator==(const ReadPosition &) const = default;
 };
 
 // A highlight or bookmark, a row of Calibre's annotations table: its
@@ -194,6 +204,8 @@ struct ItemNote
     double modified = 0;
     // The resources' hashes it uses, "xxh64:5f8c87fa2ca5d829".
     QStringList resources;
+
+    bool operator==(const ItemNote &) const = default;
 };
 
 struct LibraryData

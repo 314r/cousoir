@@ -42,6 +42,29 @@ bool isKnownSchema(int userVersion, const QString &fingerprint);
 
 // Reads the books, the items they link to and the library's id.
 bool readLibrary(SqliteDb &db, LibraryData *data, const QString &interfaceLanguage, QString *error);
+
+// From now on, notes every book whose rows change through `db`, by temporary
+// triggers on its tables: the books table, each table with a book column,
+// and the items' tables, whose rows a renamed item's books follow. Nothing
+// is written to the database's file. Again, it forgets what it noted.
+bool trackChanges(SqliteDb &db, QString *error);
+// The books whose rows changed since trackChanges(), removed ones included,
+// and the tables they changed in.
+QSet<int> changedBooks(SqliteDb &db);
+QSet<QString> changedTables(SqliteDb &db);
+// Makes `data`, read earlier from the same database, what readLibrary()
+// would read from `db` now, reading again only `books`, those changed since:
+// the others stay as they were, their files and composite values with them.
+// The items, the preferences and the notes are read whole, the highlights
+// counted again with `countAnnotations`. Should the custom columns have
+// changed, everything is read again and `whole` set. The books changed come
+// without their files or composite values.
+bool refreshLibrary(SqliteDb &db, LibraryData *data, const QSet<int> &books, const QString &interfaceLanguage,
+                    bool countAnnotations, bool *whole, QString *error);
+// What differs between two libraries, field by field, the first found: for
+// the checks that a library refreshed is the library read whole. Empty when
+// they are the same.
+QString firstDifference(const LibraryData &a, const LibraryData &b);
 // The custom columns, by id, as initialize_custom_columns() keeps them:
 // those marked for deletion and those whose tables are gone left out.
 bool readCustomColumns(SqliteDb &db, QList<CustomColumn> *columns, QString *error);

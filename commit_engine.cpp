@@ -209,6 +209,24 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     context.now = now;
     context.notes = readNotes(request.libraryPath, request.cacheFolder);
 
+    // The books it changes noted as it goes, to read only those again, when
+    // the library the window holds is of the database as it was copied.
+    const QString libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
+    const bool incremental = request.base && request.base->source == before && request.base->libraryPath == libraryPath
+        && CalibreDb::trackChanges(db, nullptr);
+    // The library as the database now holds it, `extra` read again too.
+    const auto readCurrent = [&](LibraryData *current, const QSet<int> &extra, QSet<int> *changed, bool *whole) {
+        *whole = true;
+        if (!incremental) {
+            current->libraryPath = libraryPath;
+            return CalibreDb::readLibrary(db, current, request.config.interfaceLanguage, &error);
+        }
+        *current = *request.base;
+        *changed = CalibreDb::changedBooks(db) + extra;
+        return CalibreDb::refreshLibrary(db, current, *changed, request.config.interfaceLanguage,
+                                         CalibreDb::changedTables(db).contains(QStringLiteral("annotations")), whole,
+                                         &error);
+    };
     lap("open it, check its structure");
     FileTransaction files(journalPath(request.cacheFolder));
     FieldWriters::Result state;
@@ -235,8 +253,9 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     }
     for (const BulkEdit &bulk : request.bulkEdits) {
         LibraryData current;
-        current.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-        if (!CalibreDb::readLibrary(db, &current, request.config.interfaceLanguage, &error))
+        QSet<int> changed;
+        bool whole = true;
+        if (!readCurrent(&current, QSet<int>(bulk.bookIds.cbegin(), bulk.bookIds.cend()), &changed, &whole))
             return undo(error);
         for (const int id : bulk.bookIds) {
             const Book *book = current.book(id);
@@ -271,8 +290,9 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     LibraryData trashed;
     if (!request.trash.isEmpty()) {
         // The books as they are now, for their metadata.opf.
-        trashed.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-        if (!CalibreDb::readLibrary(db, &trashed, request.config.interfaceLanguage, &error))
+        QSet<int> changed;
+        bool whole = true;
+        if (!readCurrent(&trashed, QSet<int>(request.trash.cbegin(), request.trash.cend()), &changed, &whole))
             return undo(error);
         withComposites(&trashed, request.config.interfaceLanguage,
                        QSet<int>(request.trash.cbegin(), request.trash.cend()));
@@ -347,12 +367,36 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     // The library as written, for the covers and metadata.opf files; the
     // dates of the books added and restored as Calibre holds them then.
     LibraryData data;
-    data.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-    if (!CalibreDb::readLibrary(db, &data, request.config.interfaceLanguage, &error)) {
+    QSet<int> changed;
+    bool whole = true;
+    if (!readCurrent(&data, {}, &changed, &whole)) {
         files.rollback(nullptr);
         return fail(error);
     }
+    // The books read again come without their files.
+    if (!whole)
+        CalibreDb::findFiles(&data, &changed);
     withComposites(&data, request.config.interfaceLanguage, dirtied);
+    if (request.verify && !whole) {
+        // What the books changed and those kept make must be the library
+        // read whole, as a load would read it now.
+        LibraryData read;
+        read.libraryPath = libraryPath;
+        if (!CalibreDb::readLibrary(db, &read, request.config.interfaceLanguage, &error)) {
+            files.rollback(nullptr);
+            return fail(error);
+        }
+        CalibreDb::findFiles(&read);
+        CalibreTemplate::computeComposites(&read, request.config.interfaceLanguage);
+        LibraryData refreshed = data;
+        CalibreTemplate::computeComposites(&refreshed, request.config.interfaceLanguage, &changed);
+        const QString difference = CalibreDb::firstDifference(refreshed, read);
+        if (!difference.isEmpty()) {
+            files.rollback(nullptr);
+            return fail(QStringLiteral("The library read again in part differs from the library read whole: %1")
+                            .arg(difference));
+        }
+    }
     lap("read the library back");
     QHash<int, Opf::ExactDates> exactDates;
     for (const int id : done.added + done.restored) {
@@ -363,6 +407,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
                                     OpfReader::parseDate(dates.text(1), true).value_or(CalibreDate()) });
         }
     }
+    const bool annotationsChanged = whole || CalibreDb::changedTables(db).contains(QStringLiteral("annotations"));
     db.close();
 
     for (const BookEdit &edit : request.edits) {
@@ -430,11 +475,14 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     // In one step: the window may be reading it.
     result->snapshotStale = std::rename(QFile::encodeName(work).constData(), QFile::encodeName(snapshot).constData()) != 0;
     data.source = CalibreDb::identify(database);
-    CalibreDb::findFiles(&data);
-    // The composite columns of every book, as a load makes them: this is
-    // the library the window shows from now on, and so far only the books
-    // whose metadata.opf was written had theirs.
-    CalibreTemplate::computeComposites(&data, request.config.interfaceLanguage);
+    // The files and the composite columns of every book, as a load makes
+    // them: this is the library the window shows from now on. Read again
+    // in part, only the books changed: the others keep theirs.
+    CalibreDb::findFiles(&data, whole ? nullptr : &changed);
+    CalibreTemplate::computeComposites(&data, request.config.interfaceLanguage, whole ? nullptr : &changed);
+    result->changed = changed;
+    result->incremental = !whole;
+    result->annotationsChanged = annotationsChanged;
     lap("find the files, compute the composites");
     result->data = data;
     result->written = true;

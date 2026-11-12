@@ -1998,7 +1998,10 @@ void BookLibrary::startCommit()
         emit saveFailed(tr("The library cannot be changed right now."));
         return;
     }
-    const CommitEngine::Request request = prepared(m_pending.takeFirst());
+    CommitEngine::Request request = prepared(m_pending.takeFirst());
+    // The library as shown: the save reads again only what it changes.
+    if (m_loaded && m_data.libraryPath == QDir::cleanPath(QFileInfo(m_libraryPath).absoluteFilePath()))
+        request.base = m_data;
     const QStringList sortFields = this->sortFields();
     m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
         CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits, request.id };

@@ -8,6 +8,7 @@
 #include <QString>
 
 #include <functional>
+#include <optional>
 
 #include "book.h"
 #include "book_edit.h"
@@ -72,6 +73,15 @@ struct Request
     // Called just before metadata.db is replaced, for tests that change it
     // there as Dropbox could.
     std::function<void()> beforePublish;
+    // The library as the window holds it, read from metadata.db as it is
+    // now: the save then reads again only the books it changes. When
+    // metadata.db changed since, or there is none, the library is read
+    // whole.
+    std::optional<LibraryData> base;
+    // Checks that the library read again in part is the library read whole,
+    // and fails the save naming the first difference; for the tests, and
+    // set by COUSOIR_VERIFY_COMMITS.
+    bool verify = qEnvironmentVariableIsSet("COUSOIR_VERIFY_COMMITS");
 
     // Whether it does more than edit books: any of the changes after the
     // edits; with `merges`, a reader's highlights too, which may change
@@ -105,6 +115,12 @@ struct Result
     QString backup;
     // Whether notes were written.
     bool notesWritten = false;
+    // The books the save changed, removed ones included, and whether only
+    // they were read again; the others are as in the request's base.
+    QSet<int> changed;
+    bool incremental = false;
+    // Whether highlights or bookmarks changed.
+    bool annotationsChanged = false;
     // How long each step of the save took, in nanoseconds and in order,
     // for the benchmark: what a save costs is measured, not guessed.
     QList<std::pair<QString, qint64>> timings;
