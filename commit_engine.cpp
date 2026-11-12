@@ -415,6 +415,10 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     QFile::rename(work, snapshot);
     data.source = CalibreDb::identify(database);
     CalibreDb::findFiles(&data);
+    // The composite columns of every book, as a load makes them: this is
+    // the library the window shows from now on, and so far only the books
+    // whose metadata.opf was written had theirs.
+    CalibreTemplate::computeComposites(&data, request.config.interfaceLanguage);
     result->data = data;
     result->written = true;
     result->dirtied = dirtied;

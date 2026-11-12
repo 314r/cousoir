@@ -98,6 +98,7 @@ private slots:
     void reportsMissingLibrary();
     void followsCalibreOnReload();
     void editsBooks();
+    void keepsCompositesOfOtherBooks();
     void followsSortsLikeCalibre();
     void refusesWhileReadOnly();
     void revertsCurrentBook();
@@ -670,6 +671,34 @@ void BookLibraryTest::editsBooks()
     QVERIFY(!library->updateBook(2, { { QStringLiteral("pubdate"), QStringLiteral("someday") } }).isEmpty());
     QVERIFY(!library->updateBook(2, { { QStringLiteral("colour"), QStringLiteral("red") } }).isEmpty());
     QVERIFY(!library->updateBook(99, { { QStringLiteral("title"), QStringLiteral("X") } }).isEmpty());
+}
+
+// A save reads the library again: the composite columns of the books it
+// did not change must still be there, as their templates make them.
+void BookLibraryTest::keepsCompositesOfOtherBooks()
+{
+    QTemporaryDir copy;
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library-custom"), copy.path()));
+    auto library = open(copy.path());
+    QVERIFY(library);
+    library->setWritable(true);
+    const auto computed = [&library](int id) {
+        library->setCurrentBookId(id);
+        for (const QVariant &field : library->currentBook().value(QStringLiteral("custom")).toList()) {
+            if (field.toMap().value(QStringLiteral("key")).toString() == QLatin1String("#computed"))
+                return field.toMap().value(QStringLiteral("text")).toString();
+        }
+        return QString();
+    };
+    const QString first = computed(1);
+    QCOMPARE(first, QStringLiteral("L'Écume des jours by Boris Vian"));
+    const QString second = computed(2);
+    QVERIFY(!second.isEmpty());
+
+    QCOMPARE(library->updateBook(2, { { QStringLiteral("rating"), 6 } }), QString());
+    QVERIFY(waitForSave(library.get()));
+    QCOMPARE(computed(2), second);
+    QCOMPARE(computed(1), first);
 }
 
 // The list's columns and sort are kept for the library, Calibre's own at
