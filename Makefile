@@ -10,7 +10,7 @@ else
 RUN_EXECUTABLE = $(BUILD_DIR)/cousoir
 endif
 
-.PHONY: all build install clean run test fixtures oracle
+.PHONY: all build install package package-install clean run test fixtures oracle
 
 all: build
 
@@ -20,6 +20,14 @@ build:
 
 install: build
 	cmake --install $(BUILD_DIR) --prefix $(PREFIX)
+
+# An Arch package of this working tree, as Omarchy's apps ship; the second
+# installs it with pacman, so Cousoir shows in the app launcher for everyone.
+package:
+	cd pkgbuild && makepkg -f
+
+package-install:
+	cd pkgbuild && makepkg -fsi
 
 clean:
 	cmake --build $(BUILD_DIR) --target clean

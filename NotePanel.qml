@@ -182,6 +182,7 @@ FocusScope {
                     Accessible.name: qsTr("Note")
 
                     background: Rectangle {
+                        radius: Theme.radius
                         color: Theme.fill
                         border.width: 1
                         border.color: noteArea.activeFocus ? Theme.accent : Theme.controlBorder

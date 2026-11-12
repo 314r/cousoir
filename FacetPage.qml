@@ -35,7 +35,7 @@ Rectangle {
 
     signal itemActivated(int id)
 
-    color: Theme.canvas
+    color: Theme.surface
 
     // Puts the cursor on the item with `id`, the one just left, if listed.
     function focusList(id) {

@@ -101,7 +101,7 @@ Rectangle {
     // Opening a book's file failed; `message` says why.
     signal failed(string message)
 
-    color: Theme.canvas
+    color: Theme.surface
 
     // Makes the row current in both views, and selects it alone.
     function setCurrent(index) {

@@ -38,12 +38,12 @@ QString date(const QDateTime &date)
 QString monthYear(const QDateTime &date)
 {
     return CalibreDb::isUndefinedDate(date) ? QString()
-                                            : QLocale::c().toString(date.toLocalTime().date(), QStringLiteral("MMM yyyy"));
+                                            : QLocale().toString(date.toLocalTime().date(), QStringLiteral("MMM yyyy"));
 }
 
 QString fileSize(qint64 size)
 {
-    return QLocale::c().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
+    return QLocale().formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat);
 }
 
 namespace {

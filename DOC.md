@@ -28,9 +28,10 @@ Omarchy theming is derived from bjarneo's omadji.
 
 ## Interface
 
-The interface follows the Omarchy style: the system monospace font, square
-corners, hairline dividers, foreground-tinted hover and selection states
-instead of accent fills, and one accent per screen.
+The interface follows the Omarchy style: the system monospace font, hairline
+dividers, foreground-tinted hover and selection states instead of accent
+fills, one accent per screen, and corners as the windows have them, square
+on Omarchy's default (see [On Omarchy](#on-omarchy)).
 
 The sidebar has the books, the trash and the check, then the browse sections
 with their sizes: authors, series, tags, languages and publishers, then the
@@ -1055,6 +1056,80 @@ you have checked in Calibre that no change is missing and pressed Ignore;
 another copy, or this one changed, counts again. About shows Cousoir's version, its credits, Calibre's first, and
 its license.
 
+## On Omarchy
+
+Cousoir follows what Omarchy's own apps follow, live, with no restart.
+
+**The theme.** With the Omarchy theme, the colours are those of
+`~/.local/state/omarchy/current/theme/colors.toml`, read again a moment
+after a theme switch.
+
+**The window opacity.** With the Omarchy theme, Cousoir's windows follow
+Appearance > Windows > Window Opacity as Omarchy's terminals do, read from
+the toggle files beside the current theme
+(`~/.local/state/omarchy/toggles/hypr/window-glassy.lua` or
+`window-opaque.lua`): glassy, the window's background is 65 % opaque, the
+terminals' glass, and Hyprland blurs what is behind it; transparent,
+Omarchy's default, 98.5 % while the window is active and 96 % while it is
+not; opaque, solid. Only the window's own background is see-through: the
+pages, bars and panes over it draw none of their own, the text stays solid,
+and menus, dialogs, the reader's page and its bar in full screen stay
+opaque. Cousoir asks for windows with an alpha channel only when Omarchy is
+installed. The other themes are always opaque.
+
+**The corners.** Buttons, fields, choices, menus, dialogs and the reader's
+panels take Hyprland's window rounding (`decoration:rounding`), whatever
+theme Cousoir wears: 0 on Omarchy's default, so square, and round when a
+theme or the user's settings round the windows. Cousoir asks `hyprctl` for
+the value in effect every second, as a theme and a personal override can
+both set it; small marks (a tick, a scroll bar, a header's hover) stop at
+4 px. Without Hyprland the corners stay square.
+
+**The language.** The interface speaks the language picked under Setup >
+Language, the code on the first line of `~/.config/omarchy/language`, and
+English until one is picked; a change is followed at once, the library read
+again so that its dates, sizes and messages follow too. Dates and numbers
+take the formats Omarchy gives that language (`formatLocale` in
+`$OMARCHY_PATH/default/i18n/locales.json`); without a language picked they
+keep the system's. Away from Omarchy (no `~/.config/omarchy`), the language
+is the first of the system's that Cousoir has a catalog for.
+
+A catalog is one flat JSON file by Omarchy language code, `i18n/fr.json`,
+from the English text exactly as `qsTr()` or `tr()` has it to its
+translation, compiled into Cousoir. A string a catalog lacks shows in
+English; `pt-BR` falls back on `pt`, then English. A counted string,
+`qsTr("%n books", "", count)`, maps to an object of plural forms by CLDR
+category, `{"one": "%n livre", "other": "%n livres"}`, English's own being
+in `i18n/en.json`. `tools/i18n.py` lists the strings a catalog lacks and
+those it has that Cousoir no longer says; `omarchy_tests` checks every
+catalog's placeholders. To add a language: copy `i18n/fr.json` to
+`i18n/<code>.json`, translate its values, list it in `CMakeLists.txt`, and
+add `Comment[<code>]` to the desktop entry. A right-to-left language mirrors
+the windows once Cousoir has its catalog. Calibre's interface language, in
+Settings, is another matter: it decides sorts and names in the library, not
+Cousoir's words. `cousoir-cli` stays in English.
+
+**The file chooser.** Adding books, picking a library, a cover, a file for
+a book or a Kobo's database, and saving notes ask through the desktop's
+portal (`org.freedesktop.portal.FileChooser`), which shows the chooser the
+desktop picked, Omarchy's own. Where there is no portal, on other systems,
+Qt's dialog shows instead; a portal that fails says so in the status bar.
+
+**The keyboard.** `?` shows every shortcut of the window, the reader's
+included; `Q` or Ctrl+Q quits. Quitting, or closing the window, while books
+are being converted, sent or added asks first.
+
+**The package.** `make package` builds an Arch package of the working tree
+with `pkgbuild/PKGBUILD`, and `make package-install` installs it with
+pacman: the binaries, the desktop entry, the icons and the documentation
+under `/usr`.
+
+**Agents.** `cousoir-cli` needs no display, prints JSON, and exits with 0,
+or with 1 or 2 and the error on stderr. `cousoir-cli skill` prints a short
+skill telling a coding agent how to use it, and `cousoir-cli skill install`
+copies it to `~/.agents/skills/cousoir` and links it into
+`~/.claude/skills`.
+
 ## The library
 
 By default Cousoir opens the library Calibre opens on this computer, read from
@@ -1102,7 +1177,7 @@ renames such a file when it finds it; Cousoir only reads it.
 ```bash
 cousoir-cli list [--library PATH]
 cousoir-cli search [--library PATH] [--limit N] EXPRESSION…
-cousoir-cli doctor [--library PATH]
+cousoir-cli doctor [--library PATH] [--json]
 cousoir-cli apply [--library PATH] [--force] changes.json
 cousoir-cli read FILE…
 cousoir-cli device [--library PATH] KOBO|mtp|mtp:SERIAL
@@ -1112,6 +1187,7 @@ cousoir-cli kepubify BOOK.epub BOOK.kepub
 cousoir-cli azw3 BOOK.epub BOOK.azw3
 cousoir-cli epub BOOK.azw3 BOOK.epub
 cousoir-cli kobo-highlights [--library PATH] KOBO|KoboReader.sqlite
+cousoir-cli skill [install]
 ```
 
 `kepubify` and `azw3` make a KEPUB and an AZW3 of an EPUB as Cousoir does
@@ -1128,7 +1204,13 @@ the problems it finds (a file or folder the database lists but the disk does
 not have, a cover Calibre does not list, a conflict copy, an unknown
 structure, and what the Check section finds, but what was ignored there),
 how the library is shared with other computers and the checks that would
-keep it read-only. It exits with 1 when it finds a problem. Both read a copy of the database in a temporary folder.
+keep it read-only. It exits with 1 when it finds a problem. With `--json`
+the same report is an object: `library` and `writing` with their lines by
+name (`writing.state` says why the library cannot be written), `problems` as
+a list, and `writable`. Both read a copy of the database in a temporary folder.
+
+`skill` prints the skill that tells a coding agent how to use `cousoir-cli`;
+`skill install` installs it (see [On Omarchy](#on-omarchy)).
 
 `apply` saves the edits of a JSON file as the application saves them, with
 the same checks unless `--force` skips them, all but Calibre's lock, which
@@ -1269,7 +1351,10 @@ neither in the library nor on the Kobo.
 | Enter, Menu, Shift+F10 | A finding's actions, in the check |
 | Ctrl+Shift+C | Copy the book's highlights as Markdown, in Highlights |
 | Ctrl+U | Show the book's highlights as Markdown, or as a page again, in Highlights |
+| Ctrl+Z | Undo the last change to several books, or every change to the open book, asked first; a field's own typing while editing it |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
+| ? | Show or hide every shortcut of the window, the reader's in the reader |
+| Q, Ctrl+Q | Quit, asked first while books are being converted, sent or added |
 
 ## Requirements
 
@@ -1306,7 +1391,8 @@ allow.
 
 `make build`, `make run`, `make test` and `make install` (under `~/.local`)
 are available as shortcuts. They pick the number the same way, and
-`make JOBS=4` sets it.
+`make JOBS=4` sets it. `make package` and `make package-install` build and
+install an Arch package of the working tree (see [On Omarchy](#on-omarchy)).
 
 ## Testing
 
@@ -1462,6 +1548,13 @@ The tests check the port against Calibre itself:
   book of the fixture to KEPUB; and Cousoir's own KEPUB, AZW3 and EPUB.
   `book_library_tests` and the UI tests drive conversions with
   `tests/data/fake-calibre-debug` standing in for Calibre, and without it.
+- `omarchy_tests` follows a language file as Omarchy writes it (a first
+  pick, a change, a regional catalog over its language's, plural forms, the
+  system's language away from Omarchy, a window mirrored only for a language
+  Cousoir speaks), checks that every catalog shipped keeps the placeholders
+  of its English, and follows the rounding a fake `hyprctl` answers.
+  `i18n_catalogs` (`tools/i18n.py`) checks that English has the plural forms
+  of every counted string.
 - `kobo_tests` reads fake Kobos: the model from a fake `/sys`, the books from
   their database and `metadata.calibre`, their reading and notes, the log
   kept of them, Calibre's matching with the library,
@@ -1618,5 +1711,6 @@ GPL-3.0-only, as Cousoir holds code ported from Calibre, which is GPL v3; see
 files taken from kbextract, JolieBulle and omadji (`Theme.qml`,
 `omarchy_theme.*`, `system_appearance.*`, `AppearanceSettingsPage.qml`,
 `SettingsWindow.qml` and the shared controls) also keep their MIT notice, in
-`LICENSES/MIT.txt`, and the icons adapted from Lucide their ISC notice, in
+`LICENSES/MIT.txt`, as does what follows Omarchy's own apps (`translator.*`,
+`portal_file_chooser.*`, the window rounding of `omarchy_theme.*`), and the icons adapted from Lucide their ISC notice, in
 `LICENSES/ISC-lucide.txt`.

@@ -83,7 +83,8 @@ QList<qint64> sortKey(const Hit &hit)
 QString renderTimestamp(const QString &timestamp)
 {
     const QDateTime date = QDateTime::fromString(timestamp, Qt::ISODateWithMs).toLocalTime();
-    const QLocale locale = QLocale::system();
+    // The interface's locale, which follows its language.
+    const QLocale locale;
     return locale.toString(date, locale.dateTimeFormat(QLocale::ShortFormat));
 }
 

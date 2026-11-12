@@ -131,6 +131,7 @@ Item {
             Accessible.selected: selected
 
             Rectangle {
+                radius: Theme.radius
                 anchors.fill: parent
                 anchors.margins: Math.round(Theme.gutter / 2)
                 color: cell.selected ? Theme.selected : cellMouse.containsMouse ? Theme.hover : "transparent"

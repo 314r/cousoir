@@ -45,6 +45,8 @@
 #include "book_reader.h"
 #endif
 #include "omarchy_theme.h"
+#include "portal_file_chooser.h"
+#include "test_translator.h"
 #include "system_appearance.h"
 
 // Cousoir's interface, its QML compiled as Cousoir runs it.
@@ -169,7 +171,9 @@ QString themeStateRoot;
 class IsolatedTheme : public OmarchyTheme
 {
 public:
-    explicit IsolatedTheme(QObject *parent = nullptr) : OmarchyTheme(themeStateRoot, parent) {}
+    // Square corners, or the rounding a hyprctl of COUSOIR_HYPRCTL's answers.
+    explicit IsolatedTheme(QObject *parent = nullptr)
+        : OmarchyTheme(themeStateRoot, parent, qEnvironmentVariable("COUSOIR_HYPRCTL")) {}
 };
 
 // Waits for the window to be polished and draws a frame.
@@ -182,6 +186,7 @@ void drawn(QQuickWindow *window)
 void registerTypes()
 {
     qmlRegisterType<IsolatedTheme>("Cousoir", 1, 0, "OmarchyTheme");
+    qmlRegisterType<PortalFileChooser>("Cousoir", 1, 0, "PortalFileChooser");
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
@@ -543,9 +548,11 @@ int main(int argc, char *argv[])
         parser.showHelp(2);
     const QString path = QDir(parser.positionalArguments().constFirst()).absolutePath();
 
-    // An Omarchy theme of COUSOIR_OMARCHY_STATE's, else none.
+    // An Omarchy theme of COUSOIR_OMARCHY_STATE's, else none, and the
+    // language of COUSOIR_LANGUAGE, else English.
     QTemporaryDir state;
     themeStateRoot = qEnvironmentVariable("COUSOIR_OMARCHY_STATE", state.path());
+    installTranslator(state.path(), qEnvironmentVariable("COUSOIR_LANGUAGE", QStringLiteral("en")));
     registerTypes();
     if (parser.isSet(QStringLiteral("screenshot"))) {
         Shot shot;

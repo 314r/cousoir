@@ -2,6 +2,7 @@
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlExtensionPlugin>
+#include <QQuickWindow>
 
 #include "book_library.h"
 #include "concurrency_guard.h"
@@ -13,7 +14,9 @@
 #include "highlight_sync.h"
 #include "cover_cache.h"
 #include "omarchy_theme.h"
+#include "portal_file_chooser.h"
 #include "system_appearance.h"
+#include "translator.h"
 
 #ifdef COUSOIR_READER
 #include "book_reader.h"
@@ -29,6 +32,11 @@ int main(int argc, char *argv[])
     BookReader::initialize();
 #endif
     QGuiApplication app(argc, argv);
+    // Omarchy can make its windows see-through (Appearance > Windows > Window
+    // Opacity), which a window drawn without an alpha channel cannot be.
+    // Before any window is made.
+    if (OmarchyTheme::present())
+        QQuickWindow::setDefaultAlphaBuffer(true);
 
     app.setOrganizationName(QStringLiteral("cousoir"));
     app.setApplicationName(QStringLiteral("cousoir"));
@@ -50,9 +58,21 @@ int main(int argc, char *argv[])
     qmlRegisterType<BookReader>("Cousoir", 1, 0, "BookReader");
 #endif
     qmlRegisterType<OmarchyTheme>("Cousoir", 1, 0, "OmarchyTheme");
+    qmlRegisterType<PortalFileChooser>("Cousoir", 1, 0, "PortalFileChooser");
     qmlRegisterType<SystemAppearance>("Cousoir", 1, 0, "SystemAppearance");
 
+    // Installed before anything is translated; every qsTr() is read again
+    // when Omarchy's language changes.
+    Translator translator;
+    app.installTranslator(&translator);
+
     QQmlApplicationEngine engine;
+    QObject::connect(&translator, &Translator::changed, &engine, [&engine] {
+        engine.retranslate();
+        // What the library worded or formatted is read again.
+        for (QObject *window : engine.rootObjects())
+            QMetaObject::invokeMethod(window, "relocalize");
+    });
     engine.addImageProvider(QStringLiteral("covers"), new CoverCache);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);

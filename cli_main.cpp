@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QSaveFile>
 #include <QStorageInfo>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -128,13 +129,36 @@ QString ago(qint64 seconds)
     return QStringLiteral("%1 days ago").arg(seconds / 86400);
 }
 
-void row(const QString &label, const QString &value)
+// A part of doctor's report: its title and its lines, a label and a value.
+struct ReportSection
 {
-    out() << QStringLiteral("  %1 %2").arg(label.leftJustified(14), value) << Qt::endl;
+    QString title;
+    QList<std::pair<QString, QString>> rows;
+};
+
+// "Last change" as a JSON key: "lastChange".
+QString jsonKey(const QString &label)
+{
+    QString key;
+    bool upper = false;
+    for (const QChar c : label) {
+        if (c.isSpace()) {
+            upper = true;
+            continue;
+        }
+        key += key.isEmpty() ? c.toLower() : upper ? c.toUpper() : c;
+        upper = false;
+    }
+    return key;
 }
 
-int doctor(const QString &libraryPath)
+int doctor(const QString &libraryPath, bool json)
 {
+    QList<ReportSection> sections;
+    const auto section = [&sections](const QString &title) { sections.append({ title, {} }); };
+    const auto row = [&sections](const QString &label, const QString &value) {
+        sections.last().rows.append({ label, value });
+    };
     LibraryData data;
     if (!load(libraryPath, &data))
         return 2;
@@ -268,7 +292,7 @@ int doctor(const QString &libraryPath)
                                                      QLocale::DataSizeTraditionalFormat)));
     }
 
-    out() << QStringLiteral("Library") << Qt::endl;
+    section(QStringLiteral("Library"));
     row(QStringLiteral("Folder"), QDir::toNativeSeparators(data.libraryPath));
     row(QStringLiteral("Library id"), data.uuid);
     row(QStringLiteral("Database"), QStringLiteral("schema %1, %2 structure (%3)")
@@ -280,16 +304,10 @@ int doctor(const QString &libraryPath)
                                     .arg(c.formattedDataSize(bytes, 1, QLocale::DataSizeTraditionalFormat))
                                     .arg(covers));
 
-    out() << Qt::endl << QStringLiteral("Problems") << Qt::endl;
-    if (problems.isEmpty())
-        out() << QStringLiteral("  None") << Qt::endl;
-    for (const QString &problem : std::as_const(problems))
-        out() << QStringLiteral("  ") << problem << Qt::endl;
-
     const QString database = library.filePath(QStringLiteral("metadata.db"));
     const FileIdentity identity = CalibreDb::identify(database);
     const QDateTime changed = QDateTime::fromMSecsSinceEpoch(identity.modifiedMs);
-    out() << Qt::endl << QStringLiteral("Writing") << Qt::endl;
+    section(QStringLiteral("Writing"));
     row(QStringLiteral("Calibre"), ConcurrencyGuard::calibreRunningHere()
                                        ? QStringLiteral("open on this computer") : QStringLiteral("not running here"));
     row(QStringLiteral("Journal"), QFileInfo::exists(database + QStringLiteral("-journal")) ? QStringLiteral("present")
@@ -313,6 +331,36 @@ int doctor(const QString &libraryPath)
     row(QStringLiteral("Last change"), QStringLiteral("%1 (%2)").arg(changed.toString(QStringLiteral("yyyy-MM-dd HH:mm")),
                                                                      ago(changed.secsTo(QDateTime::currentDateTime()))));
     row(QStringLiteral("State"), guard.writable() ? QStringLiteral("Could be written") : guard.readOnlyReason());
+
+    if (json) {
+        // The same report for a program: each part by its title, the
+        // problems as a list, and whether the library could be written now.
+        QJsonObject report;
+        for (const ReportSection &part : std::as_const(sections)) {
+            QJsonObject rows;
+            for (const auto &[label, value] : part.rows)
+                rows.insert(jsonKey(label), value);
+            report.insert(jsonKey(part.title), rows);
+        }
+        report.insert(QStringLiteral("problems"), QJsonArray::fromStringList(problems));
+        report.insert(QStringLiteral("writable"), guard.writable());
+        const QByteArray text = QJsonDocument(report).toJson(QJsonDocument::Indented);
+        std::fwrite(text.constData(), 1, size_t(text.size()), stdout);
+        return problems.isEmpty() ? 0 : 1;
+    }
+    const auto print = [](const ReportSection &part) {
+        out() << part.title << Qt::endl;
+        for (const auto &[label, value] : part.rows)
+            out() << QStringLiteral("  %1 %2").arg(label.leftJustified(14), value) << Qt::endl;
+    };
+    print(sections.at(0));
+    out() << Qt::endl << QStringLiteral("Problems") << Qt::endl;
+    if (problems.isEmpty())
+        out() << QStringLiteral("  None") << Qt::endl;
+    for (const QString &problem : std::as_const(problems))
+        out() << QStringLiteral("  ") << problem << Qt::endl;
+    out() << Qt::endl;
+    print(sections.at(1));
     return problems.isEmpty() ? 0 : 1;
 }
 
@@ -1181,6 +1229,53 @@ int read(const QStringList &paths)
 
 } // namespace
 
+// The skill that tells a coding agent how to drive cousoir-cli, printed, or
+// installed as Omarchy's apps install theirs (Hype, MIT, David Heinemeier
+// Hansson): one copy in ~/.agents/skills, which Codex reads, linked into
+// Claude Code's skills.
+int skill(const QStringList &arguments)
+{
+    QFile bundled(QStringLiteral(":/cousoir/skill.md"));
+    if (!bundled.open(QIODevice::ReadOnly)) {
+        err() << QStringLiteral("The skill is missing from this build.") << Qt::endl;
+        return 1;
+    }
+    const QByteArray text = bundled.readAll();
+    if (arguments.size() == 1) {
+        std::fwrite(text.constData(), 1, size_t(text.size()), stdout);
+        return 0;
+    }
+    if (arguments.size() != 2 || arguments.at(1) != QLatin1String("install")) {
+        err() << QStringLiteral("Use “cousoir-cli skill” to print the skill, or “cousoir-cli skill install”.") << Qt::endl;
+        return 2;
+    }
+    const QDir home = QDir::home();
+    const QString folder = home.filePath(QStringLiteral(".agents/skills/cousoir"));
+    QSaveFile file(folder + QStringLiteral("/SKILL.md"));
+    if (!QDir().mkpath(folder) || !file.open(QIODevice::WriteOnly) || file.write(text) < 0 || !file.commit()) {
+        err() << QStringLiteral("Could not write %1").arg(file.fileName()) << Qt::endl;
+        return 1;
+    }
+    out() << QStringLiteral("Installed %1").arg(file.fileName()) << Qt::endl;
+    if (!home.exists(QStringLiteral(".claude")))
+        return 0;
+    const QString link = home.filePath(QStringLiteral(".claude/skills/cousoir"));
+    const QFileInfo existing(link);
+    if (existing.isSymLink()) {
+        QFile::remove(link);
+    } else if (existing.exists()) {
+        err() << QStringLiteral("%1 exists and is not a link; leaving it alone.").arg(link) << Qt::endl;
+        return 1;
+    }
+    if (!home.mkpath(QStringLiteral(".claude/skills"))
+        || !QFile::link(QStringLiteral("../../.agents/skills/cousoir"), link)) {
+        err() << QStringLiteral("Could not link %1").arg(link) << Qt::endl;
+        return 1;
+    }
+    out() << QStringLiteral("Linked %1").arg(link) << Qt::endl;
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
@@ -1214,7 +1309,10 @@ int main(int argc, char *argv[])
         "          reads one, without Calibre: epub BOOK.azw3 BOOK.epub\n"
         "  kobo-highlights  Print the highlights and notes of a Kobo, by the folder it\n"
         "          is mounted on, or of a KoboReader.sqlite file, with the library's\n"
-        "          book each is.\n\n"
+        "          book each is.\n"
+        "  skill   Print the skill that tells a coding agent how to use cousoir-cli;\n"
+        "          skill install copies it to ~/.agents/skills/cousoir and links it\n"
+        "          into ~/.claude/skills.\n\n"
         "Cousoir follows Calibre's rules, ported from the code of Calibre, by Kovid\n"
         "Goyal and the Calibre contributors, https://calibre-ebook.com. GPL v3."));
     parser.addHelpOption();
@@ -1233,9 +1331,11 @@ int main(int argc, char *argv[])
     parser.addOption(limitOption);
     const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
     parser.addOption(coversOption);
+    const QCommandLineOption jsonOption(QStringLiteral("json"), QStringLiteral("doctor: the report as JSON."));
+    parser.addOption(jsonOption);
     parser.addPositionalArgument(QStringLiteral("command"),
                                  QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify, "
-                                                "azw3, epub or kobo-highlights"));
+                                                "azw3, epub, kobo-highlights or skill"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1243,6 +1343,8 @@ int main(int argc, char *argv[])
     const QStringList arguments = parser.positionalArguments();
     if (arguments.value(0) == QLatin1String("read") && arguments.size() > 1)
         return read(arguments.mid(1));
+    if (arguments.value(0) == QLatin1String("skill"))
+        return skill(arguments);
     if (arguments.value(0) == QLatin1String("search")) {
         if (arguments.size() < 2) {
             err() << QStringLiteral("Error: You must specify the search expression") << Qt::endl;
@@ -1295,7 +1397,7 @@ int main(int argc, char *argv[])
     if (arguments.first() == QLatin1String("list"))
         return list(libraryPath);
     if (arguments.first() == QLatin1String("doctor"))
-        return doctor(libraryPath);
+        return doctor(libraryPath, parser.isSet(jsonOption));
     if (arguments.first() == QLatin1String("apply"))
         return apply(libraryPath, arguments.at(1), parser.isSet(forceOption));
     if (arguments.first() == QLatin1String("device"))

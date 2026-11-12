@@ -115,7 +115,7 @@ ThemedWindow {
 
                 Layout.fillWidth: true
                 implicitHeight: Theme.toolbarHeight
-                color: Theme.canvas
+                color: Theme.surface
 
                 RowLayout {
                     anchors.fill: parent

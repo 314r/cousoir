@@ -214,6 +214,16 @@ MIT notice too.
 The look follows [Omarchy](https://omarchy.org)'s style, and the Omarchy theme
 reads the colors of the current Omarchy theme.
 
+How Cousoir follows Omarchy's language, its window rounding and its file
+chooser comes from Omarchy's own apps,
+[Omacut](https://github.com/omacom-io/omacut),
+[Monologue](https://github.com/omacom/monologue) and
+[Hype](https://github.com/omacom/hype), by David Heinemeier Hansson, MIT
+license: `translator.*` from their `Translator`; the rounding asked of
+`hyprctl` in `omarchy_theme.cpp` from their `Theme`; `portal_file_chooser.*`
+from Omacut's `portalfilepicker.cpp`; and `cousoir-cli skill install` from
+Hype's `cli.cpp`. They keep the MIT notice too.
+
 ## Lucide
 
 The icons `assets/icons/theme-dark.svg` and `assets/icons/theme-light.svg` are

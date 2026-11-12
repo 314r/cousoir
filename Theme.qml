@@ -96,6 +96,32 @@ QtObject {
     readonly property color controlBorder: withAlpha(text, 0.4)
     readonly property color textSelection: withAlpha(text, 0.35)
 
+    // Corners match the windows: Hyprland's rounding, 0 on Omarchy's default,
+    // for every panel, dialog, field and button; small marks stop at 4, and
+    // what sits inside a border takes its inner curve.
+    property int windowRounding: 0
+    readonly property int radius: Math.max(0, windowRounding)
+    readonly property int smallRadius: Math.min(4, radius)
+    readonly property int innerRadius: Math.max(0, radius - 1)
+
+    // See-through windows, as Omarchy makes them for the windows that opt in
+    // (Appearance > Windows > Window Opacity), with the Omarchy theme only.
+    // As for Omarchy's terminals, only the background lets the desktop
+    // through, which Hyprland blurs when glassy; the text stays solid.
+    property string windowOpacityMode: "opaque"
+    readonly property bool seeThrough: omarchyMode && windowOpacityMode !== "opaque"
+    // The window's own background, the only see-through one.
+    function windowColor(active: bool): color {
+        if (!seeThrough)
+            return canvas
+        return withAlpha(canvas, windowOpacityMode === "glassy" ? 0.65 : active ? 0.985 : 0.96)
+    }
+    // A pane, a page or a bar as large as its place in the window: nothing
+    // of its own over a see-through window, which would make it less so.
+    // Popups, menus and dialogs keep the canvas: what is under them shows
+    // through no blur.
+    readonly property color surface: seeThrough ? "transparent" : canvas
+
     readonly property string uiFont: systemMonoFont
     readonly property string documentFont: systemDocumentFont
     readonly property int effectiveTextScalePercent: Math.max(80, Math.min(200, textScalePercent))

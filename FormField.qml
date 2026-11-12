@@ -36,6 +36,7 @@ TextField {
     }
 
     background: Rectangle {
+        radius: Theme.radius
         color: Theme.fill
         border.width: 1
         border.color: field.invalid ? Theme.danger

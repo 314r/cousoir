@@ -121,7 +121,7 @@ Item {
 
             Layout.fillWidth: true
             implicitHeight: Theme.rowHeight
-            color: Theme.canvas
+            color: Theme.surface
             visible: list.count > 0
 
             Divider {
@@ -157,6 +157,7 @@ Item {
                         Accessible.name: modelData.title
 
                         Rectangle {
+                            radius: Theme.smallRadius
                             anchors.fill: parent
                             anchors.leftMargin: -Math.round(Theme.columnGap / 2)
                             anchors.rightMargin: -Math.round(Theme.columnGap / 2)

@@ -32,14 +32,10 @@ Rectangle {
     signal bookRequested(int bookId)
     signal failed(string message)
 
-    color: Theme.canvas
+    color: Theme.surface
 
     function focusList() {
         checkList.forceActiveFocus()
-    }
-
-    function plural(count, one, many) {
-        return (count === 1 ? one : many).arg(count)
     }
 
     function report(error) {
@@ -118,9 +114,8 @@ Rectangle {
             : (book.gains.length === 1 ? qsTr("The %1 file it lacks is copied to it first.").arg(book.gains[0])
                                        : qsTr("The %1 files it lacks are copied to it first.").arg(book.gains.join(", ")))
               + " "
-        keepDialog.message = copied + plural(page.library.trashExpiryDays,
-            qsTr("Restore from the Trash to undo; Calibre deletes what is there after %1 day."),
-            qsTr("Restore from the Trash to undo; Calibre deletes what is there after %1 days."))
+        keepDialog.message = copied + qsTr("Restore from the Trash to undo; Calibre deletes what is there after %n days.", "",
+                 page.library.trashExpiryDays)
         keepDialog.ask()
     }
 
@@ -443,7 +438,7 @@ Rectangle {
                             }
 
                             Label {
-                                text: page.plural(nameRow.modelData.count, qsTr("%1 book"), qsTr("%1 books"))
+                                text: qsTr("%n books", "", nameRow.modelData.count)
                                 color: Theme.textMuted
                             }
 

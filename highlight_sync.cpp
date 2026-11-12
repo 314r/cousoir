@@ -339,13 +339,9 @@ void HighlightSync::finishChange(int id, bool saved, const QString &error)
     if (saved) {
         markSynced(waiting.device, waiting.digest);
         const QString message = waiting.placed > 0
-            ? (waiting.placed == 1 ? tr("%1 highlight from %2 in the library") : tr("%1 highlights from %2 in the library"))
-                  .arg(waiting.placed)
-                  .arg(name)
+            ? tr("%n highlights from %1 in the library", nullptr, waiting.placed).arg(name)
             : waiting.places > 0
-            ? (waiting.places == 1 ? tr("Where %2 stopped in %1 book, in the library") : tr("Where %2 stopped in %1 books, in the library"))
-                  .arg(waiting.places)
-                  .arg(name)
+            ? tr("Where %1 stopped in %n books, in the library", nullptr, waiting.places).arg(name)
             : tr("The highlights of %1 updated in the library").arg(name);
         setStatus(message);
         emit synced(message);

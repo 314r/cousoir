@@ -103,14 +103,17 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 🛡️ **Safe, shared or not.** Cousoir writes only when nothing else can:
   Calibre closed and, for a library in Dropbox, Syncthing, Nextcloud or on a
   network folder, no other computer editing.
-- 🎨 **Wears your Omarchy theme**, or follows your system's light or dark
-  mode.
-- ⌨️ **Keyboard-first.** Every action has a shortcut, the status bar shows
-  the ones that matter right now, and Ctrl+K finds any book, author, series,
-  tag, section or action by a few letters.
+- 🎨 **At home on Omarchy.** Cousoir wears your Omarchy theme, turns glassy
+  when your windows are, rounds its corners as they are, speaks the language picked under Setup >
+  Language and asks for files with Omarchy's own file chooser, all followed
+  live. Elsewhere it follows your system's light or dark mode and language.
+- ⌨️ **Keyboard-first.** Every action has a shortcut, `?` lists them all,
+  the status bar shows the ones that matter right now, and Ctrl+K finds any
+  book, author, series, tag, section or action by a few letters.
 - 🧰 **A command line, too.** `cousoir-cli` lists and searches a library
   exactly as `calibredb list` and `calibredb search` do, checks its health,
-  applies changes from a JSON file, and makes KEPUBs and AZW3s.
+  applies changes from a JSON file, and makes KEPUBs and AZW3s. `cousoir-cli
+  skill install` teaches your coding agent to use it.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -140,7 +143,9 @@ has the details.
 > those.
 
 Cousoir installs under `~/.local` and appears in your app launcher. Set
-`PREFIX` to install it somewhere else.
+`PREFIX` to install it somewhere else. `make package-install` builds an Arch
+package instead (`pkgbuild/PKGBUILD`) and installs it with pacman, as
+Omarchy's own apps are installed.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -186,7 +191,10 @@ Cousoir installs under `~/.local` and appears in your app launcher. Set
 | F5, Ctrl+R | Reload the library, or read the reader again |
 | Ctrl+I | Show or hide the book details pane |
 | Ctrl+V | Paste the clipboard's image as the cover |
+| Ctrl+Z | Undo the last change to several books, or every change to the open book |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
+| ? | Show every shortcut |
+| Q, Ctrl+Q | Quit |
 
 </details>
 
@@ -243,13 +251,32 @@ The few places where Cousoir departs from Calibre on purpose are listed in
 
 ## 🎨 Made for Omarchy
 
-Cousoir follows the Omarchy style: your monospace font, square corners,
-hairline dividers, and one accent color per screen. With the Omarchy theme it
-reads its colors from `~/.local/state/omarchy/current/theme/colors.toml` and
-repaints a moment after you switch themes, with no restart.
+Cousoir follows the Omarchy style and the conventions of Omarchy's own apps:
+
+- **Your theme.** Your monospace font, hairline dividers and one accent color
+  per screen, the colors read from
+  `~/.local/state/omarchy/current/theme/colors.toml`. Switch themes and
+  Cousoir repaints a moment later, with no restart.
+- **Your window opacity.** With the Omarchy theme, Cousoir's window is as
+  see-through as Omarchy makes its terminals (Appearance > Windows > Window
+  Opacity): glassy, its background lets the blurred desktop through while
+  the text stays solid.
+- **Your corners.** Buttons, fields, menus and dialogs take the rounding of
+  your Hyprland windows: square on Omarchy's default, round when your theme
+  or your settings round the windows.
+- **Your language.** The one picked under Setup > Language, followed live,
+  with its dates and numbers. Cousoir speaks English and French so far; a
+  language is one JSON file in `i18n/`.
+- **Your file chooser.** Files and folders are asked for through the
+  desktop's portal, which shows Omarchy's chooser.
+- **Your keyboard.** `?` shows every shortcut, `Q` quits, and asks first
+  while a conversion or a transfer is still running.
+- **Your agents.** `cousoir-cli` needs no display, answers in JSON and
+  installs its own skill for coding agents with `cousoir-cli skill install`.
 
 Not on Omarchy? Pick the system, light or dark theme in Settings, and the text
-size that suits you.
+size that suits you; Cousoir then follows your system's language, and shows
+Qt's file dialog where there is no portal.
 
 <div align="right"><a href="#readme-top">↑ back to top</a></div>
 
@@ -320,8 +347,9 @@ for every result.
 Cousoir is free software, released under the
 [GNU General Public License, version 3](LICENSE), because it contains code
 ported from Calibre, which is GPL v3. The theme files that come from
-kbextract, JolieBulle and omadji, and the Kobo highlights code that comes
-from kbextract2, also keep their [MIT notice](LICENSES/MIT.txt), and the
+kbextract, JolieBulle and omadji, the Kobo highlights code that comes from
+kbextract2, and what follows Omarchy's own apps (the language, the window
+rounding, the file chooser) also keep their [MIT notice](LICENSES/MIT.txt), and the
 icons adapted from Lucide their [ISC notice](LICENSES/ISC-lucide.txt).
 
 ---

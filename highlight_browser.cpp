@@ -226,9 +226,9 @@ void HighlightBrowser::refresh()
             { QStringLiteral("bookId"), group.bookId },
             { QStringLiteral("title"), group.title },
             { QStringLiteral("authors"), group.authors.join(QLatin1String(" & ")) },
-            { QStringLiteral("counts"), (highlights == 1 ? tr("%1 highlight") : tr("%1 highlights")).arg(highlights)
+            { QStringLiteral("counts"), tr("%n highlights", nullptr, highlights)
                                             + QStringLiteral(" · ")
-                                            + (notes == 1 ? tr("%1 note") : tr("%1 notes")).arg(notes) },
+                                            + tr("%n notes", nullptr, notes) },
             { QStringLiteral("cover"), group.bookId > 0 ? m_library->coverUrl(group.bookId) : QString() },
             { QStringLiteral("monogram"), monogramOf(group.title) },
             { QStringLiteral("tint"), tintOf(group.title) },

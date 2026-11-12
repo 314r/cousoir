@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Controls.impl
-import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtCore
 
@@ -38,6 +37,9 @@ ThemedWindow {
     property bool noticeIsError: true
     // Books being converted to be sent: { bookId, root }.
     property var pendingSends: []
+    // What quitting would cut short, and whether quitting anyway was chosen.
+    readonly property bool working: conversions.busy || devices.busy || library.importing
+    property bool quitConfirmed: false
 
     visible: true
     width: 1240
@@ -52,6 +54,8 @@ ThemedWindow {
     function applyOmarchyTheme() {
         Theme.omarchyPalette = omarchyTheme.palette
         Theme.omarchyAvailable = omarchyTheme.available
+        Theme.windowRounding = omarchyTheme.rounding
+        Theme.windowOpacityMode = omarchyTheme.windowOpacity
     }
 
     function availableThemeModes() {
@@ -358,6 +362,73 @@ ThemedWindow {
             session.reload()
     }
 
+    // The interface's language changed: its texts follow by themselves, the
+    // dates, sizes and messages the library and the readers made are made
+    // again.
+    function relocalize() {
+        session.reload()
+        devices.refresh()
+    }
+
+    // Q or Ctrl+Q: asks first while something is still being made.
+    function quit() {
+        if (working && !quitConfirmed) {
+            quitDialog.ask()
+            return
+        }
+        bookPage.finishEditing()
+        Qt.quit()
+    }
+
+    // "?": every shortcut of the window.
+    function shortcutSections() {
+        const row = (keys, action) => ({ keys: keys, action: action })
+        return [
+            { title: qsTr("Moving around"), rows: [
+                row("↑ ↓ ← →", qsTr("Move in the list or the covers")),
+                row("Page Up, Page Down", qsTr("Move by a page")),
+                row("Home, End", qsTr("Go to the first or the last")),
+                row("Enter, Space", qsTr("Open the book, or the section's item")),
+                row("Esc, Alt+←", qsTr("Go back up one level")),
+                row("Ctrl+F", qsTr("Search")),
+                row("Ctrl+K", qsTr("Find a book, an author, a section or an action")),
+                row("Ctrl+G", qsTr("Show the books as covers or as a table")),
+                row("Ctrl+I", qsTr("Show or hide the details pane")),
+                row("F5, Ctrl+R", qsTr("Reload the library, or read the reader again")),
+                row("Ctrl++, Ctrl+-, Ctrl+0", qsTr("Text size")),
+                row("?", qsTr("Show or hide these shortcuts")),
+                row("Q, Ctrl+Q", qsTr("Quit"))
+            ] },
+            { title: qsTr("Books"), rows: [
+                row("Ctrl+N", qsTr("Add books")),
+                row("Ctrl+O", qsTr("Open in your ebook reader")),
+                row("Ctrl+Shift+O", qsTr("Read in Cousoir")),
+                row("Ctrl+D", qsTr("Send to the reader plugged in")),
+                row("Ctrl+Shift+K", qsTr("Convert to KEPUB")),
+                row("Ctrl+Shift+A", qsTr("Convert to AZW3")),
+                row("Del", qsTr("Move to the trash, or remove from the reader")),
+                row("Menu, Shift+F10", qsTr("The book's actions")),
+                row(qsTr("Ctrl+click, Shift+click"), qsTr("Select several books")),
+                row("Shift+↑ ↓", qsTr("Select more books")),
+                row("Ctrl+A", qsTr("Select every book listed"))
+            ] },
+            { title: qsTr("Editing"), rows: [
+                row("Enter", qsTr("Save the field")),
+                row("Tab", qsTr("Save the field and go to the next")),
+                row("Esc", qsTr("Put the field back as it was")),
+                row("Ctrl+Enter", qsTr("Save the description")),
+                row("Ctrl+V", qsTr("Paste the clipboard's image as the cover")),
+                row("Ctrl+Z", qsTr("Undo the last change to several books, or every change to the open book"))
+            ] },
+            { title: qsTr("Elsewhere"), rows: [
+                row("Enter", qsTr("Restore the selected entry, in the trash")),
+                row("Enter, Menu", qsTr("A finding's actions, in the check")),
+                row("Ctrl+Shift+C", qsTr("Copy the book's highlights as Markdown")),
+                row("Ctrl+U", qsTr("Show the highlights as Markdown, or as a page"))
+            ] }
+        ]
+    }
+
     function addBooks(urls) {
         const error = library.addBooks(urls)
         if (error)
@@ -470,6 +541,7 @@ ThemedWindow {
             add("vl:" + name, qsTr("Virtual library: %1").arg(name), "", "layers", name !== library.virtualLibrary)
         add("reload", qsTr("Reload the library"), "Ctrl+R", "refresh", true)
         add("settings", qsTr("Settings"), "", "settings", true)
+        add("shortcuts", qsTr("Keyboard shortcuts"), "?", "info", true)
         for (const mode of availableThemeModes()) {
             const titles = { system: qsTr("System theme"), light: qsTr("Light theme"), dark: qsTr("Dark theme"),
                              omarchy: qsTr("Omarchy theme") }
@@ -538,6 +610,8 @@ ThemedWindow {
             reload()
         } else if (hit.key === "settings") {
             openSettings("")
+        } else if (hit.key === "shortcuts") {
+            shortcutsOverlay.open()
         } else if (hit.key.startsWith("theme:")) {
             setThemeMode(hit.key.slice(6))
         } else if (hit.key === "backups") {
@@ -582,19 +656,23 @@ ThemedWindow {
         }
     }
 
-    function plural(count, one, many) {
-        return (count === 1 ? one : many).arg(count)
-    }
-
-    // "%1 author" and "%1 authors" for the browse sections.
-    function facetNouns(key) {
-        return ({
-            "authors": [qsTr("%1 author"), qsTr("%1 authors"), qsTr("%1 of %2 authors")],
-            "series": [qsTr("%1 series"), qsTr("%1 series"), qsTr("%1 of %2 series")],
-            "tags": [qsTr("%1 tag"), qsTr("%1 tags"), qsTr("%1 of %2 tags")],
-            "languages": [qsTr("%1 language"), qsTr("%1 languages"), qsTr("%1 of %2 languages")],
-            "publishers": [qsTr("%1 publisher"), qsTr("%1 publishers"), qsTr("%1 of %2 publishers")]
-        })[key] || []
+    // "3 authors", or "2 of 3 authors" while a search narrows a browse
+    // section; nothing for another section.
+    function facetCountText(key, shown, total) {
+        const narrowed = shown !== total
+        switch (key) {
+        case "authors":
+            return narrowed ? qsTr("%1 of %2 authors").arg(shown).arg(total) : qsTr("%n authors", "", total)
+        case "series":
+            return narrowed ? qsTr("%1 of %2 series").arg(shown).arg(total) : qsTr("%n series", "", total)
+        case "tags":
+            return narrowed ? qsTr("%1 of %2 tags").arg(shown).arg(total) : qsTr("%n tags", "", total)
+        case "languages":
+            return narrowed ? qsTr("%1 of %2 languages").arg(shown).arg(total) : qsTr("%n languages", "", total)
+        case "publishers":
+            return narrowed ? qsTr("%1 of %2 publishers").arg(shown).arg(total) : qsTr("%n publishers", "", total)
+        }
+        return ""
     }
 
     function statusText() {
@@ -603,29 +681,26 @@ ThemedWindow {
         if (session.bookOpen)
             return (book.formats || []).map(format => format.format).join(" · ")
         if (section === "trash")
-            return plural(library.trashEntries.length, qsTr("%1 item"), qsTr("%1 items"))
+            return qsTr("%n items", "", library.trashEntries.length)
         if (section === "highlights")
-            return plural(highlightsPage.browser.count, qsTr("%1 highlight"), qsTr("%1 highlights"))
+            return qsTr("%n highlights", "", highlightsPage.browser.count)
         if (section === "check")
             return library.checking ? qsTr("Checking…")
-                : plural(library.check.count || 0, qsTr("%1 thing to check"), qsTr("%1 things to check"))
+                : qsTr("%n things to check", "", library.check.count || 0)
         if (deviceSection)
-            return plural(devices.rows.length, qsTr("%1 book"), qsTr("%1 books")) + " · "
+            return qsTr("%n books", "", devices.rows.length) + " · "
                 + qsTr("%1 free").arg(devices.current.free || "")
         // From the section itself rather than facetShown, which may not have
         // followed a section change yet.
-        const nouns = facetNouns(section)
-        if (nouns.length > 0 && !session.filterOpen) {
-            const shown = library.facetRows.length
-            const total = library.facetCount
-            return shown !== total ? nouns[2].arg(shown).arg(total) : plural(total, nouns[0], nouns[1])
-        }
+        const facets = session.filterOpen ? "" : facetCountText(section, library.facetRows.length, library.facetCount)
+        if (facets)
+            return facets
         const shown = library.books.count
         const total = library.scopeCount
         const selected = library.books.selectedCount > 1 ? qsTr("%1 selected · ").arg(library.books.selectedCount) : ""
         if (shown !== total)
             return selected + qsTr("%1 of %2 books").arg(shown).arg(total)
-        return selected + plural(total, qsTr("%1 book"), qsTr("%1 books"))
+        return selected + qsTr("%n books", "", total)
     }
 
     function hintText() {
@@ -729,7 +804,7 @@ ThemedWindow {
         }
 
         function onBooksAdded(bookIds) {
-            window.showNotice(window.plural(bookIds.length, qsTr("Added %1 book."), qsTr("Added %1 books.")), false)
+            window.showNotice(qsTr("Added %n books.", "", bookIds.length), false)
             if (window.booksShown)
                 booksPage.select(bookIds[0])
         }
@@ -741,8 +816,8 @@ ThemedWindow {
                                          : qsTr("%1 of these books are already in the library").arg(titles.length)
             duplicatesDialog.message = (one ? "" : titles.length > 4 ? qsTr("%1 and %2 more.").arg(shown).arg(titles.length - 4)
                                                                      : shown + ".")
-                + (total > titles.length ? (one ? "" : " ") + window.plural(total - titles.length,
-                    qsTr("The other book is added either way."), qsTr("The %1 other books are added either way.")) : "")
+                + (total > titles.length ? (one ? "" : " ")
+                    + qsTr("The %n other books are added either way.", "", total - titles.length) : "")
             duplicatesDialog.acceptText = one ? qsTr("Add it anyway") : qsTr("Add them anyway")
             duplicatesDialog.rejectText = one ? qsTr("Skip it") : qsTr("Skip them")
             duplicatesDialog.ask()
@@ -824,6 +899,8 @@ ThemedWindow {
         id: omarchyTheme
         active: Theme.mode === "omarchy" && available
         onPaletteChanged: window.applyOmarchyTheme()
+        onRoundingChanged: window.applyOmarchyTheme()
+        onWindowOpacityChanged: window.applyOmarchyTheme()
         onAvailableChanged: {
             window.applyOmarchyTheme()
             window.applyThemeMode()
@@ -1063,14 +1140,41 @@ ThemedWindow {
         onActivated: window.trashBooks(window.targetIds())
     }
 
-    FileDialog {
+    // A field being edited undoes its own typing; otherwise the last change
+    // to several books, or every change to the open book, asked first.
+    Shortcut {
+        sequences: [StandardKey.Undo]
+        enabled: (window.editingMany && window.library.bulkUndoCount > 0)
+            || (session.bookOpen && window.library.canRevert && !bookPage.editing)
+        onActivated: {
+            if (window.editingMany) {
+                window.library.undoBulkEdit()
+            } else {
+                bookPage.forceActiveFocus()
+                bookPage.confirmingRevert = true
+            }
+        }
+    }
+
+    Shortcut {
+        sequence: "?"
+        onActivated: shortcutsOverlay.toggle()
+    }
+
+    Shortcut {
+        sequences: ["Q", StandardKey.Quit]
+        onActivated: window.quit()
+    }
+
+    FilePicker {
         id: addBooksDialog
 
         title: qsTr("Add books")
-        fileMode: FileDialog.OpenFiles
+        mode: PortalFileChooser.OpenFiles
         nameFilters: [qsTr("Books (*.epub *.kepub *.azw3 *.azw *.mobi *.prc *.pdf *.fb2 *.cbz *.cbr *.djvu *.docx *.rtf *.txt)"),
                       qsTr("All files (*)")]
-        onAccepted: window.addBooks(selectedFiles)
+        onAccepted: function(files) { window.addBooks(files) }
+        onFailed: function(message) { window.showNotice(message) }
     }
 
     LibraryFolderDialog {
@@ -1078,6 +1182,27 @@ ThemedWindow {
 
         libraryPath: window.library.libraryPath
         onChosen: function(path) { librarySettings.path = path }
+        onFailed: function(message) { window.showNotice(message) }
+    }
+
+    ShortcutsOverlay {
+        id: shortcutsOverlay
+
+        sections: window.shortcutSections()
+    }
+
+    ConfirmDialog {
+        id: quitDialog
+        objectName: "quitDialog"
+
+        title: qsTr("Quit while Cousoir is still working?")
+        message: qsTr("The conversions, the books being sent and the files being added stop where they are.")
+        acceptText: qsTr("Quit")
+        acceptVariant: "danger"
+        onAccepted: {
+            window.quitConfirmed = true
+            window.quit()
+        }
     }
 
     ConfirmDialog {
@@ -1186,7 +1311,13 @@ ThemedWindow {
             detailsForced = false
     }
 
-    onClosing: {
+    onClosing: function(close) {
+        // Work under way is asked about first.
+        if (window.working && !window.quitConfirmed) {
+            close.accepted = false
+            quitDialog.ask()
+            return
+        }
         // A field being edited saves before the window goes.
         bookPage.finishEditing()
         settingsWindow.close()
@@ -1207,7 +1338,7 @@ ThemedWindow {
         readonly property bool balanced: 2 * sideWidth + 40 * Theme.captionCharWidth <= width
 
         implicitHeight: Theme.statusHeight
-        color: Theme.canvas
+        color: Theme.surface
 
         Divider {
             anchors.left: parent.left
@@ -1372,7 +1503,7 @@ ThemedWindow {
 
                 Layout.fillWidth: true
                 implicitHeight: Theme.toolbarHeight
-                color: Theme.canvas
+                color: Theme.surface
 
                 Divider {
                     anchors.left: parent.left

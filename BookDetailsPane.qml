@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import Cousoir
@@ -799,13 +798,14 @@ FocusScope {
         }
     }
 
-    FileDialog {
+    FilePicker {
         id: formatDialog
 
         title: qsTr("Add a file to the book")
         nameFilters: [qsTr("Books (*.epub *.kepub *.azw3 *.azw *.mobi *.prc *.pdf *.fb2 *.cbz *.cbr *.djvu *.docx *.rtf *.txt)"),
                       qsTr("All files (*)")]
-        onAccepted: pane.addFormat(selectedFile)
+        onAccepted: function(files) { pane.addFormat(files[0]) }
+        onFailed: function(message) { pane.failed(message) }
     }
 
     ConfirmDialog {

@@ -42,6 +42,7 @@ Button {
     ToolTip.text: tip
 
     background: Rectangle {
+        radius: Theme.radius
         color: control.down ? Theme.pressed
             : control.selected ? Theme.selected
             : control.hovered && control.enabled ? Theme.hover

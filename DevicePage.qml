@@ -42,7 +42,7 @@ Rectangle {
     // Remove from the reader, asked for in a row's menu or with Delete.
     signal removeRequested(string lpath, string title)
 
-    color: Theme.canvas
+    color: Theme.surface
 
     function focusList() {
         deviceTable.focusList()

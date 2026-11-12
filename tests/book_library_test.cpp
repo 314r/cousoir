@@ -29,6 +29,7 @@
 #include "sqlite_db.h"
 #include "mobi_metadata.h"
 #include "test_support.h"
+#include "test_translator.h"
 
 namespace {
 
@@ -129,6 +130,8 @@ void BookLibraryTest::initTestCase()
     QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
     QCoreApplication::setApplicationName(QStringLiteral("book-library"));
     QSettings().clear();
+    static QTemporaryDir languageDir;
+    installTranslator(languageDir.path());
     // Calibre's names of languages from a part of its resources, whatever
     // Calibre is installed.
     CalibreLanguages::setResourcesFolder(QStringLiteral(COUSOIR_TEST_DATA_DIR "/calibre-resources"));

@@ -6,7 +6,11 @@ import Cousoir
 // A window in the theme's colours and font, which the controls in it take
 // through its palette.
 ApplicationWindow {
-    color: Theme.canvas
+    color: Theme.windowColor(active)
+
+    // A right-to-left language mirrors the window.
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
     font.family: Theme.uiFont
     font.pointSize: Theme.fontPointSizeBody
 

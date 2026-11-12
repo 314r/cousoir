@@ -231,8 +231,19 @@ qt_add_library(cousoir_models STATIC
     metadata_downloader.h
     omarchy_theme.cpp
     omarchy_theme.h
+    portal_file_chooser.cpp
+    portal_file_chooser.h
     system_appearance.cpp
     system_appearance.h
+    translator.cpp
+    translator.h
+)
+# The interface's translations, one catalog per Omarchy language code.
+qt_add_resources(cousoir_models "i18n"
+    PREFIX "/"
+    FILES
+        i18n/en.json
+        i18n/fr.json
 )
 target_link_libraries(cousoir_models PUBLIC cousoir_core Qt6::Concurrent Qt6::Quick ${COUSOIR_DBUS})
 if(TARGET Qt6::WebEngineQuick)
@@ -267,6 +278,7 @@ set(COUSOIR_QML_FILES
     DevicePage.qml
     Divider.qml
     FacetPage.qml
+    FilePicker.qml
     FlatButton.qml
     FormField.qml
     HeadingLabel.qml
@@ -280,6 +292,7 @@ set(COUSOIR_QML_FILES
     NotePanel.qml
     SearchField.qml
     SettingsWindow.qml
+    ShortcutsOverlay.qml
     Sidebar.qml
     SidebarItem.qml
     Theme.qml
@@ -380,6 +393,12 @@ target_compile_definitions(cousoir PRIVATE COUSOIR_VERSION="${COUSOIR_PACKAGE_VE
 qt_add_executable(cousoir-cli cli_main.cpp)
 set_target_properties(cousoir-cli PROPERTIES WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
 target_link_libraries(cousoir-cli PRIVATE cousoir_core)
+# The skill `cousoir-cli skill install` gives coding agents.
+qt_add_resources(cousoir-cli "cli_resources"
+    PREFIX "/cousoir"
+    BASE assets
+    FILES assets/skill.md
+)
 target_compile_definitions(cousoir-cli PRIVATE COUSOIR_VERSION="${COUSOIR_PACKAGE_VERSION}")
 
 install(TARGETS cousoir cousoir-cli
@@ -401,6 +420,10 @@ if(UNIX AND NOT APPLE)
             RENAME "${COUSOIR_APP_ID}.png"
         )
     endforeach()
+    install(FILES assets/icons/cousoir.svg
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps"
+        RENAME "${COUSOIR_APP_ID}.svg"
+    )
     install(FILES LICENSE
         DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/cousoir"
         RENAME copyright
@@ -499,6 +522,13 @@ if(BUILD_TESTING)
     cousoir_add_logged_test(book_library_tests book_library_tests)
     set_tests_properties(book_library_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+    # The language and the window rounding Cousoir follows on Omarchy.
+    qt_add_executable(omarchy_tests tests/omarchy_test.cpp)
+    target_link_libraries(omarchy_tests PRIVATE cousoir_models Qt6::Test)
+    cousoir_configure_test_executable(omarchy_tests)
+    cousoir_add_logged_test(omarchy_tests omarchy_tests)
+    set_tests_properties(omarchy_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QPA_PLATFORMTHEME=")
+
     qt_add_executable(library_ui_tests tests/library_ui_test.cpp)
     target_link_libraries(library_ui_tests PRIVATE
         cousoir_models cousoir_uiplugin Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
@@ -535,5 +565,11 @@ if(BUILD_TESTING)
             COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_compiled_qml.py"
                 "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache" cousoir_ui_
         )
+        # English has the plural forms of every counted string; the test
+        # also lists what the other catalogs lack. Skipped without lupdate.
+        add_test(NAME i18n_catalogs
+            COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/i18n.py"
+        )
+        set_tests_properties(i18n_catalogs PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
