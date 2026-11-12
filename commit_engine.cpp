@@ -429,10 +429,16 @@ namespace CommitEngine {
 Result commit(const Request &request)
 {
     Result result;
-    QString done;
-    if (!recover(request.libraryPath, request.cacheFolder, &done, &result.error))
-        return result;
+    // The lock first: what a crash left is put right only while nothing
+    // else may be writing to the library. Without it the attempt refuses,
+    // and the journal waits.
     CalibreLock lock;
+    QString done;
+    if (lock.acquire()
+        && !FileTransaction::recover(journalPath(request.cacheFolder),
+                                     QDir(request.libraryPath).filePath(QStringLiteral("metadata.db")), &done,
+                                     &result.error))
+        return result;
     bool retry = false;
     for (int round = 0; round < 3; ++round) {
         result = Result();
@@ -443,8 +449,18 @@ Result commit(const Request &request)
     return result;
 }
 
-bool recover(const QString &libraryPath, const QString &cacheFolder, QString *done, QString *error)
+bool recover(const QString &libraryPath, const QString &cacheFolder, QString *done, QString *error, bool *waiting)
 {
+    if (waiting)
+        *waiting = false;
+    if (!QFileInfo::exists(journalPath(cacheFolder)))
+        return true;
+    CalibreLock lock;
+    if (!lock.acquire()) {
+        if (waiting)
+            *waiting = true;
+        return true;
+    }
     return FileTransaction::recover(journalPath(cacheFolder), QDir(libraryPath).filePath(QStringLiteral("metadata.db")),
                                     done, error);
 }

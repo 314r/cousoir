@@ -803,6 +803,10 @@ ThemedWindow {
             window.showNotice(qsTr("Cousoir %1.").arg(message))
         }
 
+        function onRecoveryWaiting() {
+            window.showNotice(qsTr("A change that was interrupted will be put right once nothing else uses the library."))
+        }
+
         function onBooksAdded(bookIds) {
             window.showNotice(qsTr("Added %n books.", "", bookIds.length), false)
             if (window.booksShown)

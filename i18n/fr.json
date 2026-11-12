@@ -1005,5 +1005,6 @@
   "Write a note on the selection or the highlight": "Écrire une note sur la sélection ou le surlignement",
   "Look the selection up": "Chercher la sélection en ligne",
   "Remove the highlight": "Retirer le surlignement",
-  "Save the note": "Enregistrer la note"
+  "Save the note": "Enregistrer la note",
+  "A change that was interrupted will be put right once nothing else uses the library.": "Une modification interrompue sera rétablie dès que plus rien d’autre n’utilisera la bibliothèque."
 }

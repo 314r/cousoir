@@ -108,7 +108,11 @@ Result commit(const Request &request);
 
 // Undoes or finishes a change a crash interrupted, from the journal in the
 // cache folder. `done` says what was done; empty when there was nothing.
-bool recover(const QString &libraryPath, const QString &cacheFolder, QString *done, QString *error);
+// It moves files in the library, so only under Calibre's lock: while Calibre
+// is open, or another Cousoir is in the middle of that very change, the
+// journal is left for later and `waiting` is set.
+bool recover(const QString &libraryPath, const QString &cacheFolder, QString *done, QString *error,
+             bool *waiting = nullptr);
 
 // save_cover_data_to(): `data` as Calibre stores a cover. A JPEG that fits in
 // 1650 by 2200 pixels stays as it is; anything else is scaled down to fit,

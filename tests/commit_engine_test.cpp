@@ -83,6 +83,7 @@ private slots:
     void rebasesOnConcurrentChange();
     void recoversInterruptedChange();
     void finishesPublishedChange();
+    void leavesTheJournalWhileTheLibraryIsHeld();
     void addsAndTrashesBooks();
     void addsCustomValues();
     void undoesFailedOperations();
@@ -480,6 +481,48 @@ void CommitEngineTest::recoversInterruptedChange()
     QString done;
     QString error;
     QVERIFY2(CommitEngine::recover(m_library, m_cache, &done, &error), qPrintable(error));
+    QVERIFY(done.contains(QStringLiteral("undid")));
+    QCOMPARE(tree(m_library), before);
+    QVERIFY(!QFileInfo::exists(journal));
+}
+
+// Calibre open, or another Cousoir in the middle of the change the journal
+// is of: nothing in the library moves until the lock is free.
+void CommitEngineTest::leavesTheJournalWhileTheLibraryIsHeld()
+{
+    const QStringList before = tree(m_library);
+    const QString journal = QDir(m_cache).filePath(QStringLiteral("ops.journal"));
+    const QDir library(m_library);
+    {
+        FileTransaction files(journal);
+        QString error;
+        QVERIFY(files.move(library.filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)")),
+                           library.filePath(QStringLiteral("Vian/Ecume (1)")), &error));
+        files.abandon();
+    }
+    const QStringList interrupted = tree(m_library);
+    QVERIFY(interrupted != before);
+
+    QString done;
+    QString error;
+    bool waiting = false;
+    {
+        CalibreLock held;
+        QVERIFY(held.acquire());
+        QVERIFY(CommitEngine::recover(m_library, m_cache, &done, &error, &waiting));
+        QVERIFY(waiting);
+        QVERIFY(done.isEmpty());
+        QVERIFY(QFileInfo::exists(journal));
+        QCOMPARE(tree(m_library), interrupted);
+
+        // A change asked for meanwhile is refused, and recovers nothing either.
+        const CommitEngine::Result result = commit({ edit(1, { { QStringLiteral("title"), QStringLiteral("X") } }) });
+        QVERIFY(!result.ok);
+        QVERIFY(QFileInfo::exists(journal));
+        QCOMPARE(tree(m_library), interrupted);
+    }
+    QVERIFY(CommitEngine::recover(m_library, m_cache, &done, &error, &waiting));
+    QVERIFY(!waiting);
     QVERIFY(done.contains(QStringLiteral("undid")));
     QCOMPARE(tree(m_library), before);
     QVERIFY(!QFileInfo::exists(journal));

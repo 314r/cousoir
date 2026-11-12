@@ -1002,7 +1002,7 @@ void BookLibrary::startLoad()
         result.path = path;
         // A change a crash interrupted is put right before anything is read.
         QString error;
-        if (!CommitEngine::recover(path, cache, &result.recovered, &error)) {
+        if (!CommitEngine::recover(path, cache, &result.recovered, &error, &result.recoveryWaits)) {
             result.error = QObject::tr("An interrupted change could not be undone: %1").arg(error);
             return result;
         }
@@ -1022,6 +1022,8 @@ void BookLibrary::finishLoad()
     emit loadingChanged();
     if (!result.recovered.isEmpty())
         emit recovered(result.recovered);
+    if (result.recoveryWaits)
+        emit recoveryWaiting();
     // Another library was picked meanwhile: this one is not shown.
     if (result.path != m_libraryPath) {
         m_reloadPending = false;
