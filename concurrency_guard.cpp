@@ -387,7 +387,7 @@ bool ConcurrencyGuard::calibreRunning(const QString &procNetUnix, uint uid)
         return false;
     // create_single_instance_mutex() in utils/lock.py binds
     // "\0calibre-singleinstance-<uid>-db", which /proc lists with an "@".
-    const QByteArray name = "@calibre-singleinstance-" + QByteArray::number(uid) + "-db";
+    const QByteArray name = '@' + CalibreLock::name(uid);
     while (!file.atEnd()) {
         const QByteArray line = file.readLine().trimmed();
         if (line.endsWith(name) && (line.size() == name.size() || line.at(line.size() - name.size() - 1) == ' '))

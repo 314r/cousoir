@@ -44,6 +44,7 @@
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
+#include "calibre_lock.h"
 #include "omarchy_theme.h"
 #include "portal_file_chooser.h"
 #include "test_translator.h"
@@ -553,6 +554,9 @@ int main(int argc, char *argv[])
     QTemporaryDir state;
     themeStateRoot = qEnvironmentVariable("COUSOIR_OMARCHY_STATE", state.path());
     installTranslator(state.path(), qEnvironmentVariable("COUSOIR_LANGUAGE", QStringLiteral("en")));
+    // A lock of its own, as the tests': measuring a save does not need
+    // Calibre closed.
+    CalibreLock::setNameForTests("cousoir-tests-" + QByteArray::number(QCoreApplication::applicationPid()));
     registerTypes();
     if (parser.isSet(QStringLiteral("screenshot"))) {
         Shot shot;

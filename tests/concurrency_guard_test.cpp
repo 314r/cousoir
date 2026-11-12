@@ -99,6 +99,8 @@ void ConcurrencyGuardTest::initTestCase()
 {
     QCoreApplication::setOrganizationName(QStringLiteral("cousoir-tests"));
     QCoreApplication::setApplicationName(QStringLiteral("concurrency-guard"));
+    // Calibre's own lock here, looked for in made-up lists of sockets.
+    CalibreLock::setNameForTests({});
 }
 
 void ConcurrencyGuardTest::init()
