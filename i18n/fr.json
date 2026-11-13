@@ -1280,5 +1280,9 @@
   "cannot write its cover": "impossible d’écrire sa couverture",
   "cannot write its OPF": "impossible d’écrire son OPF",
   "cannot copy its %1 file": "impossible de copier son fichier %1",
-  "it has none of the formats asked for": "il n’a aucun des formats demandés"
+  "it has none of the formats asked for": "il n’a aucun des formats demandés",
+  "%1 cannot be found.": "%1 est introuvable.",
+  "Cousoir reads %1 once it is in the library.": "Cousoir lit %1 une fois qu’il est dans la bibliothèque.",
+  "“%1” is being added to the library.": "« %1 » est en cours d’ajout à la bibliothèque.",
+  "Add to library": "Ajouter à la bibliothèque"
 }
