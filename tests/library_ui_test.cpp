@@ -149,6 +149,7 @@ private slots:
     void browsesHighlights();
     void searchesAndSavesHighlights();
     void searchesTheBooksText();
+    void continuesReading();
     void renamesItems();
     void editsCustomColumns();
     void changesCovers();
@@ -2098,6 +2099,41 @@ void LibraryUiTest::readsPdfsFromTheKeyboard()
     reader->close();
     QTRY_VERIFY(!reader->isVisible());
 
+    // Each book keeps its own: another PDF fitted to its width, this one
+    // still zoomed as it was.
+    makeWritable();
+    QString error;
+    QMetaObject::invokeMethod(library(), "addFormat", Q_RETURN_ARG(QString, error), Q_ARG(int, 6),
+                              Q_ARG(QString, QUrl::fromLocalFile(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.pdf")).toString()));
+    QCOMPARE(error, QString());
+    waitForSave();
+    library()->setProperty("currentBookId", 6);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(reader->isVisible());
+    QTRY_COMPARE(reader->property("pages").toInt(), 5);
+    QTRY_COMPARE(view->property("renderScale").toReal(), scale);
+    QQuickItem *fitWidth = item("pdfFitWidth");
+    QTest::mouseClick(reader, Qt::LeftButton, {},
+                      fitWidth->mapToScene(QPointF(fitWidth->width() / 2, fitWidth->height() / 2)).toPoint());
+    QTRY_VERIFY(item("pdfFitWidth")->property("selected").toBool());
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    library()->setProperty("currentBookId", 5);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(reader->isVisible());
+    QTRY_COMPARE(reader->property("pages").toInt(), 5);
+    QTRY_COMPARE(view->property("renderScale").toReal(), scale);
+    QVERIFY(!item("pdfFitWidth")->property("selected").toBool());
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    library()->setProperty("currentBookId", 6);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(reader->isVisible());
+    QTRY_VERIFY(item("pdfFitWidth")->property("selected").toBool());
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    library()->setProperty("currentBookId", 5);
+
     // A PDF that cannot be read says so in the window.
     QVERIFY(writeAll(pdf, "%PDF-1.4 not really"));
     QMetaObject::invokeMethod(m_window, "readBook");
@@ -2480,6 +2516,53 @@ void LibraryUiTest::keepsNotes()
 }
 
 // A tag renamed from the browse section's menu, by the keyboard.
+// The books read, the last first, from the places their readers keep:
+// how far, and when; a progress column and a last read one, which sort.
+void LibraryUiTest::continuesReading()
+{
+    click("sidebar_reading");
+    QQuickItem *page = control("readingPage");
+    QTRY_VERIFY(page && page->isVisible());
+    QTRY_VERIFY(control("readingEmpty")->isVisible());
+
+    // Where Calibre's viewer stopped in The Black Company yesterday, and
+    // where a Kobo finished Good Omens long ago, and an older place in it.
+    const double now = double(QDateTime::currentSecsSinceEpoch());
+    {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error)
+                     && db.run(QStringLiteral("INSERT INTO last_read_positions(book, format, user, device, cfi, epoch, pos_frac) "
+                                              "VALUES (2, 'EPUB', 'viewer', 'computer', 'epubcfi(/6/4)', ?, 0.45),"
+                                              " (4, 'KEPUB', 'kobo', 'Kobo Libra 2', 'epubcfi(/6/20)', ?, 1.0),"
+                                              " (4, 'EPUB', 'viewer', 'computer', 'epubcfi(/6/8)', ?, 0.2)"),
+                               { now - 86400, now - 20 * 86400, now - 30 * 86400 }, &error),
+                 qPrintable(error));
+    }
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    QTRY_COMPARE(page->property("rows").toList().size(), 2);
+    const QVariantList rows = page->property("rows").toList();
+    QCOMPARE(rows.at(0).toMap().value(QStringLiteral("bookId")).toInt(), 2);
+    QCOMPARE(rows.at(1).toMap().value(QStringLiteral("bookId")).toInt(), 4);
+    QTRY_COMPARE(text("readingStatus0"), QStringLiteral("45% read · Yesterday"));
+    QTRY_VERIFY2(text("readingStatus1").startsWith(QStringLiteral("Finished · ")), qPrintable(text("readingStatus1")));
+    QCOMPARE(text("bookCount"), QStringLiteral("2 books"));
+    QVERIFY(!control("readingEmpty")->isVisible());
+
+    // The columns, sorted by how far.
+    click("sidebar_books");
+    library()->setProperty("columns", QStringList{ QStringLiteral("title"), QStringLiteral("progress"),
+                                                    QStringLiteral("last_read") });
+    QMetaObject::invokeMethod(library(), "sortBy", Q_ARG(QString, QStringLiteral("progress")));
+    QTRY_COMPARE(bookRows().first().toMap().value(QStringLiteral("progress")).toString(), QString());
+    QMetaObject::invokeMethod(library(), "sortBy", Q_ARG(QString, QStringLiteral("progress")));
+    QTRY_COMPARE(bookRows().first().toMap().value(QStringLiteral("id")).toInt(), 4);
+    QCOMPARE(bookRows().first().toMap().value(QStringLiteral("progress")).toString(), QStringLiteral("100%"));
+    QCOMPARE(bookRows().at(1).toMap().value(QStringLiteral("progress")).toString(), QStringLiteral("45%"));
+    QVERIFY(!bookRows().first().toMap().value(QStringLiteral("last_read")).toString().isEmpty());
+}
+
 // The books' text, in the index Calibre keeps of it: without one, the page
 // offers to make it, and Cousoir indexes the books as Calibre does, turning
 // Calibre's full text search on; then the books whose text has the words,

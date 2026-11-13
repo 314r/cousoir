@@ -95,6 +95,11 @@ struct Book
     // Its page count, as Calibre counted it; 0 until it does, -1 without a
     // row in books_pages_link.
     int pages = -1;
+    // Where it was read last, of all its readers' places (Cousoir's,
+    // Calibre's viewer's, a Kobo's): when, in seconds since 1970, 0 for
+    // never; and how far into it, 0 to 1.
+    double readEpoch = 0;
+    double readFraction = 0;
     // HTML.
     QString comments;
     // Sorted by format, like Calibre.

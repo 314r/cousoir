@@ -61,7 +61,7 @@ const QStringList &sections()
                                        QStringLiteral("tags"), QStringLiteral("languages"),
                                        QStringLiteral("publishers"), QStringLiteral("trash"),
                                        QStringLiteral("check"), QStringLiteral("highlights"),
-                                       QStringLiteral("text") };
+                                       QStringLiteral("text"), QStringLiteral("reading") };
     return names;
 }
 
@@ -98,6 +98,9 @@ const ColumnInfo builtinColumns[] = {
     { "formats", QT_TRANSLATE_NOOP("BookLibrary", "Formats"), "text" },
     { "identifiers", QT_TRANSLATE_NOOP("BookLibrary", "Identifiers"), "long" },
     { "pages", QT_TRANSLATE_NOOP("BookLibrary", "Pages"), "number" },
+    // Cousoir's own, from where the book was read last.
+    { "progress", QT_TRANSLATE_NOOP("BookLibrary", "Progress"), "number" },
+    { "last_read", QT_TRANSLATE_NOOP("BookLibrary", "Last read"), "date" },
     { "id", QT_TRANSLATE_NOOP("BookLibrary", "Id"), "number" },
     { "path", QT_TRANSLATE_NOOP("BookLibrary", "Path"), "long" },
 };
@@ -2082,6 +2085,39 @@ void BookLibrary::startTextIndexing()
         tasks.append(task);
     }
     m_textIndexer.start(m_libraryPath, effectiveConfig().interfaceLanguage, tasks);
+}
+
+QVariantList BookLibrary::readingRows() const
+{
+    QList<const Book *> read;
+    for (const Book &book : std::as_const(m_data.books)) {
+        if (book.readEpoch > 0)
+            read.append(&book);
+    }
+    std::sort(read.begin(), read.end(), [](const Book *a, const Book *b) { return a->readEpoch > b->readEpoch; });
+    const QString coverKey = coverKeyOf(m_libraryPath);
+    const QDate today = QDate::currentDate();
+    QVariantList rows;
+    for (const Book *book : std::as_const(read)) {
+        const QDateTime when = QDateTime::fromMSecsSinceEpoch(qint64(book->readEpoch * 1000));
+        const qint64 days = when.date().daysTo(today);
+        rows.append(QVariantMap{
+            { QStringLiteral("bookId"), book->id },
+            { QStringLiteral("title"), book->title },
+            { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
+            { QStringLiteral("cover"), book->coverFile.isEmpty()
+                  ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
+            { QStringLiteral("fraction"), book->readFraction },
+            { QStringLiteral("progress"), BookDisplay::progress(book->readFraction) },
+            { QStringLiteral("when"), days <= 0 ? tr("Today")
+                                      : days == 1 ? tr("Yesterday")
+                                      : days < 7 ? tr("%n days ago", "", int(days))
+                                                 : BookDisplay::date(when) },
+            // Calibre's viewer leaves the last pages a little short of the end.
+            { QStringLiteral("finished"), book->readFraction >= 0.98 },
+        });
+    }
+    return rows;
 }
 
 QVariantMap BookLibrary::searchBooksText(const QString &query) const

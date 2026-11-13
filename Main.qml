@@ -23,15 +23,16 @@ ThemedWindow {
     // A saved search's books.
     readonly property bool searchSection: section.startsWith("search:")
     readonly property bool facetShown: section !== "books" && section !== "trash" && section !== "check"
-        && section !== "highlights" && section !== "text"
+        && section !== "highlights" && section !== "text" && section !== "reading"
         && !deviceSection && !searchSection && !session.filterOpen && !session.bookOpen
     readonly property bool trashShown: section === "trash" && !session.bookOpen
     readonly property bool checkShown: section === "check" && !session.bookOpen
     readonly property bool highlightsShown: section === "highlights" && !session.bookOpen
     readonly property bool textShown: section === "text" && !session.bookOpen
+    readonly property bool readingShown: section === "reading" && !session.bookOpen
     readonly property bool deviceShown: deviceSection && !session.bookOpen
     readonly property bool booksShown: !facetShown && !trashShown && !checkShown && !deviceShown && !textShown
-        && !session.bookOpen
+        && !readingShown && !session.bookOpen
     // Several books selected in the list, which the pane beside it edits.
     readonly property bool editingMany: booksShown && library.books.selectedCount > 1
     // A message to show in place of the key hints for a while: an error,
@@ -183,6 +184,8 @@ ThemedWindow {
             highlightsPage.focusList()
         else if (textShown)
             textPage.focusList()
+        else if (readingShown)
+            readingPage.focusList()
         else
             booksPage.focusList()
     }
@@ -257,6 +260,8 @@ ThemedWindow {
             highlightsPage.focusList()
         else if (textShown)
             textPage.focusList()
+        else if (readingShown)
+            readingPage.focusList()
         else
             booksPage.focusList()
     }
@@ -274,6 +279,8 @@ ThemedWindow {
             return 6
         if (textShown)
             return 7
+        if (readingShown)
+            return 8
         return facetShown ? 1 : 0
     }
 
@@ -847,6 +854,8 @@ ThemedWindow {
             return qsTr("%n highlights", "", highlightsPage.browser.count)
         if (section === "text")
             return textPage.query.trim() ? qsTr("%n books", "", textPage.rows.length) : ""
+        if (section === "reading")
+            return qsTr("%n books", "", readingPage.rows.length)
         if (section === "check")
             return library.checking ? qsTr("Checking…")
                 : qsTr("%n things to check", "", library.check.count || 0)
@@ -922,6 +931,8 @@ ThemedWindow {
             return library.trashEntries.length > 0 ? [move, h("Enter", qsTr("restore", "hint"))] : [reload]
         if (textShown)
             return textPage.rows.length > 0 ? [move, h("Enter", qsTr("read", "hint"))] : []
+        if (readingShown)
+            return readingPage.rows.length > 0 ? [move, h("Enter", qsTr("read", "hint"))] : []
         if (checkShown)
             return (library.check.count || 0) > 0
                 ? [move, h("Enter", qsTr("actions", "hint")), h("F5", qsTr("check again", "hint"), 3)]
@@ -2114,7 +2125,7 @@ ThemedWindow {
 
                         visible: window.library.virtualLibraries.length > 0 && !session.bookOpen
                             && !window.deviceShown && !window.checkShown && !window.trashShown && !window.highlightsShown
-                            && !window.textShown
+                            && !window.textShown && !window.readingShown
                         // The longest name, its arrow and paddings.
                         Layout.preferredWidth: Math.round(Math.min(24, choices.reduce(
                             (longest, choice) => Math.max(longest, choice.label.length), 0)) * Theme.charWidth)
@@ -2139,7 +2150,7 @@ ThemedWindow {
                         }
 
                         visible: !session.bookOpen && !window.deviceShown && !window.checkShown && !window.highlightsShown
-                            && !window.textShown
+                            && !window.textShown && !window.readingShown
                         Layout.fillWidth: true
                         Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
@@ -2284,6 +2295,13 @@ ThemedWindow {
                         objectName: "textPage"
                         library: window.library
                         onReadRequested: function(bookId, query) { window.readAndFind(bookId, query) }
+                    }
+
+                    ReadingPage {
+                        id: readingPage
+                        objectName: "readingPage"
+                        library: window.library
+                        onReadRequested: function(bookId) { window.readBookOf(bookId) }
                     }
                 }
 

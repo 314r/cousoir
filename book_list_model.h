@@ -23,6 +23,8 @@ QString rating(int rating);
 QString shortDatePattern();
 // The local date in that pattern; empty for Calibre's undefined date.
 QString date(const QDateTime &date);
+// How far a book was read, "45%".
+QString progress(double fraction);
 // The local date and time, the time as the language writes it short.
 QString dateTime(const QDateTime &date);
 // A publication date as Calibre shows it, its month: "Apr 2015"; empty for

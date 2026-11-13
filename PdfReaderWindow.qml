@@ -23,12 +23,36 @@ ThemedWindow {
     // Why the PDF could not be shown, in the window.
     property string error: ""
     property int opens: 0
+    property int bookId: 0
     // The theme's colours need shaders, which Qt Quick's software
     // renderer does not run.
     readonly property bool canTheme: contentItem.GraphicsInfo.api !== GraphicsInfo.Software
     readonly property bool themed: pdfSettings.themedPages && canTheme
 
     signal failed(string message)
+
+    // Each book's zoom, by library and book, the last ones kept.
+    function viewKey() {
+        return pdfWindow.library.libraryPath + "#" + pdfWindow.bookId
+    }
+
+    function bookViews() {
+        try {
+            return JSON.parse(pdfSettings.bookViews) || {}
+        } catch (e) {
+            return {}
+        }
+    }
+
+    function keepBookView() {
+        const views = bookViews()
+        delete views[viewKey()]
+        views[viewKey()] = { fit: pdfSettings.fit, scale: view.renderScale }
+        const keys = Object.keys(views)
+        for (let i = 0; i < keys.length - 200; ++i)
+            delete views[keys[i]]
+        pdfSettings.bookViews = JSON.stringify(views)
+    }
 
     function openBook(bookId) {
         pdfWindow.error = ""
@@ -37,6 +61,7 @@ ThemedWindow {
             pdfWindow.failed(error)
             return false
         }
+        pdfWindow.bookId = bookId
         // Read again, the same file too: it may have changed. A fragment
         // the file's path leaves aside makes the address another.
         pdfWindow.opens += 1
@@ -152,8 +177,10 @@ ThemedWindow {
             pdfSettings.windowHeight = height
         }
         pdfSettings.renderScale = view.renderScale
-        if (document.status === PdfDocument.Ready)
+        if (document.status === PdfDocument.Ready) {
             bookReader.savePage(view.currentPage, document.pageCount)
+            pdfWindow.keepBookView()
+        }
         bookReader.close()
         if (fullScreen)
             showNormal()
@@ -172,6 +199,8 @@ ThemedWindow {
         property string sidebarTab: "contents"
         property int sidebarWidth: 280
         property bool themedPages: false
+        // Each book's zoom, as JSON: { "library#id": { fit, scale } }.
+        property string bookViews: "{}"
     }
 
     BookReader {
@@ -200,6 +229,12 @@ ThemedWindow {
             if (document.status !== PdfDocument.Ready) {
                 restart()
                 return
+            }
+            // The book's own zoom, else the last one used.
+            const kept = pdfWindow.bookViews()[pdfWindow.viewKey()]
+            if (kept) {
+                pdfSettings.fit = kept.fit
+                pdfSettings.renderScale = kept.scale
             }
             if (pdfSettings.fit === "custom")
                 view.renderScale = pdfSettings.renderScale
