@@ -342,7 +342,8 @@ set(COUSOIR_QML_FILES
     TrashPage.qml
 )
 if(TARGET Qt6::WebEngineQuick)
-    list(APPEND COUSOIR_QML_FILES ReaderWindow.qml)
+    list(APPEND COUSOIR_QML_FILES ReaderWindow.qml ReaderGoToBox.qml ReaderImageViewer.qml ReaderNoteBox.qml
+        ReaderNoteEditor.qml ReaderSettingsPopup.qml)
 endif()
 # Qt Pdf, to read PDFs in the reader; Qt Shader Tools to build the shader
 # that shows its pages in the theme's colours.
