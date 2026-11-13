@@ -1207,62 +1207,6 @@ ThemedWindow {
         }
     }
 
-    Shortcut {
-        sequences: [StandardKey.ZoomIn, "Ctrl+="]
-        onActivated: window.adjustTextScalePercent(10)
-    }
-
-    Shortcut {
-        sequences: [StandardKey.ZoomOut]
-        onActivated: window.adjustTextScalePercent(-10)
-    }
-
-    Shortcut {
-        sequence: "Ctrl+0"
-        onActivated: window.setTextScalePercent(100)
-    }
-
-    Shortcut {
-        sequences: ["Esc", "Alt+Left", StandardKey.Back]
-        enabled: session.bookOpen || session.filterOpen || (window.booksShown && booksPage.selectedCount > 1)
-        // The revert question keeps the changes instead; several books
-        // selected go back to the current one first.
-        onActivated: {
-            if (bookPage.confirmingRevert)
-                bookPage.confirmingRevert = false
-            else if (window.booksShown && booksPage.selectedCount > 1)
-                booksPage.collapseSelection()
-            else
-                window.goBack()
-        }
-    }
-
-    Shortcut {
-        sequences: ["Return", "Enter"]
-        enabled: session.bookOpen && bookPage.confirmingRevert
-        onActivated: bookPage.revertChanges()
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Paste]
-        enabled: session.bookOpen && window.library.writable && !bookPage.editing
-        onActivated: bookPage.pasteCover()
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Find]
-        onActivated: window.focusSearch()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+K"
-        enabled: window.library.loaded
-        onActivated: {
-            commandPalette.commands = window.paletteCommands()
-            commandPalette.show()
-        }
-    }
-
     BulkDownloadDialog {
         id: bulkDownloadDialog
 
@@ -1299,29 +1243,6 @@ ThemedWindow {
         }
     }
 
-    Shortcut {
-        sequences: [StandardKey.Refresh, "Ctrl+R"]
-        onActivated: window.reload()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+I"
-        enabled: session.bookOpen || window.editingMany
-        onActivated: window.toggleDetails()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+O"
-        enabled: session.bookOpen || window.booksShown
-        onActivated: window.openInReader()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+O"
-        enabled: (session.bookOpen || window.booksShown) && library.readerAvailable
-        onActivated: window.readBook()
-    }
-
     // Cousoir's reader, made the first time a book is read; built only with
     // Qt WebEngine.
     Loader {
@@ -1352,82 +1273,6 @@ ThemedWindow {
         function onFailed(message) {
             window.showNotice(message)
         }
-    }
-
-    Shortcut {
-        sequence: "Ctrl+G"
-        enabled: window.booksShown
-        onActivated: window.toggleGrid()
-    }
-
-    // The highlights as kbextract2 copies them, and their Markdown shown.
-    Shortcut {
-        sequence: "Ctrl+Shift+C"
-        enabled: window.highlightsShown && highlightsPage.bookShown
-        onActivated: highlightsPage.copyFormatted("markdown")
-    }
-
-    Shortcut {
-        sequence: "Ctrl+U"
-        enabled: window.highlightsShown
-        onActivated: highlightsPage.toggleMarkdown()
-    }
-
-    Shortcut {
-        sequences: [StandardKey.New]
-        enabled: window.library.writable && !window.library.importing
-        onActivated: addBooksDialog.open()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+K"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable
-        onActivated: window.convertBooks(window.targetIds(), "KEPUB")
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+A"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable
-        onActivated: window.convertBooks(window.targetIds(), "AZW3")
-    }
-
-    Shortcut {
-        sequence: "Ctrl+D"
-        enabled: (session.bookOpen || window.booksShown) && window.devices.devices.length > 0
-            && window.devices.writable
-        onActivated: window.sendBooks(window.targetIds(), "")
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Delete]
-        enabled: window.booksShown && window.library.writable
-        onActivated: window.trashBooks(window.targetIds())
-    }
-
-    // A field being edited undoes its own typing; otherwise the last change
-    // to several books, or every change to the open book, asked first.
-    Shortcut {
-        sequences: [StandardKey.Undo]
-        enabled: (window.editingMany && window.library.bulkUndoCount > 0)
-            || (session.bookOpen && window.library.canRevert && !bookPage.editing)
-        onActivated: {
-            if (window.editingMany) {
-                window.library.undoBulkEdit()
-            } else {
-                bookPage.forceActiveFocus()
-                bookPage.confirmingRevert = true
-            }
-        }
-    }
-
-    Shortcut {
-        sequence: "?"
-        onActivated: shortcutsOverlay.toggle()
-    }
-
-    Shortcut {
-        sequences: ["Q", StandardKey.Quit]
-        onActivated: window.quit()
     }
 
     FilePicker {
@@ -1509,18 +1354,6 @@ ThemedWindow {
 
         sections: window.shortcutSections()
         onClosed: window.focusCurrentList()
-    }
-
-    // F6 and Shift+F6: from the sidebar to the list, to the details, and
-    // round.
-    Shortcut {
-        sequence: "F6"
-        onActivated: window.cycleFocus(1)
-    }
-
-    Shortcut {
-        sequence: "Shift+F6"
-        onActivated: window.cycleFocus(-1)
     }
 
     MessagesPopup {
@@ -1705,6 +1538,17 @@ ThemedWindow {
         id: statusBar
         window: window
         session: session
+    }
+
+    AppShortcuts {
+        window: window
+        session: session
+        bookPage: bookPage
+        booksPage: booksPage
+        commandPalette: commandPalette
+        highlightsPage: highlightsPage
+        shortcutsOverlay: shortcutsOverlay
+        addBooksDialog: addBooksDialog
     }
 
     RowLayout {

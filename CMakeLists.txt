@@ -298,6 +298,7 @@ set(COUSOIR_QML_FILES
     AboutSettingsPage.qml
     ActionMenu.qml
     AppSession.qml
+    AppShortcuts.qml
     AppearanceSettingsPage.qml
     BookDetailsPane.qml
     BookPage.qml
