@@ -585,6 +585,17 @@ preferences still apply when Calibre left some (the fields left aside,
 the description added to the book's, the most tags). `cousoir-cli
 download` does the same without Calibre.
 
+**Many books at once.** With several books selected, the globe of the
+pane that edits them together, or "Download metadata for N books" in
+Ctrl+K, looks them all up, three at a time, as Calibre's bulk download
+does: each book's best match, with the fields that differ but those
+Calibre leaves aside, and, unless unticked, the largest cover found. The
+books come in a list as they are looked up, each with what it would
+change and its cover; one that failed says why, one with nothing new says
+so. Untick a book (Space, or a click) to leave it as it is; Apply saves the
+others as one change, and Undo in the pane, or Ctrl+Z, puts them back,
+covers included, for the rest of the session.
+
 The tests never go on the web: a stand-in for Calibre answers them, and a
 server of the tests' own plays Open Library with answers it once gave
 (`tools/make_openlibrary_fixtures.sh`).

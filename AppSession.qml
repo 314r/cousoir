@@ -29,6 +29,9 @@ QtObject {
     readonly property MetadataDownloader downloads: MetadataDownloader {
         library: session.library
     }
+    readonly property BulkMetadataDownloader bulkDownloads: BulkMetadataDownloader {
+        library: session.library
+    }
     // The Kobos' highlights, put into the library as each Kobo's own.
     readonly property HighlightSync highlightSync: HighlightSync {
         library: session.library

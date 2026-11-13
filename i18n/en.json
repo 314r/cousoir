@@ -198,5 +198,21 @@
   "%1 %n formats still wait to be indexed.": {
     "one": "%1 %n format still waits to be indexed.",
     "other": "%1 %n formats still wait to be indexed."
+  },
+  "Metadata for %n books": {
+    "one": "Metadata for %n book",
+    "other": "Metadata for %n books"
+  },
+  "%n books to update": {
+    "one": "%n book to update",
+    "other": "%n books to update"
+  },
+  "Download metadata for %n books": {
+    "one": "Download metadata for %n book",
+    "other": "Download metadata for %n books"
+  },
+  "%n books updated from the web; Undo puts them back.": {
+    "one": "%n book updated from the web; Undo puts it back.",
+    "other": "%n books updated from the web; Undo puts them back."
   }
 }

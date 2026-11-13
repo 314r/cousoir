@@ -104,6 +104,8 @@ Rectangle {
     signal libraryFolderRequested()
     // Opening a book's file failed; `message` says why.
     signal failed(string message)
+    // Metadata for the books, downloaded together.
+    signal downloadRequested(var bookIds)
 
     color: Theme.surface
 
@@ -431,6 +433,7 @@ Rectangle {
             library: page.library
             bookIds: visible ? page.library.books.selectedIds : []
             onFailed: function(message) { page.failed(message) }
+            onDownloadRequested: function(bookIds) { page.downloadRequested(bookIds) }
         }
 
         Divider {

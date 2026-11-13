@@ -90,6 +90,7 @@ private slots:
     void keepsRowsInPlace();
     void keepsVirtualLibraryChoice();
     void undoesOnlyBulkEdits();
+    void undoesEachBookChanges();
     void browsesSections();
     void filtersByItem();
     void describesCurrentBook();
@@ -646,6 +647,48 @@ void BookLibraryTest::undoesOnlyBulkEdits()
     library->undoBulkEdit();
     QVERIFY(waitForSave(library.get()));
     QTRY_COMPARE(field(3, "publisher").toString(), QStringLiteral("A"));
+}
+
+// Each book's own changes, as a bulk download saves them: one change, the
+// sorts following, which Undo puts back with the covers, a book without
+// one left without again.
+void BookLibraryTest::undoesEachBookChanges()
+{
+    QTemporaryDir copy;
+    QVERIFY(copyTree(fixtureLibrary(), copy.path()));
+    auto library = open(copy.path());
+    QVERIFY(library);
+    library->setWritable(true);
+    const auto book = [&library](int id) { return *library->data().book(id); };
+    const Book omens = book(4);
+    QVERIFY(book(5).coverFile.isEmpty());
+    const QByteArray omensCover = readAll(omens.coverFile);
+    const QString image = QStringLiteral(COUSOIR_TEST_DATA_DIR "/edits/large.jpg");
+
+    QCOMPARE(library->updateEachBook({ { 4, { { QStringLiteral("title"), QStringLiteral("The Nice and Accurate Prophecies") },
+                                              { QStringLiteral("coverFile"), image } } },
+                                       { 5, { { QStringLiteral("publisher"), QStringLiteral("Eyrolles") },
+                                              { QStringLiteral("coverFile"), image } } } }),
+             QString());
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(library->bulkUndoCount(), 2);
+    QCOMPARE(book(4).title, QStringLiteral("The Nice and Accurate Prophecies"));
+    // The title sort followed the title, as in Calibre's editor.
+    QCOMPARE(book(4).sort, QStringLiteral("Nice and Accurate Prophecies, The"));
+    QVERIFY(!book(5).coverFile.isEmpty());
+    QVERIFY(readAll(book(4).coverFile) != omensCover);
+
+    library->undoBulkEdit();
+    QVERIFY(waitForSave(library.get()));
+    QTRY_COMPARE(book(4).title, omens.title);
+    QCOMPARE(book(4).sort, omens.sort);
+    QCOMPARE(readAll(book(4).coverFile), omensCover);
+    QVERIFY(book(5).publisher.isEmpty());
+    QVERIFY(book(5).coverFile.isEmpty());
+    QCOMPARE(library->bulkUndoCount(), 0);
+    // The covers kept for it are gone.
+    QVERIFY(QDir(QDir(BookLibrary::cacheFolder(copy.path())).filePath(QStringLiteral("undo-covers")))
+                .entryList(QDir::Files).isEmpty());
 }
 
 void BookLibraryTest::editsBooks()

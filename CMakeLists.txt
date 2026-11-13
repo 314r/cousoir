@@ -223,6 +223,8 @@ qt_add_library(cousoir_models STATIC
     book_list_model.h
     book_text_indexer.cpp
     book_text_indexer.h
+    bulk_metadata_downloader.cpp
+    bulk_metadata_downloader.h
     conversion_service.cpp
     conversion_service.h
     cover_cache.cpp
@@ -277,6 +279,7 @@ set(COUSOIR_QML_FILES
     BookDetailsPane.qml
     BookPage.qml
     BooksPage.qml
+    BulkDownloadDialog.qml
     BulkEditPane.qml
     CheckPage.qml
     ChoiceBox.qml

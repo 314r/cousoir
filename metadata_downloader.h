@@ -76,6 +76,10 @@ public:
     // Stops the download and forgets it.
     Q_INVOKABLE void cancel();
 
+    // What saving `fields` of the book found at `result` changes, as
+    // apply() would save it.
+    QVariantMap changes(int result, const QStringList &fields) const;
+
     // For the tests: a program run in place of calibre-debug; empty to find
     // Calibre again.
     void setProgram(const QString &program);

@@ -61,6 +61,8 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
 - 🌐 **Metadata and covers from the web.** Calibre's own sources look the
   book up, or Open Library when Calibre isn't installed; pick the fields to
   take beside your values, and a cover among those found. Revert undoes it.
+  Select many books to look them all up at once, review the changes book by
+  book, and Undo puts them back.
 - 🔄 **Convert for your reader.** KEPUB for a Kobo, AZW3 for a Kindle, with
   Calibre and your conversion settings. Without Calibre, Cousoir makes the
   KEPUB and the AZW3 of an EPUB itself, and an EPUB of a Kindle book.

@@ -1189,5 +1189,35 @@
     "one": "%1 %n format attend encore d’être indexé.",
     "other": "%1 %n formats attendent encore d’être indexés."
   },
-  "Index the books' text": "Indexer le texte des livres"
+  "Index the books' text": "Indexer le texte des livres",
+  "Cannot keep the covers to put back in %1.": "Impossible de garder dans %1 les couvertures à remettre.",
+  "Waiting": "En attente",
+  "Looking it up…": "Recherche…",
+  "Nothing new found": "Rien de nouveau trouvé",
+  "Metadata for %n books": {
+    "one": "Métadonnées de %n livre",
+    "other": "Métadonnées de %n livres"
+  },
+  "Each book is looked up by its title, authors and identifiers, and its best match is taken, as Calibre's bulk download does: the fields that differ, but those Calibre is set to leave aside. You then see what changes for each book before anything is saved.": "Chaque livre est recherché par son titre, ses auteurs et ses identifiants, et le meilleur résultat est retenu, comme le fait le téléchargement groupé de Calibre : les champs qui diffèrent, sauf ceux que Calibre est réglé pour laisser de côté. Vous voyez ensuite ce qui change pour chaque livre avant que rien ne soit enregistré.",
+  "Covers too": "Les couvertures aussi",
+  "Covers too, the largest found": "Les couvertures aussi, la plus grande trouvée",
+  "Books looked up": "Livres recherchés",
+  "%1: %2 → %3": "%1 : %2 → %3",
+  "Cover: the one found": "Couverture : celle trouvée",
+  "%n books to update": {
+    "one": "%n livre à mettre à jour",
+    "other": "%n livres à mettre à jour"
+  },
+  "Looked up: %1 of %2": "Recherchés : %1 sur %2",
+  "Download": "Télécharger",
+  "Apply": "Appliquer",
+  "There is no book to look up.": "Il n’y a aucun livre à rechercher.",
+  "Download metadata for %n books": {
+    "one": "Télécharger les métadonnées de %n livre",
+    "other": "Télécharger les métadonnées de %n livres"
+  },
+  "%n books updated from the web; Undo puts them back.": {
+    "one": "%n livre mis à jour depuis le web ; Annuler le remet comme avant.",
+    "other": "%n livres mis à jour depuis le web ; Annuler les remet comme avant."
+  }
 }
