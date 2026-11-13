@@ -695,7 +695,6 @@ void BookReader::stopPreparing()
         m_conversion = nullptr;
         process->disconnect(this);
         CalibreJob::stopProcessGroup(process);
-        process->deleteLater();
         QFile::remove(m_preparingPart);
         QDir(m_preparingFolder).removeRecursively();
     }

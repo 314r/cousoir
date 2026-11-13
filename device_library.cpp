@@ -1332,7 +1332,6 @@ void DeviceLibrary::stopProcess()
     if (!m_process)
         return;
     m_process->disconnect(this);
-    CalibreJob::stopProcessGroup(m_process);
-    delete m_process;
-    m_process = nullptr;
+    // Not waited for: the window goes on while it stops.
+    CalibreJob::stopProcessGroup(std::exchange(m_process, nullptr));
 }

@@ -1,4 +1,7 @@
 #include "calibre_job.h"
+#include <QTimer>
+#include <QPointer>
+#include <QCoreApplication>
 
 #include <QDateTime>
 #include <QDir>
@@ -78,15 +81,53 @@ std::optional<int> run(const QString &program, const QStringList &arguments, con
     return process.exitStatus() == QProcess::NormalExit ? process.exitCode() : -1;
 }
 
+namespace {
+
+// Holds the processes being stopped till they end; those still running
+// when it goes, as Cousoir quits, are killed with all they started.
+class Stopper : public QObject
+{
+public:
+    using QObject::QObject;
+
+    ~Stopper() override
+    {
+        for (QProcess *process : findChildren<QProcess *>(Qt::FindDirectChildrenOnly)) {
+            const pid_t pid = pid_t(process->processId());
+            if (pid > 0 && process->state() != QProcess::NotRunning)
+                ::kill(-pid, SIGKILL);
+            process->waitForFinished(1000);
+        }
+    }
+};
+
+Stopper *stopper()
+{
+    static QPointer<Stopper> instance;
+    if (!instance)
+        instance = new Stopper(QCoreApplication::instance());
+    return instance;
+}
+
+} // namespace
+
 void stopProcessGroup(QProcess *process)
 {
+    if (!process)
+        return;
     const pid_t pid = pid_t(process->processId());
-    if (pid > 0)
-        ::kill(-pid, SIGTERM);
-    if (!process->waitForFinished(3000) && pid > 0) {
-        ::kill(-pid, SIGKILL);
-        process->waitForFinished(1000);
+    if (pid <= 0 || process->state() == QProcess::NotRunning) {
+        process->deleteLater();
+        return;
     }
+    ::kill(-pid, SIGTERM);
+    process->disconnect();
+    process->setParent(stopper());
+    QObject::connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    QTimer::singleShot(3000, process, [process, pid] {
+        if (process->state() != QProcess::NotRunning)
+            ::kill(-pid, SIGKILL);
+    });
 }
 
 void removeStaleFolders(const QString &base)
