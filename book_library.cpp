@@ -2121,6 +2121,38 @@ QString BookLibrary::saveToDisk(const QVariantList &bookIds, const QString &fold
     return {};
 }
 
+QStringList BookLibrary::dragUrls(const QVariantList &bookIds) const
+{
+    // input_format_order of Calibre's preferences, its default.
+    static const QStringList order{ QStringLiteral("EPUB"), QStringLiteral("AZW3"), QStringLiteral("MOBI"),
+                                    QStringLiteral("LIT"),  QStringLiteral("PRC"),  QStringLiteral("FB2"),
+                                    QStringLiteral("HTML"), QStringLiteral("HTM"),  QStringLiteral("XHTM"),
+                                    QStringLiteral("SHTML"), QStringLiteral("XHTML"), QStringLiteral("ZIP"),
+                                    QStringLiteral("DOCX"), QStringLiteral("ODT"),  QStringLiteral("RTF"),
+                                    QStringLiteral("PDF"),  QStringLiteral("TXT") };
+    QStringList urls;
+    for (const QVariant &id : bookIds) {
+        const Book *book = findBook(id.toInt());
+        if (!book)
+            continue;
+        const BookFormat *best = nullptr;
+        qsizetype bestRank = order.size();
+        for (const BookFormat &format : book->formats) {
+            if (format.file.isEmpty() || !QFileInfo::exists(format.file))
+                continue;
+            const qsizetype rank = order.contains(format.format) ? order.indexOf(format.format) : order.size();
+            if (!best || rank < bestRank) {
+                best = &format;
+                bestRank = rank;
+            }
+        }
+        if (best)
+            // Encoded, as a URI list holds them.
+            urls.append(QString::fromLatin1(QUrl::fromLocalFile(best->file).toEncoded()));
+    }
+    return urls;
+}
+
 QString BookLibrary::createLibrary(const QString &folder) const
 {
     QString error;

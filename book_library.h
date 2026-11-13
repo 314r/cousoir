@@ -263,6 +263,9 @@ public:
     // disk does, with its options, in the background: savedToDisk()
     // follows. An error, or empty.
     Q_INVOKABLE QString saveToDisk(const QVariantList &bookIds, const QString &folder);
+    // A file of each book, for a drag out to the desktop: its EPUB, else its
+    // first format in Calibre's order of input formats, as file URLs.
+    Q_INVOKABLE QStringList dragUrls(const QVariantList &bookIds) const;
     // The book a file of the library's is a format of; 0 for a file of none.
     Q_INVOKABLE int bookOfFile(const QString &path) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in

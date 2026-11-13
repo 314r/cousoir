@@ -37,6 +37,9 @@ Item {
     // Whether the rows say which are selected: then the current row is
     // filled only when it is one of them, else outlined.
     property bool selectable: false
+    // The files a row dragged out of the list carries, a function of its
+    // index giving file URLs; null for rows that do not leave the list.
+    property var dragUrls: null
     // The scroll bar's lane, right of the rows while it shows, so it never
     // lies over a row's highlight.
     readonly property real scrollRoom: scrollBar.size < 1.0 ? scrollBar.width : 0
@@ -292,12 +295,33 @@ Item {
                     }
                 }
 
+                // What a drag out of the list carries to the desktop: the
+                // files of the row, or of the rows selected with it.
+                Item {
+                    id: dragProxy
+
+                    width: 1
+                    height: 1
+                    Drag.dragType: Drag.Automatic
+                    Drag.supportedActions: Qt.CopyAction
+                    Drag.mimeData: rowMouse.drag.active ? { "text/uri-list": table.dragUrls(row.index) } : ({})
+                    Drag.active: rowMouse.drag.active
+                    Drag.onDragFinished: {
+                        dragProxy.x = 0
+                        dragProxy.y = 0
+                    }
+                }
+
                 MouseArea {
                     id: rowMouse
 
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    // A row dragged leaves the list, which then scrolls by
+                    // its wheel and its bar.
+                    drag.target: table.dragUrls ? dragProxy : null
+                    preventStealing: table.dragUrls !== null
                     onPressed: function(mouse) {
                         if (mouse.button !== Qt.RightButton)
                             return

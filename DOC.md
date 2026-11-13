@@ -447,7 +447,10 @@ disk): each book's files under the path its template makes, by default
 `{author_sort}/{title}/{title} - {authors}`, the cover as a `.jpg` and its
 metadata as an `.opf` beside them; names cleaned as Calibre cleans them,
 or made ASCII when Calibre is set to. A book without the formats asked for
-is said not saved. The golden test compares what Calibre and Cousoir save of
+is said not saved. A book dragged out of the list onto a file manager, or
+any program that takes files, gives it a copy of one of its files: its
+EPUB, else its first format in Calibre's order of input formats; the books
+selected with it give theirs too. The golden test compares what Calibre and Cousoir save of
 the fixture library, file by file. Unlike Calibre, Cousoir copies the files
 as they are: it does not write the library's metadata into them.
 
