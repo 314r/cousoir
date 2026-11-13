@@ -1528,9 +1528,10 @@ void LibraryUiTest::readsKindleAndOtherBooks()
     // A text file, made an EPUB by Calibre, here a stand-in, once.
     qputenv("COUSOIR_EBOOK_CONVERT", COUSOIR_TEST_DATA_DIR "/fake-ebook-convert");
     qputenv("COUSOIR_FAKE_DELAY", "1");
-    const QString text = m_libraryDir->filePath(QStringLiteral("Notes of a voyage.txt"));
+    // RTF, which Calibre makes an EPUB of, Cousoir reading FB2 and text itself.
+    const QString text = m_libraryDir->filePath(QStringLiteral("Notes of a voyage.rtf"));
     QFile file(text);
-    QVERIFY(file.open(QIODevice::WriteOnly) && file.write("A voyage, told in plain text.\n") > 0);
+    QVERIFY(file.open(QIODevice::WriteOnly) && file.write("{\\rtf1 A voyage, told in rich text.}\n") > 0);
     file.close();
     QString error;
     QMetaObject::invokeMethod(library(), "addBooks", Q_RETURN_ARG(QString, error),
@@ -1548,14 +1549,14 @@ void LibraryUiTest::readsKindleAndOtherBooks()
     library()->setProperty("currentBookId", textBook);
     QString format;
     QMetaObject::invokeMethod(library(), "readableFormat", Q_RETURN_ARG(QString, format), Q_ARG(int, textBook));
-    QCOMPARE(format, QStringLiteral("TXT"));
+    QCOMPARE(format, QStringLiteral("RTF"));
     QMetaObject::invokeMethod(m_window, "readBook");
     QTRY_VERIFY(bookReader->property("preparing").toBool());
     QCOMPARE(bookReader->property("preparingTitle").toString(), QStringLiteral("Notes of a voyage"));
     QTRY_VERIFY_WITH_TIMEOUT(!bookReader->property("preparing").toBool() && reader->isVisible()
                                  && !reader->property("position").toString().isEmpty(),
                              20000);
-    QCOMPARE(bookReader->property("format").toString(), QStringLiteral("TXT"));
+    QCOMPARE(bookReader->property("format").toString(), QStringLiteral("RTF"));
     QCOMPARE(bookReader->property("title").toString(), QStringLiteral("The Voyage"));
     reader->close();
     // Kept: no conversion the next time.
@@ -2202,6 +2203,18 @@ void LibraryUiTest::readsLooseFiles()
         });
     };
     QTRY_VERIFY_WITH_TIMEOUT(added(), 20000);
+    QTest::qWait(500);
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+
+    // An FB2, which Cousoir makes an EPUB of itself.
+    const QString fb2 = outside.filePath(QStringLiteral("Rouge.fb2"));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Le Rouge et le Noir - Stendhal.fb2"), fb2));
+    invoke(fb2);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && bookReader->property("title").toString() == QLatin1String("Le Rouge et le Noir")
+                                 && !reader->property("position").toString().isEmpty(),
+                             20000);
+    QCOMPARE(bookReader->property("format").toString(), QStringLiteral("FB2"));
     QTest::qWait(500);
     reader->close();
     QTRY_VERIFY(!reader->isVisible());

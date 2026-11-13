@@ -2234,7 +2234,8 @@ QString BookLibrary::readableFormat(int bookId) const
     if (!book || !readerAvailable())
         return {};
     QStringList wanted{ QStringLiteral("EPUB"), QStringLiteral("KEPUB"), QStringLiteral("AZW3"), QStringLiteral("MOBI"),
-                        QStringLiteral("AZW"), QStringLiteral("PDF") };
+                        QStringLiteral("AZW"), QStringLiteral("FB2"), QStringLiteral("FBZ"), QStringLiteral("PDF"),
+                        QStringLiteral("TXT") };
 #ifdef COUSOIR_READER
     if (!BookReader::converter().isEmpty())
         wanted += BookReader::convertedFormats();

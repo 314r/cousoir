@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<fb:FictionBook xmlns:fb="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:xlink="http://www.w3.org/1999/xlink">
+ <fb:description>
+  <fb:title-info>
+   <fb:book-title>   </fb:book-title>
+   <fb:sequence name="Серия без номера"/>
+  </fb:title-info>
+  <fb:src-title-info>
+   <fb:genre>sf</fb:genre>
+   <fb:author><fb:first-name>Иван</fb:first-name><fb:last-name>Петров</fb:last-name></fb:author>
+   <fb:annotation>Аннотация <fb:emphasis>без</fb:emphasis> абзаца.</fb:annotation>
+  </fb:src-title-info>
+  <fb:publish-info>
+   <fb:year>1999.5</fb:year>
+   <fb:isbn>12345</fb:isbn>
+  </fb:publish-info>
+ </fb:description>
+ <fb:body><fb:section><fb:p>Текст.</fb:p></fb:section></fb:body>
+</fb:FictionBook>

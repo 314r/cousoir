@@ -601,7 +601,7 @@ ThemedWindow {
             return false
         const extension = path.split(".").pop().toLowerCase()
         const pdf = extension === "pdf"
-        if (!pdf && ["epub", "kepub", "azw3", "mobi", "azw"].indexOf(extension) < 0)
+        if (!pdf && ["epub", "kepub", "azw3", "mobi", "azw", "fb2", "fbz", "txt"].indexOf(extension) < 0)
             return false
         const loader = pdf ? pdfReaderLoader : readerLoader
         if (!loader.item)
