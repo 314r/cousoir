@@ -235,6 +235,13 @@ qt_add_library(cousoir_models STATIC
     app_instance.h
     book_library.cpp
     book_library.h
+    book_library_commit.cpp
+    book_library_edit.cpp
+    book_library_import.cpp
+    book_library_load.cpp
+    book_library_reading.cpp
+    book_library_support.h
+    book_library_view.cpp
     book_list_model.cpp
     book_list_model.h
     book_text_indexer.cpp
@@ -431,7 +438,7 @@ target_link_libraries(cousoir
 )
 target_compile_definitions(cousoir PRIVATE COUSOIR_VERSION="${COUSOIR_PACKAGE_VERSION}")
 
-qt_add_executable(cousoir-cli cli_main.cpp)
+qt_add_executable(cousoir-cli cli_main.cpp cli_apply.cpp cli_commands.h cli_common.cpp cli_devices.cpp cli_library.cpp)
 set_target_properties(cousoir-cli PROPERTIES WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
 target_link_libraries(cousoir-cli PRIVATE cousoir_core)
 # The skill `cousoir-cli skill install` gives coding agents.
