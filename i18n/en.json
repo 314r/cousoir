@@ -175,6 +175,10 @@
     "one": "Stop sending",
     "other": "Stop the %n sendings"
   },
+  "Take “%1” off its %n books?": {
+    "one": "Take “%1” off its book?",
+    "other": "Take “%1” off its %n books?"
+  },
   "The %n other books are added either way.": {
     "one": "The other book is added either way.",
     "other": "The %n other books are added either way."
@@ -186,5 +190,13 @@
   "Where %1 stopped in %n books, in the library": {
     "one": "Where %1 stopped in %n book, in the library",
     "other": "Where %1 stopped in %n books, in the library"
+  },
+  "%1 Calibre still has %n formats to index.": {
+    "one": "%1 Calibre still has %n format to index.",
+    "other": "%1 Calibre still has %n formats to index."
+  },
+  "%n formats indexed.": {
+    "one": "%n format indexed.",
+    "other": "%n formats indexed."
   }
 }

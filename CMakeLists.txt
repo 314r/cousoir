@@ -119,6 +119,8 @@ qt_add_library(cousoir_core STATIC
     identifier_links.h
     book_search.cpp
     book_search.h
+    book_text_search.cpp
+    book_text_search.h
     epub_book.cpp
     epub_book.h
     epub_package.cpp
@@ -293,12 +295,14 @@ set(COUSOIR_QML_FILES
     MetaRow.qml
     MetadataDownloadDialog.qml
     NotePanel.qml
+    RenameDialog.qml
     SearchField.qml
     SettingsWindow.qml
     ShortcutsOverlay.qml
     Sidebar.qml
     SidebarItem.qml
     Theme.qml
+    TextSearchPage.qml
     ThemedWindow.qml
     ThinScrollBar.qml
     TrashPage.qml

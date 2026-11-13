@@ -23,13 +23,15 @@ ThemedWindow {
     // A saved search's books.
     readonly property bool searchSection: section.startsWith("search:")
     readonly property bool facetShown: section !== "books" && section !== "trash" && section !== "check"
-        && section !== "highlights"
+        && section !== "highlights" && section !== "text"
         && !deviceSection && !searchSection && !session.filterOpen && !session.bookOpen
     readonly property bool trashShown: section === "trash" && !session.bookOpen
     readonly property bool checkShown: section === "check" && !session.bookOpen
     readonly property bool highlightsShown: section === "highlights" && !session.bookOpen
+    readonly property bool textShown: section === "text" && !session.bookOpen
     readonly property bool deviceShown: deviceSection && !session.bookOpen
-    readonly property bool booksShown: !facetShown && !trashShown && !checkShown && !deviceShown && !session.bookOpen
+    readonly property bool booksShown: !facetShown && !trashShown && !checkShown && !deviceShown && !textShown
+        && !session.bookOpen
     // Several books selected in the list, which the pane beside it edits.
     readonly property bool editingMany: booksShown && library.books.selectedCount > 1
     // A message to show in place of the key hints for a while: an error,
@@ -179,6 +181,8 @@ ThemedWindow {
             checkPage.focusList()
         else if (highlightsShown)
             highlightsPage.focusList()
+        else if (textShown)
+            textPage.focusList()
         else
             booksPage.focusList()
     }
@@ -202,9 +206,15 @@ ThemedWindow {
     function focusSearch() {
         if (session.bookOpen)
             closeBook()
-        // The highlights have no search, as in kbextract2.
-        if (highlightsShown)
+        // The highlights and the books' text have their own.
+        if (highlightsShown) {
+            highlightsPage.focusSearch()
             return
+        }
+        if (textShown) {
+            textPage.focusField()
+            return
+        }
         searchField.forceActiveFocus(Qt.ShortcutFocusReason)
         searchField.selectAll()
     }
@@ -245,6 +255,8 @@ ThemedWindow {
             devicePage.focusList()
         else if (highlightsShown)
             highlightsPage.focusList()
+        else if (textShown)
+            textPage.focusList()
         else
             booksPage.focusList()
     }
@@ -260,6 +272,8 @@ ThemedWindow {
             return 5
         if (highlightsShown)
             return 6
+        if (textShown)
+            return 7
         return facetShown ? 1 : 0
     }
 
@@ -562,6 +576,16 @@ ThemedWindow {
         readBookOf(currentBookId())
     }
 
+    // The book read, searched for `query`: from the books' text.
+    function readAndFind(bookId, query) {
+        readBookOf(bookId)
+        // Calibre's search syntax left out: the reader looks for the words.
+        const words = query.replace(/["*]/g, "").trim()
+        const reader = library.readableFormat(bookId) === "PDF" ? null : readerLoader.item
+        if (reader && words)
+            reader.searchFor(words)
+    }
+
     function readBookOf(bookId) {
         if (!bookId || !library.readerAvailable)
             return
@@ -815,6 +839,8 @@ ThemedWindow {
             return qsTr("%n items", "", library.trashEntries.length)
         if (section === "highlights")
             return qsTr("%n highlights", "", highlightsPage.browser.count)
+        if (section === "text")
+            return textPage.query.trim() ? qsTr("%n books", "", textPage.rows.length) : ""
         if (section === "check")
             return library.checking ? qsTr("Checking…")
                 : qsTr("%n things to check", "", library.check.count || 0)
@@ -888,6 +914,8 @@ ThemedWindow {
         }
         if (trashShown)
             return library.trashEntries.length > 0 ? [move, h("Enter", qsTr("restore", "hint"))] : [reload]
+        if (textShown)
+            return textPage.rows.length > 0 ? [move, h("Enter", qsTr("read", "hint"))] : []
         if (checkShown)
             return (library.check.count || 0) > 0
                 ? [move, h("Enter", qsTr("actions", "hint")), h("F5", qsTr("check again", "hint"), 3)]
@@ -2068,6 +2096,7 @@ ThemedWindow {
 
                         visible: window.library.virtualLibraries.length > 0 && !session.bookOpen
                             && !window.deviceShown && !window.checkShown && !window.trashShown && !window.highlightsShown
+                            && !window.textShown
                         // The longest name, its arrow and paddings.
                         Layout.preferredWidth: Math.round(Math.min(24, choices.reduce(
                             (longest, choice) => Math.max(longest, choice.label.length), 0)) * Theme.charWidth)
@@ -2092,6 +2121,7 @@ ThemedWindow {
                         }
 
                         visible: !session.bookOpen && !window.deviceShown && !window.checkShown && !window.highlightsShown
+                            && !window.textShown
                         Layout.fillWidth: true
                         Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
@@ -2180,6 +2210,7 @@ ThemedWindow {
                             window.library.openFacetItem(id)
                             booksPage.focusList()
                         }
+                        onFailed: function(message) { window.showNotice(message) }
                     }
 
                     BookPage {
@@ -2227,6 +2258,13 @@ ThemedWindow {
                         sync: session.highlightSync
                         onFailed: function(message) { window.showNotice(message) }
                         onNoticed: function(message) { window.showNotice(message, false) }
+                    }
+
+                    TextSearchPage {
+                        id: textPage
+                        objectName: "textPage"
+                        library: window.library
+                        onReadRequested: function(bookId, query) { window.readAndFind(bookId, query) }
                     }
                 }
 

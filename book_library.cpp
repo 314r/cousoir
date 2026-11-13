@@ -36,6 +36,7 @@
 #include <numeric>
 
 #include "book_import.h"
+#include "book_text_search.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
@@ -57,7 +58,8 @@ const QStringList &sections()
     static const QStringList names = { QStringLiteral("books"), QStringLiteral("authors"), QStringLiteral("series"),
                                        QStringLiteral("tags"), QStringLiteral("languages"),
                                        QStringLiteral("publishers"), QStringLiteral("trash"),
-                                       QStringLiteral("check"), QStringLiteral("highlights") };
+                                       QStringLiteral("check"), QStringLiteral("highlights"),
+                                       QStringLiteral("text") };
     return names;
 }
 
@@ -1891,6 +1893,38 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     return {};
 }
 
+QVariantMap BookLibrary::textIndex() const
+{
+    const BookTextSearch::Status status = BookTextSearch::status(m_libraryPath);
+    return { { QStringLiteral("exists"), status.exists },
+             { QStringLiteral("indexed"), status.indexed },
+             { QStringLiteral("pending"), status.pending } };
+}
+
+QVariantMap BookLibrary::searchBooksText(const QString &query) const
+{
+    QString error;
+    const QList<BookTextSearch::Hit> hits = query.trimmed().isEmpty()
+        ? QList<BookTextSearch::Hit>()
+        : BookTextSearch::find(m_libraryPath, query, true, effectiveConfig().interfaceLanguage, 200, &error);
+    QVariantList rows;
+    QSet<int> shown;
+    for (const BookTextSearch::Hit &hit : hits) {
+        const Book *book = findBook(hit.bookId);
+        // A book Calibre indexed and the library no longer has; or one
+        // already shown from another of its formats, ranked higher.
+        if (!book || shown.contains(book->id))
+            continue;
+        shown.insert(book->id);
+        rows.append(QVariantMap{ { QStringLiteral("bookId"), book->id },
+                                 { QStringLiteral("title"), book->title },
+                                 { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
+                                 { QStringLiteral("format"), hit.format },
+                                 { QStringLiteral("snippet"), hit.snippet } });
+    }
+    return { { QStringLiteral("rows"), rows }, { QStringLiteral("error"), error } };
+}
+
 int BookLibrary::bookOfFile(const QString &path) const
 {
     const QString wanted = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
@@ -2319,6 +2353,64 @@ QString BookLibrary::keepDuplicate(int keepId, const QVariantList &otherIds)
     QString error;
     if (!LibraryCheck::keepOne(m_data, keepId, others, &change, &error))
         return error;
+    return queueChange(change);
+}
+
+QString BookLibrary::renameItem(const QString &section, int itemId, const QString &name)
+{
+    const QList<FacetItem> *items = facetItems(section);
+    if (!items)
+        return tr("This item is no longer in the library.");
+    const auto item = std::find_if(items->cbegin(), items->cend(), [itemId](const FacetItem &i) { return i.id == itemId; });
+    if (item == items->cend())
+        return tr("This item is no longer in the library.");
+    const QString renamed = name.simplified();
+    if (renamed == item->name)
+        return {};
+    if (renamed.isEmpty() && section == QLatin1String("authors"))
+        return tr("An author cannot be taken off the books: give another name.");
+    // FieldWriters refuses every author while two differ only by case.
+    if (section == QLatin1String("authors") && !m_findings.caseDuplicates.isEmpty())
+        return tr("Two author names differ only by case: Calibre merges them the next time it saves an author, and "
+                  "authors can be renamed then.");
+    // The item in its place in each book's list, once.
+    const auto replaced = [&renamed](const QList<int> &ids, const QStringList &names, int id) {
+        QStringList result;
+        for (qsizetype i = 0; i < ids.size(); ++i) {
+            const QString value = ids.at(i) == id ? renamed : names.value(i);
+            if (!value.isEmpty()
+                && std::none_of(result.cbegin(), result.cend(),
+                                [&value](const QString &other) { return other.compare(value, Qt::CaseInsensitive) == 0; }))
+                result.append(value);
+        }
+        return result;
+    };
+    CommitEngine::Request change;
+    for (const Book &book : std::as_const(m_data.books)) {
+        BookEdit edit;
+        edit.bookId = book.id;
+        if (section == QLatin1String("authors") && book.authorIds.contains(itemId)) {
+            edit.authors = replaced(book.authorIds, book.authors, itemId);
+            // An author sort set by hand stays, as the merge of names keeps it.
+            if (!LibraryCheck::authorSortFollows(m_data, book))
+                edit.authorSort = book.authorSort;
+        } else if (section == QLatin1String("tags") && book.tagIds.contains(itemId)) {
+            edit.tags = replaced(book.tagIds, book.tags, itemId);
+        } else if (section == QLatin1String("series") && book.seriesId == itemId) {
+            edit.series = renamed;
+            // A book taken out of a series is number 1, as Calibre's bulk
+            // edit leaves it.
+            if (renamed.isEmpty())
+                edit.seriesIndex = 1.0;
+        } else if (section == QLatin1String("publishers") && book.publisherId == itemId) {
+            edit.publisher = renamed;
+        } else {
+            continue;
+        }
+        change.edits.append(edit);
+    }
+    if (change.edits.isEmpty())
+        return tr("No book has this item any more.");
     return queueChange(change);
 }
 

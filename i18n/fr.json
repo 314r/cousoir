@@ -1141,5 +1141,48 @@
   "Highlights and notes: %1": "Surlignements et notes : %1",
   "Bookmarks: %1": "Signets : %1",
   "Go to, in % of the book": "Aller à, en % du livre",
-  "Move between the sidebar, the list and the details": "Passer de la barre latérale à la liste et aux détails"
+  "Move between the sidebar, the list and the details": "Passer de la barre latérale à la liste et aux détails",
+  "Cannot save %1: %2": "Impossible d’enregistrer %1 : %2",
+  "Search the highlights": "Rechercher dans les surlignements",
+  "All colours": "Toutes les couleurs",
+  "Yellow": "Jaune",
+  "Green": "Vert",
+  "Blue": "Bleu",
+  "Red": "Rouge",
+  "Purple": "Violet",
+  "Colour": "Couleur",
+  "Save the highlights of every book shown…": "Enregistrer les surlignements de tous les livres affichés…",
+  "Save the highlights": "Enregistrer les surlignements",
+  "Highlights saved": "Surlignements enregistrés",
+  "This item is no longer in the library.": "Cet élément n’est plus dans la bibliothèque.",
+  "An author cannot be taken off the books: give another name.": "Un auteur ne peut pas être retiré des livres : donnez un autre nom.",
+  "Two author names differ only by case: Calibre merges them the next time it saves an author, and authors can be renamed then.": "Deux noms d’auteurs ne diffèrent que par la casse : Calibre les fusionne la prochaine fois qu’il enregistre un auteur, et les auteurs pourront alors être renommés.",
+  "No book has this item any more.": "Plus aucun livre n’a cet élément.",
+  "Show its books": "Voir ses livres",
+  "Rename or merge…": "Renommer ou fusionner…",
+  "Take off its books…": "Retirer de ses livres…",
+  "Rename “%1”": "Renommer « %1 »",
+  "Take “%1” off its %n books?": {
+    "one": "Retirer « %1 » de son livre ?",
+    "other": "Retirer « %1 » de ses %n livres ?"
+  },
+  "A name another one has merges the two. Each book is changed as Calibre changes it.": "Un nom qu’un autre élément porte déjà fusionne les deux. Chaque livre est modifié comme Calibre le modifie.",
+  "The books stay; only this is taken off them.": "Les livres restent ; seul cet élément leur est retiré.",
+  "Take Off": "Retirer",
+  "Books' text": "Texte des livres",
+  "Words in the books' text": "Mots du texte des livres",
+  "Search the books' text": "Chercher dans le texte des livres",
+  "Calibre has not indexed the text of this library's books.": "Calibre n’a pas indexé le texte des livres de cette bibliothèque.",
+  "Calibre has not indexed the text of this library's books. Turn full text searching on in Calibre, under Preferences > Searching, and its index is searched here.": "Calibre n’a pas indexé le texte des livres de cette bibliothèque. Activez la recherche plein texte dans Calibre, sous Préférences > Recherche, et son index sera cherché ici.",
+  "%1 Calibre still has %n formats to index.": {
+    "one": "%1 Il reste %n format à indexer à Calibre.",
+    "other": "%1 Il reste %n formats à indexer à Calibre."
+  },
+  "%n formats indexed.": {
+    "one": "%n format indexé.",
+    "other": "%n formats indexés."
+  },
+  "Books found": "Livres trouvés",
+  "No book's text has “%1”.": "Aucun texte de livre ne contient « %1 ».",
+  "read|hint": "lire"
 }

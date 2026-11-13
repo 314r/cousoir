@@ -16,6 +16,7 @@
 #include <zip.h>
 
 #include "calibre_config.h"
+#include "calibre_fts.h"
 #include "calibre_lock.h"
 #include "sqlite_db.h"
 
@@ -133,4 +134,46 @@ inline bool makeKobo(const QString &root, QString *error = nullptr)
                     "N418000000000,4.1.15,4.38.21908,4.1.15,4.1.15,00000000-0000-0000-0000-000000000390")
         && writeAll(database, {}) && db.open(database, SqliteDb::Mode::ReadWrite, error)
         && db.exec(QString::fromUtf8(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/kobo.sql"))), error);
+}
+
+// The full text index Calibre keeps beside a library, with its schema
+// (resources/fts_sqlite.sql) and its tokenizer in `language`, Calibre's
+// interface language: `texts` holds { book, format, text } rows, `pending`
+// { book, format } ones Calibre has still to index.
+inline bool makeCalibreTextIndex(const QString &library, const QList<QVariantList> &texts,
+                                 const QList<QVariantList> &pending, const QString &language, QString *error)
+{
+    const QString path = QDir(library).filePath(QStringLiteral("full-text-search.db"));
+    SqliteDb db;
+    if (!writeAll(path, {}) || !db.open(path, SqliteDb::Mode::ReadWrite, error)
+        || !CalibreFts::registerTokenizers(db.handle(), language, error))
+        return false;
+    if (!db.exec(QStringLiteral(
+            "CREATE TABLE dirtied_formats (id INTEGER PRIMARY KEY, book INTEGER NOT NULL, format TEXT NOT NULL COLLATE NOCASE,"
+            " in_progress INTEGER NOT NULL DEFAULT FALSE, UNIQUE(book, format));"
+            "CREATE TABLE books_text (id INTEGER PRIMARY KEY, book INTEGER NOT NULL, timestamp REAL NOT NULL,"
+            " format TEXT NOT NULL COLLATE NOCASE, format_hash TEXT NOT NULL COLLATE NOCASE, format_size INTEGER NOT NULL DEFAULT 0,"
+            " searchable_text TEXT NOT NULL DEFAULT '', text_size INTEGER NOT NULL DEFAULT 0,"
+            " text_hash TEXT NOT NULL COLLATE NOCASE DEFAULT '', err_msg TEXT DEFAULT '', UNIQUE(book, format));"
+            "CREATE VIRTUAL TABLE books_fts USING fts5(searchable_text, content = 'books_text', content_rowid = 'id',"
+            " tokenize = 'calibre remove_diacritics 2');"
+            "CREATE VIRTUAL TABLE books_fts_stemmed USING fts5(searchable_text, content = 'books_text', content_rowid = 'id',"
+            " tokenize = 'porter calibre remove_diacritics 2');"
+            "CREATE TRIGGER books_fts_insert_trg AFTER INSERT ON books_text BEGIN"
+            " INSERT INTO books_fts(rowid, searchable_text) VALUES (NEW.id, NEW.searchable_text);"
+            " INSERT INTO books_fts_stemmed(rowid, searchable_text) VALUES (NEW.id, NEW.searchable_text);"
+            " DELETE FROM dirtied_formats WHERE book=NEW.book AND format=NEW.format; END;"),
+                 error))
+        return false;
+    for (const QVariantList &text : texts) {
+        if (!db.run(QStringLiteral("INSERT INTO books_text(book, timestamp, format, format_hash, searchable_text)"
+                                   " VALUES (?, 0, ?, 'hash', ?)"),
+                    text, error))
+            return false;
+    }
+    for (const QVariantList &format : pending) {
+        if (!db.run(QStringLiteral("INSERT INTO dirtied_formats(book, format) VALUES (?, ?)"), format, error))
+            return false;
+    }
+    return true;
 }

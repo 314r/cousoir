@@ -235,6 +235,13 @@ public:
     // The format Cousoir's reader reads the book in: EPUB, KEPUB, a Kindle
     // book (AZW3, MOBI, AZW), then PDF; empty for none.
     Q_INVOKABLE QString readableFormat(int bookId) const;
+    // Calibre's index of the books' text: { exists, indexed, pending }.
+    Q_INVOKABLE QVariantMap textIndex() const;
+    // The library's books whose text has what `query` asks, best first, as
+    // Calibre's full text search finds them: { rows: [{ bookId, title,
+    // authors, format, snippet }], error }, the words found in the snippet
+    // between \x1d marks.
+    Q_INVOKABLE QVariantMap searchBooksText(const QString &query) const;
     // The book a file of the library's is a format of; 0 for a file of none.
     Q_INVOKABLE int bookOfFile(const QString &path) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in
@@ -322,6 +329,11 @@ public:
     Q_INVOKABLE QString keepDuplicate(int keepId, const QVariantList &otherIds);
     // Files the books of the authors `authorIds` under `keepAuthorId`'s name.
     Q_INVOKABLE QString mergeAuthors(const QVariantList &authorIds, int keepAuthorId);
+    // An author, series, tag or publisher of the browse section `section`
+    // given another name, each of its books edited as Calibre edits one: a
+    // name another item has merges the two. Empty `name`, for a series, tag
+    // or publisher, takes it off its books. The error, empty when queued.
+    Q_INVOKABLE QString renameItem(const QString &section, int itemId, const QString &name);
     // Takes out of the database the book's formats whose file is gone.
     Q_INVOKABLE QString removeMissingFormats(int bookId);
     // Shows a file or folder of the library, relative to it, in the file

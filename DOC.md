@@ -199,6 +199,15 @@ ISO 639 table and its translations, read from the Calibre installed. Without
 Calibre, names are English. A search finds a language by its code, its
 English name or its name in Calibre's language.
 
+## Renaming items
+
+A row's menu in a browse section (Menu, Shift+F10 or a right click) shows
+its books, renames it, or takes it off its books. Each of its books is
+edited as Calibre edits one, so a name another item already has merges the
+two; an author renamed moves its books' folders, and keeps an author sort
+set by hand. A series taken off its books leaves them number 1. An author
+cannot be taken off, only renamed, and languages are Calibre's names.
+
 ## Searching
 
 The search box takes Calibre's search language and finds the books Calibre
@@ -251,6 +260,23 @@ Cousoir departs from Calibre's search in a few places:
   the same.
 - A date is a year, a month or a day, `2020-03-15`, or a day and month in
   the system's order; Calibre also reads "March 2020".
+
+## Searching the books' text
+
+When Calibre's full text search is turned on for a library (Preferences >
+Searching in Calibre), Calibre keeps the text of its books in
+`full-text-search.db` beside `metadata.db`. Books' text, in the sidebar,
+searches that index: each book whose text has the words, once, with the
+passage around them, the words in bold. Words are found by their stems
+("run" finds "running") and without their accents, with Calibre's tokenizer
+and its query language: `"quoted words"`, `and`, `or`, `not`, `word*`. The
+page says how many formats are indexed and how many Calibre still has to
+index. Enter or a double click reads the book, its search open on the words
+found in it.
+
+The index is only read, and while Calibre writes to it Cousoir sees it as
+it was. Without one, the page says how to have Calibre make it; Cousoir
+does not index books itself yet.
 
 ## Editing
 
@@ -1081,9 +1107,14 @@ highlights. A database found in a Kobo's `.kobo` folder is that Kobo's;
 else one whose highlights a Kobo met already has, and otherwise its
 folder's.
 
-Like kbextract2, the section has no search, filter or export, and leaves
-the bookmarks out. Calibre's annotations browser still searches them all,
-and Cousoir's reader lists a book's highlights beside its page.
+The field above the books finds the highlights by their words, in their
+text or their note, as Calibre's "Browse annotations" finds them, through
+Calibre's full text index, by their stems; a Kobo's that the library does
+not have, by the words they contain. The choice beside it keeps one of
+Calibre's colours. "Save the highlights of every book shown…", in the
+section's menu, writes them all to one Markdown file, each book under its
+title and authors. The bookmarks are left out, as kbextract2 leaves them;
+Cousoir's reader lists a book's beside its page.
 
 ## Settings
 

@@ -63,6 +63,11 @@ Rectangle {
         bookList.forceActiveFocus()
     }
 
+    function focusSearch() {
+        highlightSearch.forceActiveFocus()
+        highlightSearch.selectAll()
+    }
+
     function focusDocument() {
         if (!page.bookShown)
             return
@@ -199,6 +204,54 @@ Rectangle {
                     tip: qsTr("Sync the Kobos' highlights, or import a Kobo's database")
                     icon.source: "assets/icons/more.svg"
                     onClicked: koboMenu.popup(koboButton, 0, koboButton.height)
+                }
+            }
+
+            // Words in the highlights or their notes, and a colour.
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.panePadding
+                Layout.rightMargin: Theme.gutter
+                Layout.bottomMargin: Theme.gutter
+                spacing: Theme.gutter
+
+                SearchField {
+                    id: highlightSearch
+                    objectName: "highlightSearch"
+
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("Search the highlights")
+                    Accessible.name: qsTr("Search the highlights")
+                    // A moment after the typing: each search reads the
+                    // library's highlights.
+                    onTextChanged: searchDelay.restart()
+                    Keys.onEscapePressed: text = ""
+
+                    Timer {
+                        id: searchDelay
+                        interval: 250
+                        onTriggered: page.browser.search = highlightSearch.text
+                    }
+                }
+
+                ChoiceBox {
+                    id: colourChoice
+                    objectName: "highlightColour"
+
+                    readonly property var choices: [
+                        { value: "", label: qsTr("All colours") },
+                        { value: "yellow", label: qsTr("Yellow") },
+                        { value: "green", label: qsTr("Green") },
+                        { value: "blue", label: qsTr("Blue") },
+                        { value: "red", label: qsTr("Red") },
+                        { value: "purple", label: qsTr("Purple") }
+                    ]
+
+                    Layout.preferredWidth: Math.round(14 * Theme.charWidth)
+                    model: choices
+                    currentIndex: Math.max(0, choices.findIndex(choice => choice.value === page.browser.colour))
+                    Accessible.name: qsTr("Colour")
+                    onActivated: function(index) { page.browser.colour = choices[index].value }
                 }
             }
 
@@ -713,6 +766,7 @@ Rectangle {
         actions: [
             { key: "sync", title: qsTr("Sync highlights") },
             { key: "import", title: qsTr("Import a Kobo's database…") },
+            { key: "saveAll", title: qsTr("Save the highlights of every book shown…") },
             { key: "markdown", title: settings.markdownShown ? qsTr("Show the highlights (Ctrl+U)") : qsTr("Show as Markdown (Ctrl+U)") }
         ].concat(page.sync.sources.filter(source => !source.off).map(source => ({
             key: "remove:" + source.device, title: qsTr("Take %1's highlights out…").arg(source.name) })))
@@ -721,6 +775,8 @@ Rectangle {
                 page.syncNow()
             else if (key === "import")
                 page.importDatabase()
+            else if (key === "saveAll")
+                saveAllDialog.open()
             else if (key === "markdown")
                 page.toggleMarkdown()
             else if (key.startsWith("remove:"))
@@ -741,6 +797,26 @@ Rectangle {
             if (error)
                 page.failed(error)
         }
+    }
+
+    // Every book shown, as Markdown, in one file.
+    FilePicker {
+        id: saveAllDialog
+
+        title: qsTr("Save the highlights")
+        mode: PortalFileChooser.SaveFile
+        defaultSuffix: "md"
+        suggestedName: qsTr("Highlights") + ".md"
+        nameFilters: [qsTr("Markdown (*.md)")]
+        folder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        onAccepted: function(files) {
+            const error = page.browser.save(files[0], page.browser.formattedAll("markdown"))
+            if (error)
+                page.failed(error)
+            else
+                page.noticed(qsTr("Highlights saved"))
+        }
+        onFailed: function(message) { page.failed(message) }
     }
 
     FilePicker {
