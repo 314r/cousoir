@@ -71,6 +71,8 @@ Rectangle {
         { key: "read", title: qsTr("Open in reader") },
         { key: "folder", title: qsTr("Show in folder") }
     ]).concat([
+        { key: "save", title: menuOnSelection ? qsTr("Save %n books to disk…", "", selectedCount)
+                                              : qsTr("Save to disk…") },
         { key: "convert:KEPUB", title: menuOnSelection ? qsTr("Convert %n books to KEPUB", "", selectedCount)
                                                        : qsTr("Convert to KEPUB") },
         { key: "convert:AZW3", title: menuOnSelection ? qsTr("Convert %n books to AZW3", "", selectedCount)
@@ -102,6 +104,10 @@ Rectangle {
     signal reloadRequested()
     // Choose folder…, when the library cannot be read.
     signal libraryFolderRequested()
+    // The books saved out of the library, in a folder to pick.
+    signal saveRequested(var bookIds)
+    // A new library, made in a folder to pick.
+    signal newLibraryRequested()
     // Opening a book's file failed; `message` says why.
     signal failed(string message)
     // Metadata for the books, downloaded together.
@@ -221,6 +227,10 @@ Rectangle {
             page.trashRequested(page.menuTargets)
             return
         }
+        if (key === "save") {
+            page.saveRequested(page.menuTargets)
+            return
+        }
         if (key.startsWith("convert:")) {
             page.convertRequested(page.menuTargets, key.split(":")[1])
             return
@@ -265,7 +275,7 @@ Rectangle {
             return ""
         return page.library.libraryPath
             ? page.library.lastError
-            : qsTr("Cousoir opens the library Calibre opens on this computer, and Calibre has none yet. Choose a library's folder, the one holding metadata.db, or make one in Calibre and press Reload.")
+            : qsTr("Cousoir opens the library Calibre opens on this computer, and Calibre has none yet. Choose a library's folder, the one holding metadata.db, or make a new library, which Calibre can open too.")
     }
 
     // A new list keeps the current book current when it still shows it, a
@@ -407,11 +417,20 @@ Rectangle {
                     FlatButton {
                         objectName: "chooseLibraryButton"
 
-                        // The one way forward when Calibre has no library.
-                        variant: page.library.libraryPath ? "outline" : "primary"
+                        variant: "outline"
                         text: qsTr("Choose folder…")
                         icon.source: "assets/icons/folder.svg"
                         onClicked: page.libraryFolderRequested()
+                    }
+
+                    FlatButton {
+                        objectName: "newLibraryButton"
+
+                        // The way forward when Calibre has no library.
+                        variant: page.library.libraryPath ? "outline" : "primary"
+                        text: qsTr("New library…")
+                        icon.source: "assets/icons/plus.svg"
+                        onClicked: page.newLibraryRequested()
                     }
                 }
             }

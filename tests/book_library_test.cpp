@@ -91,6 +91,7 @@ private slots:
     void keepsVirtualLibraryChoice();
     void undoesOnlyBulkEdits();
     void undoesEachBookChanges();
+    void createsLibraries();
     void browsesSections();
     void filtersByItem();
     void describesCurrentBook();
@@ -689,6 +690,36 @@ void BookLibraryTest::undoesEachBookChanges()
     // The covers kept for it are gone.
     QVERIFY(QDir(QDir(BookLibrary::cacheFolder(copy.path())).filePath(QStringLiteral("undo-covers")))
                 .entryList(QDir::Files).isEmpty());
+}
+
+// A new library made without Calibre: Calibre's structure, a uuid of its
+// own, no books, and books added to it; a folder not empty refused.
+void BookLibraryTest::createsLibraries()
+{
+    QTemporaryDir root;
+    const QString folder = root.filePath(QStringLiteral("New library"));
+    // Any library makes another, not itself.
+    auto maker = open();
+    QVERIFY(maker);
+    QCOMPARE(maker->createLibrary(folder), QString());
+    QVERIFY(!maker->createLibrary(folder).isEmpty());
+    QVERIFY(!maker->createLibrary(fixtureLibrary()).isEmpty());
+    QTemporaryDir second;
+    QCOMPARE(maker->createLibrary(second.path()), QString());
+
+    auto library = open(folder);
+    QVERIFY(library);
+    QVERIFY(library->loaded());
+    QCOMPARE(library->data().books.size(), 0);
+    QVERIFY(library->data().schemaKnown);
+    QCOMPARE(library->data().uuid.size(), 36);
+    auto other = open(second.path());
+    QVERIFY(other && other->data().uuid != library->data().uuid);
+    library->setWritable(true);
+    QCOMPARE(library->addBooks({ QUrl::fromLocalFile(QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Le Vicomte - Inconnu.epub")) }),
+             QString());
+    QTRY_COMPARE_WITH_TIMEOUT(library->data().books.size(), 1, 15000);
+    QCOMPARE(library->data().books.first().title, QStringLiteral("Le Vicomte de Bragelonne: Tome premier"));
 }
 
 void BookLibraryTest::editsBooks()

@@ -222,5 +222,17 @@
   "%n days ago": {
     "one": "%n day ago",
     "other": "%n days ago"
+  },
+  "Save %n books to disk…": {
+    "one": "Save %n book to disk…",
+    "other": "Save %n books to disk…"
+  },
+  "%n books saved to disk in %1.": {
+    "one": "%n book saved to disk in %1.",
+    "other": "%n books saved to disk in %1."
+  },
+  "%n books could not be saved to disk; the first: %1": {
+    "one": "%n book could not be saved to disk; the first: %1",
+    "other": "%n books could not be saved to disk; the first: %1"
   }
 }

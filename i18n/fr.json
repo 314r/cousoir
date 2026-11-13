@@ -177,7 +177,6 @@
   "The virtual library “%1” has none of them.": "La bibliothèque virtuelle « %1 » n’en contient aucun.",
   "Add books with Ctrl+N, or drop their files here.": "Ajoutez des livres avec Ctrl+N, ou déposez leurs fichiers ici.",
   "Esc clears the search.": "Esc efface la recherche.",
-  "Cousoir opens the library Calibre opens on this computer, and Calibre has none yet. Choose a library's folder, the one holding metadata.db, or make one in Calibre and press Reload.": "Cousoir ouvre la bibliothèque que Calibre ouvre sur cet ordinateur, et Calibre n’en a pas encore. Choisissez le dossier d’une bibliothèque, celui qui contient metadata.db, ou créez-en une dans Calibre puis appuyez sur Recharger.",
   "Books": "Livres",
   "Book covers": "Couvertures des livres",
   "Reload": "Recharger",
@@ -1251,5 +1250,35 @@
   "Books read": "Livres lus",
   "%1 read": "Lu à %1",
   "No book has been read yet. A book read in Cousoir, in Calibre's viewer or on a Kobo shows here, where it was left.": "Aucun livre n’a encore été lu. Un livre lu dans Cousoir, dans la visionneuse de Calibre ou sur une Kobo apparaît ici, là où il a été laissé.",
-  "Continue reading": "Reprendre la lecture"
+  "Continue reading": "Reprendre la lecture",
+  "Books are already being saved to disk.": "Des livres sont déjà en cours d’enregistrement sur le disque.",
+  "There is no book to save.": "Il n’y a aucun livre à enregistrer.",
+  "Save %n books to disk…": {
+    "one": "Enregistrer %n livre sur le disque…",
+    "other": "Enregistrer %n livres sur le disque…"
+  },
+  "Save to disk…": "Enregistrer sur le disque…",
+  "Cousoir opens the library Calibre opens on this computer, and Calibre has none yet. Choose a library's folder, the one holding metadata.db, or make a new library, which Calibre can open too.": "Cousoir ouvre la bibliothèque que Calibre ouvre sur cet ordinateur, et Calibre n’en a pas encore. Choisissez le dossier d’une bibliothèque, celui qui contient metadata.db, ou créez une nouvelle bibliothèque, que Calibre pourra aussi ouvrir.",
+  "New library…": "Nouvelle bibliothèque…",
+  "Choose a folder to save the books in": "Choisir un dossier où enregistrer les livres",
+  "%n books saved to disk in %1.": {
+    "one": "%n livre enregistré sur le disque dans %1.",
+    "other": "%n livres enregistrés sur le disque dans %1."
+  },
+  "%n books could not be saved to disk; the first: %1": {
+    "one": "%n livre n’a pas pu être enregistré sur le disque ; le premier : %1",
+    "other": "%n livres n’ont pas pu être enregistrés sur le disque ; le premier : %1"
+  },
+  "Choose an empty folder for the new library": "Choisir un dossier vide pour la nouvelle bibliothèque",
+  "A new library was made in %1.": "Une nouvelle bibliothèque a été créée dans %1.",
+  "%1 is not empty: a new library needs a folder of its own.": "%1 n’est pas vide : une nouvelle bibliothèque a besoin de son propre dossier.",
+  "Cousoir was built without Calibre's schema for new libraries.": "Cousoir a été compilé sans le schéma de Calibre pour les nouvelles bibliothèques.",
+  "Cannot write in %1: %2": "Impossible d’écrire dans %1 : %2",
+  "Cannot create %1.": "Impossible de créer %1.",
+  "%1 is too long a path to save books under.": "%1 est un chemin trop long pour y enregistrer des livres.",
+  "cannot create the folder %1": "impossible de créer le dossier %1",
+  "cannot write its cover": "impossible d’écrire sa couverture",
+  "cannot write its OPF": "impossible d’écrire son OPF",
+  "cannot copy its %1 file": "impossible de copier son fichier %1",
+  "it has none of the formats asked for": "il n’a aucun des formats demandés"
 }

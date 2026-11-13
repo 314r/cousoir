@@ -38,6 +38,13 @@ struct UploadOptions
     std::function<void(QStringList *)> sanitizeComponents;
 };
 
+// get_components()'s template made of get_component_metadata()'s values:
+// the path of the book's files, its parts still to clean.
+QString componentText(const LibraryData &data, const Book &book, const QString &templateText,
+                      const QString &interfaceLanguage);
+// shorten_components_to().
+QStringList shortenComponentsTo(qsizetype length, QStringList components, bool lastHasExtension);
+
 // create_upload_path(): where a book goes, relative to the prefix,
 // `extension` its file's, ".azw3".
 QString uploadPath(const LibraryData &data, const Book &book, const QString &extension, const UploadOptions &options,

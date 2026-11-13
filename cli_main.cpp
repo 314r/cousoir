@@ -43,6 +43,8 @@
 #include "kobo_send.h"
 #include "sqlite_db.h"
 #include "book_text_index.h"
+#include "new_library.h"
+#include "save_to_disk.h"
 #include "book_text_search.h"
 #include "library_check.h"
 #include "metadata_download.h"
@@ -471,6 +473,42 @@ int indexText(const QString &libraryPath, bool force, bool json)
         return 1;
     }
     return 0;
+}
+
+// Saves books out of the library as Calibre's Save to disk does, with
+// Calibre's options for it: `ids` or "all".
+int exportBooks(const QString &libraryPath, const QString &folder, const QStringList &ids)
+{
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 2;
+    QList<int> books;
+    if (ids == QStringList{ QStringLiteral("all") }) {
+        for (const Book &book : std::as_const(data.books))
+            books.append(book.id);
+    } else {
+        for (const QString &id : ids) {
+            bool ok = false;
+            const int value = id.toInt(&ok);
+            if (!ok || !data.book(value)) {
+                err() << QStringLiteral("No book %1 in the library.").arg(id) << Qt::endl;
+                return 2;
+            }
+            books.append(value);
+        }
+    }
+    const CalibreConfig config = CalibreConfig::load();
+    Opf::Settings opf;
+    opf.interfaceLanguage = config.interfaceLanguage;
+    opf.producer = QStringLiteral("Cousoir (%1)").arg(QStringLiteral(COUSOIR_VERSION));
+    opf.producerId = QStringLiteral("cousoir");
+    const SaveToDisk::Outcome outcome = SaveToDisk::save(
+        data, books, folder, SaveToDisk::Options::load(CalibreConfig::configDirectory()), opf);
+    for (const QString &failure : outcome.failures)
+        err() << failure << Qt::endl;
+    out() << QStringLiteral("Saved %1 book(s) in %2").arg(outcome.saved).arg(QFileInfo(folder).absoluteFilePath())
+          << Qt::endl;
+    return outcome.failures.isEmpty() ? 0 : 1;
 }
 
 // The books whose text has what `query` asks, in Calibre's full text index,
@@ -1407,6 +1445,10 @@ int main(int argc, char *argv[])
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
         "  search  Print the ids of the books an expression of Calibre's search\n"
         "          language finds, as `calibredb search` does.\n"
+        "  export  Save books out of the library as Calibre's Save to disk does, with\n"
+        "          its options, their files copied as they are: export FOLDER ID… or all\n"
+        "  new-library  Make a new, empty Calibre library in a folder, empty or not\n"
+        "          there yet, as Calibre makes one: new-library FOLDER\n"
         "  index-text  Index the text of the books into Calibre's full text index, as\n"
         "          Calibre does, turning its full text search on; formats Cousoir\n"
         "          cannot read are left to Calibre.\n"
@@ -1458,7 +1500,7 @@ int main(int argc, char *argv[])
     parser.addOption(jsonOption);
     parser.addPositionalArgument(QStringLiteral("command"),
                                  QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify, "
-                                                "azw3, epub, kobo-highlights, index-text, search-text or skill"));
+                                                "azw3, epub, kobo-highlights, export, new-library, index-text, search-text or skill"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1480,6 +1522,24 @@ int main(int argc, char *argv[])
             return 2;
         }
         return search(path, arguments.mid(1).join(u' '), parser.value(limitOption).toInt());
+    }
+    if (arguments.value(0) == QLatin1String("export") && arguments.size() >= 3) {
+        const QString path = parser.isSet(libraryOption) ? parser.value(libraryOption)
+                                                         : CalibreConfig::defaultLibraryPath();
+        if (path.isEmpty()) {
+            err() << QStringLiteral("Calibre has no library on this computer; pass --library.") << Qt::endl;
+            return 2;
+        }
+        return exportBooks(path, arguments.at(1), arguments.mid(2));
+    }
+    if (arguments.value(0) == QLatin1String("new-library") && arguments.size() == 2) {
+        QString error;
+        if (!NewLibrary::create(QDir::cleanPath(QFileInfo(arguments.at(1)).absoluteFilePath()), &error)) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+        out() << QStringLiteral("Made a new library in %1").arg(QFileInfo(arguments.at(1)).absoluteFilePath()) << Qt::endl;
+        return 0;
     }
     if (arguments.value(0) == QLatin1String("search-text")) {
         if (arguments.size() < 2) {

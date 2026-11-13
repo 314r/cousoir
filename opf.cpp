@@ -291,9 +291,10 @@ QByteArray metadataToOpf(const LibraryData &data, const Book &book, const Settin
         opf += QStringLiteral("        ") + line + u'\n';
     opf += QStringLiteral("    </metadata>\n");
     if (settings.coverReference) {
-        opf += QStringLiteral("    <guide>\n        <reference type=\"cover\" title=\"%1\" href=\"cover.jpg\"/>\n"
+        opf += QStringLiteral("    <guide>\n        <reference type=\"cover\" title=\"%1\" href=\"%2\"/>\n"
                               "    </guide>\n")
-                   .arg(escapeAttribute(CalibreText::coverText(settings.interfaceLanguage)));
+                   .arg(escapeAttribute(CalibreText::coverText(settings.interfaceLanguage)),
+                        escapeAttribute(settings.coverHref));
     } else {
         opf += QStringLiteral("    <guide/>\n");
     }

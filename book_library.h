@@ -16,6 +16,7 @@
 #include "book_edit.h"
 #include "book_list_model.h"
 #include "book_text_indexer.h"
+#include "save_to_disk.h"
 #include "book_sort.h"
 #include "book_operations.h"
 #include "calibre_config.h"
@@ -255,6 +256,13 @@ public:
     // keep: { bookId, title, authors, cover, fraction, progress, when,
     // finished }; `when` as "Today", "Yesterday", "3 days ago" or a date.
     Q_INVOKABLE QVariantList readingRows() const;
+    // Makes a new, empty Calibre library in `folder`, empty or not there
+    // yet; an error, or empty. Another library to open, not this one.
+    Q_INVOKABLE QString createLibrary(const QString &folder) const;
+    // Saves the books out of the library in `folder`, as Calibre's Save to
+    // disk does, with its options, in the background: savedToDisk()
+    // follows. An error, or empty.
+    Q_INVOKABLE QString saveToDisk(const QVariantList &bookIds, const QString &folder);
     // The book a file of the library's is a format of; 0 for a file of none.
     Q_INVOKABLE int bookOfFile(const QString &path) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in
@@ -389,6 +397,8 @@ signals:
     void savingChanged();
     // The index of the books' text was made, or text went in.
     void textIndexChanged();
+    // The books saved to disk, and those that could not be with why.
+    void savedToDisk(int saved, const QStringList &failures, const QString &folder);
     void canRevertChanged();
     void bulkUndoChanged();
     void publishedKeyChanged();
@@ -592,6 +602,8 @@ private:
     int m_filterId = 0;
     BookListModel m_bookList;
     BookTextIndexer m_textIndexer;
+    QFutureWatcher<SaveToDisk::Outcome> m_saveToDiskWatcher;
+    QString m_saveToDiskFolder;
     // A save changed the formats while the indexer ran: it runs again.
     bool m_textIndexAgain = false;
     int m_scopeCount = 0;

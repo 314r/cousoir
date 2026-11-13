@@ -38,6 +38,7 @@
 
 #include "book_import.h"
 #include "book_text_index.h"
+#include "new_library.h"
 #include "book_text_search.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
@@ -271,6 +272,10 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_changeTimer, qOverload<>(&QTimer::start));
     connect(&m_loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &BookLibrary::finishLoad);
     connect(&m_commitWatcher, &QFutureWatcher<CommitResult>::finished, this, &BookLibrary::finishCommit);
+    connect(&m_saveToDiskWatcher, &QFutureWatcher<SaveToDisk::Outcome>::finished, this, [this] {
+        const SaveToDisk::Outcome outcome = m_saveToDiskWatcher.future().takeResult();
+        emit savedToDisk(outcome.saved, outcome.failures, m_saveToDiskFolder);
+    });
     connect(&m_textIndexer, &BookTextIndexer::finished, this, [this] {
         emit textIndexChanged();
         if (std::exchange(m_textIndexAgain, false))
@@ -288,6 +293,7 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
 BookLibrary::~BookLibrary()
 {
     m_textIndexer.stop();
+    m_saveToDiskWatcher.waitForFinished();
     m_checkWatcher.cancel();
     m_checkWatcher.waitForFinished();
     m_loadWatcher.waitForFinished();
@@ -2085,6 +2091,40 @@ void BookLibrary::startTextIndexing()
         tasks.append(task);
     }
     m_textIndexer.start(m_libraryPath, effectiveConfig().interfaceLanguage, tasks);
+}
+
+QString BookLibrary::saveToDisk(const QVariantList &bookIds, const QString &folder)
+{
+    if (!m_loaded)
+        return tr("No library is open.");
+    if (m_saveToDiskWatcher.isRunning())
+        return tr("Books are already being saved to disk.");
+    QList<int> ids;
+    for (const QVariant &id : bookIds) {
+        if (findBook(id.toInt()))
+            ids.append(id.toInt());
+    }
+    if (ids.isEmpty())
+        return tr("There is no book to save.");
+    const CalibreConfig config = effectiveConfig();
+    Opf::Settings opf;
+    opf.interfaceLanguage = config.interfaceLanguage;
+    const QString version = QCoreApplication::applicationVersion();
+    opf.producer = version.isEmpty() ? QStringLiteral("Cousoir") : QStringLiteral("Cousoir (%1)").arg(version);
+    opf.producerId = QStringLiteral("cousoir");
+    const SaveToDisk::Options options = SaveToDisk::Options::load(CalibreConfig::configDirectory());
+    m_saveToDiskFolder = QDir::cleanPath(folder);
+    // A copy: the library shown may change meanwhile.
+    m_saveToDiskWatcher.setFuture(QtConcurrent::run([data = m_data, ids, folder = m_saveToDiskFolder, options, opf] {
+        return SaveToDisk::save(data, ids, folder, options, opf);
+    }));
+    return {};
+}
+
+QString BookLibrary::createLibrary(const QString &folder) const
+{
+    QString error;
+    return NewLibrary::create(QDir::cleanPath(folder), &error) ? QString() : error;
 }
 
 QVariantList BookLibrary::readingRows() const
