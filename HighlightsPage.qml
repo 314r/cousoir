@@ -63,6 +63,11 @@ Rectangle {
         bookList.forceActiveFocus()
     }
 
+    function focusSearch() {
+        highlightSearch.forceActiveFocus()
+        highlightSearch.selectAll()
+    }
+
     function focusDocument() {
         if (!page.bookShown)
             return

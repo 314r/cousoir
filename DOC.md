@@ -261,6 +261,23 @@ Cousoir departs from Calibre's search in a few places:
 - A date is a year, a month or a day, `2020-03-15`, or a day and month in
   the system's order; Calibre also reads "March 2020".
 
+## Searching the books' text
+
+When Calibre's full text search is turned on for a library (Preferences >
+Searching in Calibre), Calibre keeps the text of its books in
+`full-text-search.db` beside `metadata.db`. Books' text, in the sidebar,
+searches that index: each book whose text has the words, once, with the
+passage around them, the words in bold. Words are found by their stems
+("run" finds "running") and without their accents, with Calibre's tokenizer
+and its query language: `"quoted words"`, `and`, `or`, `not`, `word*`. The
+page says how many formats are indexed and how many Calibre still has to
+index. Enter or a double click reads the book, its search open on the words
+found in it.
+
+The index is only read, and while Calibre writes to it Cousoir sees it as
+it was. Without one, the page says how to have Calibre make it; Cousoir
+does not index books itself yet.
+
 ## Editing
 
 While the library can be written, the details pane of a book edits its title,

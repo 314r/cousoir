@@ -1168,5 +1168,21 @@
   },
   "A name another one has merges the two. Each book is changed as Calibre changes it.": "Un nom qu’un autre élément porte déjà fusionne les deux. Chaque livre est modifié comme Calibre le modifie.",
   "The books stay; only this is taken off them.": "Les livres restent ; seul cet élément leur est retiré.",
-  "Take Off": "Retirer"
+  "Take Off": "Retirer",
+  "Books' text": "Texte des livres",
+  "Words in the books' text": "Mots du texte des livres",
+  "Search the books' text": "Chercher dans le texte des livres",
+  "Calibre has not indexed the text of this library's books.": "Calibre n’a pas indexé le texte des livres de cette bibliothèque.",
+  "Calibre has not indexed the text of this library's books. Turn full text searching on in Calibre, under Preferences > Searching, and its index is searched here.": "Calibre n’a pas indexé le texte des livres de cette bibliothèque. Activez la recherche plein texte dans Calibre, sous Préférences > Recherche, et son index sera cherché ici.",
+  "%1 Calibre still has %n formats to index.": {
+    "one": "%1 Il reste %n format à indexer à Calibre.",
+    "other": "%1 Il reste %n formats à indexer à Calibre."
+  },
+  "%n formats indexed.": {
+    "one": "%n format indexé.",
+    "other": "%n formats indexés."
+  },
+  "Books found": "Livres trouvés",
+  "No book's text has “%1”.": "Aucun texte de livre ne contient « %1 ».",
+  "read|hint": "lire"
 }

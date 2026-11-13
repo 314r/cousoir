@@ -145,6 +145,7 @@ private slots:
     void keepsNotes();
     void browsesHighlights();
     void searchesAndSavesHighlights();
+    void searchesTheBooksText();
     void renamesItems();
     void editsCustomColumns();
     void changesCovers();
@@ -2364,6 +2365,74 @@ void LibraryUiTest::keepsNotes()
 }
 
 // A tag renamed from the browse section's menu, by the keyboard.
+// The books' text, in the index Calibre keeps of it: without one, the page
+// says how to have it; with one, the books whose text has the words, each
+// once, and Enter reads the book, searched for the words found in it.
+void LibraryUiTest::searchesTheBooksText()
+{
+    click("sidebar_text");
+    QQuickItem *page = control("textPage");
+    QTRY_VERIFY(page && page->isVisible());
+    QVERIFY(text("textIndexStatus").contains(QStringLiteral("Preferences > Searching")));
+    QVERIFY(!control("textSearchField")->isEnabled());
+    QVERIFY(!control("searchField")->isVisible());
+
+    // Made in Calibre's language, as Calibre makes it.
+    QString error;
+    const QString blackCompany = QStringLiteral("The Black Company is running north.");
+    QVERIFY2(makeCalibreTextIndex(m_libraryPath,
+                                  { { 1, QStringLiteral("EPUB"), QStringLiteral("Colin possède un appartement et un cuisinier.") },
+                                    { 2, QStringLiteral("EPUB"), blackCompany },
+                                    { 2, QStringLiteral("AZW3"), blackCompany } },
+                                  { { 3, QStringLiteral("EPUB") } }, QStringLiteral("fr"), &error),
+             qPrintable(error));
+    QMetaObject::invokeMethod(page, "refresh");
+    QCOMPARE(text("textIndexStatus"), QStringLiteral("3 formats indexed. Calibre still has 1 format to index."));
+    QQuickItem *field = control("textSearchField");
+    QVERIFY(field->isEnabled());
+    field->forceActiveFocus();
+    typeText(QStringLiteral("running"));
+    QTRY_COMPARE(page->property("rows").toList().size(), 1);
+    const QVariantMap hit = page->property("rows").toList().first().toMap();
+    QCOMPARE(hit.value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
+    QVERIFY(hit.value(QStringLiteral("snippet")).toString().contains(QStringLiteral("\x1drunning\x1d")));
+    QCOMPARE(text("bookCount"), QStringLiteral("1 book"));
+    // Down to the books, Ctrl+F back to the words.
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTRY_VERIFY(control("textResults")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_F, Qt::ControlModifier);
+    QTRY_VERIFY(field->hasActiveFocus());
+
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    typeText(QStringLiteral("nowhere"));
+    QTRY_VERIFY(page->property("rows").toList().isEmpty());
+    QTRY_VERIFY(control("textNothing")->isVisible());
+
+#ifdef COUSOIR_READER
+    makeWritable();
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    typeText(QStringLiteral("cuisinier OR nowhere"));
+    QTRY_COMPARE(page->property("rows").toList().size(), 1);
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTRY_VERIFY(control("textResults")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QQuickWindow *reader = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT((reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow")))
+                                 && !reader->property("position").toString().isEmpty(),
+                             20000);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QCOMPARE(reader->property("sidebar").toString(), QStringLiteral("search"));
+    QTRY_VERIFY_WITH_TIMEOUT(!bookReader->property("searching").toBool()
+                                 && !bookReader->property("searchResults").toList().isEmpty(),
+                             10000);
+    QCOMPARE(bookReader->property("searchQuery").toString(), QStringLiteral("cuisinier"));
+    QCOMPARE(bookReader->property("searchResults").toList().first().toMap().value(QStringLiteral("text")).toString(),
+             QStringLiteral("cuisinier"));
+    QTest::qWait(500);
+    reader->close();
+#endif
+}
+
 void LibraryUiTest::renamesItems()
 {
     makeWritable();

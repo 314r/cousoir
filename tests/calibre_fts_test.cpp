@@ -1,9 +1,11 @@
 #include <QtTest>
 
 #include <QJsonArray>
+#include <QTemporaryDir>
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "book_text_search.h"
 #include "calibre_fts.h"
 #include "sqlite_db.h"
 #include "test_support.h"
@@ -17,6 +19,7 @@ class CalibreFtsTest : public QObject
     Q_OBJECT
 
 private slots:
+    void searchesTheBooksText();
     void tokenizesAsCalibre_data();
     void tokenizesAsCalibre();
 };
@@ -62,6 +65,49 @@ void CalibreFtsTest::tokenizesAsCalibre()
             theirs.append(instance.toArray().at(0).toString() + u'@' + QString::number(instance.toArray().at(1).toInt()));
         QCOMPARE(ours, theirs);
     }
+}
+
+// The books' text found in an index made as Calibre makes it, with its
+// schema (resources/fts_sqlite.sql) and its tokenizer.
+void CalibreFtsTest::searchesTheBooksText()
+{
+    QTemporaryDir library;
+    QCOMPARE(BookTextSearch::status(library.path()).exists, false);
+    QString error;
+    QVERIFY(BookTextSearch::find(library.path(), QStringLiteral("annals"), true, QStringLiteral("en"), 10, &error).isEmpty());
+    QVERIFY(!error.isEmpty());
+    QVERIFY2(makeCalibreTextIndex(library.path(),
+                                  { { 2, QStringLiteral("EPUB"), QStringLiteral("The Black Company is running north. The Annals are kept by Croaker.") },
+                                    { 1, QStringLiteral("epub"), QStringLiteral("Colin aimait la musique de Duke Ellington. Écume des jours.") },
+                                    { 4, QStringLiteral("AZW3"), QStringLiteral("The world will end next Saturday, just before dinner.") } },
+                                  { { 5, QStringLiteral("PDF") } }, QStringLiteral("en"), &error),
+             qPrintable(error));
+    const BookTextSearch::Status status = BookTextSearch::status(library.path());
+    QVERIFY(status.exists);
+    QCOMPARE(status.indexed, 3);
+    QCOMPARE(status.pending, 1);
+
+    // By the words' stems: "run" finds "running".
+    QList<BookTextSearch::Hit> hits = BookTextSearch::find(library.path(), QStringLiteral("run"), true, QStringLiteral("en"), 10, &error);
+    QCOMPARE(hits.size(), 1);
+    QCOMPARE(hits.first().bookId, 2);
+    QCOMPARE(hits.first().format, QStringLiteral("EPUB"));
+    QVERIFY(hits.first().snippet.contains(QStringLiteral("\x1drunning\x1d")));
+    QVERIFY(BookTextSearch::find(library.path(), QStringLiteral("run"), false, QStringLiteral("en"), 10, &error).isEmpty());
+    // Stemmed in another language than Calibre's: as written.
+    error.clear();
+    hits = BookTextSearch::find(library.path(), QStringLiteral("running"), true, QStringLiteral("fr"), 10, &error);
+    QCOMPARE(hits.size(), 1);
+    QCOMPARE(hits.first().bookId, 2);
+    QVERIFY(error.isEmpty());
+    // Accents aside, as Calibre's tokenizer folds them.
+    hits = BookTextSearch::find(library.path(), QStringLiteral("ecume"), true, QStringLiteral("fr"), 10, &error);
+    QCOMPARE(hits.size(), 1);
+    QCOMPARE(hits.first().bookId, 1);
+    QCOMPARE(hits.first().format, QStringLiteral("EPUB"));
+    // A query FTS5 cannot read says why.
+    QVERIFY(BookTextSearch::find(library.path(), QStringLiteral("\"unclosed"), true, QStringLiteral("en"), 10, &error).isEmpty());
+    QVERIFY(!error.isEmpty());
 }
 
 QTEST_GUILESS_MAIN(CalibreFtsTest)

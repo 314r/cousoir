@@ -36,6 +36,7 @@
 #include <numeric>
 
 #include "book_import.h"
+#include "book_text_search.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
 #endif
@@ -57,7 +58,8 @@ const QStringList &sections()
     static const QStringList names = { QStringLiteral("books"), QStringLiteral("authors"), QStringLiteral("series"),
                                        QStringLiteral("tags"), QStringLiteral("languages"),
                                        QStringLiteral("publishers"), QStringLiteral("trash"),
-                                       QStringLiteral("check"), QStringLiteral("highlights") };
+                                       QStringLiteral("check"), QStringLiteral("highlights"),
+                                       QStringLiteral("text") };
     return names;
 }
 
@@ -1889,6 +1891,38 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     emit savingChanged();
     startCommit();
     return {};
+}
+
+QVariantMap BookLibrary::textIndex() const
+{
+    const BookTextSearch::Status status = BookTextSearch::status(m_libraryPath);
+    return { { QStringLiteral("exists"), status.exists },
+             { QStringLiteral("indexed"), status.indexed },
+             { QStringLiteral("pending"), status.pending } };
+}
+
+QVariantMap BookLibrary::searchBooksText(const QString &query) const
+{
+    QString error;
+    const QList<BookTextSearch::Hit> hits = query.trimmed().isEmpty()
+        ? QList<BookTextSearch::Hit>()
+        : BookTextSearch::find(m_libraryPath, query, true, effectiveConfig().interfaceLanguage, 200, &error);
+    QVariantList rows;
+    QSet<int> shown;
+    for (const BookTextSearch::Hit &hit : hits) {
+        const Book *book = findBook(hit.bookId);
+        // A book Calibre indexed and the library no longer has; or one
+        // already shown from another of its formats, ranked higher.
+        if (!book || shown.contains(book->id))
+            continue;
+        shown.insert(book->id);
+        rows.append(QVariantMap{ { QStringLiteral("bookId"), book->id },
+                                 { QStringLiteral("title"), book->title },
+                                 { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
+                                 { QStringLiteral("format"), hit.format },
+                                 { QStringLiteral("snippet"), hit.snippet } });
+    }
+    return { { QStringLiteral("rows"), rows }, { QStringLiteral("error"), error } };
 }
 
 int BookLibrary::bookOfFile(const QString &path) const

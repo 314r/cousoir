@@ -190,5 +190,13 @@
   "Where %1 stopped in %n books, in the library": {
     "one": "Where %1 stopped in %n book, in the library",
     "other": "Where %1 stopped in %n books, in the library"
+  },
+  "%1 Calibre still has %n formats to index.": {
+    "one": "%1 Calibre still has %n format to index.",
+    "other": "%1 Calibre still has %n formats to index."
+  },
+  "%n formats indexed.": {
+    "one": "%n format indexed.",
+    "other": "%n formats indexed."
   }
 }

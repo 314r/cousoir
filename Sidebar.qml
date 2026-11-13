@@ -23,7 +23,8 @@ Item {
             { key: "books", title: qsTr("Books"), icon: "book" },
             { key: "trash", title: qsTr("Trash"), icon: "trash" },
             { key: "check", title: qsTr("Check"), icon: "check" },
-            { key: "highlights", title: qsTr("Highlights"), icon: "highlighter" }
+            { key: "highlights", title: qsTr("Highlights"), icon: "highlighter" },
+            { key: "text", title: qsTr("Books' text"), icon: "search" }
         ] },
         { title: qsTr("Browse"), items: [
             { key: "authors", title: qsTr("Authors"), icon: "user" },

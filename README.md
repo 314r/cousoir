@@ -92,6 +92,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   and notes typeset as a page by chapter, as kbextract2 shows them, found
   by their words or their colour, and copied or saved as Markdown, Obsidian
   Markdown or plain text, a book or all of them.
+- 📚 **Search inside every book.** With Calibre's full text search turned
+  on, Cousoir searches the text of the whole library: the books that have
+  your words, with the passage around them, and Enter opens the book there.
 - 🖍️ **Your Kobo's highlights, at their place in your books.** Plug it in:
   its highlights and notes go into the library, each where you made it in
   the book, for Calibre's search and Cousoir's reader, and those you delete

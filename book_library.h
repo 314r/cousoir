@@ -235,6 +235,13 @@ public:
     // The format Cousoir's reader reads the book in: EPUB, KEPUB, a Kindle
     // book (AZW3, MOBI, AZW), then PDF; empty for none.
     Q_INVOKABLE QString readableFormat(int bookId) const;
+    // Calibre's index of the books' text: { exists, indexed, pending }.
+    Q_INVOKABLE QVariantMap textIndex() const;
+    // The library's books whose text has what `query` asks, best first, as
+    // Calibre's full text search finds them: { rows: [{ bookId, title,
+    // authors, format, snippet }], error }, the words found in the snippet
+    // between \x1d marks.
+    Q_INVOKABLE QVariantMap searchBooksText(const QString &query) const;
     // The book a file of the library's is a format of; 0 for a file of none.
     Q_INVOKABLE int bookOfFile(const QString &path) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in

@@ -409,6 +409,14 @@ ThemedWindow {
         bookReader.search(query)
     }
 
+    // The search panel open on `query`, its places found: from the
+    // library's search of the books' text.
+    function searchFor(query) {
+        openSearch()
+        searchField.text = query
+        find(query)
+    }
+
     function openSearch() {
         tocVisible = true
         sidebar = "search"
