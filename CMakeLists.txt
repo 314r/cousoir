@@ -322,6 +322,7 @@ set(COUSOIR_QML_FILES
     ListTable.qml
     Main.qml
     MessagesPopup.qml
+    MainToolbar.qml
     MetaRow.qml
     MetadataDownloadDialog.qml
     NotePanel.qml
@@ -333,6 +334,7 @@ set(COUSOIR_QML_FILES
     SidebarItem.qml
     Theme.qml
     ReadingPage.qml
+    StatusBar.qml
     TextSearchPage.qml
     ThemedWindow.qml
     ThinScrollBar.qml
