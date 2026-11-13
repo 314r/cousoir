@@ -1140,5 +1140,6 @@
   "Put back the highlight removed": "Remettre le surlignement retiré",
   "Highlights and notes: %1": "Surlignements et notes : %1",
   "Bookmarks: %1": "Signets : %1",
-  "Go to, in % of the book": "Aller à, en % du livre"
+  "Go to, in % of the book": "Aller à, en % du livre",
+  "Move between the sidebar, the list and the details": "Passer de la barre latérale à la liste et aux détails"
 }

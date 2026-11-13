@@ -1407,6 +1407,7 @@ neither in the library nor on the Kobo.
 | Ctrl+U | Show the book's highlights as Markdown, or as a page again, in Highlights |
 | Ctrl+Z | Undo the last change to several books, or every change to the open book, asked first; a field's own typing while editing it |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
+| F6, Shift+F6 | Move between the sidebar, the list or the book, and the book's details |
 | ? | Show or hide every shortcut of the window, the reader's in the reader |
 | Q, Ctrl+Q | Quit, asked first while books are being converted, sent or added |
 

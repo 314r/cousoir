@@ -135,6 +135,7 @@ private slots:
     void remembersTheSession();
     void sortsAndShowsColumnsFromCommands();
     void readsFromTheKeyboard();
+    void movesBetweenAreas();
     void editsDetailsInPlace();
     void revertsBookChanges();
     void keepsWhatIsTyped();
@@ -2947,6 +2948,45 @@ void LibraryUiTest::readsFromTheKeyboard()
     QTest::qWait(500);
     reader->close();
 #endif
+}
+
+// F6 goes from the sidebar to the list, to a book's details, and round;
+// a question answered gives the focus back where it was.
+void LibraryUiTest::movesBetweenAreas()
+{
+    QMetaObject::invokeMethod(m_window, "focusCurrentList");
+    QTRY_VERIFY(m_window->activeFocusItem());
+    const auto inside = [this](const char *name) {
+        QQuickItem *area = control(name);
+        for (QQuickItem *item = m_window->activeFocusItem(); item; item = item->parentItem()) {
+            if (item == area)
+                return true;
+        }
+        return false;
+    };
+    QVERIFY(inside("booksPage"));
+    QTest::keyClick(m_window, Qt::Key_F6);
+    QTRY_VERIFY(inside("sidebar"));
+    QTest::keyClick(m_window, Qt::Key_F6, Qt::ShiftModifier);
+    QTRY_VERIFY(inside("booksPage"));
+
+    openWritable(1);
+    QTest::keyClick(m_window, Qt::Key_F6);
+    QTRY_VERIFY(inside("detailsPane"));
+    QTest::keyClick(m_window, Qt::Key_F6);
+    QTRY_VERIFY(inside("sidebar"));
+
+    // A question asked and answered: the focus comes back.
+    QTest::keyClick(m_window, Qt::Key_F6, Qt::ShiftModifier);
+    QTRY_VERIFY(inside("detailsPane"));
+    QQuickItem *before = m_window->activeFocusItem();
+    QObject *dialog = object("trashDialog");
+    QVERIFY(dialog);
+    QMetaObject::invokeMethod(dialog, "ask");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    QTRY_COMPARE(m_window->activeFocusItem(), before);
 }
 
 // The section and the window's size come back as they were left.

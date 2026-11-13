@@ -18,9 +18,19 @@ Popup {
 
     signal accepted()
 
+    // What had the focus before, to give it back once answered.
+    property Item focusBefore: null
+
     function ask() {
+        focusBefore = dialog.parent && dialog.parent.Window.window ? dialog.parent.Window.window.activeFocusItem : null
         open()
         acceptButton.forceActiveFocus(Qt.PopupFocusReason)
+    }
+
+    onClosed: {
+        if (focusBefore && focusBefore.visible)
+            focusBefore.forceActiveFocus(Qt.PopupFocusReason)
+        focusBefore = null
     }
 
     function accept() {
