@@ -156,6 +156,10 @@ qt_add_library(cousoir_core STATIC
     new_library.h
     save_to_disk.cpp
     save_to_disk.h
+    text_book_epub.cpp
+    text_book_epub.h
+    text_book_metadata.cpp
+    text_book_metadata.h
     mobi_book.h
     mobi_format.cpp
     mobi_format.h

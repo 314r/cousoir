@@ -1284,5 +1284,8 @@
   "%1 cannot be found.": "%1 est introuvable.",
   "Cousoir reads %1 once it is in the library.": "Cousoir lit %1 une fois qu’il est dans la bibliothèque.",
   "“%1” is being added to the library.": "« %1 » est en cours d’ajout à la bibliothèque.",
-  "Add to library": "Ajouter à la bibliothèque"
+  "Add to library": "Ajouter à la bibliothèque",
+  "%1 is not an FB2 book Cousoir can read.": "%1 n’est pas un livre FB2 que Cousoir sait lire.",
+  "%1 has no text.": "%1 n’a pas de texte.",
+  "%1 holds no FB2 book.": "%1 ne contient aucun livre FB2."
 }

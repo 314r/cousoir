@@ -1,4 +1,5 @@
 #include "book_reader.h"
+#include "text_book_epub.h"
 #include <QStandardPaths>
 #include <QCryptographicHash>
 
@@ -732,13 +733,35 @@ void BookReader::convertKindle(int bookId, const QString &title, const QString &
         emit prepared(bookId, error);
     });
     // On a thread: a large book takes a moment, a damaged one longer.
-    watcher->setFuture(QtConcurrent::run([source, part, title] {
+    watcher->setFuture(QtConcurrent::run([source, part, title, format = m_nativeFormat] {
         QString error;
-        if (MobiBook::toEpub(source, part, &error))
+        if (makeNatively(format, source, part, &error))
             return QString();
         return error.isEmpty() ? tr("“%1” cannot be read.").arg(title) : error;
     }));
     emit preparingChanged();
+}
+
+bool BookReader::makeNatively(const QString &format, const QString &source, const QString &epub, QString *error)
+{
+    if (format == QLatin1String("FB2") || format == QLatin1String("FBZ"))
+        return TextBookEpub::fb2ToEpub(source, epub, error);
+    if (format == QLatin1String("TXT"))
+        return TextBookEpub::txtToEpub(source, epub, error);
+    return MobiBook::toEpub(source, epub, error);
+}
+
+QStringList BookReader::nativeFormats()
+{
+    return { QStringLiteral("AZW3"), QStringLiteral("MOBI"), QStringLiteral("AZW"), QStringLiteral("FB2"),
+             QStringLiteral("FBZ"),  QStringLiteral("TXT") };
+}
+
+QString BookReader::nativeMaker(const QString &format)
+{
+    const bool text = format == QLatin1String("FB2") || format == QLatin1String("FBZ") || format == QLatin1String("TXT");
+    return text ? QStringLiteral("cousoirtext%1").arg(TextBookEpub::version)
+                : QStringLiteral("cousoir%1").arg(MobiBook::version);
 }
 
 QString BookReader::preparingTitle() const
@@ -851,8 +874,8 @@ QString BookReader::open(int bookId)
     if (!book)
         return tr("This book is no longer in the library.");
     QString path;
-    QStringList wanted{ QStringLiteral("EPUB"), QStringLiteral("KEPUB"), QStringLiteral("AZW3"), QStringLiteral("MOBI"),
-                        QStringLiteral("AZW") };
+    // Those Cousoir reads itself, then those Calibre makes EPUBs of.
+    QStringList wanted = QStringList{ QStringLiteral("EPUB"), QStringLiteral("KEPUB") } + nativeFormats();
     if (!converter().isEmpty())
         wanted += convertedFormats();
     for (const QString &name : std::as_const(wanted)) {
@@ -876,8 +899,8 @@ QString BookReader::open(int bookId)
         const QString prefix = QStringLiteral("%1-%2-").arg(book->uuid, m_format);
         // The maker's version too: a book made by an older Cousoir is made
         // again.
-        const bool calibre = convertedFormats().contains(m_format);
-        const QString maker = calibre ? QStringLiteral("calibre") : QStringLiteral("cousoir%1").arg(MobiBook::version);
+        const bool calibre = !nativeFormats().contains(m_format);
+        const QString maker = calibre ? QStringLiteral("calibre") : nativeMaker(m_format);
         const QString made = cache.filePath(prefix + QStringLiteral("%1-%2-%3.epub")
                                                          .arg(info.size())
                                                          .arg(info.lastModified().toMSecsSinceEpoch())
@@ -887,6 +910,7 @@ QString BookReader::open(int bookId)
             for (const QString &old : cache.entryList({ prefix + u'*' }, QDir::Files))
                 QFile::remove(cache.filePath(old));
             const QString part = made + QStringLiteral(".part.epub");
+            m_nativeFormat = m_format;
             m_format.clear();
             if (calibre)
                 return convert(bookId, book->title, path, part, made) ? QString() : tr("Calibre cannot be run.");
@@ -915,15 +939,15 @@ QString BookReader::openFile(const QString &file)
     const QString key = QStringLiteral("file-") + QString::fromLatin1(hash.result().toHex());
     m_format = info.suffix().toUpper();
     QString path = file;
-    if (m_format == QLatin1String("AZW3") || m_format == QLatin1String("MOBI") || m_format == QLatin1String("AZW")) {
+    if (nativeFormats().contains(m_format)) {
         // Made an EPUB once, kept while the file is the same.
         const QDir cache(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/loose"));
-        const QString made = cache.filePath(QStringLiteral("%1-cousoir%2.epub").arg(key).arg(MobiBook::version));
+        const QString made = cache.filePath(QStringLiteral("%1-%2.epub").arg(key, nativeMaker(m_format)));
         if (!QFileInfo::exists(made)) {
             QDir().mkpath(cache.path());
             const QString part = made + QStringLiteral(".part.epub");
             QString error;
-            if (!MobiBook::toEpub(file, part, &error) || !QFile::rename(part, made)) {
+            if (!makeNatively(m_format, file, part, &error) || !QFile::rename(part, made)) {
                 QFile::remove(part);
                 m_format.clear();
                 return error.isEmpty() ? tr("“%1” cannot be read.").arg(info.fileName()) : error;

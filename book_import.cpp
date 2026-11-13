@@ -40,6 +40,7 @@
 #include "calibre_text.h"
 #include "field_writers.h"
 #include "pdf_reader.h"
+#include "text_book_metadata.h"
 
 namespace {
 
@@ -601,6 +602,10 @@ bool readFileMetadata(const QString &path, const CalibreConfig &config, Imported
         return readMobi(path, metadata, error, config);
     if (format == QLatin1String("pdf"))
         return PdfReader::read(path, config.interfaceLanguage, metadata, error);
+    if (format == QLatin1String("fb2") || format == QLatin1String("fbz"))
+        return TextBookMetadata::readFb2(path, metadata, error);
+    if (format == QLatin1String("txt"))
+        return TextBookMetadata::readTxt(path, metadata, error);
     return readWithCalibre(path, metadata, false, error);
 }
 

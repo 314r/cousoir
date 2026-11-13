@@ -117,6 +117,8 @@ public:
     // The formats Cousoir reads once Calibre makes them EPUBs, in the order
     // it prefers them.
     static QStringList convertedFormats();
+    // The formats Cousoir makes EPUBs of itself: Kindle books, FB2, text.
+    static QStringList nativeFormats();
     // Calibre's ebook-convert, or the program COUSOIR_EBOOK_CONVERT names
     // (the tests'); empty without Calibre.
     static QString converter();
@@ -202,7 +204,11 @@ private:
     // Has Calibre make `part` of `source`, renamed `made` once done.
     bool convert(int bookId, const QString &title, const QString &source, const QString &part, const QString &made);
     // The same of a Kindle book, by Cousoir on a thread.
+    // Makes the EPUB of a format Cousoir reads itself, on a thread.
     void convertKindle(int bookId, const QString &title, const QString &source, const QString &part, const QString &made);
+    static bool makeNatively(const QString &format, const QString &source, const QString &epub, QString *error);
+    // What makes a format's EPUB, and its version, in the name it is kept by.
+    static QString nativeMaker(const QString &format);
     // What is being made let go: Calibre stopped, a thread's EPUB not kept.
     void stopPreparing();
     void queueAnnotation(const Annotation &annotation);
@@ -229,6 +235,8 @@ private:
     // highlights kept by Cousoir alone.
     bool m_local = false;
     QString m_looseFile;
+    // The format being made an EPUB by Cousoir.
+    QString m_nativeFormat;
     // The conversion running, if any, and its book.
     QPointer<QProcess> m_conversion;
     QString m_preparingPart;

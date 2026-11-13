@@ -474,8 +474,10 @@ them, and reads what `calibredb add` reads:
 - then the file's own metadata, unless Calibre is set not to read it, merged
   as Calibre merges it: the file's title and authors unless they are
   "Unknown", its other fields where it has them, its tags with the name's, its
-  cover. EPUB and KEPUB (OPF 2 and 3), MOBI, AZW, AZW3 and PRC are read by
-  Cousoir itself; PDF through poppler's `pdfinfo` and `pdftoppm`, Calibre's
+  cover. EPUB and KEPUB (OPF 2 and 3), MOBI, AZW, AZW3, PRC, FB2, FBZ and
+  TXT are read by Cousoir itself (an FB2's title, authors, genres, annotation,
+  series, ISBN, publisher, year, language and cover; a text file's title and
+  authors in its first lines, as Calibre's reader finds them); PDF through poppler's `pdfinfo` and `pdftoppm`, Calibre's
   own copy when Calibre is installed, its XMP packet merged with its info
   dictionary as Calibre merges them; any other format, and the cover of an
   EPUB whose first page must be drawn, through Calibre itself when it is
@@ -944,15 +946,19 @@ the Kobos synced. Enter or a double click reads the book where it was left.
 
 Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
 the book in Cousoir's reader: its EPUB (or KEPUB), else its Kindle book (AZW3,
-MOBI, AZW), else its PDF, else, when Calibre is installed, another of its
-formats (FB2, DOCX, ODT, RTF, TXT, HTMLZ, LIT, PDB, comics…). Ctrl+O still
-opens it in the desktop's reader.
+MOBI, AZW), else its FB2 (or FBZ), else its PDF, else its text file, else,
+when Calibre is installed, another of its formats (DOCX, ODT, RTF, HTMLZ,
+LIT, PDB, comics…). Ctrl+O still opens it in the desktop's reader.
 
 A Kindle book is made an EPUB by Cousoir itself, as Calibre's MOBI reader
 extracts its files: an AZW3, the KF8 half of a MOBI that holds both kinds
 (Calibre's "both"), or a MOBI of the old kind alone (Calibre's default), its
 pages, styles, pictures, fonts, links and contents. A book with DRM, an
-Amazon Topaz or KFX book cannot be read, and says so. The other formats are
+Amazon Topaz or KFX book cannot be read, and says so. An FB2 is made an EPUB
+by Cousoir too: its sections as pages and its contents, its titles, poems,
+epigraphs and tables, its notes linked, its pictures and its cover; a text
+file its paragraphs, by the blank lines between them, the title and authors
+Calibre's reader finds before them left out. The other formats are
 made EPUBs by Calibre's `ebook-convert`, which can take a while: the reader
 says so meanwhile. Either EPUB is kept in Cousoir's cache, and made again
 only when the book's file changes. The place and the highlights in such a
@@ -1549,7 +1555,8 @@ neither in the library nor on the Kobo.
 - ICU and Snowball's libstemmer, for Calibre's full text tokenizer
 - xxHash, for the names Calibre gives the notes it keeps aside
 - For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
-  formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
+  formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC, FB2, FBZ, TXT and
+  PDF, Calibre
 - For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs, with Qt
   Shader Tools to build it; built without them, Cousoir has no reader
 - For reading them aloud, Qt TextToSpeech, and a speech engine such as
@@ -1659,7 +1666,9 @@ The tests check the port against Calibre itself:
 - `tests/data/import` holds book files for the corners of Calibre's readers:
   EPUB package files of both versions, MOBI and AZW3 files made by
   `ebook-convert`, PDF files with an info dictionary and an XMP packet (one
-  written by Calibre), covers to draw, metadata only in a file's name, and an
+  written by Calibre), covers to draw, metadata only in a file's name, FB2
+  books (one in windows-1251 with a prefixed namespace), an FBZ and text
+  files (`tools/make_text_fixtures.py`), and an
   EPUB of each version and a PDF exported by Calibre from a library with
   custom columns. `tools/make_import_fixtures.sh` builds them again.
 - `tests/data/library` is a six-book library made by `calibredb`, with

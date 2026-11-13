@@ -82,10 +82,11 @@ QList<Node *> findAll(Node *root, const std::function<bool(const Node &)> &match
     return found;
 }
 
-QString xmlText(const QByteArray &data)
+namespace {
+
+// HTML's named character references as numeric ones, which XML reads.
+QString withNumericEntities(const QString &text)
 {
-    QStringDecoder decoder = QStringDecoder::decoderForHtml(data);
-    QString text = decoder.isValid() ? decoder.decode(data) : QString::fromUtf8(data);
     static const QRegularExpression entity(QStringLiteral("&([A-Za-z][A-Za-z0-9]*);"));
     static const QSet<QString> xmlEntities{ QStringLiteral("amp"), QStringLiteral("lt"), QStringLiteral("gt"),
                                             QStringLiteral("quot"), QStringLiteral("apos") };
@@ -105,6 +106,32 @@ QString xmlText(const QByteArray &data)
         last = match.capturedEnd();
     }
     return last == 0 ? text : result + QStringView(text).mid(last);
+}
+
+} // namespace
+
+QString xmlText(const QByteArray &data)
+{
+    // The XML declaration's encoding, which decoderForHtml() reads only in
+    // a meta tag; then a byte order mark or a meta tag.
+    static const QRegularExpression declared(QStringLiteral(
+        "^\\s*<\\?xml[^>]*?encoding\\s*=\\s*[\"']([A-Za-z0-9._:-]+)[\"']"));
+    const QRegularExpressionMatch match = declared.match(QString::fromLatin1(data.left(200)));
+    const QString named = match.captured(1).toLower();
+    if (match.hasMatch() && named != QLatin1String("utf-8") && named != QLatin1String("utf8")
+        && !data.startsWith("\xef\xbb\xbf") && !data.startsWith("\xff\xfe") && !data.startsWith("\xfe\xff")) {
+        QStringDecoder decoder(match.captured(1).toLatin1().constData());
+        if (decoder.isValid()) {
+            QString text = decoder.decode(data);
+            // Decoded: the declaration no longer says how.
+            static const QRegularExpression encoding(QStringLiteral("(<\\?xml[^>]*?)\\s+encoding\\s*=\\s*[\"'][^\"']*[\"']"));
+            text.replace(encoding, QStringLiteral("\\1"));
+            return withNumericEntities(text);
+        }
+    }
+    QStringDecoder decoder = QStringDecoder::decoderForHtml(data);
+    QString text = decoder.isValid() ? decoder.decode(data) : QString::fromUtf8(data);
+    return withNumericEntities(text);
 }
 
 std::unique_ptr<Node> parse(const QByteArray &data)

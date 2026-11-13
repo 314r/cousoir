@@ -10,6 +10,7 @@
 #include "epub_cfi.h"
 #include "html_soup.h"
 #include "mobi_book.h"
+#include "text_book_epub.h"
 #include "test_support.h"
 #include "xml_tree.h"
 
@@ -38,6 +39,7 @@ class EpubBookTest : public QObject
     Q_OBJECT
 
 private slots:
+    void makesEpubsOfTextBooks();
     void readsAnEpub3();
     void readsAnEpub2();
     void resolvesPaths();
@@ -174,6 +176,57 @@ void EpubBookTest::refusesWhatIsNoEpub()
     const QString empty = folder.filePath(QStringLiteral("empty.epub"));
     QVERIFY(writeEpub(empty, { { QStringLiteral("mimetype"), "application/epub+zip" } }));
     QVERIFY(!EpubBook::open(empty, &error));
+}
+
+// FB2 books and text files made EPUBs for the reader: their title, their
+// chapters in the contents, their text, their pictures.
+void EpubBookTest::makesEpubsOfTextBooks()
+{
+    QTemporaryDir folder;
+    const auto make = [&folder](const QString &source, bool fb2) -> std::unique_ptr<EpubBook> {
+        const QString epub = folder.filePath(QFileInfo(source).fileName() + QStringLiteral(".epub"));
+        QString error;
+        const bool made = fb2 ? TextBookEpub::fb2ToEpub(source, epub, &error) : TextBookEpub::txtToEpub(source, epub, &error);
+        if (!made) {
+            qWarning() << error;
+            return nullptr;
+        }
+        return EpubBook::open(epub, &error);
+    };
+    const auto text = [](const EpubBook &book) {
+        QString all;
+        for (const EpubBook::SpineItem &item : book.spine())
+            all += QString::fromUtf8(book.read(item.name));
+        return all;
+    };
+
+    const auto rouge = make(QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Le Rouge et le Noir - Stendhal.fb2"), true);
+    QVERIFY(rouge);
+    QCOMPARE(rouge->title(), QStringLiteral("Le Rouge et le Noir"));
+    QCOMPARE(rouge->language(), QStringLiteral("fra"));
+    // The cover, then the chapter.
+    QCOMPARE(rouge->spine().size(), 2);
+    QCOMPARE(rouge->toc().size(), 1);
+    QCOMPARE(rouge->toc().first().title, QStringLiteral("Chapitre premier"));
+    QVERIFY(text(*rouge).contains(QStringLiteral("La petite ville de Verrières")));
+    QVERIFY(rouge->contains(QStringLiteral("images/0.jpg")));
+    QVERIFY(text(*rouge).contains(QStringLiteral("../images/0.jpg")));
+
+    const auto zipped = make(QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Rouge.fbz"), true);
+    QVERIFY(zipped);
+    QCOMPARE(zipped->title(), QStringLiteral("Le Rouge, zippé, et le Noir"));
+
+    // A prefixed namespace, in another encoding.
+    const auto sparse = make(QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Sans titre - Quelqu'un.fb2"), true);
+    QVERIFY(sparse);
+    QVERIFY(text(*sparse).contains(QStringLiteral("Текст.")));
+
+    const auto moby = make(QStringLiteral(COUSOIR_TEST_DATA_DIR "/import/Moby.txt"), false);
+    QVERIFY(moby);
+    QCOMPARE(moby->title(), QStringLiteral("Moby Dick"));
+    QVERIFY(text(*moby).contains(QStringLiteral("<p>Call me Ishmael. Some years ago")));
+    // Its title and authors, before the text, are no paragraph of it.
+    QVERIFY(!text(*moby).contains(QStringLiteral("Herman Melville")));
 }
 
 QTEST_GUILESS_MAIN(EpubBookTest)

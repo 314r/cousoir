@@ -27,6 +27,9 @@ magick -size 400x600 'xc:#4a3b6b' -fill white -font "$(fc-match -f %{file} sans-
     -gravity center -annotate 0 "Cover" -quality 85 "$work/cover.jpg"
 "$tool" make-import-epubs "$out" "$work/cover.jpg"
 
+# FB2, FBZ and plain text books, which Cousoir reads without Calibre.
+python3 "$root/tools/make_text_fixtures.py" "$out" "$work/cover.jpg"
+
 # MOBI and AZW3: their EXTH headers as Calibre writes them.
 ebook-convert "$out/Le Vicomte - Inconnu.epub" "$out/Vicomte.azw3" >/dev/null
 ebook-convert "$out/Le Vicomte - Inconnu.epub" "$out/Vicomte.mobi" >/dev/null
