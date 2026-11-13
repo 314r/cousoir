@@ -27,6 +27,9 @@ bool SqliteDb::open(const QString &path, Mode mode, QString *error)
     if (mode == Mode::Immutable) {
         uri += "?mode=ro&immutable=1";
         flags |= SQLITE_OPEN_READONLY;
+    } else if (mode == Mode::ReadOnly) {
+        uri += "?mode=ro";
+        flags |= SQLITE_OPEN_READONLY;
     } else {
         flags |= SQLITE_OPEN_READWRITE;
     }
@@ -37,6 +40,8 @@ bool SqliteDb::open(const QString &path, Mode mode, QString *error)
         return false;
     }
     sqlite3_extended_result_codes(m_db, 1);
+    if (mode == Mode::ReadOnly)
+        sqlite3_busy_timeout(m_db, 5000);
     return true;
 }
 

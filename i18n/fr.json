@@ -1173,16 +1173,21 @@
   "Words in the books' text": "Mots du texte des livres",
   "Search the books' text": "Chercher dans le texte des livres",
   "Calibre has not indexed the text of this library's books.": "Calibre n’a pas indexé le texte des livres de cette bibliothèque.",
-  "Calibre has not indexed the text of this library's books. Turn full text searching on in Calibre, under Preferences > Searching, and its index is searched here.": "Calibre n’a pas indexé le texte des livres de cette bibliothèque. Activez la recherche plein texte dans Calibre, sous Préférences > Recherche, et son index sera cherché ici.",
-  "%1 Calibre still has %n formats to index.": {
-    "one": "%1 Il reste %n format à indexer à Calibre.",
-    "other": "%1 Il reste %n formats à indexer à Calibre."
-  },
   "%n formats indexed.": {
     "one": "%n format indexé.",
     "other": "%n formats indexés."
   },
   "Books found": "Livres trouvés",
   "No book's text has “%1”.": "Aucun texte de livre ne contient « %1 ».",
-  "read|hint": "lire"
+  "read|hint": "lire",
+  "Extracting text from the PDF file took too long": "L’extraction du texte du fichier PDF a pris trop de temps",
+  "The library already has a full text index.": "La bibliothèque a déjà un index plein texte.",
+  "Indexing the books' text: %1 of %2.": "Indexation du texte des livres : %1 sur %2.",
+  "Calibre's full text search is off for this library: its index is no longer kept up to date.": "La recherche plein texte de Calibre est désactivée pour cette bibliothèque : son index n’est plus tenu à jour.",
+  "The text of this library's books is not indexed yet. Cousoir indexes it as Calibre does with its full text search on, and Calibre then keeps the index too.": "Le texte des livres de cette bibliothèque n’est pas encore indexé. Cousoir l’indexe comme le fait Calibre avec sa recherche plein texte activée, et Calibre tient alors l’index à jour lui aussi.",
+  "%1 %n formats still wait to be indexed.": {
+    "one": "%1 %n format attend encore d’être indexé.",
+    "other": "%1 %n formats attendent encore d’être indexés."
+  },
+  "Index the books' text": "Indexer le texte des livres"
 }

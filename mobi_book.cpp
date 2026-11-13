@@ -567,6 +567,8 @@ public:
     bool read(const QByteArray &file, QString *error);
     bool writeEpub(const QString &path, QString *error);
 
+    OldPages oldPages = OldPages::Split;
+
 private:
     QString decode(const QByteArray &data) const;
     QByteArray textSection(qsizetype index) const;
@@ -1424,7 +1426,8 @@ void Reader::readMobi6()
     };
     while (!body->children.empty()) {
         std::unique_ptr<XmlTree::Node> child = body->take(0);
-        if (child->isElement("div") && child->attribute(QStringLiteral("class")).contains(QLatin1String("mbp_pagebreak"))) {
+        if (oldPages == OldPages::Split && child->isElement("div")
+            && child->attribute(QStringLiteral("class")).contains(QLatin1String("mbp_pagebreak"))) {
             if (hasContent(pageBodies.back()))
                 pageBodies.emplace_back();
             if (child->attribute(QStringLiteral("id")).isEmpty())
@@ -1668,7 +1671,7 @@ bool Reader::writeEpub(const QString &path, QString *error)
 
 } // namespace
 
-bool toEpub(const QString &mobi, const QString &epub, QString *error)
+bool toEpub(const QString &mobi, const QString &epub, QString *error, OldPages oldPages)
 {
     QFile file(mobi);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -1676,6 +1679,7 @@ bool toEpub(const QString &mobi, const QString &epub, QString *error)
         return false;
     }
     Reader reader;
+    reader.oldPages = oldPages;
     return reader.read(file.readAll(), error) && reader.writeEpub(epub, error);
 }
 

@@ -23,6 +23,7 @@
 #include "calibre_fts.h"
 #include "calibre_languages.h"
 #include "book_library.h"
+#include "book_text_indexer.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
 #include "metadata_downloader.h"
@@ -210,6 +211,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+    qmlRegisterUncreatableType<BookTextIndexer>("Cousoir", 1, 0, "BookTextIndexer", QStringLiteral("The library's own"));
     qmlRegisterType<HighlightDocument>("Cousoir", 1, 0, "HighlightDocument");
     qmlRegisterType<HighlightSync>("Cousoir", 1, 0, "HighlightSync");
 #ifdef COUSOIR_READER
@@ -2366,36 +2368,42 @@ void LibraryUiTest::keepsNotes()
 
 // A tag renamed from the browse section's menu, by the keyboard.
 // The books' text, in the index Calibre keeps of it: without one, the page
-// says how to have it; with one, the books whose text has the words, each
-// once, and Enter reads the book, searched for the words found in it.
+// offers to make it, and Cousoir indexes the books as Calibre does, turning
+// Calibre's full text search on; then the books whose text has the words,
+// each once, and Enter reads the book, searched for the words found in it.
 void LibraryUiTest::searchesTheBooksText()
 {
     click("sidebar_text");
     QQuickItem *page = control("textPage");
     QTRY_VERIFY(page && page->isVisible());
-    QVERIFY(text("textIndexStatus").contains(QStringLiteral("Preferences > Searching")));
+    QVERIFY(text("textIndexStatus").contains(QStringLiteral("not indexed yet")));
     QVERIFY(!control("textSearchField")->isEnabled());
     QVERIFY(!control("searchField")->isVisible());
 
-    // Made in Calibre's language, as Calibre makes it.
-    QString error;
-    const QString blackCompany = QStringLiteral("The Black Company is running north.");
-    QVERIFY2(makeCalibreTextIndex(m_libraryPath,
-                                  { { 1, QStringLiteral("EPUB"), QStringLiteral("Colin possède un appartement et un cuisinier.") },
-                                    { 2, QStringLiteral("EPUB"), blackCompany },
-                                    { 2, QStringLiteral("AZW3"), blackCompany } },
-                                  { { 3, QStringLiteral("EPUB") } }, QStringLiteral("fr"), &error),
-             qPrintable(error));
-    QMetaObject::invokeMethod(page, "refresh");
-    QCOMPARE(text("textIndexStatus"), QStringLiteral("3 formats indexed. Calibre still has 1 format to index."));
+    makeWritable();
+    click("indexBooksText");
+    auto *indexer = library()->property("textIndexer").value<BookTextIndexer *>();
+    QVERIFY(indexer);
+    // EPUBs, the AZW3 and, with Poppler's pdftotext, the PDF.
+    const bool pdf = !QStandardPaths::findExecutable(QStringLiteral("pdftotext")).isEmpty();
+    QTRY_COMPARE_WITH_TIMEOUT(text("textIndexStatus"),
+                              pdf ? QStringLiteral("6 formats indexed.")
+                                  : QStringLiteral("5 formats indexed. 1 format still waits to be indexed."),
+                              20000);
+    QVERIFY(!indexer->running());
+    QVariantMap index;
+    QMetaObject::invokeMethod(library(), "textIndex", Q_RETURN_ARG(QVariantMap, index));
+    QVERIFY(index.value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!control("indexBooksText")->isVisible());
+
     QQuickItem *field = control("textSearchField");
     QVERIFY(field->isEnabled());
     field->forceActiveFocus();
-    typeText(QStringLiteral("running"));
+    typeText(QStringLiteral("portents"));
     QTRY_COMPARE(page->property("rows").toList().size(), 1);
     const QVariantMap hit = page->property("rows").toList().first().toMap();
     QCOMPARE(hit.value(QStringLiteral("title")).toString(), QStringLiteral("The Black Company"));
-    QVERIFY(hit.value(QStringLiteral("snippet")).toString().contains(QStringLiteral("\x1drunning\x1d")));
+    QVERIFY(hit.value(QStringLiteral("snippet")).toString().contains(QStringLiteral("\x1dportents\x1d")));
     QCOMPARE(text("bookCount"), QStringLiteral("1 book"));
     // Down to the books, Ctrl+F back to the words.
     QTest::keyClick(m_window, Qt::Key_Down);
@@ -2408,11 +2416,24 @@ void LibraryUiTest::searchesTheBooksText()
     QTRY_VERIFY(page->property("rows").toList().isEmpty());
     QTRY_VERIFY(control("textNothing")->isVisible());
 
+    // A format added waits, and is indexed in turn.
+    QString error;
+    QMetaObject::invokeMethod(library(), "addFormat", Q_RETURN_ARG(QString, error), Q_ARG(int, 6),
+                              Q_ARG(QString, QUrl::fromLocalFile(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/notes.epub")).toString()));
+    QCOMPARE(error, QString());
+    QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
+    typeText(QStringLiteral("endnote"));
+    QTRY_COMPARE_WITH_TIMEOUT(page->property("rows").toList().size(), 1, 20000);
+    QCOMPARE(page->property("rows").toList().first().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Le Petit Prince"));
+
 #ifdef COUSOIR_READER
-    makeWritable();
     QTest::keyClick(m_window, Qt::Key_A, Qt::ControlModifier);
     typeText(QStringLiteral("cuisinier OR nowhere"));
-    QTRY_COMPARE(page->property("rows").toList().size(), 1);
+    QTRY_COMPARE(page->property("query").toString(), QStringLiteral("cuisinier OR nowhere"));
+    QCOMPARE(page->property("rows").toList().size(), 1);
+    QCOMPARE(page->property("rows").toList().first().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("L'Écume des jours"));
     QTest::keyClick(m_window, Qt::Key_Down);
     QTRY_VERIFY(control("textResults")->hasActiveFocus());
     QTest::keyClick(m_window, Qt::Key_Return);

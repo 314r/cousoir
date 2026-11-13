@@ -238,8 +238,9 @@ struct LibraryData
     // aside.
     int annotationCount = 0;
     // The preferences a search reads, by key, as JSON: saved searches,
-    // virtual libraries, grouped search terms and user categories; and the
-    // columns and sort Calibre's list last had.
+    // virtual libraries, grouped search terms and user categories; the
+    // columns and sort Calibre's list last had; and whether its full text
+    // search is on.
     QHash<QString, QString> preferences;
 
     // The book with that id, or nullptr. A library is read in the order of

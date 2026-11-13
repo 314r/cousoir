@@ -119,6 +119,8 @@ qt_add_library(cousoir_core STATIC
     identifier_links.h
     book_search.cpp
     book_search.h
+    book_text_index.cpp
+    book_text_index.h
     book_text_search.cpp
     book_text_search.h
     epub_book.cpp
@@ -219,6 +221,8 @@ qt_add_library(cousoir_models STATIC
     book_library.h
     book_list_model.cpp
     book_list_model.h
+    book_text_indexer.cpp
+    book_text_indexer.h
     conversion_service.cpp
     conversion_service.h
     cover_cache.cpp

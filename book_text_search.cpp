@@ -25,7 +25,7 @@ Status status(const QString &libraryPath)
     if (!QFileInfo::exists(path))
         return result;
     SqliteDb db;
-    if (!db.open(path, SqliteDb::Mode::Immutable, nullptr))
+    if (!db.open(path, SqliteDb::Mode::ReadOnly, nullptr))
         return result;
     result.exists = true;
     result.indexed = db.value(QStringLiteral("SELECT count(*) FROM books_text WHERE searchable_text != ''")).toInt();
@@ -44,7 +44,7 @@ QList<Hit> find(const QString &libraryPath, const QString &query, bool stemming,
         return hits;
     }
     SqliteDb db;
-    if (!db.open(path, SqliteDb::Mode::Immutable, error)
+    if (!db.open(path, SqliteDb::Mode::ReadOnly, error)
         || !CalibreFts::registerTokenizers(db.handle(), interfaceLanguage, error))
         return hits;
     // unicode_normalize(): the query composed, as the text was indexed.

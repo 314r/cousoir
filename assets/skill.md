@@ -24,7 +24,11 @@ cousoir-cli template templates.json    # what each Calibre template of a JSON ar
 cousoir-cli download 12 --covers       # what the web finds for book 12, and what it would change
 cousoir-cli device /run/media/$USER/KOBOeReader   # the books on a Kobo; `mtp` or `mtp:SERIAL` for a Kindle
 cousoir-cli kobo-highlights /run/media/$USER/KOBOeReader   # a Kobo's highlights and notes, or a KoboReader.sqlite
+cousoir-cli search-text --json 'jazz AND cocktail'   # books whose text has the words: id, format, passage
 ```
+
+`search-text` reads Calibre's full text index; `cousoir-cli index-text`
+makes it and indexes the books (it writes, so the rules of `apply` hold).
 
 `search` takes Calibre's search language (`author:vian not tag:read`,
 `title:"=Mood Indigo"`, `series:true`, `#genre:sf`). It exits with 1 when

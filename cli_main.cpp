@@ -42,6 +42,8 @@
 #include "kobo_sync.h"
 #include "kobo_send.h"
 #include "sqlite_db.h"
+#include "book_text_index.h"
+#include "book_text_search.h"
 #include "library_check.h"
 #include "metadata_download.h"
 #include "mtp.h"
@@ -386,6 +388,121 @@ QString readOnlyReason(const QString &libraryPath)
         loop.exec();
     }
     return guard.writable() ? QString() : guard.readOnlyReason();
+}
+
+// Indexes the text of the library's books into Calibre's full text index,
+// as Calibre's workers do, after making the index and turning Calibre's
+// full text search on when the library has none.
+int indexText(const QString &libraryPath, bool force, bool json)
+{
+    if (!force) {
+        const QString reason = readOnlyReason(libraryPath);
+        if (!reason.isEmpty()) {
+            err() << QStringLiteral("The library cannot be written: %1").arg(reason) << Qt::endl;
+            return 1;
+        }
+    }
+    LibraryData data;
+    if (!load(libraryPath, &data))
+        return 2;
+    const CalibreConfig config = CalibreConfig::load();
+    const QString calibreOpen = QStringLiteral("Calibre is open on this computer: close it to change the library.");
+    if (!BookTextSearch::status(libraryPath).exists) {
+        QList<BookTextIndex::Job> formats;
+        for (const Book &book : std::as_const(data.books)) {
+            for (const BookFormat &format : book.formats)
+                formats.append({ book.id, format.format });
+        }
+        bool made = false;
+        QString error;
+        if (!CommitEngine::withLibraryLock(
+                [&] { made = BookTextIndex::create(libraryPath, formats, config.interfaceLanguage, &error); })) {
+            err() << calibreOpen << Qt::endl;
+            return 1;
+        }
+        if (!made) {
+            err() << error << Qt::endl;
+            return 1;
+        }
+    }
+    if (data.preferences.value(QStringLiteral("fts_enabled")) != QLatin1String("true")) {
+        CommitEngine::Request request;
+        request.preferences = { { QStringLiteral("fts_enabled"), QStringLiteral("true") } };
+        request.libraryPath = libraryPath;
+        request.cacheFolder = CousoirPaths::cacheFolder(QDir::cleanPath(QFileInfo(libraryPath).absoluteFilePath()));
+        request.config = config;
+        request.producer = QStringLiteral("Cousoir (%1)").arg(QStringLiteral(COUSOIR_VERSION));
+        request.producerId = QStringLiteral("cousoir");
+        const CommitEngine::Result result = CommitEngine::commit(request);
+        if (!result.ok) {
+            err() << result.error << Qt::endl;
+            return 1;
+        }
+    }
+    QList<BookTextIndex::Task> tasks;
+    for (const BookTextIndex::Job &job : BookTextIndex::waiting(libraryPath, nullptr)) {
+        BookTextIndex::Task task{ job.book, job.format, {} };
+        if (const Book *book = data.book(job.book)) {
+            for (const BookFormat &format : book->formats) {
+                if (format.format.compare(job.format, Qt::CaseInsensitive) == 0 && QFileInfo::exists(format.file))
+                    task.path = format.file;
+            }
+        }
+        tasks.append(task);
+    }
+    const BookTextIndex::Run run = BookTextIndex::index(libraryPath, config.interfaceLanguage, tasks);
+    const BookTextSearch::Status status = BookTextSearch::status(libraryPath);
+    if (json) {
+        out() << QJsonDocument(QJsonObject{ { QStringLiteral("stored"), run.stored },
+                                            { QStringLiteral("indexed"), status.indexed },
+                                            { QStringLiteral("waiting"), status.pending },
+                                            { QStringLiteral("calibreRunning"), run.calibreRunning } })
+                     .toJson(QJsonDocument::Compact)
+              << Qt::endl;
+    } else {
+        out() << QStringLiteral("%1 format(s) indexed now, %2 in all; %3 left to Calibre")
+                     .arg(run.stored)
+                     .arg(status.indexed)
+                     .arg(status.pending)
+              << Qt::endl;
+    }
+    if (run.calibreRunning) {
+        err() << calibreOpen << Qt::endl;
+        return 1;
+    }
+    return 0;
+}
+
+// The books whose text has what `query` asks, in Calibre's full text index,
+// best first: the words found between ** in each passage.
+int searchText(const QString &libraryPath, const QString &query, int limit, bool json)
+{
+    const CalibreConfig config = CalibreConfig::load();
+    QString error;
+    const QList<BookTextSearch::Hit> hits
+        = BookTextSearch::find(libraryPath, query, true, config.interfaceLanguage, limit < 0 ? 1000 : limit, &error);
+    if (!error.isEmpty()) {
+        err() << error << Qt::endl;
+        return 1;
+    }
+    QJsonArray rows;
+    for (const BookTextSearch::Hit &hit : hits) {
+        const QString snippet = QString(hit.snippet).replace(u'\x1d', QStringLiteral("**"));
+        if (json) {
+            rows.append(QJsonObject{ { QStringLiteral("book"), hit.bookId },
+                                     { QStringLiteral("format"), hit.format },
+                                     { QStringLiteral("snippet"), snippet } });
+        } else {
+            out() << hit.bookId << u'\t' << hit.format << u'\t' << QString(snippet).replace(u'\n', u' ') << Qt::endl;
+        }
+    }
+    if (json)
+        out() << QJsonDocument(rows).toJson(QJsonDocument::Compact) << Qt::endl;
+    if (hits.isEmpty()) {
+        err() << QStringLiteral("No book's text matches: %1").arg(query) << Qt::endl;
+        return 1;
+    }
+    return 0;
 }
 
 // Converts the books to the formats, as Calibre's convert action does, and
@@ -1290,6 +1407,11 @@ int main(int argc, char *argv[])
         "  list    Print the books as `calibredb list --for-machine --fields all` does.\n"
         "  search  Print the ids of the books an expression of Calibre's search\n"
         "          language finds, as `calibredb search` does.\n"
+        "  index-text  Index the text of the books into Calibre's full text index, as\n"
+        "          Calibre does, turning its full text search on; formats Cousoir\n"
+        "          cannot read are left to Calibre.\n"
+        "  search-text  Print the books whose text has the words, by Calibre's full\n"
+        "          text index and its query language: id, format and passage.\n"
         "  doctor  Report missing files, conflict copies and whether the library could be written now.\n"
         "  apply   Apply the changes of a JSON file (edits, added and removed books and\n"
         "          formats, restorations, conversions, books sent to or removed from a\n"
@@ -1322,8 +1444,8 @@ int main(int argc, char *argv[])
                                            QStringLiteral("path"));
     parser.addOption(libraryOption);
     const QCommandLineOption forceOption(QStringLiteral("force"),
-                                         QStringLiteral("apply: skip the sync, recent-change and conflict checks; "
-                                                        "Calibre's lock still applies."));
+                                         QStringLiteral("apply, index-text: skip the sync, recent-change and conflict "
+                                                        "checks; Calibre's lock still applies."));
     parser.addOption(forceOption);
     const QCommandLineOption limitOption(QStringList{ QStringLiteral("l"), QStringLiteral("limit") },
                                          QStringLiteral("search: the most ids to print."), QStringLiteral("n"),
@@ -1331,11 +1453,12 @@ int main(int argc, char *argv[])
     parser.addOption(limitOption);
     const QCommandLineOption coversOption(QStringLiteral("covers"), QStringLiteral("download: the covers too."));
     parser.addOption(coversOption);
-    const QCommandLineOption jsonOption(QStringLiteral("json"), QStringLiteral("doctor: the report as JSON."));
+    const QCommandLineOption jsonOption(QStringLiteral("json"),
+                                        QStringLiteral("doctor, index-text, search-text: the report as JSON."));
     parser.addOption(jsonOption);
     parser.addPositionalArgument(QStringLiteral("command"),
                                  QStringLiteral("list, search, doctor, apply, read, device, template, download, kepubify, "
-                                                "azw3, epub, kobo-highlights or skill"));
+                                                "azw3, epub, kobo-highlights, index-text, search-text or skill"));
     parser.addPositionalArgument(QStringLiteral("edits"), QStringLiteral("apply: a JSON file of edits"), QStringLiteral("[edits]"));
     parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("read: book files"), QStringLiteral("[files…]"));
     parser.process(app);
@@ -1357,6 +1480,19 @@ int main(int argc, char *argv[])
             return 2;
         }
         return search(path, arguments.mid(1).join(u' '), parser.value(limitOption).toInt());
+    }
+    if (arguments.value(0) == QLatin1String("search-text")) {
+        if (arguments.size() < 2) {
+            err() << QStringLiteral("Error: You must specify the words to look for") << Qt::endl;
+            return 2;
+        }
+        const QString path = parser.isSet(libraryOption) ? parser.value(libraryOption)
+                                                         : CalibreConfig::defaultLibraryPath();
+        if (path.isEmpty()) {
+            err() << QStringLiteral("Calibre has no library on this computer; pass --library.") << Qt::endl;
+            return 2;
+        }
+        return searchText(path, arguments.mid(1).join(u' '), parser.value(limitOption).toInt(), parser.isSet(jsonOption));
     }
     if (arguments.value(0) == QLatin1String("kepubify") && arguments.size() == 3) {
         QString error;
@@ -1398,6 +1534,8 @@ int main(int argc, char *argv[])
         return list(libraryPath);
     if (arguments.first() == QLatin1String("doctor"))
         return doctor(libraryPath, parser.isSet(jsonOption));
+    if (arguments.first() == QLatin1String("index-text"))
+        return indexText(libraryPath, parser.isSet(forceOption), parser.isSet(jsonOption));
     if (arguments.first() == QLatin1String("apply"))
         return apply(libraryPath, arguments.at(1), parser.isSet(forceOption));
     if (arguments.first() == QLatin1String("device"))
