@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "calibre_text.h"
 #include "epub_package.h"
 #include "text_book_metadata.h"
 #include "xml_tree.h"
@@ -22,9 +23,11 @@ using Node = XmlTree::Node;
 
 const QString xlinkNamespace = QStringLiteral("http://www.w3.org/1999/xlink");
 
+// Text as XML: its markup escaped, and without the characters XML forbids,
+// which a damaged or odd file brings and which would leave nothing readable.
 QString escaped(const QString &text)
 {
-    QString out = text;
+    QString out = CalibreText::cleanXmlChars(text);
     return out.replace(u'&', QStringLiteral("&amp;"))
         .replace(u'<', QStringLiteral("&lt;"))
         .replace(u'>', QStringLiteral("&gt;"))
@@ -345,14 +348,19 @@ bool fb2ToEpub(const QString &fb2, const QString &epub, QString *error)
     if (data.isEmpty())
         return false;
     std::unique_ptr<Node> root = XmlTree::parse(data);
+    const auto refuse = [&] {
+        if (error)
+            *error = QObject::tr("%1 is not an FB2 book Cousoir can read.").arg(QFileInfo(fb2).fileName());
+        return false;
+    };
+    if (!root)
+        return refuse();
     ImportedMetadata metadata;
     TextBookMetadata::readFb2(fb2, &metadata, error);
     const QString language = metadata.languages.value(0, QStringLiteral("und"));
     Fb2 book(root.get(), language);
-    if (!root || !book.book()) {
-        *error = QObject::tr("%1 is not an FB2 book Cousoir can read.").arg(QFileInfo(fb2).fileName());
-        return false;
-    }
+    if (!book.book())
+        return refuse();
     book.readImages();
     const QString title = metadata.title.isEmpty() ? QFileInfo(fb2).completeBaseName() : metadata.title;
 

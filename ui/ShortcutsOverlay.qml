@@ -8,7 +8,7 @@ import Cousoir
 
 // "?": every shortcut of the window, by what it acts on. "?" again, Esc or a
 // click beside it closes it.
-Popup {
+ThemedPopup {
     id: overlay
 
     // [{ title, rows: [{ keys, action }] }]
@@ -32,21 +32,9 @@ Popup {
     width: Math.min(parent ? parent.width - 2 * Theme.gutter : 0,
                     columns * columnWidth + (columns - 1) * Theme.pagePadding + 2 * padding)
     height: Math.min(parent ? parent.height - 2 * Theme.pagePadding : 0, implicitHeight)
-    modal: true
     focus: true
     padding: Theme.pagePadding
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.35)
-    }
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
-    }
 
     contentItem: Flickable {
         id: flick

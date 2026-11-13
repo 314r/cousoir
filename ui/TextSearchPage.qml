@@ -176,25 +176,16 @@ Rectangle {
                         decrementCurrentIndex()
                 }
 
-                delegate: Rectangle {
+                delegate: ListRow {
                     id: hit
 
                     required property var modelData
                     required property int index
 
                     objectName: "textHit" + index
-                    width: ListView.view.width
                     implicitHeight: texts.implicitHeight + 2 * Theme.gutter
                     radius: Theme.smallRadius
-                    color: ListView.isCurrentItem && results.activeFocus ? Theme.selected
-                        : hover.hovered ? Theme.hover : "transparent"
-                    Accessible.role: Accessible.ListItem
                     Accessible.name: hit.modelData.title + ", " + hit.modelData.snippet.replace(/\x1d/g, "").replace(/\s+/g, " ")
-                    Accessible.selected: ListView.isCurrentItem
-
-                    HoverHandler {
-                        id: hover
-                    }
 
                     TapHandler {
                         onTapped: {

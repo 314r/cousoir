@@ -322,26 +322,18 @@ Rectangle {
                     elide: Text.ElideRight
                 }
 
-                delegate: Rectangle {
+                delegate: ListRow {
                     id: row
 
                     required property var modelData
                     required property int index
-                    readonly property bool current: modelData.key === page.browser.current
+                    current: modelData.key === page.browser.current
+                    keepCurrent: true
                     readonly property int tileWidth: Math.round(36 * Theme.spacingScale)
 
                     objectName: "highlightBook_" + (modelData.bookId || modelData.key)
-                    Accessible.role: Accessible.ListItem
                     Accessible.name: modelData.title || ""
-                    Accessible.selected: current
-                    width: ListView.view.width
                     implicitHeight: Math.max(tile.height, texts.implicitHeight) + 2 * Theme.gutter
-                    color: current ? (bookList.activeFocus ? Theme.selected : Theme.hover)
-                        : hover.hovered ? Theme.hover : "transparent"
-
-                    HoverHandler {
-                        id: hover
-                    }
 
                     TapHandler {
                         onTapped: {

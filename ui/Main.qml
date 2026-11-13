@@ -219,8 +219,8 @@ ThemedWindow {
             textPage.focusField()
             return
         }
-        searchField.forceActiveFocus(Qt.ShortcutFocusReason)
-        searchField.selectAll()
+        toolbar.searchField.forceActiveFocus(Qt.ShortcutFocusReason)
+        toolbar.searchField.selectAll()
     }
 
     // The areas F6 goes round, the focus moving to the next one: the
@@ -998,22 +998,12 @@ ThemedWindow {
     function hintLine(available) {
         let items = hints()
         const line = list => list.map(item => qsTr("%1 %2", "hint").arg(item.keys).arg(item.action)).join(" · ")
-        while (items.length > 1 && hintMetrics.advanceWidth(line(items)) > available) {
+        while (items.length > 1 && statusBar.hintMetrics.advanceWidth(line(items)) > available) {
             const ranks = items.map(item => item.rank)
             const dropped = ranks.lastIndexOf(Math.max(...ranks))
             items = items.slice(0, dropped).concat(items.slice(dropped + 1))
         }
         return line(items)
-    }
-
-    // An icon button of the status bar.
-    component StatusButton: FlatButton {
-        implicitWidth: implicitHeight
-        implicitHeight: Theme.statusHeight - 6
-        iconOnly: true
-        icon.width: Theme.smallIconSize
-        icon.height: Theme.smallIconSize
-        icon.color: Theme.textMuted
     }
 
     AppSession {
@@ -1217,62 +1207,6 @@ ThemedWindow {
         }
     }
 
-    Shortcut {
-        sequences: [StandardKey.ZoomIn, "Ctrl+="]
-        onActivated: window.adjustTextScalePercent(10)
-    }
-
-    Shortcut {
-        sequences: [StandardKey.ZoomOut]
-        onActivated: window.adjustTextScalePercent(-10)
-    }
-
-    Shortcut {
-        sequence: "Ctrl+0"
-        onActivated: window.setTextScalePercent(100)
-    }
-
-    Shortcut {
-        sequences: ["Esc", "Alt+Left", StandardKey.Back]
-        enabled: session.bookOpen || session.filterOpen || (window.booksShown && booksPage.selectedCount > 1)
-        // The revert question keeps the changes instead; several books
-        // selected go back to the current one first.
-        onActivated: {
-            if (bookPage.confirmingRevert)
-                bookPage.confirmingRevert = false
-            else if (window.booksShown && booksPage.selectedCount > 1)
-                booksPage.collapseSelection()
-            else
-                window.goBack()
-        }
-    }
-
-    Shortcut {
-        sequences: ["Return", "Enter"]
-        enabled: session.bookOpen && bookPage.confirmingRevert
-        onActivated: bookPage.revertChanges()
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Paste]
-        enabled: session.bookOpen && window.library.writable && !bookPage.editing
-        onActivated: bookPage.pasteCover()
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Find]
-        onActivated: window.focusSearch()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+K"
-        enabled: window.library.loaded
-        onActivated: {
-            commandPalette.commands = window.paletteCommands()
-            commandPalette.show()
-        }
-    }
-
     BulkDownloadDialog {
         id: bulkDownloadDialog
 
@@ -1304,32 +1238,9 @@ ThemedWindow {
         library: window.library
         onChosen: function(hit) { window.runPaletteHit(hit) }
         onClosed: {
-            if (!session.bookOpen && !searchField.activeFocus)
+            if (!session.bookOpen && !toolbar.searchField.activeFocus)
                 window.focusCurrentList()
         }
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Refresh, "Ctrl+R"]
-        onActivated: window.reload()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+I"
-        enabled: session.bookOpen || window.editingMany
-        onActivated: window.toggleDetails()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+O"
-        enabled: session.bookOpen || window.booksShown
-        onActivated: window.openInReader()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+O"
-        enabled: (session.bookOpen || window.booksShown) && library.readerAvailable
-        onActivated: window.readBook()
     }
 
     // Cousoir's reader, made the first time a book is read; built only with
@@ -1362,82 +1273,6 @@ ThemedWindow {
         function onFailed(message) {
             window.showNotice(message)
         }
-    }
-
-    Shortcut {
-        sequence: "Ctrl+G"
-        enabled: window.booksShown
-        onActivated: window.toggleGrid()
-    }
-
-    // The highlights as kbextract2 copies them, and their Markdown shown.
-    Shortcut {
-        sequence: "Ctrl+Shift+C"
-        enabled: window.highlightsShown && highlightsPage.bookShown
-        onActivated: highlightsPage.copyFormatted("markdown")
-    }
-
-    Shortcut {
-        sequence: "Ctrl+U"
-        enabled: window.highlightsShown
-        onActivated: highlightsPage.toggleMarkdown()
-    }
-
-    Shortcut {
-        sequences: [StandardKey.New]
-        enabled: window.library.writable && !window.library.importing
-        onActivated: addBooksDialog.open()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+K"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable
-        onActivated: window.convertBooks(window.targetIds(), "KEPUB")
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+A"
-        enabled: (session.bookOpen || window.booksShown) && window.library.writable
-        onActivated: window.convertBooks(window.targetIds(), "AZW3")
-    }
-
-    Shortcut {
-        sequence: "Ctrl+D"
-        enabled: (session.bookOpen || window.booksShown) && window.devices.devices.length > 0
-            && window.devices.writable
-        onActivated: window.sendBooks(window.targetIds(), "")
-    }
-
-    Shortcut {
-        sequences: [StandardKey.Delete]
-        enabled: window.booksShown && window.library.writable
-        onActivated: window.trashBooks(window.targetIds())
-    }
-
-    // A field being edited undoes its own typing; otherwise the last change
-    // to several books, or every change to the open book, asked first.
-    Shortcut {
-        sequences: [StandardKey.Undo]
-        enabled: (window.editingMany && window.library.bulkUndoCount > 0)
-            || (session.bookOpen && window.library.canRevert && !bookPage.editing)
-        onActivated: {
-            if (window.editingMany) {
-                window.library.undoBulkEdit()
-            } else {
-                bookPage.forceActiveFocus()
-                bookPage.confirmingRevert = true
-            }
-        }
-    }
-
-    Shortcut {
-        sequence: "?"
-        onActivated: shortcutsOverlay.toggle()
-    }
-
-    Shortcut {
-        sequences: ["Q", StandardKey.Quit]
-        onActivated: window.quit()
     }
 
     FilePicker {
@@ -1519,18 +1354,6 @@ ThemedWindow {
 
         sections: window.shortcutSections()
         onClosed: window.focusCurrentList()
-    }
-
-    // F6 and Shift+F6: from the sidebar to the list, to the details, and
-    // round.
-    Shortcut {
-        sequence: "F6"
-        onActivated: window.cycleFocus(1)
-    }
-
-    Shortcut {
-        sequence: "Shift+F6"
-        onActivated: window.cycleFocus(-1)
     }
 
     MessagesPopup {
@@ -1711,185 +1534,21 @@ ThemedWindow {
         settingsWindow.close()
     }
 
-    footer: Rectangle {
+    footer: StatusBar {
         id: statusBar
-        objectName: "statusBar"
+        window: window
+        session: session
+    }
 
-        readonly property real countWidth: Math.max(statusCount.implicitWidth, Theme.statusHeight)
-        readonly property real stateWidth: Math.min((writeState.visible ? writeState.implicitWidth + Theme.gutter : 0)
-            + (stopConversions.visible ? stopConversions.width + Theme.gutter : 0)
-            + (stopSending.visible ? stopSending.width + Theme.gutter : 0)
-            + (stopAdding.visible ? stopAdding.width + Theme.gutter : 0)
-            + (messagesButton.visible ? messagesButton.width + Theme.gutter : 0)
-            + (detailsToggle.visible ? detailsToggle.width : 0), width * 0.45)
-        readonly property real sideWidth: Math.max(countWidth, stateWidth)
-        // Equal sides keep the hints centered while 40 characters of them
-        // still fit; a long write state then takes room from the count's side.
-        readonly property bool balanced: 2 * sideWidth + 40 * Theme.captionCharWidth <= width
-
-        implicitHeight: Theme.statusHeight
-        color: Theme.surface
-
-        Divider {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: Theme.gutter
-            anchors.rightMargin: Math.round(Theme.gutter / 2)
-            spacing: Theme.gutter
-
-            Label {
-                id: statusCount
-                objectName: "bookCount"
-
-                Layout.preferredWidth: statusBar.balanced ? statusBar.sideWidth : statusBar.countWidth
-                text: window.statusText()
-                color: Theme.textMuted
-                font.pointSize: Theme.fontPointSizeCaption
-                elide: Text.ElideRight
-            }
-
-            Label {
-                id: keyHintsLabel
-                objectName: "keyHints"
-
-                Layout.fillWidth: true
-                text: window.notice || window.hintText(width)
-
-                FontMetrics {
-                    id: hintMetrics
-                    font: keyHintsLabel.font
-                }
-                color: window.notice && window.noticeIsError ? Theme.danger : window.notice ? Theme.text : Theme.textMuted
-                font.pointSize: Theme.fontPointSizeCaption
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-
-                // A message cut short is read whole among the messages.
-                HoverHandler {
-                    id: hintsHover
-                }
-                TapHandler {
-                    enabled: window.notice !== ""
-                    onTapped: window.showMessages()
-                }
-                ToolTip.visible: window.notice !== "" && hintsHover.hovered && truncated
-                ToolTip.delay: 400
-                ToolTip.text: window.notice
-            }
-
-            RowLayout {
-                Layout.preferredWidth: statusBar.balanced ? statusBar.sideWidth : statusBar.stateWidth
-                Layout.fillHeight: true
-                spacing: Theme.gutter
-
-                Item { Layout.fillWidth: true }
-
-                // Why the library cannot be written now; a click shows the
-                // library settings, where conflict copies can be ignored.
-                FlatButton {
-                    id: writeState
-                    objectName: "writeState"
-
-                    Layout.maximumWidth: statusBar.width * 0.45 - (detailsToggle.visible ? detailsToggle.width : 0)
-                    visible: window.library.loaded && !window.guard.writable
-                    implicitHeight: Theme.statusHeight - 6
-                    horizontalPadding: Math.round(6 * Theme.spacingScale)
-                    text: window.guard.readOnlyReason
-                    tip: window.guard.readOnlyReason
-                    font.pointSize: Theme.fontPointSizeCaption
-                    icon.source: "assets/icons/lock.svg"
-                    icon.width: Theme.smallIconSize
-                    icon.height: Theme.smallIconSize
-                    icon.color: Theme.textMuted
-                    palette.buttonText: Theme.textMuted
-                    onClicked: window.openSettings("library")
-
-                    contentItem: RowLayout {
-                        spacing: Math.round(6 * Theme.spacingScale)
-
-                        IconImage {
-                            Layout.preferredWidth: writeState.icon.width
-                            Layout.preferredHeight: writeState.icon.height
-                            sourceSize: Qt.size(writeState.icon.width, writeState.icon.height)
-                            source: writeState.icon.source
-                            color: writeState.icon.color
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: writeState.text
-                            color: Theme.textMuted
-                            font: writeState.font
-                            elide: Text.ElideRight
-                        }
-                    }
-                }
-
-                StatusButton {
-                    id: stopConversions
-                    objectName: "stopConversions"
-
-                    visible: window.conversions.busy
-                    text: qsTr("Stop converting")
-                    tip: qsTr("Stop the %n conversions", "", window.conversions.jobs.length)
-                    icon.source: "assets/icons/close.svg"
-                    onClicked: window.conversions.cancel(0)
-                }
-
-                StatusButton {
-                    id: stopAdding
-                    objectName: "stopAdding"
-
-                    visible: window.library.importing
-                    text: qsTr("Stop adding")
-                    tip: qsTr("Stop adding books")
-                    icon.source: "assets/icons/close.svg"
-                    onClicked: window.library.cancelImport()
-                }
-
-                StatusButton {
-                    id: messagesButton
-                    objectName: "messagesButton"
-
-                    visible: window.messages.length > 0
-                    text: qsTr("Messages")
-                    tip: window.unreadErrors > 0 ? qsTr("Messages: %n errors not seen", "", window.unreadErrors)
-                                                 : qsTr("Messages")
-                    icon.source: "assets/icons/info.svg"
-                    icon.color: window.unreadErrors > 0 ? Theme.danger : Theme.textMuted
-                    onClicked: window.showMessages()
-                }
-
-                StatusButton {
-                    id: stopSending
-                    objectName: "stopSending"
-
-                    visible: window.devices.busy
-                    text: qsTr("Stop sending")
-                    tip: qsTr("Stop the %n sendings", "", window.devices.jobs.length)
-                    icon.source: "assets/icons/close.svg"
-                    onClicked: window.devices.cancel(0)
-                }
-
-                StatusButton {
-                    id: detailsToggle
-                    objectName: "detailsToggle"
-
-                    visible: session.bookOpen || window.editingMany
-                    selected: window.detailsVisible
-                    text: window.detailsVisible ? qsTr("Hide details") : qsTr("Show details")
-                    tip: qsTr("Details (Ctrl+I)")
-                    icon.source: "assets/icons/panel-right.svg"
-                    icon.color: selected ? Theme.text : Theme.textMuted
-                    onClicked: window.toggleDetails()
-                }
-            }
-        }
+    AppShortcuts {
+        window: window
+        session: session
+        bookPage: bookPage
+        booksPage: booksPage
+        commandPalette: commandPalette
+        highlightsPage: highlightsPage
+        shortcutsOverlay: shortcutsOverlay
+        addBooksDialog: addBooksDialog
     }
 
     RowLayout {
@@ -1928,365 +1587,18 @@ ThemedWindow {
             Layout.fillHeight: true
             spacing: 0
 
-            Rectangle {
+            MainToolbar {
                 id: toolbar
-                objectName: "toolbar"
-
-                // The book's text buttons, as wide as their words in the
-                // language shown: icons alone when the toolbar has no room
-                // for them beside the breadcrumb and the other buttons.
-                readonly property real bookButtonsWidth: (window.library.canRevert ? [qsTr("Revert changes")] : [])
-                    .concat([qsTr("Read"), qsTr("Open in reader")])
-                    .reduce((sum, text) => sum + toolbarMetrics.advanceWidth(text) + 2 * Theme.controlInset
-                            + Theme.iconSize + 2 * Theme.gutter, 0)
-                readonly property bool compact: width < bookButtonsWidth + 6 * Theme.rowHeight + 28 * Theme.charWidth
-
-                FontMetrics {
-                    id: toolbarMetrics
-                    font: window.font
-                }
 
                 Layout.fillWidth: true
-                implicitHeight: Theme.toolbarHeight
-                color: Theme.surface
-
-                Divider {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                }
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: Theme.gutter
-                    anchors.rightMargin: Theme.gutter
-                    spacing: Theme.gutter
-
-                    FlatButton {
-                        objectName: "backButton"
-
-                        iconOnly: true
-                        enabled: session.bookOpen || session.filterOpen
-                        text: qsTr("Back")
-                        tip: qsTr("Back (Esc)")
-                        icon.source: "assets/icons/arrow-left.svg"
-                        onClicked: window.goBack()
-                    }
-
-                    // The section, then the item or book open in it; each
-                    // crumb but the last goes back to its level.
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: Math.min(implicitWidth, Math.round(10 * Theme.charWidth))
-                        Layout.leftMargin: Math.round(Theme.gutter / 2)
-                        spacing: 0
-
-                        Label {
-                            objectName: "rootCrumb"
-
-                            visible: session.bookOpen || session.filterOpen
-                            text: sidebar.current.title
-                            color: rootHover.hovered ? Theme.text : Theme.textMuted
-                            Accessible.role: Accessible.Button
-                            Accessible.name: qsTr("Back to %1").arg(sidebar.current.title)
-
-                            HoverHandler {
-                                id: rootHover
-                                cursorShape: Qt.PointingHandCursor
-                            }
-
-                            TapHandler {
-                                onTapped: {
-                                    if (session.bookOpen)
-                                        window.closeBook()
-                                    if (session.filterOpen)
-                                        window.closeFilter()
-                                }
-                            }
-                        }
-
-                        Label {
-                            visible: session.bookOpen || session.filterOpen
-                            text: " / "
-                            color: Theme.textFaint
-                        }
-
-                        Label {
-                            objectName: "filterCrumb"
-
-                            visible: session.bookOpen && session.filterOpen
-                            text: window.filter.name || ""
-                            color: filterHover.hovered ? Theme.text : Theme.textMuted
-                            elide: Text.ElideRight
-                            Layout.maximumWidth: Math.round(24 * Theme.charWidth)
-                            Accessible.role: Accessible.Button
-                            Accessible.name: qsTr("Back to %1").arg(window.filter.name || "")
-
-                            HoverHandler {
-                                id: filterHover
-                                cursorShape: Qt.PointingHandCursor
-                            }
-
-                            TapHandler {
-                                onTapped: window.closeBook()
-                            }
-                        }
-
-                        Label {
-                            visible: session.bookOpen && session.filterOpen
-                            text: " / "
-                            color: Theme.textFaint
-                        }
-
-                        Label {
-                            objectName: "pageTitle"
-
-                            Layout.fillWidth: true
-                            text: session.bookOpen ? (window.book.title || "")
-                                : session.filterOpen ? (window.filter.name || "")
-                                : sidebar.current.title
-                            font.weight: Font.Bold
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    // Every change saves at once; this undoes them all until the
-                    // book closes, after asking.
-                    FlatButton {
-                        objectName: "revertChangesButton"
-
-                        visible: session.bookOpen && window.library.canRevert && !bookPage.confirmingRevert
-                        variant: "outline"
-                        iconOnly: toolbar.compact
-                        icon.source: toolbar.compact ? "assets/icons/refresh.svg" : ""
-                        text: qsTr("Revert changes")
-                        tip: qsTr("Undo every change since you opened the book")
-                        // Out of any field first, so Enter and Esc answer.
-                        onClicked: {
-                            bookPage.finishEditing()
-                            bookPage.forceActiveFocus()
-                            bookPage.confirmingRevert = true
-                        }
-                    }
-
-                    Label {
-                        objectName: "revertQuestion"
-
-                        // Whole when there is room: a layout rounds a fractional
-                        // width down, which would elide the last letter.
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: Math.ceil(implicitWidth)
-                        Layout.maximumWidth: Math.ceil(implicitWidth)
-                        visible: session.bookOpen && bookPage.confirmingRevert
-                        text: qsTr("Undo every change since you opened it?")
-                        elide: Text.ElideRight
-                    }
-
-                    FlatButton {
-                        objectName: "revertKeepButton"
-
-                        visible: session.bookOpen && bookPage.confirmingRevert
-                        variant: "outline"
-                        text: qsTr("Keep")
-                        onClicked: bookPage.confirmingRevert = false
-                    }
-
-                    FlatButton {
-                        objectName: "confirmRevertButton"
-
-                        visible: session.bookOpen && bookPage.confirmingRevert
-                        variant: "danger"
-                        text: qsTr("Revert")
-                        onClicked: bookPage.revertChanges()
-                    }
-
-                    FlatButton {
-                        objectName: "downloadMetadataButton"
-
-                        visible: session.bookOpen && !bookPage.confirmingRevert && window.library.writable
-                        iconOnly: true
-                        text: qsTr("Download metadata and covers")
-                        icon.source: "assets/icons/globe.svg"
-                        onClicked: window.downloadMetadata()
-                    }
-
-                    FlatButton {
-                        objectName: "trashBookButton"
-
-                        visible: session.bookOpen && !bookPage.confirmingRevert && window.library.writable
-                        iconOnly: true
-                        text: qsTr("Move to Trash")
-                        icon.source: "assets/icons/trash.svg"
-                        onClicked: window.trashBook(window.book.id)
-                    }
-
-                    FlatButton {
-                        objectName: "readButton"
-
-                        visible: session.bookOpen && !bookPage.confirmingRevert && library.readerAvailable
-                        // Whatever Ctrl+Shift+O reads: Kindle books and
-                        // those Calibre makes readable too.
-                        enabled: window.book.id > 0 && window.library.readableFormat(window.book.id) !== ""
-                        variant: "outline"
-                        iconOnly: toolbar.compact
-                        text: qsTr("Read")
-                        tip: qsTr("Read in Cousoir (Ctrl+Shift+O)")
-                        icon.source: "assets/icons/book.svg"
-                        onClicked: window.readBook()
-                    }
-
-                    FlatButton {
-                        objectName: "openInReaderButton"
-
-                        visible: session.bookOpen && !bookPage.confirmingRevert
-                        enabled: (window.book.formats || []).some(format => !format.missing)
-                        variant: "outline"
-                        iconOnly: toolbar.compact
-                        text: qsTr("Open in reader")
-                        tip: qsTr("Open in reader (Ctrl+O)")
-                        icon.source: "assets/icons/external.svg"
-                        onClicked: window.openInReader()
-                    }
-
-                    // Where you stopped and your highlights, put on the Kobo
-                    // when asked and only then.
-                    FlatButton {
-                        objectName: "syncReadingButton"
-
-                        visible: window.deviceShown && window.devices.current.kind === "kobo"
-                        enabled: !window.devices.busy && !window.devices.syncing && window.devices.writable
-                        variant: "outline"
-                        text: window.devices.syncing ? qsTr("Syncing…") : qsTr("Sync reading")
-                        tip: window.devices.writable
-                             ? qsTr("Put where you stopped in your books, and your highlights, on %1").arg(window.devices.current.name || "")
-                             : window.devices.readOnlyReason
-                        icon.source: "assets/icons/refresh.svg"
-                        onClicked: window.syncReading(window.devices.currentRoot)
-                    }
-
-                    // While a Kobo is mounted, Calibre's way of letting it
-                    // go: unmounted and powered off. A Kindle needs none.
-                    FlatButton {
-                        objectName: "ejectButton"
-
-                        visible: window.deviceShown && window.devices.current.ejectable === true
-                        enabled: !window.devices.busy && !window.devices.syncing
-                        variant: "outline"
-                        text: qsTr("Eject")
-                        tip: qsTr("Eject %1 so it can be unplugged").arg(window.devices.current.name || "")
-                        icon.source: "assets/icons/eject.svg"
-                        onClicked: window.ejectDevice(window.devices.currentRoot)
-                    }
-
-                    FlatButton {
-                        objectName: "addBooksButton"
-
-                        visible: !session.bookOpen && !window.deviceShown
-                        enabled: window.library.writable && !window.library.importing
-                        iconOnly: true
-                        text: qsTr("Add books")
-                        tip: qsTr("Add books (Ctrl+N)")
-                        icon.source: "assets/icons/plus.svg"
-                        onClicked: addBooksDialog.open()
-                    }
-
-                    FlatButton {
-                        objectName: "viewToggle"
-
-                        visible: window.booksShown
-                        iconOnly: true
-                        text: layoutSettings.gridMode ? qsTr("Show as list") : qsTr("Show covers")
-                        tip: qsTr("%1 (Ctrl+G)").arg(text)
-                        icon.source: layoutSettings.gridMode ? "assets/icons/list.svg" : "assets/icons/grid.svg"
-                        onClicked: window.toggleGrid()
-                    }
-
-                    // Calibre's virtual libraries: one narrows every section,
-                    // as in Calibre.
-                    ChoiceBox {
-                        objectName: "virtualLibraryBox"
-
-                        readonly property var choices: [{ value: "", label: qsTr("All books") }].concat(
-                            window.library.virtualLibraries.map(name => ({ value: name, label: name })))
-
-                        visible: window.library.virtualLibraries.length > 0 && !session.bookOpen
-                            && !window.deviceShown && !window.checkShown && !window.trashShown && !window.highlightsShown
-                            && !window.textShown && !window.readingShown
-                        // The longest name, its arrow and paddings.
-                        Layout.preferredWidth: Math.round(Math.min(24, choices.reduce(
-                            (longest, choice) => Math.max(longest, choice.label.length), 0)) * Theme.charWidth)
-                            + leftPadding + rightPadding
-                        Accessible.name: qsTr("Virtual library")
-                        model: choices
-                        currentIndex: Math.max(0, choices.findIndex(choice => choice.value === window.library.virtualLibrary))
-                        onActivated: function(index) {
-                            window.library.virtualLibrary = choices[index].value
-                        }
-                    }
-
-                    SearchField {
-                        id: searchField
-                        objectName: "searchField"
-
-                        function submit() {
-                            if (window.facetShown)
-                                facetPage.activate(0)
-                            else
-                                booksPage.activate(0)
-                        }
-
-                        visible: !session.bookOpen && !window.deviceShown && !window.checkShown && !window.highlightsShown
-                            && !window.textShown && !window.readingShown
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
-                        Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
-                        Layout.minimumWidth: Math.round(120 * Theme.spacingScale)
-                        placeholderText: !window.facetShown ? qsTr("Search, as in Calibre")
-                            : ({ authors: qsTr("Search authors"), series: qsTr("Search series"), tags: qsTr("Search tags"),
-                                 languages: qsTr("Search languages"), publishers: qsTr("Search publishers") })[window.section]
-                              || qsTr("Search")
-                        text: window.library.searchText
-
-                        onTextEdited: window.library.searchText = text
-                        Keys.onDownPressed: window.focusCurrentList()
-                        Keys.onReturnPressed: submit()
-                        Keys.onEnterPressed: submit()
-                        Keys.onEscapePressed: {
-                            // Clear through the model so the text binding survives.
-                            if (window.library.searchText.length > 0)
-                                window.library.searchText = ""
-                            else
-                                window.focusCurrentList()
-                        }
-                    }
-
-                    FlatButton {
-                        objectName: "refreshButton"
-
-                        visible: !session.bookOpen
-                        iconOnly: true
-                        text: window.deviceShown ? qsTr("Read the device again") : qsTr("Reload library")
-                        tip: qsTr("%1 (F5)").arg(text)
-                        icon.source: "assets/icons/refresh.svg"
-                        onClicked: window.reload()
-                    }
-
-                    Divider {
-                        visible: !session.bookOpen
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: Math.round(Theme.rowHeight * 0.6)
-                    }
-
-                    FlatButton {
-                        objectName: "settingsButton"
-
-                        visible: !session.bookOpen
-                        iconOnly: true
-                        text: qsTr("Settings")
-                        icon.source: "assets/icons/settings.svg"
-                        onClicked: window.openSettings("")
-                    }
-                }
+                window: window
+                session: session
+                bookPage: bookPage
+                booksPage: booksPage
+                facetPage: facetPage
+                layoutSettings: layoutSettings
+                sidebar: sidebar
+                addBooksDialog: addBooksDialog
             }
 
             Item {

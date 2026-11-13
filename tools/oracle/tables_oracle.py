@@ -8,7 +8,7 @@
 #   reference; the language of a MOBI file by its header's code; and the
 #   named character references replace_entities() knows.
 #
-#   calibre-debug -e tools/oracle/tables_oracle.py -- <source folder>
+#   calibre-debug -e tools/oracle/tables_oracle.py -- <core folder>
 
 import os
 import sys

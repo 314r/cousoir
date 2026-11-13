@@ -10,7 +10,7 @@ import Cousoir
 // Ctrl+K: the window's sections and actions, and the library's books,
 // authors, series, tags and publishers, found by a few letters. Up and Down
 // choose, Enter or a click goes there or does it, Esc closes.
-Popup {
+ThemedPopup {
     id: palette
 
     required property BookLibrary library
@@ -73,21 +73,8 @@ Popup {
     x: Math.round((parent.width - width) / 2)
     y: Math.round(parent.height * 0.12)
     width: Math.min(parent ? parent.width - 2 * Theme.pagePadding : 0, Math.round(600 * Theme.spacingScale))
-    modal: true
-    focus: true
     padding: Theme.gutter
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.35)
-    }
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
-    }
 
     contentItem: ColumnLayout {
         spacing: Theme.gutter

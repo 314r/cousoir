@@ -233,7 +233,7 @@ Rectangle {
                 }
             }
 
-            delegate: Rectangle {
+            delegate: ListRow {
                 id: finding
 
                 required property var modelData
@@ -241,17 +241,8 @@ Rectangle {
                 readonly property bool firstOfKind: index === 0 || page.rows[index - 1].kind !== modelData.kind
 
                 objectName: "check_" + modelData.key
-                Accessible.role: Accessible.ListItem
                 Accessible.name: [modelData.title || "", page.reason(modelData)].filter(text => text).join(", ")
-                Accessible.selected: ListView.isCurrentItem
-                width: ListView.view.width
                 implicitHeight: content.implicitHeight + 2 * Theme.gutter
-                color: ListView.isCurrentItem && checkList.activeFocus ? Theme.selected
-                    : hover.hovered ? Theme.hover : "transparent"
-
-                HoverHandler {
-                    id: hover
-                }
 
                 TapHandler {
                     onTapped: checkList.currentIndex = finding.index

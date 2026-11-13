@@ -1320,6 +1320,10 @@ void LibraryUiTest::readsAloud()
     QVERIFY(settings && speech && view);
     settings->setProperty("speechEngine", QStringLiteral("mock"));
     QCOMPARE(speech->property("engine").toString(), QStringLiteral("mock"));
+    // The settings offer "the engine's voice", then its own.
+    QObject *voices = reader->findChild<QObject *>(QStringLiteral("readerSpeechVoice"));
+    QVERIFY(voices);
+    QTRY_COMPARE(voices->property("count").toInt(), speech->property("voices").toList().size() + 1);
     QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
     QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1 && reader->property("page").toInt() == 0
                                  && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),

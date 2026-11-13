@@ -6,7 +6,7 @@ import Cousoir
 
 // A name asked for, in the middle of the window: Enter gives it, Esc
 // leaves it as it was. `accepted` comes with the name typed.
-Popup {
+ThemedPopup {
     id: dialog
 
     property string title
@@ -32,9 +32,6 @@ Popup {
     parent: Overlay.overlay
     anchors.centerIn: parent
     width: Math.min(parent ? parent.width - 2 * Theme.pagePadding : 0, Math.round(440 * Theme.spacingScale))
-    modal: true
-    focus: true
-    padding: Theme.panePadding
     closePolicy: Popup.CloseOnEscape
 
     onOpened: {
@@ -46,17 +43,6 @@ Popup {
         if (focusBefore && focusBefore.visible)
             focusBefore.forceActiveFocus(Qt.PopupFocusReason)
         focusBefore = null
-    }
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.35)
-    }
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
     }
 
     contentItem: ColumnLayout {

@@ -75,29 +75,20 @@ Rectangle {
         Keys.onReturnPressed: page.read(currentIndex)
         Keys.onEnterPressed: page.read(currentIndex)
 
-        delegate: Rectangle {
+        delegate: ListRow {
             id: book
 
             required property var modelData
             required property int index
 
             objectName: "readingBook" + index
-            width: ListView.view.width
             implicitHeight: Math.max(cover.height, texts.implicitHeight) + 2 * Theme.gutter
             radius: Theme.smallRadius
-            color: ListView.isCurrentItem && list.activeFocus ? Theme.selected
-                : hover.hovered ? Theme.hover : "transparent"
-            Accessible.role: Accessible.ListItem
             Accessible.name: book.modelData.title + ", " + book.statusText
-            Accessible.selected: ListView.isCurrentItem
 
             readonly property string statusText: (book.modelData.finished ? qsTr("Finished")
                                                                            : qsTr("%1 read").arg(book.modelData.progress))
                 + " · " + book.modelData.when
-
-            HoverHandler {
-                id: hover
-            }
 
             TapHandler {
                 onTapped: {

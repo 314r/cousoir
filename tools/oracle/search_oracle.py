@@ -11,7 +11,7 @@
 #   two functions find each query in each text, which the folds must agree
 #   with.
 #
-#   CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/search_oracle.py -- <source folder> <out.json>
+#   CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/search_oracle.py -- <core folder> <out.json>
 
 import json
 import os
