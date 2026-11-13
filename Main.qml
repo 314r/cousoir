@@ -623,8 +623,9 @@ ThemedWindow {
         add("add", qsTr("Add books…"), "Ctrl+N", "plus", library.writable && !library.importing)
         add("read", qsTr("Read in Cousoir"), "Ctrl+Shift+O", "book", currentBookId() > 0 && library.readerAvailable)
         add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
-        add("download", qsTr("Download metadata and covers"), "", "globe",
-            session.bookOpen && library.writable)
+        add("download", !session.bookOpen && books > 1 ? qsTr("Download metadata for %n books", "", books)
+                                                       : qsTr("Download metadata and covers"), "", "globe",
+            (session.bookOpen || books > 0) && library.writable)
         add("kepub", books > 1 ? qsTr("Convert %n books to KEPUB", "", books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
             "refresh", books > 0 && library.writable)
         add("azw3", books > 1 ? qsTr("Convert %n books to AZW3", "", books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
@@ -771,8 +772,13 @@ ThemedWindow {
     // Calibre's sources, or Open Library, asked about the open book, out of
     // any field first.
     function downloadMetadata() {
-        if (!session.bookOpen)
+        if (!session.bookOpen) {
+            // The books selected, together.
+            const ids = targetIds()
+            if (ids.length > 0)
+                bulkDownloadDialog.start(ids)
             return
+        }
         bookPage.finishEditing()
         downloadDialog.start(window.book.id, window.book.title || "")
     }
@@ -981,6 +987,7 @@ ThemedWindow {
     readonly property ConcurrencyGuard guard: session.guard
     readonly property ConversionService conversions: session.conversions
     readonly property MetadataDownloader downloads: session.downloads
+    readonly property BulkMetadataDownloader bulkDownloads: session.bulkDownloads
     readonly property DeviceLibrary devices: session.devices
 
     Timer {
@@ -1226,6 +1233,17 @@ ThemedWindow {
             commandPalette.commands = window.paletteCommands()
             commandPalette.show()
         }
+    }
+
+    BulkDownloadDialog {
+        id: bulkDownloadDialog
+
+        downloader: window.bulkDownloads
+        onFailed: function(message) { window.showNotice(message) }
+        onSaved: function(count) {
+            window.showNotice(qsTr("%n books updated from the web; Undo puts them back.", "", count), false)
+        }
+        onClosed: booksPage.focusList()
     }
 
     MetadataDownloadDialog {
@@ -2197,6 +2215,7 @@ ThemedWindow {
                         onReadRequested: function(bookId) { window.readBookOf(bookId) }
                         onConvertRequested: function(bookIds, format) { window.convertBooks(bookIds, format) }
                         onSendRequested: function(bookIds, root) { window.sendBooks(bookIds, root) }
+                        onDownloadRequested: function(bookIds) { bulkDownloadDialog.start(bookIds) }
                         onReloadRequested: session.reload()
                         onLibraryFolderRequested: libraryFolderDialog.open()
                         onFailed: function(message) { window.showNotice(message) }

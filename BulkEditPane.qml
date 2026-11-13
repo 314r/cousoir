@@ -26,6 +26,7 @@ FocusScope {
         })))
 
     signal failed(string message)
+    signal downloadRequested(var bookIds)
 
     // The changes the fields hold, as updateBooks() takes them.
     function changes() {
@@ -351,6 +352,17 @@ FocusScope {
                     text: qsTr("Apply to %n books", "", pane.bookIds.length)
                     enabled: pane.editable && pane.valid && Object.keys(pane.changes()).length > 0
                     onClicked: pane.apply()
+                }
+
+                FlatButton {
+                    objectName: "bulkDownloadButton"
+
+                    enabled: pane.library.writable
+                    variant: "outline"
+                    iconOnly: true
+                    text: qsTr("Download metadata and covers")
+                    icon.source: "assets/icons/globe.svg"
+                    onClicked: pane.downloadRequested(pane.bookIds)
                 }
 
                 FlatButton {

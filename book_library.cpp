@@ -25,6 +25,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QTextDocument>
 #include <QUrl>
 #include <QPromise>
@@ -348,7 +349,10 @@ void BookLibrary::setLibraryPath(const QString &path)
     m_importedBooks.clear();
     m_importedDuplicates.clear();
     m_backedUp = false;
-    m_bulkUndo.clear();
+    clearBulkUndo();
+    dropUndoPlans();
+    // An undo lasts a session: covers kept for one before are stale.
+    QDir(undoCoverFolder()).removeRecursively();
     emit bulkUndoChanged();
     rebuildCheck();
     emit libraryChanged();
@@ -1683,6 +1687,16 @@ QString BookLibrary::updateBook(int bookId, const QVariantMap &changes)
         return tr("This book is no longer in the library.");
     if (!m_writable)
         return tr("The library cannot be changed right now.");
+    BookEdit edit;
+    const QString error = makeEdit(*book, changes, &edit);
+    if (!error.isEmpty())
+        return error;
+    keepOriginal(*book);
+    return queueEdit(edit);
+}
+
+QString BookLibrary::makeEdit(const Book &book, const QVariantMap &changes, BookEdit *edit, QStringList *fields) const
+{
     if (changes.contains(QStringLiteral("pubdate")) && !isDate(changes.value(QStringLiteral("pubdate")).toString()))
         return tr("“%1” is not a date.").arg(changes.value(QStringLiteral("pubdate")).toString());
 
@@ -1691,23 +1705,30 @@ QString BookLibrary::updateBook(int bookId, const QVariantMap &changes)
     // Calibre's editor: a sort that followed its title or authors keeps
     // following them, any other stays as it is.
     if (adjusted.contains(QStringLiteral("title")) && !adjusted.contains(QStringLiteral("sort"))) {
-        const QString language = book->languages.value(0);
-        const QString automatic = CalibreText::titleSort(book->title, language, config.tweaks, config.interfaceLanguage);
-        adjusted.insert(QStringLiteral("sort"), book->sort == automatic
+        const QString language = book.languages.value(0);
+        const QString automatic = CalibreText::titleSort(book.title, language, config.tweaks, config.interfaceLanguage);
+        adjusted.insert(QStringLiteral("sort"), book.sort == automatic
             ? CalibreText::titleSort(adjusted.value(QStringLiteral("title")).toString(), language, config.tweaks,
                                      config.interfaceLanguage)
-            : book->sort);
+            : book.sort);
     }
     if (adjusted.contains(QStringLiteral("authors")) && !adjusted.contains(QStringLiteral("authorSort"))
-        && !LibraryCheck::authorSortFollows(m_data, *book))
-        adjusted.insert(QStringLiteral("authorSort"), book->authorSort);
+        && !LibraryCheck::authorSortFollows(m_data, book))
+        adjusted.insert(QStringLiteral("authorSort"), book.authorSort);
 
-    BookEdit edit;
     QString error;
-    if (!BookEdit::fromVariantMap(bookId, adjusted, &edit, &error))
+    if (!BookEdit::fromVariantMap(book.id, adjusted, edit, &error))
         return error;
-    keepOriginal(*book);
-    return queueEdit(edit);
+    if (fields) {
+        for (auto it = adjusted.cbegin(); it != adjusted.cend(); ++it) {
+            if (it.key() != QLatin1String("coverFile") && it.key() != QLatin1String("removeCover"))
+                fields->append(it.key());
+        }
+        // The author sort follows the authors by itself.
+        if (adjusted.contains(QStringLiteral("authors")) && !fields->contains(QStringLiteral("authorSort")))
+            fields->append(QStringLiteral("authorSort"));
+    }
+    return {};
 }
 
 void BookLibrary::keepOriginal(const Book &book)
@@ -1812,7 +1833,7 @@ QString BookLibrary::updateBooks(const QVariantList &bookIds, const QVariantMap 
     // The undo of an earlier one gives way; this one's comes once it is
     // saved.
     if (!m_bulkUndo.isEmpty()) {
-        m_bulkUndo.clear();
+        clearBulkUndo();
         emit bulkUndoChanged();
     }
     CommitEngine::Request request;
@@ -1836,12 +1857,19 @@ void BookLibrary::undoBulkEdit()
             if (current.value(field.key()) == it->after.value(field.key()) && field.value() != it->after.value(field.key()))
                 changes.insert(field.key(), field.value());
         }
+        // The cover as it was, read now from where it was kept.
+        if (it->coverBefore) {
+            if (it->coverBefore->isEmpty())
+                changes.insert(QStringLiteral("removeCover"), true);
+            else
+                changes.insert(QStringLiteral("coverFile"), *it->coverBefore);
+        }
         BookEdit edit;
         QString error;
         if (BookEdit::fromVariantMap(it.key(), changes, &edit, &error) && !edit.isEmpty())
             request.edits.append(edit);
     }
-    m_bulkUndo.clear();
+    clearBulkUndo();
     emit bulkUndoChanged();
     if (!request.edits.isEmpty())
         queueChange(request);
@@ -1867,7 +1895,12 @@ void BookLibrary::keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Boo
         if (bulk.pubdate)
             fields << QStringLiteral("pubdate");
     }
-    m_bulkUndo.clear();
+    keepUndo(fields, before, {});
+}
+
+void BookLibrary::keepUndo(const QStringList &fields, const QList<Book> &before, const QHash<int, QString> &covers)
+{
+    clearBulkUndo();
     for (const Book &old : before) {
         const Book *now = findBook(old.id);
         if (!now)
@@ -1875,14 +1908,96 @@ void BookLibrary::keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Boo
         const QVariantMap was = editableValues(old);
         const QVariantMap is = editableValues(*now);
         BulkUndo undo;
-        for (const QString &field : std::as_const(fields)) {
+        for (const QString &field : fields) {
             undo.before.insert(field, was.value(field));
             undo.after.insert(field, is.value(field));
         }
-        if (undo.before != undo.after)
+        if (covers.contains(old.id))
+            undo.coverBefore = covers.value(old.id);
+        if (undo.before != undo.after || undo.coverBefore)
             m_bulkUndo.insert(old.id, undo);
     }
     emit bulkUndoChanged();
+}
+
+void BookLibrary::clearBulkUndo()
+{
+    for (const BulkUndo &undo : std::as_const(m_bulkUndo)) {
+        if (undo.coverBefore && !undo.coverBefore->isEmpty())
+            QFile::remove(*undo.coverBefore);
+    }
+    m_bulkUndo.clear();
+}
+
+void BookLibrary::dropUndoPlans()
+{
+    for (const UndoPlan &plan : std::as_const(m_undoPlans)) {
+        for (const QString &cover : plan.covers) {
+            if (!cover.isEmpty())
+                QFile::remove(cover);
+        }
+    }
+    m_undoPlans.clear();
+}
+
+QString BookLibrary::undoCoverFolder() const
+{
+    return QDir(cacheFolder(m_libraryPath)).filePath(QStringLiteral("undo-covers"));
+}
+
+QString BookLibrary::updateEachBook(const QList<QPair<int, QVariantMap>> &changes)
+{
+    if (!m_writable)
+        return tr("The library cannot be changed right now.");
+    CommitEngine::Request request;
+    UndoPlan plan;
+    QHash<int, QByteArray> oldCovers;
+    for (const auto &[bookId, bookChanges] : changes) {
+        const Book *book = findBook(bookId);
+        if (!book)
+            continue;
+        BookEdit edit;
+        QStringList fields;
+        const QString error = makeEdit(*book, bookChanges, &edit, &fields);
+        if (!error.isEmpty())
+            return error;
+        if (edit.isEmpty())
+            continue;
+        request.edits.append(edit);
+        plan.before.append(*book);
+        for (const QString &field : std::as_const(fields)) {
+            if (!plan.fields.contains(field))
+                plan.fields.append(field);
+        }
+        if (edit.cover)
+            oldCovers.insert(bookId, coverBytes(*book));
+    }
+    if (request.edits.isEmpty())
+        return {};
+    // The undo of an earlier change gives way; this one's comes once it is
+    // saved, with the covers it replaces kept in the cache till then.
+    if (!m_bulkUndo.isEmpty()) {
+        clearBulkUndo();
+        emit bulkUndoChanged();
+    }
+    if (!oldCovers.isEmpty()) {
+        const QDir folder(undoCoverFolder());
+        folder.mkpath(QStringLiteral("."));
+        for (auto it = oldCovers.cbegin(); it != oldCovers.cend(); ++it) {
+            QString kept;
+            if (!it.value().isEmpty()) {
+                kept = folder.filePath(QStringLiteral("%1-%2").arg(m_lastChangeId + 1).arg(it.key()));
+                QSaveFile file(kept);
+                if (!file.open(QIODevice::WriteOnly) || file.write(it.value()) != it.value().size() || !file.commit())
+                    return tr("Cannot keep the covers to put back in %1.").arg(folder.path());
+            }
+            plan.covers.insert(it.key(), kept);
+        }
+    }
+    const QString error = queueChange(request);
+    if (error.isEmpty())
+        m_undoPlans.insert(m_lastChangeId, plan);
+    return error;
 }
 
 QString BookLibrary::queueEdit(const BookEdit &edit)
@@ -1890,7 +2005,8 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     if (edit.isEmpty())
         return {};
     // With the edits just before it, if the last change waiting is edits.
-    if (!m_pending.isEmpty() && !m_pending.constLast().hasOperations() && m_pending.constLast().bulkEdits.isEmpty()) {
+    if (!m_pending.isEmpty() && !m_pending.constLast().hasOperations() && m_pending.constLast().bulkEdits.isEmpty()
+        && !m_undoPlans.contains(m_pending.constLast().id)) {
         m_pending.last().edits.append(edit);
     } else {
         CommitEngine::Request request;
@@ -2166,7 +2282,8 @@ void BookLibrary::finishCommit()
         // holds.
         emit changeFinished(committed.id, false, result.error);
         dropPending(result.error);
-        m_bulkUndo.clear();
+        clearBulkUndo();
+        dropUndoPlans();
         emit bulkUndoChanged();
         emit saveFailed(result.error);
         m_reloadPending = true;
@@ -2188,6 +2305,10 @@ void BookLibrary::finishCommit()
             m_saveTimings.append({ QStringLiteral("show it (the window's thread)"), clock.nsecsElapsed() });
             if (!committed.bulkEdits.isEmpty())
                 keepBulkUndo(committed.bulkEdits, result.bulkBefore);
+            if (m_undoPlans.contains(committed.id)) {
+                const UndoPlan plan = m_undoPlans.take(committed.id);
+                keepUndo(plan.fields, plan.before, plan.covers);
+            }
             m_publishedKey = ConcurrencyGuard::changeKey(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")));
             emit publishedKeyChanged();
         }

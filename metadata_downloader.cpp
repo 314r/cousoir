@@ -226,6 +226,13 @@ QString MetadataDownloader::apply(int result, const QStringList &fields, const Q
     return error;
 }
 
+QVariantMap MetadataDownloader::changes(int result, const QStringList &fields) const
+{
+    if (!m_library || m_state != QLatin1String("found") || result < 0 || result >= m_identified.books.size())
+        return {};
+    return m_library->downloadedChanges(m_bookId, m_identified.books.at(result), fields, m_identified.appendComments);
+}
+
 void MetadataDownloader::cancel()
 {
     stopProcess();

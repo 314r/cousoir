@@ -24,6 +24,7 @@
 #include "calibre_languages.h"
 #include "book_library.h"
 #include "book_text_indexer.h"
+#include "bulk_metadata_downloader.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
 #include "metadata_downloader.h"
@@ -157,6 +158,7 @@ private slots:
     void checksLibrary();
     void convertsBooks();
     void downloadsMetadata();
+    void downloadsManyBooks();
     void sendsToKobo();
     void showsReading();
     void sendsToKindle();
@@ -209,6 +211,7 @@ void LibraryUiTest::initTestCase()
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
+    qmlRegisterType<BulkMetadataDownloader>("Cousoir", 1, 0, "BulkMetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
     qmlRegisterUncreatableType<BookTextIndexer>("Cousoir", 1, 0, "BookTextIndexer", QStringLiteral("The library's own"));
@@ -3480,6 +3483,73 @@ void LibraryUiTest::convertsBooks()
 // Metadata from the web, with a stand-in for Calibre: the books found, a
 // field left as it is, a cover picked, saved as one change that Revert
 // undoes.
+// Metadata for the books selected, looked up together: each book's best
+// match and cover in a list, a book unticked left as it is, the rest saved
+// as one change that Undo puts back, covers included.
+void LibraryUiTest::downloadsManyBooks()
+{
+    auto *bulk = qobject_cast<BulkMetadataDownloader *>(m_window->property("bulkDownloads").value<QObject *>());
+    QVERIFY(bulk);
+    bulk->setProgram(QStringLiteral(COUSOIR_TEST_DATA_DIR "/fake-calibre-debug"));
+    makeWritable();
+    // By title: The Black Company (2), L'Écume des jours (1), Good Omens (4).
+    click("bookRow0");
+    QTest::keyClick(m_window, Qt::Key_Down, Qt::ShiftModifier);
+    QTest::keyClick(m_window, Qt::Key_Down, Qt::ShiftModifier);
+    QTRY_VERIFY(control("bulkPane") && control("bulkPane")->isVisible());
+    const auto coverOf = [this](int id) {
+        QDirIterator files(m_libraryPath, { QStringLiteral("cover.jpg") }, QDir::Files, QDirIterator::Subdirectories);
+        while (files.hasNext()) {
+            const QString file = files.next();
+            if (QFileInfo(file).dir().dirName().endsWith(QStringLiteral("(%1)").arg(id)))
+                return readAll(file);
+        }
+        return QByteArray();
+    };
+    const QByteArray omens = coverOf(4);
+    QVERIFY(!omens.isEmpty());
+
+    click("bulkDownloadButton");
+    QObject *dialog = object("bulkDownloadDialog");
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QCOMPARE(text("bulkDownloadTitle"), QStringLiteral("Metadata for 3 books"));
+    click("bulkDownloadStart");
+    QTRY_COMPARE_WITH_TIMEOUT(bulk->state(), QStringLiteral("done"), 20000);
+    QVariantList rows = bulk->rows();
+    QCOMPARE(rows.size(), 3);
+    for (const QVariant &row : std::as_const(rows)) {
+        QCOMPARE(row.toMap().value(QStringLiteral("state")).toString(), QStringLiteral("found"));
+        QVERIFY(row.toMap().value(QStringLiteral("chosen")).toBool());
+        QVERIFY(!row.toMap().value(QStringLiteral("cover")).toString().isEmpty());
+    }
+    QCOMPARE(text("bulkDownloadStatus"), QStringLiteral("3 books to update"));
+    // L'Écume des jours unticked from the keyboard.
+    QTRY_VERIFY(control("bulkDownloadBooks")->hasActiveFocus());
+    QTest::keyClick(m_window, Qt::Key_Down);
+    QTest::keyClick(m_window, Qt::Key_Space);
+    QTRY_COMPARE(bulk->chosenCount(), 2);
+    QVERIFY(!bulk->rows().at(1).toMap().value(QStringLiteral("chosen")).toBool());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    waitForSave();
+    auto *books = qobject_cast<BookLibrary *>(library());
+    const auto book = [books](int id) { return books->data().book(id) ? *books->data().book(id) : Book(); };
+    QTRY_COMPARE(book(2).publisher, QStringLiteral("Tor Fantasy"));
+    QCOMPARE(book(4).title, QStringLiteral("The Black Company"));
+    QCOMPARE(book(1).title, QStringLiteral("L'Écume des jours"));
+    QCOMPARE(book(1).publisher, QStringLiteral("Gallimard"));
+    QVERIFY(coverOf(4) != omens);
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("2 books updated from the web; Undo puts them back."));
+    QTRY_COMPARE(library()->property("bulkUndoCount").toInt(), 2);
+
+    click("bulkUndoButton");
+    waitForSave();
+    QTRY_COMPARE(book(4).title, QStringLiteral("Good Omens"));
+    QCOMPARE(book(2).publisher, QStringLiteral("Tor"));
+    QCOMPARE(coverOf(4), omens);
+    QCOMPARE(library()->property("bulkUndoCount").toInt(), 0);
+}
+
 void LibraryUiTest::downloadsMetadata()
 {
     auto *downloads = qobject_cast<MetadataDownloader *>(m_window->property("downloads").value<QObject *>());

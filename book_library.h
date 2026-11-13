@@ -295,6 +295,9 @@ public:
     // edit does; `bookIds` in the list's order, which numbers a series. Same
     // returns as updateBook().
     Q_INVOKABLE QString updateBooks(const QVariantList &bookIds, const QVariantMap &changes);
+    // Each book's own changes, updateBook()'s keys, saved as one change that
+    // Undo puts back, covers included. Same returns as updateBook().
+    QString updateEachBook(const QList<QPair<int, QVariantMap>> &changes);
     // Puts the books of the last bulk edit back as they were before it, in
     // the fields it could change.
     Q_INVOKABLE void undoBulkEdit();
@@ -449,6 +452,18 @@ private:
     {
         QVariantMap before;
         QVariantMap after;
+        // The cover replaced: a file of the cache holding it, empty for a
+        // book that had none; unset when the cover was not changed.
+        std::optional<QString> coverBefore;
+    };
+
+    // What a save of several books' own changes undoes once saved: the
+    // fields it sets, the books before it, and their covers kept.
+    struct UndoPlan
+    {
+        QStringList fields;
+        QList<Book> before;
+        QHash<int, QString> covers;
     };
 
     struct ImportResult
@@ -484,6 +499,16 @@ private:
     // The undo of a bulk edit just saved: the fields it set, before and
     // after, by book.
     void keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before);
+    void keepUndo(const QStringList &fields, const QList<Book> &before, const QHash<int, QString> &covers);
+    // The undo dropped, and the covers it kept.
+    void clearBulkUndo();
+    // The undos of changes still waiting dropped, with their covers.
+    void dropUndoPlans();
+    // The folder of the cache the covers an undo puts back are kept in.
+    QString undoCoverFolder() const;
+    // updateBook()'s edit of `book`: its sorts following its title and
+    // authors as in Calibre's editor; the fields it sets in `fields`.
+    QString makeEdit(const Book &book, const QVariantMap &changes, BookEdit *edit, QStringList *fields = nullptr) const;
     // With `previous`, the search index of the library before a change,
     // only the books in `changed` are indexed again.
     static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config, const QStringList &sortFields,
@@ -600,6 +625,8 @@ private:
     QString m_calibreLanguage;
     // The books of the last bulk edit, in the fields it set.
     QHash<int, BulkUndo> m_bulkUndo;
+    // By the id of the change waiting to be saved.
+    QHash<int, UndoPlan> m_undoPlans;
     // The current book as it was opened, kept at its first change.
     int m_originalBookId = 0;
     QVariantMap m_original;
