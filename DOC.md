@@ -1624,6 +1624,23 @@ nothing outside the source tree, not even Qt's `~/.qttest`.
 tools/sandbox.sh ctest --test-dir build --output-on-failure
 ```
 
+`make sanitize` builds everything again in `build-asan` with AddressSanitizer
+and UndefinedBehaviorSanitizer, which turn a use of freed memory, an
+overflow or undefined behaviour into a report where it happens:
+
+```bash
+make sanitize
+ulimit -s 65536
+ASAN_OPTIONS=detect_leaks=0 tools/sandbox.sh ctest --test-dir build-asan --output-on-failure
+```
+
+The larger stack is for the sanitizers' larger frames: a template nested as
+deep as Calibre allows, 400 levels, takes about 1 MB in a normal build and
+more than the usual 8 MB with AddressSanitizer.
+
+`.github/workflows/ci.yml` builds and tests Cousoir in an Arch Linux
+container on each push; the comparison with Calibre skips itself there.
+
 Besides what builds Cousoir, the tests need only Calibre, for the parts that
 run it. `cousoir-test-tool`, built with them, does the rest: it compares what
 Calibre and Cousoir wrote, stands in for the readers and for Calibre's

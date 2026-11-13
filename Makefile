@@ -10,13 +10,23 @@ else
 RUN_EXECUTABLE = $(BUILD_DIR)/cousoir
 endif
 
-.PHONY: all build app install package package-install clean run test fixtures oracle
+.PHONY: all build app install package package-install clean run test fixtures oracle sanitize
 
 all: build
 
 build:
 	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Release $(CMAKE_FLAGS)
 	cmake --build $(BUILD_DIR) --parallel $(or $(JOBS),1)
+
+# The tests with AddressSanitizer and UndefinedBehaviorSanitizer, in
+# build-asan, half as many compilers at once, each taking more memory; then,
+# with a stack for the sanitizers' larger frames,
+#   ulimit -s 65536
+#   ASAN_OPTIONS=detect_leaks=0 tools/sandbox.sh ctest --test-dir build-asan
+SANITIZE_JOBS ?= $(shell echo $$(( ($(or $(JOBS),2) + 1) / 2 )))
+sanitize:
+	cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCOUSOIR_SANITIZE=address,undefined $(CMAKE_FLAGS)
+	cmake --build build-asan --parallel $(SANITIZE_JOBS)
 
 # Cousoir and cousoir-cli alone, without the thirty programs of the tests:
 # all that installing and packaging need.

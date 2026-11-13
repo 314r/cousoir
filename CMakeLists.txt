@@ -11,6 +11,14 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# A build with the compiler's sanitizers, "address,undefined" for instance,
+# for the tests to find what a crash would: make sanitize.
+set(COUSOIR_SANITIZE "" CACHE STRING "Sanitizers to build with, as -fsanitize= takes them")
+if(COUSOIR_SANITIZE)
+    add_compile_options(-fsanitize=${COUSOIR_SANITIZE} -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
+    add_link_options(-fsanitize=${COUSOIR_SANITIZE})
+endif()
+
 include(GNUInstallDirs)
 include(CTest)
 
