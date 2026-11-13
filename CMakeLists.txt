@@ -560,7 +560,7 @@ if(BUILD_TESTING)
 
     foreach(name IN ITEMS calibre_text calibre_paths calibre_search calibre_db description opf commit_engine concurrency_guard conversion kobo
                           kindle kf8 library_check metadata_web mobi_metadata epub_book epub_cfi calibre_fts calibre_notes annotation_search
-                          kobo_highlights kobo_placement kobo_write test_tool)
+                          kobo_highlights kobo_placement kobo_write test_tool damaged_books)
         qt_add_executable(${name}_tests tests/${name}_test.cpp)
         target_link_libraries(${name}_tests PRIVATE cousoir_core Qt6::Test)
         cousoir_configure_test_executable(${name}_tests)

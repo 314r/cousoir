@@ -1884,6 +1884,19 @@ The tests check the port against Calibre itself:
   read again by Cousoir's Kindle reader, every word, link, font and the
   table of contents found again; the library's metadata in the EXTH; DRM
   refused; and damaged EPUBs converted or refused, never a crash.
+- `damaged_books_tests` damages books every which way, as files from
+  anywhere may be, and puts them through each reader Cousoir has of its own:
+  EPUBs and KEPUBs damaged in their archive, their package, their contents
+  and their pages, opened by the reader and read through (the pages parsed,
+  their text, the places of highlights), read by the import and made into a
+  KEPUB; package documents; pages made for a Kobo; damaged places; a PDF's
+  XMP and a few whole PDFs; FictionBooks and plain text, read and made into
+  EPUBs. Read or refused, never a crash; what Cousoir makes still opens.
+  `COUSOIR_FUZZ_ROUNDS` and `COUSOIR_FUZZ_SEED` make longer and other runs
+  (as for the Kindle books of `epub_book_tests`); run it under the
+  sanitizers too. `COUSOIR_CALIBRE_DEBUG`, set empty there, keeps the import
+  from asking Calibre for covers; set to a path, it names the Calibre
+  Cousoir uses.
 - `mobi_metadata_tests` writes metadata into MOBI and AZW3 books, Calibre's
   conversions and two it never makes, and compares them byte for byte with
   what Calibre's own writer made of them (`tools/oracle/mobi_oracle.py`),

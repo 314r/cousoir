@@ -580,6 +580,10 @@ QString formatOf(const QString &path)
 
 QString calibreDebug()
 {
+    // COUSOIR_CALIBRE_DEBUG names the Calibre to use; set empty, none, as
+    // the tests that read thousands of damaged books want.
+    if (qEnvironmentVariableIsSet("COUSOIR_CALIBRE_DEBUG"))
+        return qEnvironmentVariable("COUSOIR_CALIBRE_DEBUG");
     const QString found = QStandardPaths::findExecutable(QStringLiteral("calibre-debug"));
     if (!found.isEmpty())
         return found;
