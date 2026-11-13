@@ -48,6 +48,14 @@ not answer within a few seconds is reported, never doubled. On Hyprland the
 window is given the focus through `hyprctl`, Wayland letting a window take
 it only when the compositor agrees.
 
+## What Cousoir remembers
+
+The window's size and the section shown, but a reader's or a saved
+search's, which may be gone; the reader's size, whether its sidebar shows
+and which of its lists, the contents, highlights or bookmarks; the PDF
+reader's size and zoom. The details pane shows beside a book from 960 pixels
+of window at the normal text size, and from more with larger text.
+
 ## Messages
 
 What Cousoir has to say goes to the status line: what was done, for a few

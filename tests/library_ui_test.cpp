@@ -132,6 +132,7 @@ private slots:
     void welcomesWithoutLibrary();
     void followsOmarchy();
     void keepsMessages();
+    void remembersTheSession();
     void editsDetailsInPlace();
     void revertsBookChanges();
     void keepsWhatIsTyped();
@@ -2843,6 +2844,23 @@ void LibraryUiTest::keepsMessages()
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTRY_VERIFY(!popup->property("opened").toBool());
     QTRY_VERIFY(!control("messagesButton")->isVisible());
+}
+
+// The section and the window's size come back as they were left.
+void LibraryUiTest::remembersTheSession()
+{
+    m_window->setProperty("section", QStringLiteral("authors"));
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Window/section")).toString(), QStringLiteral("authors"));
+    m_window->resize(1000, 700);
+    m_window->close();
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Window/width")).toInt(), 1000);
+    m_engine.reset();
+    QVERIFY(loadUi());
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
+    QCOMPARE(m_window->property("section").toString(), QStringLiteral("authors"));
+    // A reader's section is not: it may be unplugged next time.
+    m_window->setProperty("section", QStringLiteral("device:/media/kobo"));
+    QCOMPARE(QSettings().value(QStringLiteral("Window/section")).toString(), QStringLiteral("authors"));
 }
 
 void LibraryUiTest::movesBooksToTrashAndBack()

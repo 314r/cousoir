@@ -10,7 +10,8 @@ ThemedWindow {
     id: window
 
     // The details pane hides on narrow windows unless the toggle forces it.
-    readonly property bool wide: width >= 960
+    // At the text size chosen: larger text needs a wider window for both.
+    readonly property bool wide: width >= Math.round(960 * Theme.spacingScale)
     property bool detailsForced: false
     readonly property bool detailsVisible: layoutSettings.showDetails && (wide || detailsForced)
     readonly property var book: library.currentBook
@@ -46,8 +47,9 @@ ThemedWindow {
     property bool quitConfirmed: false
 
     visible: true
-    width: 1240
-    height: 820
+    // As the window was left.
+    width: windowSettings.width
+    height: windowSettings.height
     minimumWidth: 720
     minimumHeight: 480
     title: session.bookOpen && book.title ? qsTr("%1 — Cousoir").arg(book.title)
@@ -425,6 +427,8 @@ ThemedWindow {
             return
         }
         bookPage.finishEditing()
+        windowSettings.width = window.width
+        windowSettings.height = window.height
         // The readers close first, so that the place and the highlights of
         // the book being read are handed to the library before it goes.
         if (readerLoader.item)
@@ -998,6 +1002,15 @@ ThemedWindow {
         property int textScalePercent: 100
     }
 
+    // The window's size and the section shown, as they were left.
+    Settings {
+        id: windowSettings
+        category: "Window"
+        property int width: 1240
+        property int height: 820
+        property string section: "books"
+    }
+
     Settings {
         id: layoutSettings
         category: "Layout"
@@ -1411,6 +1424,9 @@ ThemedWindow {
         applyOmarchyTheme()
         applyThemeMode()
         setTextScalePercent(appearanceSettings.textScalePercent)
+        // The section left last time, the library's own.
+        if (windowSettings.section !== "books" && windowSettings.section !== section)
+            section = windowSettings.section
         booksPage.focusList()
         if (typeof startupInvocation !== "undefined")
             handleInvocation(startupInvocation, false)
@@ -1418,6 +1434,9 @@ ThemedWindow {
 
     onSectionChanged: {
         notice = ""
+        // A reader or a saved search may be gone next time.
+        if (!section.startsWith("device:") && !section.startsWith("search:"))
+            windowSettings.section = section
         session.closeBook()
         // From the section itself: deviceSection may not have followed yet.
         if (section.startsWith("device:"))
@@ -1438,6 +1457,8 @@ ThemedWindow {
             quitDialog.ask()
             return
         }
+        windowSettings.width = window.width
+        windowSettings.height = window.height
         // A field being edited saves before the window goes.
         bookPage.finishEditing()
         settingsWindow.close()
