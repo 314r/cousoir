@@ -1006,5 +1006,14 @@
   "Look the selection up": "Chercher la sélection en ligne",
   "Remove the highlight": "Retirer le surlignement",
   "Save the note": "Enregistrer la note",
-  "A change that was interrupted will be put right once nothing else uses the library.": "Une modification interrompue sera rétablie dès que plus rien d’autre n’utilisera la bibliothèque."
+  "A change that was interrupted will be put right once nothing else uses the library.": "Une modification interrompue sera rétablie dès que plus rien d’autre n’utilisera la bibliothèque.",
+  "Add “%1” to the library?": "Ajouter « %1 » à la bibliothèque ?",
+  "Add %n books to the library?": {
+    "one": "Ajouter %n livre à la bibliothèque ?",
+    "other": "Ajouter %n livres à la bibliothèque ?"
+  },
+  "Only the library's books are read in Cousoir.": "Seuls les livres de la bibliothèque se lisent dans Cousoir.",
+  "Cousoir is running but does not answer; close it and try again.": "Cousoir est ouvert mais ne répond pas ; fermez-le et réessayez.",
+  "Add": "Ajouter",
+  "Cannot copy %1 to %2: %3": "Impossible de copier %1 vers %2 : %3"
 }

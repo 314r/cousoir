@@ -27,6 +27,27 @@ The project structure, theming (system, light, dark and Omarchy) and Settings
 window come from the JolieBulle Qt port, which took them from kbextract; the
 Omarchy theming is derived from bjarneo's omadji.
 
+## Starting Cousoir
+
+There is one Cousoir a session. Launched again, from the app launcher or a
+file manager, it hands what it was asked for to the one running, whose
+window comes forward, and ends:
+
+```bash
+cousoir                     # shows the window
+cousoir BOOK.epub…          # reads the books, those of the library;
+                            # the others it offers to add
+cousoir --add [BOOK…]       # adds the books, or opens the file chooser
+cousoir --library PATH      # opens that library
+cousoir --show ID           # shows the library's book of that id
+```
+
+The desktop entry declares EPUB, MOBI and AZW3 files, so a file manager
+offers Cousoir for them, and has an "Add books" action. A Cousoir that does
+not answer within a few seconds is reported, never doubled. On Hyprland the
+window is given the focus through `hyprctl`, Wayland letting a window take
+it only when the compositor agrees.
+
 ## Interface
 
 The interface follows the Omarchy style: the system monospace font, hairline

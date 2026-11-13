@@ -113,6 +113,50 @@ ThemedWindow {
         settingsWindow.requestActivate()
     }
 
+    // What a launch of Cousoir asked for, this one's or one after, which
+    // hands it over: a book to show, files to read or add, another library.
+    // Kept until the library is loaded.
+    property var pendingInvocation: null
+
+    function handleInvocation(invocation, forwarded) {
+        if (forwarded) {
+            window.show()
+            window.raise()
+            window.requestActivate()
+            appInstance.focusWindow()
+            // Another library, unless a change is being saved to this one.
+            if (invocation.library && invocation.library !== library.libraryPath && !library.saving)
+                librarySettings.path = invocation.library
+        }
+        if (!library.loaded || (invocation.library && invocation.library !== library.libraryPath)) {
+            pendingInvocation = invocation
+            return
+        }
+        pendingInvocation = null
+        if (invocation.show > 0)
+            openBook(invocation.show)
+        // The library's own files are read; the others offered to add.
+        const outside = []
+        for (const file of invocation.files) {
+            const bookId = library.bookOfFile(file)
+            if (bookId > 0)
+                readBookOf(bookId)
+            else
+                outside.push(file)
+        }
+        if (invocation.add.length > 0)
+            addBooks(invocation.add)
+        else if (invocation.addAsked)
+            addBooksDialog.open()
+        if (outside.length > 0) {
+            addFilesDialog.files = outside
+            addFilesDialog.title = outside.length === 1
+                ? qsTr("Add “%1” to the library?").arg(outside[0].split("/").pop())
+                : qsTr("Add %n books to the library?", "", outside.length)
+            addFilesDialog.ask()
+        }
+    }
+
     function openBook(bookId) {
         session.openBook(bookId)
         bookPage.forceActiveFocus()
@@ -1205,6 +1249,34 @@ ThemedWindow {
     }
 
     ConfirmDialog {
+        id: addFilesDialog
+        objectName: "addFilesDialog"
+
+        property var files: []
+
+        message: qsTr("Only the library's books are read in Cousoir.")
+        acceptText: qsTr("Add")
+        onAccepted: window.addBooks(files)
+    }
+
+    Connections {
+        // None in the tests, which run the window alone.
+        target: typeof appInstance !== "undefined" ? appInstance : null
+        ignoreUnknownSignals: true
+        function onInvoked(invocation) {
+            window.handleInvocation(invocation, true)
+        }
+    }
+
+    Connections {
+        target: window.library
+        function onLibraryChanged() {
+            if (window.pendingInvocation && window.library.loaded)
+                window.handleInvocation(window.pendingInvocation, false)
+        }
+    }
+
+    ConfirmDialog {
         id: quitDialog
         objectName: "quitDialog"
 
@@ -1307,6 +1379,8 @@ ThemedWindow {
         applyThemeMode()
         setTextScalePercent(appearanceSettings.textScalePercent)
         booksPage.focusList()
+        if (typeof startupInvocation !== "undefined")
+            handleInvocation(startupInvocation, false)
     }
 
     onSectionChanged: {
