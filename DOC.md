@@ -793,7 +793,7 @@ text there is not the Kobo's (a KEPUB another converter made, a plain EPUB
 read on the Kobo), the Kobo's text is looked for in its file, nearest where
 the Kobo has it, then in the whole book. The place is written as Calibre's
 viewer writes a highlight's: CFIs worked out from the page's XML as the
-viewer works them out from its pages (`epub_cfi.cpp`, from
+viewer works them out from its pages (`core/epub_cfi.cpp`, from
 `src/pyj/read_book/cfi.pyj`), with the Kobo's text, note, colour and date,
 the chapter's file and the table of contents' titles. Calibre's annotations
 browser lists them and its search finds them; Cousoir's reader and
@@ -1580,6 +1580,16 @@ Give `--parallel` a number. A build runs about 100 compilers taking up to
 memory. `tools/build_jobs.sh` gives as many as the cores and the free memory
 allow.
 
+The sources, by the library each goes into:
+
+- `core/`: reading and writing the library, the books and the readers, with
+  no interface (`cousoir_core`, which `cousoir-cli` and most tests link);
+- `models/`: what the interface shows and does on top of it, the reader,
+  the theme and the translations (`cousoir_models`);
+- `ui/`: the QML of the window and `main.cpp` (`cousoir_ui`, the `Cousoir`
+  QML module, whose files keep their names at its root in the resources);
+- `cli/`: `cousoir-cli`, one file per group of commands.
+
 `make build`, `make run`, `make test` and `make install` (under `~/.local`)
 are available as shortcuts. `make install` builds Cousoir and `cousoir-cli`
 only (`make app`), not the tests' programs. They pick the number the same way, and
@@ -1599,14 +1609,14 @@ on: a rule changes, or the database gains a column. After a new Calibre:
    asking it (`calibre-debug -c "…"`), follow it in Cousoir, and update the
    test that held the old behaviour. Calibre 9.17, for one, keeps the line
    breaks of a description, which 9.16 folded into spaces
-   (`longText()` in `field_writers.cpp`).
+   (`longText()` in `core/field_writers.cpp`).
 3. `make oracle` records again what Calibre computes for the other tests
    (sorts, names, tables, search, templates); `git diff tests/data` shows
    what moved.
 4. If Calibre changed the database's structure, every library it opens
    becomes read-only in Cousoir until its fingerprint is known. Check that
    the writers still fit the new tables, then add the fingerprint that
-   `cousoir-cli doctor` prints to `knownSchemas` in `calibre_db.cpp`.
+   `cousoir-cli doctor` prints to `knownSchemas` in `core/calibre_db.cpp`.
 5. Note the release the change follows where the code says which Calibre it
    was ported from.
 
@@ -1988,9 +1998,9 @@ use. WebEngine, linked but unused until a book is read, accounts for about
 
 GPL-3.0-only, as Cousoir holds code ported from Calibre, which is GPL v3; see
 `LICENSE`, and [CREDITS.md](CREDITS.md) for what comes from Calibre. The theme
-files taken from kbextract, JolieBulle and omadji (`Theme.qml`,
-`omarchy_theme.*`, `system_appearance.*`, `AppearanceSettingsPage.qml`,
-`SettingsWindow.qml` and the shared controls) also keep their MIT notice, in
+files taken from kbextract, JolieBulle and omadji (`ui/Theme.qml`,
+`models/omarchy_theme.*`, `models/system_appearance.*`,
+`ui/AppearanceSettingsPage.qml`, `ui/SettingsWindow.qml` and the shared controls) also keep their MIT notice, in
 `LICENSES/MIT.txt`, as does what follows Omarchy's own apps (`translator.*`,
 `portal_file_chooser.*`, the window rounding of `omarchy_theme.*`), and the icons adapted from Lucide their ISC notice, in
 `LICENSES/ISC-lucide.txt`.

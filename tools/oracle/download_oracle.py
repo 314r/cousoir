@@ -157,7 +157,9 @@ def covers(cpp, folder):
     from calibre.utils.logging import GUILog
 
     script = job_script(cpp, 'coversScript')
-    with open(os.path.join(os.path.dirname(os.path.abspath(cpp)), 'tests/data/edits/large.jpg'), 'rb') as f:
+    # The source tree's root, above core/ where metadata_download.cpp is.
+    root = os.path.dirname(os.path.dirname(os.path.abspath(cpp)))
+    with open(os.path.join(root, 'tests/data/edits/large.jpg'), 'rb') as f:
         image = f.read()
     asked = []
 

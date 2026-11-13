@@ -33,7 +33,8 @@ def source_strings():
         # ctest's code for a test skipped.
         print("Qt's lupdate is not installed: nothing compared")
         sys.exit(77)
-    sources = sorted(str(path) for pattern in ("*.qml", "*.cpp", "*.h") for path in ROOT.glob(pattern))
+    sources = sorted(str(path) for folder in ("core", "models", "ui", "cli")
+                     for pattern in ("*.qml", "*.cpp", "*.h") for path in (ROOT / folder).glob(pattern))
     with tempfile.TemporaryDirectory() as folder:
         ts = pathlib.Path(folder) / "cousoir.ts"
         subprocess.run([lupdate, "-no-obsolete", "-locations", "none", *sources, "-ts", str(ts)],

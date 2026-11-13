@@ -63,160 +63,159 @@ qt_standard_project_setup(REQUIRES 6.9)
 # which covers need; Qt Xml and libzip to read the metadata of the books
 # added.
 qt_add_library(cousoir_core STATIC
-    book.h
-    book_edit.cpp
-    book_edit.h
-    book_import.cpp
-    book_import.h
-    book_operations.cpp
-    book_operations.h
-    book_sort.cpp
-    book_sort.h
-    calibre_config.cpp
-    calibre_config.h
-    calibre_date.h
-    calibre_db.cpp
-    calibre_fts.cpp
-    calibre_fts.h
-    calibre_notes.cpp
-    calibre_notes.h
-    calibre_db.h
-    calibre_job.cpp
-    calibre_job.h
-    calibre_languages.cpp
-    calibre_languages.h
-    calibre_list.cpp
-    calibre_list.h
-    calibre_lock.cpp
-    calibre_lock.h
-    calibre_paths.cpp
-    calibre_paths.h
-    calibre_search.cpp
-    calibre_search.h
-    calibre_search.inc
-    calibre_strings.inc
-    calibre_template.cpp
-    calibre_template.h
-    calibre_template.inc
-    calibre_template_book.cpp
-    calibre_template_engine.cpp
-    calibre_template_functions.cpp
-    calibre_template_p.h
-    calibre_text.cpp
-    calibre_text.h
-    calibre_unidecode.inc
-    commit_engine.cpp
-    commit_engine.h
-    concurrency_guard.cpp
-    concurrency_guard.h
-    conversion.cpp
-    conversion.h
-    cousoir_paths.cpp
-    cousoir_paths.h
-    description.cpp
-    description.h
-    device_books.cpp
-    device_books.h
-    device_files.cpp
-    device_files.h
-    field_writers.cpp
-    field_writers.h
-    file_transaction.cpp
-    file_transaction.h
-    identifier_links.cpp
-    identifier_links.h
-    book_search.cpp
-    book_search.h
-    book_text_index.cpp
-    book_text_index.h
-    book_text_search.cpp
-    book_text_search.h
-    epub_book.cpp
-    epub_book.h
-    epub_package.cpp
-    epub_package.h
-    kepub.cpp
-    kepub.h
-    kindle.cpp
-    kindle.h
-    kindle_clippings.cpp
-    kindle_clippings.h
-    kindle_send.cpp
-    kindle_send.h
-    kf8_book.cpp
-    kf8_book.h
-    kf8_index.cpp
-    kf8_index.h
-    kf8_skeleton.cpp
-    kf8_skeleton.h
-    kf8_writer.cpp
-    kf8_writer.h
-    kobo.cpp
-    kobo.h
-    kobo_send.cpp
-    kobo_send.h
-    library_check.cpp
-    library_check.h
-    metadata_download.cpp
-    metadata_download.h
-    mobi_book.cpp
-    new_library.cpp
-    new_library.h
-    save_to_disk.cpp
-    save_to_disk.h
-    text_book_epub.cpp
-    text_book_epub.h
-    text_book_metadata.cpp
-    text_book_metadata.h
-    mobi_book.h
-    mobi_format.cpp
-    mobi_format.h
-    mobi_metadata.cpp
-    mobi_metadata.h
-    mtp.cpp
-    mtp.h
-    native_send.cpp
-    native_send.h
-    open_library.cpp
-    open_library.h
-    opf.cpp
-    opf.h
-    opf_reader.cpp
-    opf_reader.h
-    palette.cpp
-    palette.h
-    pdf_reader.cpp
-    pdf_reader.h
-    python_json.cpp
-    python_json.h
-    reading_log.cpp
-    reading_log.h
-    send_job.cpp
-    send_job.h
-    sqlite_db.cpp
-    sqlite_db.h
-    annotation_search.cpp
-    annotation_search.h
-    epub_cfi.cpp
-    epub_cfi.h
-    highlight_formats.cpp
-    highlight_formats.h
-    html_soup.cpp
-    html_soup.h
-    highlight_json.cpp
-    highlight_json.h
-    kobo_highlights.cpp
-    kobo_highlights.h
-    kobo_placement.cpp
-    kobo_placement.h
-    kobo_sync.cpp
-    kobo_sync.h
-    kobo_write.cpp
-    kobo_write.h
-    xml_tree.cpp
-    xml_tree.h
-)
-target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    core/book.h
+    core/book_edit.cpp
+    core/book_edit.h
+    core/book_import.cpp
+    core/book_import.h
+    core/book_operations.cpp
+    core/book_operations.h
+    core/book_sort.cpp
+    core/book_sort.h
+    core/calibre_config.cpp
+    core/calibre_config.h
+    core/calibre_date.h
+    core/calibre_db.cpp
+    core/calibre_fts.cpp
+    core/calibre_fts.h
+    core/calibre_notes.cpp
+    core/calibre_notes.h
+    core/calibre_db.h
+    core/calibre_job.cpp
+    core/calibre_job.h
+    core/calibre_languages.cpp
+    core/calibre_languages.h
+    core/calibre_list.cpp
+    core/calibre_list.h
+    core/calibre_lock.cpp
+    core/calibre_lock.h
+    core/calibre_paths.cpp
+    core/calibre_paths.h
+    core/calibre_search.cpp
+    core/calibre_search.h
+    core/calibre_search.inc
+    core/calibre_strings.inc
+    core/calibre_template.cpp
+    core/calibre_template.h
+    core/calibre_template.inc
+    core/calibre_template_book.cpp
+    core/calibre_template_engine.cpp
+    core/calibre_template_functions.cpp
+    core/calibre_template_p.h
+    core/calibre_text.cpp
+    core/calibre_text.h
+    core/calibre_unidecode.inc
+    core/commit_engine.cpp
+    core/commit_engine.h
+    core/concurrency_guard.cpp
+    core/concurrency_guard.h
+    core/conversion.cpp
+    core/conversion.h
+    core/cousoir_paths.cpp
+    core/cousoir_paths.h
+    core/description.cpp
+    core/description.h
+    core/device_books.cpp
+    core/device_books.h
+    core/device_files.cpp
+    core/device_files.h
+    core/field_writers.cpp
+    core/field_writers.h
+    core/file_transaction.cpp
+    core/file_transaction.h
+    core/identifier_links.cpp
+    core/identifier_links.h
+    core/book_search.cpp
+    core/book_search.h
+    core/book_text_index.cpp
+    core/book_text_index.h
+    core/book_text_search.cpp
+    core/book_text_search.h
+    core/epub_book.cpp
+    core/epub_book.h
+    core/epub_package.cpp
+    core/epub_package.h
+    core/kepub.cpp
+    core/kepub.h
+    core/kindle.cpp
+    core/kindle.h
+    core/kindle_clippings.cpp
+    core/kindle_clippings.h
+    core/kindle_send.cpp
+    core/kindle_send.h
+    core/kf8_book.cpp
+    core/kf8_book.h
+    core/kf8_index.cpp
+    core/kf8_index.h
+    core/kf8_skeleton.cpp
+    core/kf8_skeleton.h
+    core/kf8_writer.cpp
+    core/kf8_writer.h
+    core/kobo.cpp
+    core/kobo.h
+    core/kobo_send.cpp
+    core/kobo_send.h
+    core/library_check.cpp
+    core/library_check.h
+    core/metadata_download.cpp
+    core/metadata_download.h
+    core/mobi_book.cpp
+    core/new_library.cpp
+    core/new_library.h
+    core/save_to_disk.cpp
+    core/save_to_disk.h
+    core/text_book_epub.cpp
+    core/text_book_epub.h
+    core/text_book_metadata.cpp
+    core/text_book_metadata.h
+    core/mobi_book.h
+    core/mobi_format.cpp
+    core/mobi_format.h
+    core/mobi_metadata.cpp
+    core/mobi_metadata.h
+    core/mtp.cpp
+    core/mtp.h
+    core/native_send.cpp
+    core/native_send.h
+    core/open_library.cpp
+    core/open_library.h
+    core/opf.cpp
+    core/opf.h
+    core/opf_reader.cpp
+    core/opf_reader.h
+    core/palette.cpp
+    core/palette.h
+    core/pdf_reader.cpp
+    core/pdf_reader.h
+    core/python_json.cpp
+    core/python_json.h
+    core/reading_log.cpp
+    core/reading_log.h
+    core/send_job.cpp
+    core/send_job.h
+    core/sqlite_db.cpp
+    core/sqlite_db.h
+    core/annotation_search.cpp
+    core/annotation_search.h
+    core/epub_cfi.cpp
+    core/epub_cfi.h
+    core/highlight_formats.cpp
+    core/highlight_formats.h
+    core/html_soup.cpp
+    core/html_soup.h
+    core/highlight_json.cpp
+    core/highlight_json.h
+    core/kobo_highlights.cpp
+    core/kobo_highlights.h
+    core/kobo_placement.cpp
+    core/kobo_placement.h
+    core/kobo_sync.cpp
+    core/kobo_sync.h
+    core/kobo_write.cpp
+    core/kobo_write.h
+    core/xml_tree.cpp
+    core/xml_tree.h)
+target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/core)
 # Kobo's script, which a KEPUB carries.
 qt_add_resources(cousoir_core "core_resources"
     PREFIX "/cousoir"
@@ -231,46 +230,45 @@ target_include_directories(cousoir_core PRIVATE ${STEMMER_INCLUDE_DIR} ${XXHASH_
 
 # The models QML uses on top of it, and the system's theme and appearance.
 qt_add_library(cousoir_models STATIC
-    app_instance.cpp
-    app_instance.h
-    book_library.cpp
-    book_library.h
-    book_library_commit.cpp
-    book_library_edit.cpp
-    book_library_import.cpp
-    book_library_load.cpp
-    book_library_reading.cpp
-    book_library_support.h
-    book_library_view.cpp
-    book_list_model.cpp
-    book_list_model.h
-    book_text_indexer.cpp
-    book_text_indexer.h
-    bulk_metadata_downloader.cpp
-    bulk_metadata_downloader.h
-    conversion_service.cpp
-    conversion_service.h
-    cover_cache.cpp
-    cover_cache.h
-    device_library.cpp
-    device_library.h
-    highlight_browser.cpp
-    highlight_browser.h
-    highlight_document.cpp
-    highlight_document.h
-    highlight_sync.cpp
-    highlight_sync.h
-    metadata_downloader.cpp
-    metadata_downloader.h
-    omarchy_theme.cpp
-    omarchy_theme.h
-    portal_file_chooser.cpp
-    portal_file_chooser.h
-    system_appearance.cpp
-    system_appearance.h
-    translator.cpp
-    translator.h
-)
+    models/app_instance.cpp
+    models/app_instance.h
+    models/book_library.cpp
+    models/book_library.h
+    models/book_library_commit.cpp
+    models/book_library_edit.cpp
+    models/book_library_import.cpp
+    models/book_library_load.cpp
+    models/book_library_reading.cpp
+    models/book_library_support.h
+    models/book_library_view.cpp
+    models/book_list_model.cpp
+    models/book_list_model.h
+    models/book_text_indexer.cpp
+    models/book_text_indexer.h
+    models/bulk_metadata_downloader.cpp
+    models/bulk_metadata_downloader.h
+    models/conversion_service.cpp
+    models/conversion_service.h
+    models/cover_cache.cpp
+    models/cover_cache.h
+    models/device_library.cpp
+    models/device_library.h
+    models/highlight_browser.cpp
+    models/highlight_browser.h
+    models/highlight_document.cpp
+    models/highlight_document.h
+    models/highlight_sync.cpp
+    models/highlight_sync.h
+    models/metadata_downloader.cpp
+    models/metadata_downloader.h
+    models/omarchy_theme.cpp
+    models/omarchy_theme.h
+    models/portal_file_chooser.cpp
+    models/portal_file_chooser.h
+    models/system_appearance.cpp
+    models/system_appearance.h
+    models/translator.cpp
+    models/translator.h)
 # The interface's translations, one catalog per Omarchy language code.
 qt_add_resources(cousoir_models "i18n"
     PREFIX "/"
@@ -278,74 +276,74 @@ qt_add_resources(cousoir_models "i18n"
         i18n/en.json
         i18n/fr.json
 )
+target_include_directories(cousoir_models PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/models)
 target_link_libraries(cousoir_models PUBLIC cousoir_core Qt6::Concurrent Qt6::Quick ${COUSOIR_DBUS})
 if(TARGET Qt6::WebEngineQuick)
-    target_sources(cousoir_models PRIVATE book_reader.cpp book_reader.h)
+    target_sources(cousoir_models PRIVATE models/book_reader.cpp models/book_reader.h)
     target_link_libraries(cousoir_models PUBLIC Qt6::WebEngineQuick)
     target_compile_definitions(cousoir_models PUBLIC COUSOIR_READER)
     if(TARGET Qt6::TextToSpeech)
-        target_sources(cousoir_models PRIVATE book_speech.cpp book_speech.h)
+        target_sources(cousoir_models PRIVATE models/book_speech.cpp models/book_speech.h)
         target_link_libraries(cousoir_models PUBLIC Qt6::TextToSpeech)
         target_compile_definitions(cousoir_models PUBLIC COUSOIR_SPEECH)
     endif()
 endif()
 
-qt_add_executable(cousoir main.cpp)
+qt_add_executable(cousoir ui/main.cpp)
 
-set_source_files_properties(Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(ui/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 set(COUSOIR_QML_FILES
-    AboutSettingsPage.qml
-    ActionMenu.qml
-    AppSession.qml
-    AppShortcuts.qml
-    AppearanceSettingsPage.qml
-    BookDetailsPane.qml
-    BookPage.qml
-    BooksPage.qml
-    BulkDownloadDialog.qml
-    BulkEditPane.qml
-    CheckPage.qml
-    ChoiceBox.qml
-    CommandPalette.qml
-    ConfirmDialog.qml
-    CoverGrid.qml
-    DevicePage.qml
-    Divider.qml
-    FacetPage.qml
-    FilePicker.qml
-    FlatButton.qml
-    FormField.qml
-    HeadingLabel.qml
-    HighlightsPage.qml
-    LibraryFolderDialog.qml
-    LibrarySettingsPage.qml
-    ListRow.qml
-    ListTable.qml
-    Main.qml
-    MessagesPopup.qml
-    MainToolbar.qml
-    MetaRow.qml
-    MetadataDownloadDialog.qml
-    NotePanel.qml
-    RenameDialog.qml
-    SearchField.qml
-    SettingsWindow.qml
-    ShortcutsOverlay.qml
-    Sidebar.qml
-    SidebarItem.qml
-    Theme.qml
-    ReadingPage.qml
-    StatusBar.qml
-    TextSearchPage.qml
-    ThemedPopup.qml
-    ThemedWindow.qml
-    ThinScrollBar.qml
-    TrashPage.qml
-)
+    ui/AboutSettingsPage.qml
+    ui/ActionMenu.qml
+    ui/AppSession.qml
+    ui/AppShortcuts.qml
+    ui/AppearanceSettingsPage.qml
+    ui/BookDetailsPane.qml
+    ui/BookPage.qml
+    ui/BooksPage.qml
+    ui/BulkDownloadDialog.qml
+    ui/BulkEditPane.qml
+    ui/CheckPage.qml
+    ui/ChoiceBox.qml
+    ui/CommandPalette.qml
+    ui/ConfirmDialog.qml
+    ui/CoverGrid.qml
+    ui/DevicePage.qml
+    ui/Divider.qml
+    ui/FacetPage.qml
+    ui/FilePicker.qml
+    ui/FlatButton.qml
+    ui/FormField.qml
+    ui/HeadingLabel.qml
+    ui/HighlightsPage.qml
+    ui/LibraryFolderDialog.qml
+    ui/LibrarySettingsPage.qml
+    ui/ListRow.qml
+    ui/ListTable.qml
+    ui/Main.qml
+    ui/MessagesPopup.qml
+    ui/MainToolbar.qml
+    ui/MetaRow.qml
+    ui/MetadataDownloadDialog.qml
+    ui/NotePanel.qml
+    ui/RenameDialog.qml
+    ui/SearchField.qml
+    ui/SettingsWindow.qml
+    ui/ShortcutsOverlay.qml
+    ui/Sidebar.qml
+    ui/SidebarItem.qml
+    ui/Theme.qml
+    ui/ReadingPage.qml
+    ui/StatusBar.qml
+    ui/TextSearchPage.qml
+    ui/ThemedPopup.qml
+    ui/ThemedWindow.qml
+    ui/ThinScrollBar.qml
+    ui/TrashPage.qml)
 if(TARGET Qt6::WebEngineQuick)
-    list(APPEND COUSOIR_QML_FILES ReaderWindow.qml ReaderGoToBox.qml ReaderImageViewer.qml ReaderNoteBox.qml
-        ReaderNoteEditor.qml ReaderSettingsPopup.qml ReaderToolbar.qml)
+    list(APPEND COUSOIR_QML_FILES ui/ReaderWindow.qml ui/ReaderGoToBox.qml ui/ReaderImageViewer.qml ui/ReaderNoteBox.qml
+        ui/ReaderNoteEditor.qml ui/ReaderSettingsPopup.qml ui/ReaderToolbar.qml)
 endif()
 # Qt Pdf, to read PDFs in the reader; Qt Shader Tools to build the shader
 # that shows its pages in the theme's colours.
@@ -353,8 +351,15 @@ if(TARGET Qt6::WebEngineQuick AND TARGET Qt6::PdfQuick)
     if(NOT TARGET Qt6::ShaderTools)
         message(FATAL_ERROR "The PDF reader needs Qt Shader Tools (qt6-shadertools) to build.")
     endif()
-    list(APPEND COUSOIR_QML_FILES PdfReaderWindow.qml)
+    list(APPEND COUSOIR_QML_FILES ui/PdfReaderWindow.qml)
 endif()
+
+# The QML in ui/, at the module's root in the resources as before: beside
+# the assets and shaders their addresses name, "assets/icons/book.svg".
+foreach(file IN LISTS COUSOIR_QML_FILES)
+    get_filename_component(name "${file}" NAME)
+    set_source_files_properties("${file}" PROPERTIES QT_RESOURCE_ALIAS "${name}")
+endforeach()
 
 set(COUSOIR_ICON_FILES
     assets/icons/arrow-left.svg
@@ -444,7 +449,8 @@ target_link_libraries(cousoir
 )
 target_compile_definitions(cousoir PRIVATE COUSOIR_VERSION="${COUSOIR_PACKAGE_VERSION}")
 
-qt_add_executable(cousoir-cli cli_main.cpp cli_apply.cpp cli_commands.h cli_common.cpp cli_devices.cpp cli_library.cpp)
+qt_add_executable(cousoir-cli cli/cli_main.cpp cli/cli_apply.cpp cli/cli_commands.h cli/cli_common.cpp cli/cli_devices.cpp
+    cli/cli_library.cpp)
 set_target_properties(cousoir-cli PROPERTIES WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
 target_link_libraries(cousoir-cli PRIVATE cousoir_core)
 # The skill `cousoir-cli skill install` gives coding agents.

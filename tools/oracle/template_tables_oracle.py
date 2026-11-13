@@ -9,7 +9,7 @@
 #   "None", "Error", "DRM", "Unknown", "TEMPLATE ERROR" and the text of an
 #   unknown function.
 #
-#   calibre-debug -e tools/oracle/template_tables_oracle.py -- <source folder>
+#   calibre-debug -e tools/oracle/template_tables_oracle.py -- <core folder>
 
 import os
 import sys

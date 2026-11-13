@@ -70,10 +70,10 @@ fixtures: build
 oracle:
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/text_oracle.py -- tests/data/oracle/text.json
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/paths_oracle.py -- tests/data/oracle/paths.json
-	calibre-debug -e tools/oracle/tables_oracle.py -- .
+	calibre-debug -e tools/oracle/tables_oracle.py -- core
 	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/conversion_oracle.py -- tests/data/library tests/data/oracle/conversion.json
-	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/search_oracle.py -- . tests/data/oracle/search.json
-	calibre-debug -e tools/oracle/template_tables_oracle.py -- .
+	CALIBRE_OVERRIDE_LANG=fr calibre-debug -e tools/oracle/search_oracle.py -- core tests/data/oracle/search.json
+	calibre-debug -e tools/oracle/template_tables_oracle.py -- core
 	calibre-debug -e tools/oracle/language_fixture.py -- tests/data/calibre-resources
 	CALIBRE_OVERRIDE_LANG=en calibre-debug -e tools/oracle/source_oracle.py -- tests/data/oracle/source.json
 	calibre-debug -e tools/oracle/mobi_oracle.py -- tests/data
