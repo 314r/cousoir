@@ -320,6 +320,7 @@ set(COUSOIR_QML_FILES
     HighlightsPage.qml
     LibraryFolderDialog.qml
     LibrarySettingsPage.qml
+    ListRow.qml
     ListTable.qml
     Main.qml
     MessagesPopup.qml

@@ -75,7 +75,7 @@ Rectangle {
                     page.restore(page.library.trashEntries[currentIndex])
             }
 
-            delegate: Rectangle {
+            delegate: ListRow {
                 id: entry
 
                 required property var modelData
@@ -84,17 +84,8 @@ Rectangle {
                 readonly property int thumbWidth: Math.round(Theme.rowHeight * 1.4)
 
                 objectName: "trash_" + modelData.key
-                Accessible.role: Accessible.ListItem
                 Accessible.name: modelData.title || ""
-                Accessible.selected: ListView.isCurrentItem
-                width: ListView.view.width
                 implicitHeight: row.implicitHeight + 2 * Theme.gutter
-                color: ListView.isCurrentItem && trashList.activeFocus ? Theme.selected
-                    : hover.hovered ? Theme.hover : "transparent"
-
-                HoverHandler {
-                    id: hover
-                }
 
                 TapHandler {
                     onTapped: trashList.currentIndex = entry.index
