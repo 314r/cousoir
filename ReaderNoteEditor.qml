@@ -8,7 +8,7 @@ import QtQuick.Layouts
 import Cousoir
 
 // A note written on a highlight, or changed.
-Popup {
+ThemedPopup {
     id: noteEditor
     objectName: "readerNoteEditor"
 
@@ -26,24 +26,14 @@ Popup {
     x: Math.round((parent.width - width) / 2)
     y: Math.round((parent.height - height) / 3)
     width: Math.min(noteEditor.readerWindow.width - 2 * Theme.gutter, Math.round(56 * Theme.charWidth))
-    modal: true
-    focus: true
     // A click beside it would lose the note: Esc or Cancel leave it.
     closePolicy: Popup.CloseOnEscape
-    padding: Theme.panePadding
     onOpened: {
         noteText.text = highlight ? highlight.notes : ""
         noteText.forceActiveFocus()
         noteText.cursorPosition = noteText.length
     }
     onClosed: noteEditor.view.forceActiveFocus()
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
-    }
 
     contentItem: ColumnLayout {
         spacing: Theme.gutter

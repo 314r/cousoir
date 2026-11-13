@@ -9,7 +9,7 @@ import Cousoir
 
 // The reader's settings: the type, its size and spacing, the line length,
 // the pages one or two at a time or as a scroll, their colours.
-Popup {
+ThemedPopup {
     id: settingsPopup
     objectName: "readerSettings"
 
@@ -47,20 +47,15 @@ Popup {
 
     x: settingsPopup.readerWindow.width - width - Theme.gutter
     y: settingsPopup.bar.y + settingsPopup.bar.height
+    // Beside the pages, which still turn while it shows.
+    modal: false
+    focus: false
     width: Math.min(settingsPopup.readerWindow.width - 2 * Theme.gutter, Math.round(44 * Theme.charWidth))
-    padding: Theme.panePadding
     onOpened: {
         if (settingsPopup.readerWindow.speech)
             settingsPopup.readerWindow.speech.loadVoices()
     }
     onClosed: settingsPopup.view.forceActiveFocus()
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
-    }
 
     contentItem: ColumnLayout {
         spacing: Theme.gutter

@@ -13,7 +13,7 @@ import Cousoir
 // change, which Undo puts back. Space ticks the book it is on, Enter
 // applies or presses the button it is on; Esc closes and stops the
 // downloads.
-Popup {
+ThemedPopup {
     id: dialog
 
     required property BulkMetadataDownloader downloader
@@ -86,26 +86,12 @@ Popup {
     anchors.centerIn: parent
     width: Math.min(parent ? parent.width - 2 * Theme.pagePadding : 0, Math.round(860 * Theme.spacingScale))
     height: Math.min(parent ? parent.height - 2 * Theme.pagePadding : 0, Math.round(620 * Theme.spacingScale))
-    modal: true
-    focus: true
-    padding: Theme.panePadding
     closePolicy: Popup.CloseOnEscape
     onOpened: {
         if (dialog.page === "setup")
             downloadButton.forceActiveFocus()
     }
     onClosed: dialog.downloader.cancel()
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.35)
-    }
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
-    }
 
     // A box ticked or not.
     component Tick: Rectangle {

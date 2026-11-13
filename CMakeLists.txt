@@ -337,13 +337,14 @@ set(COUSOIR_QML_FILES
     ReadingPage.qml
     StatusBar.qml
     TextSearchPage.qml
+    ThemedPopup.qml
     ThemedWindow.qml
     ThinScrollBar.qml
     TrashPage.qml
 )
 if(TARGET Qt6::WebEngineQuick)
     list(APPEND COUSOIR_QML_FILES ReaderWindow.qml ReaderGoToBox.qml ReaderImageViewer.qml ReaderNoteBox.qml
-        ReaderNoteEditor.qml ReaderSettingsPopup.qml)
+        ReaderNoteEditor.qml ReaderSettingsPopup.qml ReaderToolbar.qml)
 endif()
 # Qt Pdf, to read PDFs in the reader; Qt Shader Tools to build the shader
 # that shows its pages in the theme's colours.

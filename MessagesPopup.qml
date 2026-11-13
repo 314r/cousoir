@@ -7,7 +7,7 @@ import Cousoir
 // The session's messages, newest first, errors in the danger colour, to read
 // one the status bar cut, or to copy: selected with the mouse or the keys,
 // or all with Copy.
-Popup {
+ThemedPopup {
     id: popup
 
     // [{ text, error, time }], oldest first.
@@ -28,23 +28,9 @@ Popup {
     anchors.centerIn: parent
     width: Math.min(parent ? parent.width - 2 * Theme.pagePadding : 0, Math.round(80 * Theme.charWidth))
     height: Math.min(parent ? parent.height - 2 * Theme.pagePadding : 0, Math.round(24 * Theme.rowHeight))
-    modal: true
-    focus: true
-    padding: Theme.panePadding
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     onOpened: log.forceActiveFocus()
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.35)
-    }
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
-    }
 
     contentItem: ColumnLayout {
         spacing: Theme.gutter

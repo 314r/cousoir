@@ -8,7 +8,7 @@ import QtQuick.Layouts
 import Cousoir
 
 // Ctrl+G: somewhere by how far into the book, from 0 to 100 %.
-Popup {
+ThemedPopup {
     id: goToBox
     objectName: "readerGoTo"
 
@@ -32,9 +32,6 @@ Popup {
     x: Math.round((parent.width - width) / 2)
     y: Math.round(parent.height * 0.2)
     width: Math.round(32 * Theme.charWidth)
-    modal: true
-    focus: true
-    padding: Theme.panePadding
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     // Once open: a field takes the focus only then.
     onOpened: {
@@ -42,17 +39,6 @@ Popup {
         goToField.selectAll()
     }
     onClosed: goToBox.view.forceActiveFocus()
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.35)
-    }
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
-    }
 
     contentItem: ColumnLayout {
         spacing: Theme.gutter

@@ -15,7 +15,7 @@ import Cousoir
 // picked as one change, which Revert undoes. Space ticks a field, the arrows
 // pick a cover, Enter saves or presses the button it is on; Esc closes and
 // stops the download.
-Popup {
+ThemedPopup {
     id: dialog
 
     required property MetadataDownloader downloader
@@ -149,9 +149,6 @@ Popup {
     anchors.centerIn: parent
     width: Math.min(parent ? parent.width - 2 * Theme.pagePadding : 0, Math.round(920 * Theme.spacingScale))
     height: Math.min(parent ? parent.height - 2 * Theme.pagePadding : 0, Math.round(620 * Theme.spacingScale))
-    modal: true
-    focus: true
-    padding: Theme.panePadding
     closePolicy: Popup.CloseOnEscape
     onClosed: dialog.downloader.cancel()
 
@@ -173,17 +170,6 @@ Popup {
 
     ListModel {
         id: coverModel
-    }
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.35)
-    }
-
-    background: Rectangle {
-        radius: Theme.radius
-        color: Theme.canvas
-        border.width: 1
-        border.color: Theme.controlBorder
     }
 
     // A box ticked or not, for a field taken or left.

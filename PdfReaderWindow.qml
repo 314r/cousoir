@@ -834,7 +834,7 @@ ThemedWindow {
     }
 
     // Ctrl+G: a page by its number.
-    Popup {
+    ThemedPopup {
         id: goToBox
         objectName: "pdfGoTo"
 
@@ -855,26 +855,12 @@ ThemedWindow {
         x: Math.round((parent.width - width) / 2)
         y: Math.round(parent.height * 0.2)
         width: Math.round(32 * Theme.charWidth)
-        modal: true
-        focus: true
-        padding: Theme.panePadding
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onOpened: {
             goToField.forceActiveFocus(Qt.PopupFocusReason)
             goToField.selectAll()
         }
         onClosed: view.forceActiveFocus()
-
-        Overlay.modal: Rectangle {
-            color: Qt.rgba(0, 0, 0, 0.35)
-        }
-
-        background: Rectangle {
-            radius: Theme.radius
-            color: Theme.canvas
-            border.width: 1
-            border.color: Theme.controlBorder
-        }
 
         contentItem: ColumnLayout {
             spacing: Theme.gutter

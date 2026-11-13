@@ -100,7 +100,7 @@ ThemedWindow {
     // In full screen the toolbar shows over the page with the mouse at the
     // top, or after a click in the page's middle, until a page is turned.
     property bool chromeAsked: false
-    readonly property bool chromeShown: !fullScreen || chromeAsked || topEdge.containsMouse || barHover.hovered
+    readonly property bool chromeShown: !fullScreen || chromeAsked || topEdge.containsMouse || bar.hovered
                                         || tocVisible || settingsPopup.opened
 
     // The page's colours: Cousoir's theme's, or the reader's pick.
@@ -1154,133 +1154,13 @@ ThemedWindow {
     Item {
         anchors.fill: parent
 
-        Rectangle {
+        ReaderToolbar {
             id: bar
 
-            z: 2
+            readerWindow: readerWindow
+            settingsPopup: settingsPopup
             anchors.left: parent.left
             anchors.right: parent.right
-            y: readerWindow.chromeShown ? 0 : -height
-            height: Theme.toolbarHeight
-            color: readerWindow.fullScreen ? Theme.canvas : Theme.surface
-
-            Behavior on y { NumberAnimation { duration: 120 } }
-
-            HoverHandler {
-                id: barHover
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: Theme.gutter
-                anchors.rightMargin: Theme.gutter
-                spacing: Theme.gutter
-
-                FlatButton {
-                    objectName: "readerTocButton"
-
-                    iconOnly: true
-                    text: qsTr("Table of contents (T)")
-                    icon.source: "assets/icons/list.svg"
-                    selected: readerWindow.tocVisible
-                    onClicked: readerWindow.tocVisible = !readerWindow.tocVisible
-                }
-
-                FlatButton {
-                    objectName: "readerBackButton"
-
-                    visible: readerWindow.backStack.length > 0
-                    variant: "outline"
-                    text: qsTr("Back")
-                    tip: qsTr("Back where you were (Alt+Left)")
-                    icon.source: "assets/icons/arrow-left.svg"
-                    onClicked: readerWindow.goBack()
-                }
-
-                Label {
-                    objectName: "readerTitle"
-
-                    Layout.fillWidth: true
-                    text: readerWindow.arrival || bookReader.title
-                    elide: Text.ElideRight
-                    color: readerWindow.arrival ? Theme.accent : Theme.textMuted
-                }
-
-                FlatButton {
-                    objectName: "readerSpeechButton"
-
-                    visible: readerWindow.speech !== null && readerWindow.speech.engines.length > 0
-                    enabled: readerWindow.spineIndex >= 0
-                    iconOnly: true
-                    selected: readerWindow.speaking
-                    text: readerWindow.speaking ? qsTr("Stop reading aloud (R)") : qsTr("Read aloud from here (R)")
-                    icon.source: "assets/icons/speaker.svg"
-                    onClicked: readerWindow.toggleSpeech()
-                }
-
-                FlatButton {
-                    objectName: "readerBookmarkButton"
-
-                    iconOnly: true
-                    enabled: readerWindow.spineIndex >= 0
-                    text: readerWindow.pageBookmarks.length ? qsTr("Remove the page's bookmark (Ctrl+D)")
-                                                            : qsTr("Bookmark the page (Ctrl+D)")
-                    icon.source: readerWindow.pageBookmarks.length ? "assets/icons/bookmark-filled.svg"
-                                                                   : "assets/icons/bookmark.svg"
-                    onClicked: readerWindow.toggleBookmark()
-                }
-
-                FlatButton {
-                    id: settingsButton
-                    objectName: "readerSettingsButton"
-
-                    iconOnly: true
-                    text: qsTr("Text and page")
-                    icon.source: "assets/icons/type.svg"
-                    selected: settingsPopup.opened
-                    onClicked: settingsPopup.opened ? settingsPopup.close() : settingsPopup.open()
-                }
-
-                FlatButton {
-                    objectName: "readerFullScreenButton"
-
-                    iconOnly: true
-                    text: readerWindow.fullScreen ? qsTr("Leave full screen (F11)") : qsTr("Full screen (F11)")
-                    icon.source: "assets/icons/fullscreen.svg"
-                    selected: readerWindow.fullScreen
-                    onClicked: readerWindow.toggleFullScreen()
-                }
-
-                FlatButton {
-                    objectName: "readerAddToLibrary"
-
-                    // A file of no library, which it can join.
-                    visible: bookReader.looseFile !== "" && readerWindow.library.writable
-                    variant: "outline"
-                    text: qsTr("Add to library")
-                    icon.source: "assets/icons/plus.svg"
-                    onClicked: {
-                        const error = readerWindow.library.addBooks([bookReader.looseFile])
-                        if (error)
-                            readerWindow.failed(error)
-                        else
-                            readerWindow.added(bookReader.title)
-                    }
-                }
-
-                FlatButton {
-                    iconOnly: true
-                    text: qsTr("Close the book (Esc)")
-                    icon.source: "assets/icons/close.svg"
-                    onClicked: readerWindow.close()
-                }
-            }
-
-            Divider {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-            }
         }
 
         // In full screen, the top edge brings the toolbar.
