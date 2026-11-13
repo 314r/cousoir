@@ -783,7 +783,9 @@ ThemedWindow {
         return parts.join(" · ")
     }
 
-    function hintText() {
+    // What the status bar says when there is no message: work under way,
+    // else the keys of the moment that fit in `available` pixels.
+    function hintText(available) {
         if (library.importing)
             return qsTr("Reading %1 of %2 files…").arg(library.importDone).arg(library.importTotal)
         if (conversions.busy) {
@@ -808,40 +810,78 @@ ThemedWindow {
         }
         if (library.saving)
             return qsTr("Saving…")
+        return hintLine(available)
+    }
+
+    // The keys of the moment and what they do, in the order shown, each with
+    // its rank: the line too narrow, the highest rank goes first.
+    function hints() {
+        const h = (keys, action, rank = 1) => ({ keys: keys, action: action, rank: rank })
+        const move = h("↑↓", qsTr("move", "hint"), 3)
+        const reload = h("F5", qsTr("reload", "hint"), 3)
+        const search = h("Ctrl+F", qsTr("search", "hint"), 2)
+        const find = h("Ctrl+K", qsTr("find", "hint"), 2)
         if (session.bookOpen && bookPage.confirmingRevert)
-            return qsTr("Enter revert · Esc keep")
+            return [h("Enter", qsTr("revert", "hint")), h("Esc", qsTr("keep", "hint"))]
         if (session.bookOpen && bookPage.editingDescription)
-            return qsTr("Ctrl+Enter save · Esc cancel")
+            return [h("Ctrl+Enter", qsTr("save", "hint")), h("Esc", qsTr("cancel", "hint"))]
         if (session.bookOpen && bookPage.editing)
-            return qsTr("Enter save · Esc revert · Tab next field")
-        if (session.bookOpen && library.writable && devices.devices.length > 0)
-            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+D send · Ctrl+I details")
-        if (session.bookOpen && library.writable)
-            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+V paste cover · Ctrl+I details")
-        if (session.bookOpen)
-            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+I details")
+            return [h("Enter", qsTr("save", "hint")), h("Esc", qsTr("revert", "hint")), h("Tab", qsTr("next field", "hint"), 2)]
+        if (session.bookOpen) {
+            const list = [h("Esc", qsTr("back", "hint")), h("Ctrl+O", qsTr("open in reader", "hint"), 2)]
+            if (library.writable && devices.devices.length > 0)
+                list.push(h("Ctrl+D", qsTr("send", "hint"), 3))
+            else if (library.writable)
+                list.push(h("Ctrl+V", qsTr("paste cover", "hint"), 4))
+            list.push(h("Ctrl+I", qsTr("details", "hint"), 3))
+            return list
+        }
         if (trashShown)
-            return library.trashEntries.length > 0 ? qsTr("↑↓ move · Enter restore") : qsTr("F5 reload")
+            return library.trashEntries.length > 0 ? [move, h("Enter", qsTr("restore", "hint"))] : [reload]
         if (checkShown)
-            return (library.check.count || 0) > 0 ? qsTr("↑↓ move · Enter actions · F5 check again")
-                                                  : qsTr("F5 check again")
-        if (deviceShown)
-            return devices.rows.length === 0 ? qsTr("F5 read again")
-                : devices.writable ? qsTr("↑↓ move · Enter show in library · Del remove from %1").arg(devices.current.name)
-                : qsTr("↑↓ move · Enter show in library")
+            return (library.check.count || 0) > 0
+                ? [move, h("Enter", qsTr("actions", "hint")), h("F5", qsTr("check again", "hint"), 3)]
+                : [h("F5", qsTr("check again", "hint"))]
+        if (deviceShown) {
+            if (devices.rows.length === 0)
+                return [h("F5", qsTr("read again", "hint"))]
+            const list = [move, h("Enter", qsTr("show in library", "hint"))]
+            if (devices.writable)
+                list.push(h("Del", qsTr("remove from %1", "hint").arg(devices.current.name), 2))
+            return list
+        }
         if (facetShown)
-            return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search · Ctrl+K find")
-                                                : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
+            return library.facetRows.length > 0 ? [move, h("Enter", qsTr("show books", "hint")), search, find]
+                                                : [search, find, reload]
         if (library.books.count === 0)
-            return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
-        if (editingMany)
-            return qsTr("Esc one book · Shift+↑↓ more · Ctrl+A all") + (library.writable ? qsTr(" · Del trash") : "")
-                + (devices.devices.length > 0 ? qsTr(" · Ctrl+D send") : "")
-        const back = session.filterOpen ? qsTr("Esc back · ") : ""
-        const trash = library.writable ? qsTr(" · Del trash") : ""
-        return back + qsTr("↑↓ move · Enter open · Ctrl+O read · Ctrl+G %1").arg(layoutSettings.gridMode ? qsTr("list")
-                                                                                                   : qsTr("covers"))
-            + trash
+            return session.filterOpen ? [h("Esc", qsTr("back", "hint")), reload] : [search, find, reload]
+        if (editingMany) {
+            const list = [h("Esc", qsTr("one book", "hint")), h("Shift+↑↓", qsTr("more", "hint"), 2),
+                          h("Ctrl+A", qsTr("all", "hint"), 3)]
+            if (library.writable)
+                list.push(h("Del", qsTr("trash", "hint"), 2))
+            if (devices.devices.length > 0)
+                list.push(h("Ctrl+D", qsTr("send", "hint"), 3))
+            return list
+        }
+        const list = session.filterOpen ? [h("Esc", qsTr("back", "hint"))] : []
+        list.push(move, h("Enter", qsTr("open", "hint")), h("Ctrl+O", qsTr("open in reader", "hint"), 4),
+                  h("Ctrl+G", layoutSettings.gridMode ? qsTr("list", "hint") : qsTr("covers", "hint"), 3))
+        if (library.writable)
+            list.push(h("Del", qsTr("trash", "hint"), 2))
+        return list
+    }
+
+    // The hints that fit in `available` pixels of the status bar.
+    function hintLine(available) {
+        let items = hints()
+        const line = list => list.map(item => qsTr("%1 %2", "hint").arg(item.keys).arg(item.action)).join(" · ")
+        while (items.length > 1 && hintMetrics.advanceWidth(line(items)) > available) {
+            const ranks = items.map(item => item.rank)
+            const dropped = ranks.lastIndexOf(Math.max(...ranks))
+            items = items.slice(0, dropped).concat(items.slice(dropped + 1))
+        }
+        return line(items)
     }
 
     // An icon button of the status bar.
@@ -1508,10 +1548,16 @@ ThemedWindow {
             }
 
             Label {
+                id: keyHintsLabel
                 objectName: "keyHints"
 
                 Layout.fillWidth: true
-                text: window.notice || window.hintText()
+                text: window.notice || window.hintText(width)
+
+                FontMetrics {
+                    id: hintMetrics
+                    font: keyHintsLabel.font
+                }
                 color: window.notice && window.noticeIsError ? Theme.danger : window.notice ? Theme.text : Theme.textMuted
                 font.pointSize: Theme.fontPointSizeCaption
                 horizontalAlignment: Text.AlignHCenter
