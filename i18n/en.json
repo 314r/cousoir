@@ -175,6 +175,10 @@
     "one": "Stop sending",
     "other": "Stop the %n sendings"
   },
+  "Take “%1” off its %n books?": {
+    "one": "Take “%1” off its book?",
+    "other": "Take “%1” off its %n books?"
+  },
   "The %n other books are added either way.": {
     "one": "The other book is added either way.",
     "other": "The %n other books are added either way."

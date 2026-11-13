@@ -199,6 +199,15 @@ ISO 639 table and its translations, read from the Calibre installed. Without
 Calibre, names are English. A search finds a language by its code, its
 English name or its name in Calibre's language.
 
+## Renaming items
+
+A row's menu in a browse section (Menu, Shift+F10 or a right click) shows
+its books, renames it, or takes it off its books. Each of its books is
+edited as Calibre edits one, so a name another item already has merges the
+two; an author renamed moves its books' folders, and keeps an author sort
+set by hand. A series taken off its books leaves them number 1. An author
+cannot be taken off, only renamed, and languages are Calibre's names.
+
 ## Searching
 
 The search box takes Calibre's search language and finds the books Calibre

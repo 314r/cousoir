@@ -145,6 +145,7 @@ private slots:
     void keepsNotes();
     void browsesHighlights();
     void searchesAndSavesHighlights();
+    void renamesItems();
     void editsCustomColumns();
     void changesCovers();
     void movesBooksToTrashAndBack();
@@ -2360,6 +2361,41 @@ void LibraryUiTest::keepsNotes()
     QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();
     QMetaObject::invokeMethod(library(), "reload");
     QTRY_VERIFY(!control("notePane")->isVisible());
+}
+
+// A tag renamed from the browse section's menu, by the keyboard.
+void LibraryUiTest::renamesItems()
+{
+    makeWritable();
+    click("sidebar_tags");
+    QQuickItem *page = control("facetPage");
+    QTRY_VERIFY(page && page->isVisible());
+    QVariantMap row;
+    for (const QVariant &value : library()->property("facetRows").toList()) {
+        if (value.toMap().value(QStringLiteral("name")).toString() == QLatin1String("Humour"))
+            row = value.toMap();
+    }
+    QVERIFY(!row.isEmpty());
+    page->setProperty("menuRow", row);
+    QMetaObject::invokeMethod(page, "runAction", Q_ARG(QVariant, QStringLiteral("rename")));
+    QObject *dialog = page->findChild<QObject *>(QStringLiteral("renameDialog"));
+    QVERIFY(dialog);
+    QTRY_VERIFY(dialog->property("opened").toBool());
+    QQuickItem *field = nullptr;
+    QTRY_VERIFY((field = page->findChild<QQuickItem *>(QStringLiteral("renameField"))) && field->hasActiveFocus());
+    QTest::keySequence(m_window, QKeySequence(QKeySequence::SelectAll));
+    for (const QChar character : QStringLiteral("Comedy"))
+        QTest::keyClick(m_window, character.toLatin1());
+    QTest::keyClick(m_window, Qt::Key_Return);
+    QTRY_VERIFY(!dialog->property("opened").toBool());
+    waitForSave();
+    QTRY_VERIFY([this] {
+        for (const QVariant &value : library()->property("facetRows").toList()) {
+            if (value.toMap().value(QStringLiteral("name")).toString() == QLatin1String("Comedy"))
+                return true;
+        }
+        return false;
+    }());
 }
 
 // The highlights found by their words, by their colour, and saved, every

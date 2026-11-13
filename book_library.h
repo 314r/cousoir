@@ -322,6 +322,11 @@ public:
     Q_INVOKABLE QString keepDuplicate(int keepId, const QVariantList &otherIds);
     // Files the books of the authors `authorIds` under `keepAuthorId`'s name.
     Q_INVOKABLE QString mergeAuthors(const QVariantList &authorIds, int keepAuthorId);
+    // An author, series, tag or publisher of the browse section `section`
+    // given another name, each of its books edited as Calibre edits one: a
+    // name another item has merges the two. Empty `name`, for a series, tag
+    // or publisher, takes it off its books. The error, empty when queued.
+    Q_INVOKABLE QString renameItem(const QString &section, int itemId, const QString &name);
     // Takes out of the database the book's formats whose file is gone.
     Q_INVOKABLE QString removeMissingFormats(int bookId);
     // Shows a file or folder of the library, relative to it, in the file

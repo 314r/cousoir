@@ -1153,5 +1153,20 @@
   "Colour": "Couleur",
   "Save the highlights of every book shown…": "Enregistrer les surlignements de tous les livres affichés…",
   "Save the highlights": "Enregistrer les surlignements",
-  "Highlights saved": "Surlignements enregistrés"
+  "Highlights saved": "Surlignements enregistrés",
+  "This item is no longer in the library.": "Cet élément n’est plus dans la bibliothèque.",
+  "An author cannot be taken off the books: give another name.": "Un auteur ne peut pas être retiré des livres : donnez un autre nom.",
+  "Two author names differ only by case: Calibre merges them the next time it saves an author, and authors can be renamed then.": "Deux noms d’auteurs ne diffèrent que par la casse : Calibre les fusionne la prochaine fois qu’il enregistre un auteur, et les auteurs pourront alors être renommés.",
+  "No book has this item any more.": "Plus aucun livre n’a cet élément.",
+  "Show its books": "Voir ses livres",
+  "Rename or merge…": "Renommer ou fusionner…",
+  "Take off its books…": "Retirer de ses livres…",
+  "Rename “%1”": "Renommer « %1 »",
+  "Take “%1” off its %n books?": {
+    "one": "Retirer « %1 » de son livre ?",
+    "other": "Retirer « %1 » de ses %n livres ?"
+  },
+  "A name another one has merges the two. Each book is changed as Calibre changes it.": "Un nom qu’un autre élément porte déjà fusionne les deux. Chaque livre est modifié comme Calibre le modifie.",
+  "The books stay; only this is taken off them.": "Les livres restent ; seul cet élément leur est retiré.",
+  "Take Off": "Retirer"
 }

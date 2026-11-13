@@ -2180,6 +2180,7 @@ ThemedWindow {
                             window.library.openFacetItem(id)
                             booksPage.focusList()
                         }
+                        onFailed: function(message) { window.showNotice(message) }
                     }
 
                     BookPage {

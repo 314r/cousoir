@@ -34,6 +34,41 @@ Rectangle {
     }
 
     signal itemActivated(int id)
+    signal failed(string message)
+
+    // What can be done to an item of the section: renamed, merged into
+    // another by its name, or taken off its books. Not a language, whose
+    // names are Calibre's.
+    readonly property bool editable: library.writable && library.section !== "languages"
+    property var menuRow: null
+    readonly property var actions: [
+        { key: "open", title: qsTr("Show its books") },
+        { key: "rename", title: qsTr("Rename or merge…") }
+    ].concat(library.section === "authors" ? [] : [{ key: "remove", title: qsTr("Take off its books…") }])
+        .filter(action => action.key === "open" || page.editable)
+
+    function openMenu(index, item, x, y) {
+        page.menuRow = page.library.facetRows[index] || null
+        if (page.menuRow)
+            itemMenu.popup(item, x, y)
+    }
+
+    function runAction(key) {
+        const row = page.menuRow
+        if (!row)
+            return
+        if (key === "open") {
+            page.itemActivated(row.id)
+        } else if (key === "rename") {
+            renameDialog.itemId = row.id
+            renameDialog.title = qsTr("Rename “%1”").arg(row.name)
+            renameDialog.ask(row.name)
+        } else if (key === "remove") {
+            removeDialog.itemId = row.id
+            removeDialog.title = qsTr("Take “%1” off its %n books?", "", row.count).arg(row.name)
+            removeDialog.ask()
+        }
+    }
 
     color: Theme.surface
 
@@ -70,6 +105,45 @@ Rectangle {
         Accessible.name: page.library.section
         onActivated: function(index) { page.activate(index) }
         onSortRequested: function(sort) { page.sortBy(sort) }
+        onMenuRequested: function(index, row, x, y) { page.openMenu(index, row, x, y) }
+    }
+
+    ActionMenu {
+        id: itemMenu
+        objectName: "facetMenu"
+
+        actions: page.actions
+        onChosen: function(key) { page.runAction(key) }
+    }
+
+    RenameDialog {
+        id: renameDialog
+        objectName: "renameDialog"
+
+        property int itemId: 0
+
+        message: qsTr("A name another one has merges the two. Each book is changed as Calibre changes it.")
+        onAccepted: function(name) {
+            const error = page.library.renameItem(page.library.section, itemId, name)
+            if (error)
+                page.failed(error)
+        }
+    }
+
+    ConfirmDialog {
+        id: removeDialog
+        objectName: "removeItemDialog"
+
+        property int itemId: 0
+
+        message: qsTr("The books stay; only this is taken off them.")
+        acceptText: qsTr("Take Off")
+        acceptVariant: "danger"
+        onAccepted: {
+            const error = page.library.renameItem(page.library.section, itemId, "")
+            if (error)
+                page.failed(error)
+        }
     }
 
     ColumnLayout {

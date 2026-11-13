@@ -103,6 +103,7 @@ private slots:
     void keepsCompositesOfOtherBooks();
     void savesWhatWaitsWhenClosed();
     void readsAgainOnlyWhatChanged();
+    void renamesAndRemovesItems();
     void followsSortsLikeCalibre();
     void refusesWhileReadOnly();
     void revertsCurrentBook();
@@ -753,6 +754,57 @@ void BookLibraryTest::readsAgainOnlyWhatChanged()
         QVERIFY2(failed.isEmpty(), qPrintable(QStringLiteral("step %1: %2").arg(step).arg(failed.value(0).value(0).toString())));
     }
     QVERIFY(changes > 40);
+}
+
+// The browse sections' items renamed, merged into another by its name, or
+// taken off their books, each book edited as Calibre edits one.
+void BookLibraryTest::renamesAndRemovesItems()
+{
+    qputenv("COUSOIR_VERIFY_COMMITS", "1");
+    const auto unset = qScopeGuard([] { qunsetenv("COUSOIR_VERIFY_COMMITS"); });
+    auto copy = writableCopy();
+    auto library = open(copy->path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QSignalSpy failed(library.get(), &BookLibrary::saveFailed);
+    const auto names = [&library](const QString &section) {
+        library->setSection(section);
+        QStringList list;
+        for (const QVariant &row : library->facetRows())
+            list.append(row.toMap().value(QStringLiteral("name")).toString());
+        return list;
+    };
+
+    // Renamed: its three books follow.
+    QCOMPARE(library->renameItem(QStringLiteral("tags"), 3, QStringLiteral("Fantastique")), QString());
+    QVERIFY(waitForSave(library.get()));
+    QVERIFY(names(QStringLiteral("tags")).contains(QStringLiteral("Fantastique")));
+    QVERIFY(!names(QStringLiteral("tags")).contains(QStringLiteral("Fantasy")));
+    library->setSection(QStringLiteral("books"));
+    library->setCurrentBookId(2);
+    QVERIFY(library->currentBook().value(QStringLiteral("tags")).toStringList().contains(QStringLiteral("Fantastique")));
+
+    // Merged: Humour's book gets Fantastique, and Humour goes.
+    QCOMPARE(library->renameItem(QStringLiteral("tags"), 4, QStringLiteral("fantastique")), QString());
+    QVERIFY(waitForSave(library.get()));
+    QVERIFY(!names(QStringLiteral("tags")).contains(QStringLiteral("Humour")));
+    QCOMPARE(library->facetRows().size(), names(QStringLiteral("tags")).size());
+
+    // Taken off its book: Tor is gone, the book stays.
+    QCOMPARE(library->renameItem(QStringLiteral("publishers"), 2, QString()), QString());
+    QVERIFY(waitForSave(library.get()));
+    QVERIFY(!names(QStringLiteral("publishers")).contains(QStringLiteral("Tor")));
+    library->setSection(QStringLiteral("books"));
+    QCOMPARE(library->scopeCount(), 6);
+
+    // An author renamed: the books' folders follow.
+    QCOMPARE(library->renameItem(QStringLiteral("authors"), 2, QStringLiteral("Glen Charles Cook")), QString());
+    QVERIFY(waitForSave(library.get()));
+    QVERIFY(QFileInfo::exists(copy->filePath(QStringLiteral("Glen Charles Cook"))));
+    QVERIFY(!QFileInfo::exists(copy->filePath(QStringLiteral("Glen Cook"))));
+    // But not taken off the books.
+    QVERIFY(!library->renameItem(QStringLiteral("authors"), 2, QString()).isEmpty());
+    QVERIFY2(failed.isEmpty(), qPrintable(failed.value(0).value(0).toString()));
 }
 
 // Quitting while a save runs: the changes waiting behind it are written

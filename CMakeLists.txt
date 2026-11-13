@@ -293,6 +293,7 @@ set(COUSOIR_QML_FILES
     MetaRow.qml
     MetadataDownloadDialog.qml
     NotePanel.qml
+    RenameDialog.qml
     SearchField.qml
     SettingsWindow.qml
     ShortcutsOverlay.qml
