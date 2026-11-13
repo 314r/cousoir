@@ -3091,7 +3091,7 @@ void LibraryUiTest::checksLibrary()
     click("keep_7");
     QTRY_VERIFY(object("keepDialog")->property("opened").toBool());
     QCOMPARE(object("keepDialog")->property("title").toString(),
-             QStringLiteral("Keep “Shadows Linger” and move the other copy to the Trash?"));
+             QStringLiteral("Keep “Shadows Linger” and move the other copy to the trash?"));
     clickVisible("confirmAccept");
     waitForSave();
     QTRY_VERIFY_WITH_TIMEOUT(!control("check_duplicates:3,7"), 10000);

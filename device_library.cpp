@@ -771,13 +771,15 @@ QString DeviceLibrary::syncReading(const QString &root)
         if (!result.ok) {
             emit failed(result.error);
         } else {
-            const QString places = tr("where you stopped in %n books", nullptr, result.places);
-            const QString highlights = tr("%n highlights", nullptr, result.highlights);
-            const QString message = result.places == 0 && result.highlights == 0
-                ? tr("%1 already has your reading.").arg(name)
-                : result.highlights == 0 ? tr("%1 has %2 now. Eject it to read on.").arg(name, places)
-                : result.places == 0     ? tr("%1 has %2 now. Eject it to read on.").arg(name, highlights)
-                                         : tr("%1 has %2 and %3 now. Eject it to read on.").arg(name, places, highlights);
+            // Whole sentences, each with its own count.
+            QStringList sentences;
+            if (result.places > 0)
+                sentences.append(tr("%1 has your place in %n books now.", nullptr, result.places).arg(name));
+            if (result.highlights > 0)
+                sentences.append(result.places > 0 ? tr("And %n highlights.", nullptr, result.highlights)
+                                                   : tr("%1 has %n highlights now.", nullptr, result.highlights).arg(name));
+            const QString message = sentences.isEmpty() ? tr("%1 already has your reading.").arg(name)
+                                                        : sentences.join(u' ') + u' ' + tr("Eject it to read on.");
             emit readingSynced(message, result.skipped);
         }
         // What it has now; and the sends that waited.

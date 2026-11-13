@@ -12,6 +12,9 @@
 // and Monologue, MIT, David Heinemeier Hansson). Away from Omarchy, the
 // system's language.
 //
+// A word of two meanings, qsTr("Read", "column"), has its own key,
+// "Read|column", the word alone serving where a catalog has no other.
+//
 // Catalogs are flat JSON objects from the English text to its translation,
 // one per Omarchy language code (i18n/fr.json, i18n/pt-BR.json), so QML keeps
 // plain qsTr("Save") and C++ plain tr("Save"), and a string without a

@@ -79,7 +79,7 @@ Item {
                 objectName: "libraryPathLabel"
 
                 Layout.fillWidth: true
-                text: libraryPage.library.libraryPath || qsTr("None")
+                text: libraryPage.library.libraryPath || qsTr("None", "library")
                 font.weight: Font.Bold
                 wrapMode: Text.WrapAnywhere
             }

@@ -64,7 +64,7 @@ Popup {
     }
 
     function kindText(hit) {
-        return { book: qsTr("Book"), authors: qsTr("Author"), series: qsTr("Series"), tags: qsTr("Tag"),
+        return { book: qsTr("Book"), authors: qsTr("Author"), series: qsTr("Series", "field"), tags: qsTr("Tag"),
                  publishers: qsTr("Publisher"), section: qsTr("Go to"), action: qsTr("Action") }[hit.kind] || ""
     }
 

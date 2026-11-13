@@ -115,6 +115,7 @@ private slots:
     void asksThePortalForFiles();
     void speaksEnglishUntilALanguageIsPicked();
     void followsTheLanguageFile();
+    void tellsMeaningsApart();
     void followsALanguageChange();
     void picksPluralForms();
     void followsTheSystemAwayFromOmarchy();
@@ -277,6 +278,22 @@ void OmarchyTest::followsTheLanguageFile()
     QCOMPARE(translator.translate("Main", "Open"), QStringLiteral("Abrir"));
     QVERIFY(translator.translate("Main", "Quit").isNull());
     QCOMPARE(QLocale().language(), QLocale::Portuguese);
+}
+
+// A word of two meanings has a key for each, the word alone serving the
+// meanings a catalog does not tell apart.
+void OmarchyTest::tellsMeaningsApart()
+{
+    QTemporaryDir dir;
+    QVERIFY(writeAll(dir.filePath(QStringLiteral("language")), "fr\n"));
+    QVERIFY(writeAll(dir.filePath(QStringLiteral("fr.json")),
+                     R"({"Read": "Lire", "Read|column": "Lu", "Series": "Séries", "%n books|status": {"one": "%n livre", "other": "%n livres"}})"));
+    Translator translator(dir.filePath(QStringLiteral("language")), dir.path());
+    QCOMPARE(translator.translate("Main", "Read"), QStringLiteral("Lire"));
+    QCOMPARE(translator.translate("DevicePage", "Read", "column"), QStringLiteral("Lu"));
+    QCOMPARE(translator.translate("BookDetailsPane", "Series", "field"), QStringLiteral("Séries"));
+    QCOMPARE(translator.translate("Main", "%n books", "status", 2), QStringLiteral("%n livres"));
+    QVERIFY(translator.translate("Main", "Quit", "menu").isNull());
 }
 
 void OmarchyTest::followsALanguageChange()

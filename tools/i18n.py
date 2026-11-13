@@ -15,6 +15,7 @@ a counted string ("%n books") to an object of plural forms.
 """
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,12 @@ def source_strings():
         strings = {}
         for message in ET.parse(ts).getroot().iter("message"):
             text = message.find("source").text or ""
+            # A word of two meanings: "Read|column" for qsTr("Read", "column").
+            comment = message.find("comment")
+            if comment is not None and comment.text:
+                if "|" in text or not re.fullmatch(r"[a-z0-9-]+", comment.text):
+                    sys.exit(f"{text!r}: a meaning is a word of [a-z0-9-], and a text has no '|'")
+                text = f"{text}|{comment.text}"
             strings[text] = strings.get(text, False) or message.get("numerus") == "yes"
     return strings
 
@@ -54,7 +61,11 @@ def main():
         catalog = json.loads(path.read_text(encoding="utf-8"))
         # English is its own source: it only gives counted strings their forms.
         wanted = counted if code == "en" else set(strings)
-        missing = [text for text in strings if text in wanted and text not in catalog]
+        # A meaning the catalog does not have takes the word's translation;
+        # the word stays wanted while a meaning leans on it.
+        wanted |= {text.split("|")[0] for text in wanted if "|" in text and text.split("|")[0] not in strings}
+        missing = [text for text in strings if text in wanted and text not in catalog
+                   and not ("|" in text and text.split("|")[0] in catalog)]
         stale = [text for text in catalog if text not in wanted]
         if arguments[:1] == ["--missing"]:
             if arguments[1:] == [code]:

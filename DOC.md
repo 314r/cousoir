@@ -1137,7 +1137,11 @@ is the first of the system's that Cousoir has a catalog for.
 
 A catalog is one flat JSON file by Omarchy language code, `i18n/fr.json`,
 from the English text exactly as `qsTr()` or `tr()` has it to its
-translation, compiled into Cousoir. A string a catalog lacks shows in
+translation, compiled into Cousoir. A word of two meanings is told apart by
+`qsTr`'s second argument, which becomes part of its key: `qsTr("Read",
+"column")` is `"Read|column"`, translated on its own, the plain key serving
+a catalog that does not tell them apart. Sentences are written whole, a count
+with `%n`, never glued from pieces. A string a catalog lacks shows in
 English; `pt-BR` falls back on `pt`, then English. A counted string,
 `qsTr("%n books", "", count)`, maps to an object of plural forms by CLDR
 category, `{"one": "%n livre", "other": "%n livres"}`, English's own being

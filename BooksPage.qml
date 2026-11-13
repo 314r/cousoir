@@ -71,15 +71,15 @@ Rectangle {
         { key: "read", title: qsTr("Open in reader") },
         { key: "folder", title: qsTr("Show in folder") }
     ]).concat([
-        { key: "convert:KEPUB", title: menuOnSelection ? qsTr("Convert %1 books to KEPUB").arg(selectedCount)
+        { key: "convert:KEPUB", title: menuOnSelection ? qsTr("Convert %n books to KEPUB", "", selectedCount)
                                                        : qsTr("Convert to KEPUB") },
-        { key: "convert:AZW3", title: menuOnSelection ? qsTr("Convert %1 books to AZW3").arg(selectedCount)
+        { key: "convert:AZW3", title: menuOnSelection ? qsTr("Convert %n books to AZW3", "", selectedCount)
                                                       : qsTr("Convert to AZW3") }
     ]).concat((page.canSend ? page.devices.devices : []).map(device => ({
-        key: "send:" + device.root, title: menuOnSelection ? qsTr("Send %1 books to %2").arg(selectedCount).arg(device.name)
+        key: "send:" + device.root, title: menuOnSelection ? qsTr("Send %n books to %1", "", selectedCount).arg(device.name)
                                                            : qsTr("Send to %1").arg(device.name)
     }))).concat([
-        { key: "trash", title: menuOnSelection ? qsTr("Move %1 books to Trash").arg(selectedCount) : qsTr("Move to Trash") }
+        { key: "trash", title: menuOnSelection ? qsTr("Move %n books to the trash", "", selectedCount) : qsTr("Move to the trash") }
     ]).filter(action => action.key === "trash" ? page.library.writable
                         : action.key === "cousoir" ? page.library.readerAvailable
                         : action.key.startsWith("convert:") ? page.canConvert : true)

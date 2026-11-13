@@ -61,7 +61,7 @@ QList<Hit> search(const CalibreSearch::Index &index, const QString &query, int l
                 const FacetItem &item = list.at(row);
                 // Items before books of the same closeness.
                 hits.append({ kind, item.id, item.name,
-                              item.count == 1 ? QObject::tr("1 book") : QObject::tr("%1 books").arg(item.count),
+                              QObject::tr("%n books", nullptr, item.count),
                               found + 5 });
             }
         }

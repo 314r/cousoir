@@ -1,4 +1,36 @@
 {
+  "%1 has %n highlights now.": {
+    "one": "%1 has %n highlight now.",
+    "other": "%1 has %n highlights now."
+  },
+  "%1 has your place in %n books now.": {
+    "one": "%1 has your place in %n book now.",
+    "other": "%1 has your place in %n books now."
+  },
+  "%1 of %n authors": {
+    "one": "%1 of %n author",
+    "other": "%1 of %n authors"
+  },
+  "%1 of %n books": {
+    "one": "%1 of %n book",
+    "other": "%1 of %n books"
+  },
+  "%1 of %n languages": {
+    "one": "%1 of %n language",
+    "other": "%1 of %n languages"
+  },
+  "%1 of %n publishers": {
+    "one": "%1 of %n publisher",
+    "other": "%1 of %n publishers"
+  },
+  "%1 of %n series": {
+    "one": "%1 of %n series",
+    "other": "%1 of %n series"
+  },
+  "%1 of %n tags": {
+    "one": "%1 of %n tag",
+    "other": "%1 of %n tags"
+  },
   "%n authors": {
     "one": "%n author",
     "other": "%n authors"
@@ -6,6 +38,10 @@
   "%n books": {
     "one": "%n book",
     "other": "%n books"
+  },
+  "%n books sent to %1.": {
+    "one": "%n book sent to %1.",
+    "other": "%n books sent to %1."
   },
   "%n days left": {
     "one": "%n day left",
@@ -31,9 +67,17 @@
     "one": "%n note",
     "other": "%n notes"
   },
+  "%n of these books are already in the library": {
+    "one": "%n of these books is already in the library",
+    "other": "%n of these books are already in the library"
+  },
   "%n publishers": {
     "one": "%n publisher",
     "other": "%n publishers"
+  },
+  "%n selected": {
+    "one": "%n selected",
+    "other": "%n selected"
   },
   "%n series": {
     "one": "%n series",
@@ -47,6 +91,10 @@
     "one": "%n thing to check",
     "other": "%n things to check"
   },
+  "(%n more waiting)": {
+    "one": "(%n more waiting)",
+    "other": "(%n more waiting)"
+  },
   "Add %n books to the library?": {
     "one": "Add %n book to the library?",
     "other": "Add %n books to the library?"
@@ -55,28 +103,88 @@
     "one": "Added %n book.",
     "other": "Added %n books."
   },
+  "And %n highlights.": {
+    "one": "And %n highlight.",
+    "other": "And %n highlights."
+  },
+  "Apply to %n books": {
+    "one": "Apply to %n book",
+    "other": "Apply to %n books"
+  },
   "Calibre deletes books from the trash after %n days.": {
     "one": "Calibre deletes books from the trash after %n day.",
     "other": "Calibre deletes books from the trash after %n days."
+  },
+  "Convert %n books to %1 for %2?": {
+    "one": "Convert %n book to %1 for %2?",
+    "other": "Convert %n books to %1 for %2?"
+  },
+  "Convert %n books to %1?": {
+    "one": "Convert %n book to %1?",
+    "other": "Convert %n books to %1?"
+  },
+  "Convert %n books to AZW3": {
+    "one": "Convert %n book to AZW3",
+    "other": "Convert %n books to AZW3"
+  },
+  "Convert %n books to KEPUB": {
+    "one": "Convert %n book to KEPUB",
+    "other": "Convert %n books to KEPUB"
+  },
+  "Keep “%1” and move the %n other copies to the trash?": {
+    "one": "Keep “%1” and move the other copy to the trash?",
+    "other": "Keep “%1” and move the %n other copies to the trash?"
   },
   "Messages: %n errors not seen": {
     "one": "Messages: %n error not seen",
     "other": "Messages: %n errors not seen"
   },
+  "Move %n books to the trash": {
+    "one": "Move %n book to the trash",
+    "other": "Move %n books to the trash"
+  },
+  "Move %n books to the trash?": {
+    "one": "Move %n book to the trash?",
+    "other": "Move %n books to the trash?"
+  },
+  "Put the %n books of the last change back as they were": {
+    "one": "Put the book of the last change back as it was",
+    "other": "Put the %n books of the last change back as they were"
+  },
   "Restore from the Trash to undo; Calibre deletes what is there after %n days.": {
     "one": "Restore from the Trash to undo; Calibre deletes what is there after %n day.",
     "other": "Restore from the Trash to undo; Calibre deletes what is there after %n days."
+  },
+  "Send %n books to %1": {
+    "one": "Send %n book to %1",
+    "other": "Send %n books to %1"
+  },
+  "Sending %n books to %1 after the changes…": {
+    "one": "Sending %n book to %1 after the changes…",
+    "other": "Sending %n books to %1 after the changes…"
+  },
+  "Sending %n books to %1 · %2%": {
+    "one": "Sending %n book to %1 · %2%",
+    "other": "Sending %n books to %1 · %2%"
+  },
+  "Stop the %n conversions": {
+    "one": "Stop the conversion",
+    "other": "Stop the %n conversions"
+  },
+  "Stop the %n sendings": {
+    "one": "Stop sending",
+    "other": "Stop the %n sendings"
   },
   "The %n other books are added either way.": {
     "one": "The other book is added either way.",
     "other": "The %n other books are added either way."
   },
+  "Use “%1” on %n books?": {
+    "one": "Use “%1” on %n book?",
+    "other": "Use “%1” on %n books?"
+  },
   "Where %1 stopped in %n books, in the library": {
     "one": "Where %1 stopped in %n book, in the library",
     "other": "Where %1 stopped in %n books, in the library"
-  },
-  "where you stopped in %n books": {
-    "one": "where you stopped in %n book",
-    "other": "where you stopped in %n books"
   }
 }

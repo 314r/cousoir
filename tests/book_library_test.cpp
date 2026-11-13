@@ -1897,7 +1897,7 @@ void BookLibraryTest::syncsReadingWithAKobo()
     QCOMPARE(devices.syncReading(kobo.path()), QString());
     QVERIFY(syncedReading.wait(15000));
     QCOMPARE(syncedReading.first().first().toString(),
-             QStringLiteral("Kobo eReader has where you stopped in 1 book and 1 highlight now. Eject it to read on."));
+             QStringLiteral("Kobo eReader has your place in 1 book now. And 1 highlight. Eject it to read on."));
     {
         SqliteDb db;
         QVERIFY(db.open(database, SqliteDb::Mode::Immutable, &error));

@@ -32,7 +32,7 @@ FocusScope {
         { key: "authors", label: qsTr("Authors"), value: (book.authors || []).join(" & ") },
         { key: "authorSort", label: qsTr("Author sort"),
           value: book.authorSort !== (book.authors || []).join(" & ") ? book.authorSort || "" : "" },
-        { key: "series", label: qsTr("Series"), value: book.seriesText || "" },
+        { key: "series", label: qsTr("Series", "field"), value: book.seriesText || "" },
         { key: "tags", label: qsTr("Tags"), value: (book.tags || []).join(", ") },
         { key: "rating", label: qsTr("Rating"), value: book.rating || "" },
         { key: "publisher", label: qsTr("Publisher"), value: book.publisher || "" },
@@ -61,7 +61,7 @@ FocusScope {
 
     // A rating from 0 to 10 as stars, two per star.
     function ratingLabel(rating) {
-        return rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+        return rating === 0 ? qsTr("None", "rating") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
     }
 
     function open(format) {
@@ -362,7 +362,7 @@ FocusScope {
 
                 DetailField {
                     key: "series"
-                    label: qsTr("Series")
+                    label: qsTr("Series", "field")
                     value: pane.book.series || ""
                 }
 
