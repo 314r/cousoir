@@ -198,17 +198,32 @@ ThemedWindow {
     }
 
     signal failed(string message)
+    // A file of no library added to it.
+    signal added(string title)
 
     // Reads the book from where it was left.
     function openBook(bookId) {
-        // Nothing of the book shown before kept for this one.
+        forgetShown()
+        return started(bookReader.open(bookId))
+    }
+
+    // Reads a file of no library from where it was left.
+    function openFile(path) {
+        forgetShown()
+        return started(bookReader.openFile(path))
+    }
+
+    // Nothing of the book shown before kept for this one.
+    function forgetShown() {
         spineIndex = -1
         position = ""
         fileFraction = 0
         page = 0
         pageBookmarks = []
         bookmarksFor = ""
-        const error = bookReader.open(bookId)
+    }
+
+    function started(error) {
         if (error) {
             readerWindow.failed(error)
             return false
@@ -1234,6 +1249,23 @@ ThemedWindow {
                     icon.source: "assets/icons/fullscreen.svg"
                     selected: readerWindow.fullScreen
                     onClicked: readerWindow.toggleFullScreen()
+                }
+
+                FlatButton {
+                    objectName: "readerAddToLibrary"
+
+                    // A file of no library, which it can join.
+                    visible: bookReader.looseFile !== "" && readerWindow.library.writable
+                    variant: "outline"
+                    text: qsTr("Add to library")
+                    icon.source: "assets/icons/plus.svg"
+                    onClicked: {
+                        const error = readerWindow.library.addBooks([bookReader.looseFile])
+                        if (error)
+                            readerWindow.failed(error)
+                        else
+                            readerWindow.added(bookReader.title)
+                    }
                 }
 
                 FlatButton {

@@ -35,8 +35,8 @@ window comes forward, and ends:
 
 ```bash
 cousoir                     # shows the window
-cousoir BOOK.epub…          # reads the books, those of the library;
-                            # the others it offers to add
+cousoir BOOK.epub…          # reads the books, the library's or not;
+                            # those it cannot read it offers to add
 cousoir --add [BOOK…]       # adds the books, or opens the file chooser
 cousoir --library PATH      # opens that library
 cousoir --show ID           # shows the library's book of that id
@@ -49,6 +49,13 @@ from Calibre's own by `tools/oracle/new_library_sql.py`, with a library id
 of its own. Calibre opens it as one of its own, adding its notes folder
 then; the golden test has Calibre check it against a library it makes, list
 the book Cousoir added and add another.
+
+A file of no library, an EPUB, KEPUB, Kindle book or PDF, opens in the
+reader as it is, without being added: its place and its highlights are
+kept by Cousoir, by the file's start and size, for the next time it is
+read from anywhere; "Add to library" in the reader's toolbar adds it.
+Other formats are offered to add, as Cousoir reads them only once in the
+library.
 
 The desktop entry declares EPUB, MOBI and AZW3 files, so a file manager
 offers Cousoir for them, and has an "Add books" action. A Cousoir that does

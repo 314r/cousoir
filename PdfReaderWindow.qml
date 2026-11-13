@@ -24,6 +24,8 @@ ThemedWindow {
     property string error: ""
     property int opens: 0
     property int bookId: 0
+    // A file of no library read, its path.
+    property string loosePath: ""
     // The theme's colours need shaders, which Qt Quick's software
     // renderer does not run.
     readonly property bool canTheme: contentItem.GraphicsInfo.api !== GraphicsInfo.Software
@@ -33,7 +35,8 @@ ThemedWindow {
 
     // Each book's zoom, by library and book, the last ones kept.
     function viewKey() {
-        return pdfWindow.library.libraryPath + "#" + pdfWindow.bookId
+        return pdfWindow.loosePath !== "" ? "file:" + pdfWindow.loosePath
+                                          : pdfWindow.library.libraryPath + "#" + pdfWindow.bookId
     }
 
     function bookViews() {
@@ -54,8 +57,25 @@ ThemedWindow {
         pdfSettings.bookViews = JSON.stringify(views)
     }
 
+    // A PDF of no library, read as it is: its zoom kept by its path, no page.
+    function openFile(path) {
+        pdfWindow.error = ""
+        bookReader.close()
+        pdfWindow.bookId = -1
+        pdfWindow.loosePath = path
+        pdfWindow.opens += 1
+        document.source = "file://" + path.split("/").map(encodeURIComponent).join("/") + "#" + pdfWindow.opens
+        searchField.text = ""
+        show()
+        raise()
+        requestActivate()
+        startPage.restart()
+        return true
+    }
+
     function openBook(bookId) {
         pdfWindow.error = ""
+        pdfWindow.loosePath = ""
         const error = bookReader.openPdf(bookId)
         if (error) {
             pdfWindow.failed(error)
@@ -178,7 +198,8 @@ ThemedWindow {
         }
         pdfSettings.renderScale = view.renderScale
         if (document.status === PdfDocument.Ready) {
-            bookReader.savePage(view.currentPage, document.pageCount)
+            if (pdfWindow.loosePath === "")
+                bookReader.savePage(view.currentPage, document.pageCount)
             pdfWindow.keepBookView()
         }
         bookReader.close()
@@ -240,7 +261,7 @@ ThemedWindow {
                 view.renderScale = pdfSettings.renderScale
             else
                 pdfWindow.fit(pdfSettings.fit)
-            view.goToPage(bookReader.startPosition.page || 0)
+            view.goToPage(pdfWindow.loosePath === "" ? bookReader.startPosition.page || 0 : 0)
             outline.expandRecursively()
             view.forceActiveFocus()
         }
@@ -259,7 +280,10 @@ ThemedWindow {
     Timer {
         id: saveTimer
         interval: 1500
-        onTriggered: bookReader.savePage(view.currentPage, document.pageCount)
+        onTriggered: {
+            if (pdfWindow.loosePath === "")
+                bookReader.savePage(view.currentPage, document.pageCount)
+        }
     }
 
     Shortcut {
@@ -657,7 +681,6 @@ ThemedWindow {
                     visible: pdfSettings.sidebarTab === "search"
                     clip: true
                     model: view.searchModel
-                    currentIndex: view.searchModel.currentResult
                     keyNavigationEnabled: true
                     boundsBehavior: Flickable.StopAtBounds
                     highlightMoveDuration: 0
@@ -786,6 +809,13 @@ ThemedWindow {
 
                 function onCountChanged() {
                     pdfWindow.showFirstFound()
+                }
+
+                // The list follows the place shown, set rather than bound:
+                // the list sets the place too.
+                function onCurrentResultChanged() {
+                    if (results.currentIndex !== view.searchModel.currentResult)
+                        results.currentIndex = view.searchModel.currentResult
                 }
             }
 

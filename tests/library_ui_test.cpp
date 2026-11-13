@@ -130,6 +130,7 @@ private slots:
     void readsKoboHighlights();
     void readsPdfs();
     void readsPdfsFromTheKeyboard();
+    void readsLooseFiles();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
     void welcomesWithoutLibrary();
@@ -2143,6 +2144,76 @@ void LibraryUiTest::readsPdfsFromTheKeyboard()
     QTRY_VERIFY(item("pdfError")->isVisible());
     QVERIFY(item("pdfError")->property("text").toString().startsWith(QLatin1String("This PDF cannot be read")));
     reader->close();
+#endif
+}
+
+// Files of no library, given on the command line, read as they are: the
+// place kept by Cousoir for the next time, the file added on request; a
+// PDF in the PDF reader.
+void LibraryUiTest::readsLooseFiles()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QTemporaryDir outside;
+    const QString epub = outside.filePath(QStringLiteral("The Voyage.epub"));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), epub));
+    const auto invoke = [this](const QString &file) {
+        const QVariantMap invocation{ { QStringLiteral("files"), QStringList{ file } },
+                                      { QStringLiteral("add"), QStringList() },
+                                      { QStringLiteral("addAsked"), false },
+                                      { QStringLiteral("show"), 0 },
+                                      { QStringLiteral("library"), QString() } };
+        QMetaObject::invokeMethod(m_window, "handleInvocation", Q_ARG(QVariant, invocation), Q_ARG(QVariant, false));
+    };
+    invoke(epub);
+    QQuickWindow *reader = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT((reader = m_window->findChild<QQuickWindow *>(QStringLiteral("readerWindow")))
+                                 && !reader->property("position").toString().isEmpty(),
+                             20000);
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QCOMPARE(bookReader->property("looseFile").toString(), epub);
+    QCOMPARE(bookReader->property("bookId").toInt(), -1);
+    QCOMPARE(bookReader->property("title").toString(), QStringLiteral("The Voyage"));
+    QVERIFY(!object("addFilesDialog") || !object("addFilesDialog")->property("opened").toBool());
+
+    // A place further on, kept for the next time.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 2), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 2
+                                 && !reader->property("position").toString().isEmpty(), 20000);
+    const QString place = reader->property("position").toString();
+    QTest::qWait(500);
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    invoke(epub);
+    QTRY_VERIFY_WITH_TIMEOUT(reader->isVisible() && reader->property("spineIndex").toInt() == 2, 20000);
+    QCOMPARE(bookReader->property("startPosition").toMap().value(QStringLiteral("cfi")).toString(), place);
+
+    // Added to the library on request.
+    makeWritable();
+    QTRY_VERIFY(control("readerAddToLibrary") || visualDescendants(reader->contentItem(), QStringLiteral("readerAddToLibrary")).value(0));
+    QQuickItem *add = visualDescendants(reader->contentItem(), QStringLiteral("readerAddToLibrary")).value(0);
+    QVERIFY(add && add->isVisible());
+    QTest::mouseClick(reader, Qt::LeftButton, {}, add->mapToScene(QPointF(add->width() / 2, add->height() / 2)).toPoint());
+    const auto added = [this] {
+        const QVariantList rows = bookRows();
+        return std::any_of(rows.cbegin(), rows.cend(), [](const QVariant &row) {
+            return row.toMap().value(QStringLiteral("title")).toString() == QLatin1String("The Voyage");
+        });
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(added(), 20000);
+    QTest::qWait(500);
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+
+    // A PDF of no library.
+    const QString pdf = outside.filePath(QStringLiteral("voyage #1.pdf"));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.pdf"), pdf));
+    invoke(pdf);
+    QQuickWindow *pdfReader = nullptr;
+    QTRY_VERIFY((pdfReader = m_window->findChild<QQuickWindow *>(QStringLiteral("pdfReaderWindow"))) && pdfReader->isVisible());
+    QTRY_COMPARE(pdfReader->property("pages").toInt(), 5);
+    pdfReader->close();
 #endif
 }
 

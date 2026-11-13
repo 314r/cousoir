@@ -144,13 +144,14 @@ ThemedWindow {
         pendingInvocation = null
         if (invocation.show > 0)
             openBook(invocation.show)
-        // The library's own files are read; the others offered to add.
+        // The library's own files are read, and those of no library the
+        // reader opens as they are; the others offered to add.
         const outside = []
         for (const file of invocation.files) {
             const bookId = library.bookOfFile(file)
             if (bookId > 0)
                 readBookOf(bookId)
-            else
+            else if (!readFile(file))
                 outside.push(file)
         }
         if (invocation.add.length > 0)
@@ -591,6 +592,25 @@ ThemedWindow {
         const reader = library.readableFormat(bookId) === "PDF" ? null : readerLoader.item
         if (reader && words)
             reader.searchFor(words)
+    }
+
+    // A file of no library read as it is: false when the readers do not
+    // read its format.
+    function readFile(path) {
+        if (!library.readerAvailable)
+            return false
+        const extension = path.split(".").pop().toLowerCase()
+        const pdf = extension === "pdf"
+        if (!pdf && ["epub", "kepub", "azw3", "mobi", "azw"].indexOf(extension) < 0)
+            return false
+        const loader = pdf ? pdfReaderLoader : readerLoader
+        if (!loader.item)
+            loader.setSource(pdf ? "PdfReaderWindow.qml" : "ReaderWindow.qml", { library: window.library })
+        if (loader.item)
+            loader.item.openFile(path)
+        else
+            showNotice(qsTr("The reader cannot be opened."))
+        return true
     }
 
     function readBookOf(bookId) {
@@ -1328,6 +1348,10 @@ ThemedWindow {
 
         function onFailed(message) {
             window.showNotice(message)
+        }
+
+        function onAdded(title) {
+            window.showNotice(qsTr("“%1” is being added to the library.").arg(title), false)
         }
     }
 

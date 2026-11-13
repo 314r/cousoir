@@ -1,4 +1,6 @@
 #include "book_reader.h"
+#include <QStandardPaths>
+#include <QCryptographicHash>
 
 #include <QBuffer>
 #include <QClipboard>
@@ -566,7 +568,7 @@ void BookReader::keepPending(const QString &uuid) const
 void BookReader::flush(bool withPosition)
 {
     m_flushTimer.stop();
-    if (!m_library || m_bookId <= 0)
+    if (!m_library || (m_bookId <= 0 && m_looseFile.isEmpty()))
         return;
     // A Kindle book's highlights and bookmarks are Cousoir's own, kept with
     // its positions: Calibre's viewer would look for them in its own
@@ -893,9 +895,59 @@ QString BookReader::open(int bookId)
         }
         path = made;
     }
+    return openEpub(path, bookId, book->uuid);
+}
+
+QString BookReader::openFile(const QString &file)
+{
+    close();
+    const QFileInfo info(file);
+    if (!info.isFile())
+        return tr("%1 cannot be found.").arg(QDir::toNativeSeparators(file));
+    QFile source(file);
+    if (!source.open(QIODevice::ReadOnly))
+        return tr("Cannot read %1.").arg(QDir::toNativeSeparators(file));
+    // The file known by its start and its size, wherever it is moved: its
+    // place and highlights are Cousoir's own, in a store of no library.
+    QCryptographicHash hash(QCryptographicHash::Sha1);
+    hash.addData(source.read(1 << 20));
+    hash.addData(QByteArray::number(info.size()));
+    const QString key = QStringLiteral("file-") + QString::fromLatin1(hash.result().toHex());
+    m_format = info.suffix().toUpper();
+    QString path = file;
+    if (m_format == QLatin1String("AZW3") || m_format == QLatin1String("MOBI") || m_format == QLatin1String("AZW")) {
+        // Made an EPUB once, kept while the file is the same.
+        const QDir cache(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/loose"));
+        const QString made = cache.filePath(QStringLiteral("%1-cousoir%2.epub").arg(key).arg(MobiBook::version));
+        if (!QFileInfo::exists(made)) {
+            QDir().mkpath(cache.path());
+            const QString part = made + QStringLiteral(".part.epub");
+            QString error;
+            if (!MobiBook::toEpub(file, part, &error) || !QFile::rename(part, made)) {
+                QFile::remove(part);
+                m_format.clear();
+                return error.isEmpty() ? tr("“%1” cannot be read.").arg(info.fileName()) : error;
+            }
+        }
+        path = made;
+    } else if (m_format != QLatin1String("EPUB") && m_format != QLatin1String("KEPUB")) {
+        const QString name = info.fileName();
+        m_format.clear();
+        return tr("Cousoir reads %1 once it is in the library.").arg(name);
+    }
+    m_local = true;
+    m_looseFile = info.absoluteFilePath();
+    return openEpub(path, -1, key);
+}
+
+QString BookReader::openEpub(const QString &path, int bookId, const QString &uuid)
+{
+    QString error;
     std::unique_ptr<EpubBook> opened = EpubBook::open(path, &error);
-    if (!opened)
+    if (!opened) {
+        m_looseFile.clear();
         return error;
+    }
     installHandler();
     // The book's pictures for the window's Image.
     if (QQmlEngine *engine = qmlEngine(this); engine && !engine->imageProvider(QStringLiteral("book")))
@@ -906,8 +958,8 @@ QString BookReader::open(int bookId)
     m_speech->setBook(m_book, m_book->language());
 #endif
     m_bookId = bookId;
-    m_uuid = book->uuid;
-    m_token = QStringLiteral("book-%1").arg(bookId);
+    m_uuid = uuid;
+    m_token = bookId > 0 ? QStringLiteral("book-%1").arg(bookId) : uuid;
     {
         const QMutexLocker locker(&booksLock);
         openBooks.insert(m_token, m_book);
@@ -918,7 +970,8 @@ QString BookReader::open(int bookId)
     const QJsonObject kept = positions.value(m_uuid).toObject();
     // A Kindle book's: Cousoir's alone, Calibre's viewer counting its places
     // in its own conversion.
-    QList<ReadPosition> candidates = m_local ? QList<ReadPosition>() : m_library->data().readPositions.value(bookId);
+    QList<ReadPosition> candidates = m_local || !m_library ? QList<ReadPosition>()
+                                                           : m_library->data().readPositions.value(bookId);
     if (kept.value(QLatin1String("format")).toString() == m_format)
         candidates.append({ m_format, QStringLiteral("local"), QStringLiteral("cousoir"),
                             kept.value(QLatin1String("cfi")).toString(), kept.value(QLatin1String("epoch")).toDouble(),
@@ -1045,6 +1098,7 @@ void BookReader::close()
     m_speech->setBook(nullptr, QString());
 #endif
     m_bookId = 0;
+    m_looseFile.clear();
     m_format.clear();
     m_start.clear();
     emit bookChanged();
@@ -1219,5 +1273,8 @@ void BookReader::writePositions(const QJsonObject &positions) const
 
 QString BookReader::positionsFile() const
 {
+    // A file of no library's: a store of Cousoir's own.
+    if (!m_looseFile.isEmpty())
+        return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/loose-files.json");
     return m_library ? CousoirPaths::positionsFile(m_library->libraryPath()) : QString();
 }

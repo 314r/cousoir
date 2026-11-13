@@ -29,6 +29,8 @@ class BookReader : public QObject
     Q_OBJECT
     Q_PROPERTY(BookLibrary *library READ library WRITE setLibrary NOTIFY libraryChanged)
     Q_PROPERTY(int bookId READ bookId NOTIFY bookChanged)
+    // A file read that is in no library, -1 for its bookId: its path.
+    Q_PROPERTY(QString looseFile READ looseFile NOTIFY bookChanged)
     Q_PROPERTY(QString title READ title NOTIFY bookChanged)
     Q_PROPERTY(QString format READ format NOTIFY bookChanged)
     // The book's language, as its package gives it: "fr", "en-GB".
@@ -124,6 +126,10 @@ public:
     // open, or while Calibre makes it: `preparing` is then true, and
     // prepared() tells when it is done.
     Q_INVOKABLE QString open(int bookId);
+    // Reads a file of no library, an EPUB or a Kindle book: its place and
+    // highlights kept by Cousoir, by the file's start and size.
+    Q_INVOKABLE QString openFile(const QString &file);
+    QString looseFile() const { return m_looseFile; }
     // Opens the book's PDF; startPosition then has its { page }.
     Q_INVOKABLE QString openPdf(int bookId);
     // Keeps the page of a PDF being read.
@@ -187,6 +193,9 @@ signals:
     void prepared(int bookId, const QString &error);
 
 private:
+    // The EPUB at `path` opened as the book `bookId`, -1 for a loose file,
+    // known as `uuid` in the positions kept.
+    QString openEpub(const QString &path, int bookId, const QString &uuid);
     QString positionsFile() const;
     QJsonObject readPositions() const;
     void writePositions(const QJsonObject &positions) const;
@@ -219,6 +228,7 @@ private:
     // A book read through an EPUB Cousoir made of it: its places and
     // highlights kept by Cousoir alone.
     bool m_local = false;
+    QString m_looseFile;
     // The conversion running, if any, and its book.
     QPointer<QProcess> m_conversion;
     QString m_preparingPart;
