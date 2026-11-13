@@ -10,7 +10,7 @@ url='https://github.com/314r/cousoir'
 license=('GPL-3.0-only')
 depends=('qt6-base' 'qt6-declarative' 'qt6-svg' 'qt6-wayland' 'qt6-webengine' 'qt6-speech'
          'sqlite' 'libzip' 'icu' 'libstemmer' 'xxhash' 'libmtp')
-makedepends=('cmake' 'gcc' 'make')
+makedepends=('cmake' 'gcc' 'make' 'qt6-shadertools')
 optdepends=('calibre: conversions from other formats, its metadata sources and device drivers'
             'xdg-desktop-portal: the desktop file chooser'
             'speech-dispatcher: voices to read books aloud')

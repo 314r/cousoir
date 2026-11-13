@@ -129,6 +129,7 @@ private slots:
     void placesKoboHighlightsAsTheReader();
     void readsKoboHighlights();
     void readsPdfs();
+    void readsPdfsFromTheKeyboard();
     void usesOmarchyColorsByDefault();
     void missingLibraryShowsError();
     void welcomesWithoutLibrary();
@@ -1995,6 +1996,115 @@ void LibraryUiTest::readsPdfs()
     QCOMPARE(reader->title(), QStringLiteral("Manuel technique"));
     reader->close();
     QTRY_VERIFY(!reader->isVisible());
+#endif
+}
+
+// A PDF with an outline: its entries go to their pages, Ctrl+G to a page
+// by its number, Ctrl+F finds a word and F3 goes on; the pages in the
+// theme's colours; the zoom set kept for the next PDF; one that cannot be
+// read says so in the window.
+void LibraryUiTest::readsPdfsFromTheKeyboard()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    const QString pdf = QDir(m_libraryPath)
+                            .filePath(QStringLiteral("Jean-Pierre Dupont/Manuel technique (5)/Manuel technique - Jean-Pierre Dupont.pdf"));
+    QVERIFY(QFile::remove(pdf));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.pdf"), pdf));
+    library()->setProperty("currentBookId", 5);
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QQuickWindow *reader = nullptr;
+    QTRY_VERIFY((reader = m_window->findChild<QQuickWindow *>(QStringLiteral("pdfReaderWindow"))) && reader->isVisible());
+    QTRY_COMPARE(reader->property("pages").toInt(), 5);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    const auto item = [reader](const char *name) {
+        QQuickItem *found = reader->findChild<QQuickItem *>(QString::fromLatin1(name));
+        return found ? found : visualDescendants(reader->contentItem(), QString::fromLatin1(name)).value(0);
+    };
+    QQuickItem *view = item("pdfView");
+    QVERIFY(view);
+    const auto page = [view] { return view->property("currentPage").toInt(); };
+    QTRY_COMPARE(page(), 0);
+
+    // The outline, its sections under their chapters.
+    QTest::keyClick(reader, Qt::Key_T);
+    QTRY_VERIFY(item("pdfSidebar")->isVisible());
+    QQuickItem *outline = item("pdfOutline");
+    QTRY_COMPARE(outline->property("rows").toInt(), 5);
+    QTRY_VERIFY(item("pdfOutlineEntry3"));
+    QCOMPARE(item("pdfOutlineEntry3")->property("title").toString(), QStringLiteral("Storm"));
+    QMetaObject::invokeMethod(reader, "openEntry", Q_ARG(QVariant, 3));
+    QTRY_COMPARE(page(), 3);
+    QTest::keyClick(reader, Qt::Key_End);
+    QTRY_COMPARE(page(), 4);
+
+    // Ctrl+G, then a page's number.
+    QTest::keySequence(reader, QKeySequence(QStringLiteral("Ctrl+G")));
+    QObject *goTo = reader->findChild<QObject *>(QStringLiteral("pdfGoTo"));
+    QTRY_VERIFY(goTo && goTo->property("opened").toBool());
+    QTRY_VERIFY(item("pdfGoToField") && item("pdfGoToField")->hasActiveFocus());
+    QTest::keySequence(reader, QKeySequence(QKeySequence::SelectAll));
+    QTest::keyClick(reader, '2');
+    QTest::keyClick(reader, Qt::Key_Return);
+    QTRY_VERIFY(!goTo->property("opened").toBool());
+    QTRY_COMPARE(page(), 1);
+
+    // Ctrl+F: a word, and its page.
+    QTest::keySequence(reader, QKeySequence(QKeySequence::Find));
+    QTRY_VERIFY(item("pdfSearchField")->hasActiveFocus());
+    for (const char character : QByteArray("lighthouse"))
+        QTest::keyClick(reader, character);
+    QTRY_COMPARE(item("pdfSearchStatus")->property("text").toString(), QStringLiteral("1 of 1 place"));
+    QTRY_COMPARE(page(), 3);
+    QTest::keySequence(reader, QKeySequence(QKeySequence::SelectAll));
+    for (const char character : QByteArray("orchard"))
+        QTest::keyClick(reader, character);
+    QTRY_VERIFY(item("pdfSearchStatus")->property("text").toString().endsWith(QLatin1String(" places")));
+    QObject *results = view->property("searchModel").value<QObject *>();
+    QVERIFY(results->property("count").toInt() > 1);
+    const int first = results->property("currentResult").toInt();
+    QTest::keyClick(reader, Qt::Key_F3);
+    QTRY_COMPARE(results->property("currentResult").toInt(), first + 1);
+
+    // Esc: back to the pages, the reader still open.
+    QTest::keyClick(reader, Qt::Key_Escape);
+    QTRY_VERIFY(!item("pdfSearchField")->hasActiveFocus());
+    QVERIFY(reader->isVisible());
+
+    // The pages in the theme's colours, drawn; not offered by Qt Quick's
+    // software renderer, which the tests use, as it runs no shaders.
+    if (reader->property("canTheme").toBool()) {
+        QTest::keyClick(reader, Qt::Key_I);
+        QTRY_VERIFY(item("pdfThemedPages")->property("selected").toBool());
+        QVERIFY(!reader->grabWindow().isNull());
+        QTest::keyClick(reader, Qt::Key_I);
+        QTRY_VERIFY(!item("pdfThemedPages")->property("selected").toBool());
+    } else {
+        QVERIFY(!item("pdfThemedPages")->isVisible());
+    }
+
+    // A zoom set is kept for the next time.
+    QTest::keySequence(reader, QKeySequence(QKeySequence::ZoomIn));
+    const qreal scale = view->property("renderScale").toReal();
+    QVERIFY(!item("pdfFitWidth")->property("selected").toBool());
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(reader->isVisible());
+    QTRY_COMPARE(reader->property("pages").toInt(), 5);
+    QTRY_COMPARE(view->property("renderScale").toReal(), scale);
+    reader->close();
+    QTRY_VERIFY(!reader->isVisible());
+
+    // A PDF that cannot be read says so in the window.
+    QVERIFY(writeAll(pdf, "%PDF-1.4 not really"));
+    QMetaObject::invokeMethod(m_window, "readBook");
+    QTRY_VERIFY(reader->isVisible());
+    QTRY_VERIFY(item("pdfError")->isVisible());
+    QVERIFY(item("pdfError")->property("text").toString().startsWith(QLatin1String("This PDF cannot be read")));
+    reader->close();
 #endif
 }
 

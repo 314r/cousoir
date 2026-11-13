@@ -214,5 +214,9 @@
   "%n books updated from the web; Undo puts them back.": {
     "one": "%n book updated from the web; Undo puts it back.",
     "other": "%n books updated from the web; Undo puts them back."
+  },
+  "%1 of %n places": {
+    "one": "%1 of %n place",
+    "other": "%1 of %n places"
   }
 }

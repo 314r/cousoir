@@ -1059,7 +1059,21 @@ pen, removed with the bin; a bookmark renamed is written removed under its
 old title and added under the new one, as the library keeps them by title.
 
 A PDF shows a page after the other, fitted to the window's width or to the
-whole page, its page kept.
+whole page, or zoomed with Ctrl++ and Ctrl+-; the zoom stays as it was left
+for the next PDF, and a fit follows the window's size. Its page is kept.
+T shows its outline beside the pages, its sections under their chapters,
+each with its page; Ctrl+F searches its text, the places found listed with
+the words around them, the first from the page read on shown, F3 and
+Shift+F3 to the next and the previous. Ctrl+G goes to a page by its number,
+the page number in the toolbar too; Home and End to the first and the last;
+Alt+← and Alt+→ back where a link or a jump came from, and forward again.
+I, or the moon in the toolbar, shows the pages in the theme's colours: white
+paper as the theme's background and black ink as its text, pictures keeping
+their colours around that, which with a dark theme makes dark pages (not
+offered where Qt Quick draws without a graphics card, as it then runs no
+shaders). F11 is full screen; Esc takes the keys back to the pages, then
+leaves full screen, then closes the book. A PDF that cannot be read says
+why in the window.
 
 R, or the speaker in the toolbar, reads the book aloud from the page shown,
 a sentence after the other, through the chapters to the end, with the
@@ -1489,8 +1503,8 @@ neither in the library nor on the Kobo.
 - xxHash, for the names Calibre gives the notes it keeps aside
 - For adding PDF files, Calibre or poppler's `pdfinfo` and `pdftoppm`; for
   formats other than EPUB, KEPUB, MOBI, AZW, AZW3, PRC and PDF, Calibre
-- For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs; built
-  without them, Cousoir has no reader
+- For reading books in Cousoir, Qt WebEngine, and Qt Pdf for PDFs, with Qt
+  Shader Tools to build it; built without them, Cousoir has no reader
 - For reading them aloud, Qt TextToSpeech, and a speech engine such as
   speech-dispatcher with a voice
 - For converting from formats other than EPUB and Kindle books, Calibre

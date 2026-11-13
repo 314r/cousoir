@@ -540,7 +540,6 @@
   "Open Library cannot be reached: %1": "Open Library est injoignable : %1",
   "Some covers could not be downloaded: %1": "Certaines couvertures n’ont pas pu être téléchargées : %1",
   "Reader": "Lecteur",
-  "This PDF cannot be read.": "Impossible de lire ce PDF.",
   "Page %1 of %2": "Page %1 sur %2",
   "Width": "Largeur",
   "Fit the page's width": "Ajuster à la largeur de la page",
@@ -1219,5 +1218,25 @@
   "%n books updated from the web; Undo puts them back.": {
     "one": "%n livre mis à jour depuis le web ; Annuler le remet comme avant.",
     "other": "%n livres mis à jour depuis le web ; Annuler les remet comme avant."
-  }
+  },
+  "This PDF cannot be read: %1": "Impossible de lire ce PDF : %1",
+  "unknown error": "erreur inconnue",
+  "Go to the first or the last page": "Aller à la première ou à la dernière page",
+  "Show or hide the outline": "Afficher ou masquer le sommaire",
+  "Go to a page": "Aller à une page",
+  "Pages in the theme's colours, or as printed": "Pages aux couleurs du thème, ou telles qu’imprimées",
+  "Outline and search (T)": "Sommaire et recherche (T)",
+  "Go to a page (Ctrl+G)": "Aller à une page (Ctrl+G)",
+  "Fit the page's width (Ctrl+0)": "Ajuster à la largeur de la page (Ctrl+0)",
+  "Pages in the theme's colours (I)": "Pages aux couleurs du thème (I)",
+  "Outline": "Sommaire",
+  "This PDF has no outline.": "Ce PDF n’a pas de sommaire.",
+  "%1 of %n places": {
+    "one": "%1 sur %n endroit",
+    "other": "%1 sur %n endroits"
+  },
+  "Places found": "Endroits trouvés",
+  "Go to page, of %1": "Aller à la page, sur %1",
+  "Go to page": "Aller à la page",
+  "Back to the pages, leave full screen, then close the book": "Retour aux pages, quitter le plein écran, puis fermer le livre"
 }
