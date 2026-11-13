@@ -31,8 +31,9 @@ struct Settings
     // another value, like the uuid a conversion's OPF has there.
     QString applicationId;
     // Whether the guide names the cover: a metadata.opf always does, the OPF
-    // a conversion reads never.
+    // a conversion reads never; and the file it names.
     bool coverReference = true;
+    QString coverHref = QStringLiteral("cover.jpg");
 };
 
 // The dates of a book as Calibre holds them in memory, to the microsecond,

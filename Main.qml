@@ -628,6 +628,9 @@ ThemedWindow {
                 commands.push({ kind: "action", key: key, title: title, detail: detail || "", icon: icon || "search" })
         }
         add("add", qsTr("Add books…"), "Ctrl+N", "plus", library.writable && !library.importing)
+        add("newLibrary", qsTr("New library…"), "", "folder", true)
+        add("saveToDisk", books > 1 ? qsTr("Save %n books to disk…", "", books) : qsTr("Save to disk…"), "", "folder",
+            books > 0 && library.loaded)
         add("read", qsTr("Read in Cousoir"), "Ctrl+Shift+O", "book", currentBookId() > 0 && library.readerAvailable)
         add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
         add("download", !session.bookOpen && books > 1 ? qsTr("Download metadata for %n books", "", books)
@@ -717,6 +720,10 @@ ThemedWindow {
             booksPage.focusList()
         } else if (hit.key === "add") {
             addBooksDialog.open()
+        } else if (hit.key === "newLibrary") {
+            newLibraryDialog.open()
+        } else if (hit.key === "saveToDisk") {
+            saveToDisk(targetIds())
         } else if (hit.key === "read") {
             readBook()
         } else if (hit.key === "reader") {
@@ -1417,6 +1424,61 @@ ThemedWindow {
         nameFilters: [qsTr("Books (*.epub *.kepub *.azw3 *.azw *.mobi *.prc *.pdf *.fb2 *.cbz *.cbr *.djvu *.docx *.rtf *.txt)"),
                       qsTr("All files (*)")]
         onAccepted: function(files) { window.addBooks(files) }
+        onFailed: function(message) { window.showNotice(message) }
+    }
+
+    // The books to save to disk, while their folder is picked.
+    property var savingIds: []
+
+    function saveToDisk(bookIds) {
+        if (bookIds.length === 0)
+            return
+        window.savingIds = bookIds
+        saveToDiskDialog.open()
+    }
+
+    LibraryFolderDialog {
+        id: saveToDiskDialog
+        objectName: "saveToDiskDialog"
+
+        title: qsTr("Choose a folder to save the books in")
+        libraryPath: ""
+        onChosen: function(path) {
+            const error = window.library.saveToDisk(window.savingIds, path)
+            if (error)
+                window.showNotice(error)
+        }
+        onFailed: function(message) { window.showNotice(message) }
+    }
+
+    Connections {
+        target: window.library
+
+        function onSavedToDisk(saved, failures, folder) {
+            if (failures.length === 0)
+                window.showNotice(qsTr("%n books saved to disk in %1.", "", saved).arg(folder), false, true)
+            else
+                window.showNotice(qsTr("%n books could not be saved to disk; the first: %1", "", failures.length)
+                                  .arg(failures[0]))
+        }
+    }
+
+    // A new library, in an empty folder, opened once made.
+    LibraryFolderDialog {
+        id: newLibraryDialog
+        objectName: "newLibraryDialog"
+
+        title: qsTr("Choose an empty folder for the new library")
+        libraryPath: ""
+        onChosen: function(path) {
+            const error = window.library.createLibrary(path)
+            if (error) {
+                window.showNotice(error)
+                return
+            }
+            librarySettings.path = path
+            window.showNotice(qsTr("A new library was made in %1.").arg(path), false)
+        }
         onFailed: function(message) { window.showNotice(message) }
     }
 
@@ -2229,6 +2291,8 @@ ThemedWindow {
                         onDownloadRequested: function(bookIds) { bulkDownloadDialog.start(bookIds) }
                         onReloadRequested: session.reload()
                         onLibraryFolderRequested: libraryFolderDialog.open()
+                        onNewLibraryRequested: newLibraryDialog.open()
+                        onSaveRequested: function(bookIds) { window.saveToDisk(bookIds) }
                         onFailed: function(message) { window.showNotice(message) }
                     }
 

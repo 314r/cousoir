@@ -51,7 +51,7 @@ QString shortenComponent(const QString &part, qsizetype by)
 
 // shorten_components_to(): the parts of a path shortened in proportion
 // until it is `length` long.
-QStringList shortenComponentsTo(qsizetype length, QStringList components, bool lastHasExtension)
+QStringList shortenParts(qsizetype length, QStringList components, bool lastHasExtension)
 {
     for (QString &component : components)
         component = limitComponent(component);
@@ -84,6 +84,11 @@ QStringList shortenComponentsTo(qsizetype length, QStringList components, bool l
 
 } // namespace
 
+QStringList shortenComponentsTo(qsizetype length, QStringList components, bool lastHasExtension)
+{
+    return shortenParts(length, std::move(components), lastHasExtension);
+}
+
 QString sendFormat(const Book &book, const QStringList &formatMap, QString *file)
 {
     QStringList formats;
@@ -101,8 +106,8 @@ QString sendFormat(const Book &book, const QStringList &formatMap, QString *file
     return format;
 }
 
-QString uploadPath(const LibraryData &data, const Book &book, const QString &extension, const UploadOptions &options,
-                   const QString &interfaceLanguage)
+QString componentText(const LibraryData &data, const Book &book, const QString &templateText,
+                      const QString &interfaceLanguage)
 {
     // get_component_metadata(): the title by its sort, the series sorted as
     // a title, and no "/" in a value, which would make a folder.
@@ -122,7 +127,13 @@ QString uploadPath(const LibraryData &data, const Book &book, const QString &ext
     values.tags = tags;
     const CalibreTemplate::Library library(data, interfaceLanguage);
     QString error;
-    const QString formatted = CalibreTemplate::evaluate(options.saveTemplate, library, values, &error);
+    return CalibreTemplate::evaluate(templateText, library, values, &error);
+}
+
+QString uploadPath(const LibraryData &data, const Book &book, const QString &extension, const UploadOptions &options,
+                   const QString &interfaceLanguage)
+{
+    const QString formatted = componentText(data, book, options.saveTemplate, interfaceLanguage);
     const QString appId = QString::number(book.id);
     QStringList components;
     for (const QString &part : formatted.split(u'/')) {
@@ -133,7 +144,7 @@ QString uploadPath(const LibraryData &data, const Book &book, const QString &ext
     components.removeAll(QString());
     if (components.isEmpty())
         components.append(appId);
-    components = shortenComponentsTo(options.maxLength - appId.size() - 1, components, false);
+    components = shortenParts(options.maxLength - appId.size() - 1, components, false);
     components.last() = CalibreText::asciiFilename(components.last() + options.nameSuffix + extension);
     if (components.last().startsWith(u'.') || components.last().startsWith(u'_'))
         components.last() = u'x' + components.last().mid(1);
@@ -146,7 +157,7 @@ QString uploadPath(const LibraryData &data, const Book &book, const QString &ext
         if (component.isEmpty())
             component = QStringLiteral("x");
     }
-    components = shortenComponentsTo(options.maxLength - options.prefix.size(), components, true);
+    components = shortenParts(options.maxLength - options.prefix.size(), components, true);
     if (options.sanitizeComponents)
         options.sanitizeComponents(&components);
     return components.join(u'/');

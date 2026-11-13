@@ -95,6 +95,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   and notes typeset as a page by chapter, as kbextract2 shows them, found
   by their words or their colour, and copied or saved as Markdown, Obsidian
   Markdown or plain text, a book or all of them.
+- 🗂️ **No Calibre needed to start.** Make a new library in an empty folder,
+  exactly as Calibre makes one, so Calibre opens it later as its own; save
+  books out of it to disk the way Calibre's Save to disk does.
 - 📚 **Search inside every book.** Cousoir indexes the text of your EPUBs,
   Kindle books and PDFs into the same index Calibre's full text search
   keeps, and searches the whole library: the books that have your words,

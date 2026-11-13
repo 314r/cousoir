@@ -602,6 +602,74 @@ JSON
 
 text_index
 
+# A new library made by cousoir-cli, without Calibre, and a book added to
+# it: Calibre finds its database the same as one it makes, lists the book
+# and adds another (tools/oracle/new_library_check.py); then both list it
+# alike.
+new_library() {
+    local library="$work/new-library"
+    rm -rf "$library"
+    mkdir -p "$work/new-ops"
+    cp "$root/tests/data/import/Le Vicomte - Inconnu.epub" "$work/new-ops/book.epub"
+    echo '[{"add": ["book.epub"]}]' > "$work/new-ops/ops.json"
+    if ! "$cli" new-library "$library" > "$work/new.log" 2>&1 \
+        || ! "$cli" apply --force --library "$library" "$work/new-ops/ops.json" >> "$work/new.log" 2>&1; then
+        echo "new library: cousoir-cli failed:"
+        tail -5 "$work/new.log"
+        status=1
+        return 0
+    fi
+    if oracle "$root/tools/oracle/new_library_check.py" -- "$library" "$root/tests/data" > "$work/new-check.txt"; then
+        echo "new library: Calibre opens the library Cousoir made as one of its own"
+    else
+        echo "new library: Calibre and Cousoir's new libraries differ:"
+        cat "$work/new-check.txt"
+        status=1
+    fi
+    compare new "$library"
+}
+
+new_library
+
+# Books saved to disk by Calibre (calibredb export, the metadata inside the
+# files left as Cousoir leaves it) and by cousoir-cli export, from copies of
+# the fixture library: the same folders and files, the OPFs alike but for
+# the software that wrote them.
+save_to_disk() {
+    local library="$work/save-library"
+    rm -rf "$library" "$work/save-calibre" "$work/save-cousoir"
+    cp -a --reflink=auto "$root/tests/data/library" "$library"
+    # A book without files is saved by neither, and both say so with their
+    # exit status.
+    calibredb export --with-library "$library" --all --dont-asciiize --dont-update-metadata \
+        --to-dir "$work/save-calibre" > "$work/save.log" 2>&1 || true
+    "$cli" export --library "$library" "$work/save-cousoir" all >> "$work/save.log" 2>&1 || true
+    local differ=0
+    if ! diff <(cd "$work/save-calibre" && find . -type f | sort) <(cd "$work/save-cousoir" && find . -type f | sort); then
+        differ=1
+    else
+        while IFS= read -r -d '' file; do
+            case "$file" in
+            *.opf)
+                diff -u <(grep -v 'role="bkp"' "$work/save-calibre/$file") \
+                    <(grep -v 'role="bkp"' "$work/save-cousoir/$file") || differ=1
+                ;;
+            *)
+                cmp "$work/save-calibre/$file" "$work/save-cousoir/$file" || differ=1
+                ;;
+            esac
+        done < <(cd "$work/save-calibre" && find . -type f -print0)
+    fi
+    if [ $differ = 0 ]; then
+        echo "save to disk: Calibre and Cousoir save the same files ($(find "$work/save-cousoir" -type f | wc -l))"
+    else
+        echo "save to disk: Calibre and Cousoir save different files"
+        status=1
+    fi
+}
+
+save_to_disk
+
 # A Kobo's highlights of The Voyage, synced into a copy of the library by
 # cousoir-cli: Calibre lists, searches and changes them, and a second sync
 # leaves what it changed.

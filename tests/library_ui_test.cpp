@@ -150,6 +150,8 @@ private slots:
     void searchesAndSavesHighlights();
     void searchesTheBooksText();
     void continuesReading();
+    void makesNewLibraries();
+    void savesToDisk();
     void renamesItems();
     void editsCustomColumns();
     void changesCovers();
@@ -2201,7 +2203,8 @@ void LibraryUiTest::welcomesWithoutLibrary()
     QTRY_COMPARE_WITH_TIMEOUT(text("emptyTitle"), QStringLiteral("Welcome to Cousoir"), 10000);
     QVERIFY(text("emptyMessage").contains(QStringLiteral("metadata.db")));
     QVERIFY(control("chooseLibraryButton")->isVisible());
-    QCOMPARE(control("chooseLibraryButton")->property("variant").toString(), QStringLiteral("primary"));
+    // Making a library is the way forward without Calibre's.
+    QCOMPARE(control("newLibraryButton")->property("variant").toString(), QStringLiteral("primary"));
     QVERIFY(control("reloadButton")->isVisible());
 
     // Calibre's welcome wizard made a library meanwhile: Reload finds it.
@@ -2561,6 +2564,52 @@ void LibraryUiTest::continuesReading()
     QCOMPARE(bookRows().first().toMap().value(QStringLiteral("progress")).toString(), QStringLiteral("100%"));
     QCOMPARE(bookRows().at(1).toMap().value(QStringLiteral("progress")).toString(), QStringLiteral("45%"));
     QVERIFY(!bookRows().first().toMap().value(QStringLiteral("last_read")).toString().isEmpty());
+}
+
+// A new library, in a folder picked, made and opened; a folder not empty
+// refused, the library open staying.
+void LibraryUiTest::makesNewLibraries()
+{
+    QObject *dialog = object("newLibraryDialog");
+    QVERIFY(dialog);
+    QMetaObject::invokeMethod(dialog, "chosen", Q_ARG(QString, m_libraryPath));
+    QTRY_VERIFY(text("keyHints").contains(QLatin1String("is not empty")));
+    QCOMPARE(library()->property("libraryPath").toString(), m_libraryPath);
+
+    const QString folder = m_libraryDir->filePath(QStringLiteral("Nouvelle bibliothèque"));
+    QMetaObject::invokeMethod(dialog, "chosen", Q_ARG(QString, folder));
+    QTRY_COMPARE(library()->property("libraryPath").toString(), folder);
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    QVERIFY(QFileInfo::exists(QDir(folder).filePath(QStringLiteral("metadata.db"))));
+    QCOMPARE(bookRows().size(), 0);
+    QTRY_COMPARE(text("keyHints"), QStringLiteral("A new library was made in %1.").arg(folder));
+    QCOMPARE(text("emptyTitle"), QStringLiteral("No books yet"));
+}
+
+// Books saved out of the library in a folder picked, as Calibre's Save to
+// disk saves them: their files, cover and OPF under the author and the
+// title; a book without files said not saved.
+void LibraryUiTest::savesToDisk()
+{
+    QTemporaryDir folder;
+    const QVariant two = QVariantList{ 2, 1 };
+    QMetaObject::invokeMethod(m_window, "saveToDisk", Q_ARG(QVariant, two));
+    QObject *dialog = object("saveToDiskDialog");
+    QVERIFY(dialog);
+    QMetaObject::invokeMethod(dialog, "chosen", Q_ARG(QString, folder.path()));
+    QTRY_COMPARE_WITH_TIMEOUT(text("keyHints"), QStringLiteral("2 books saved to disk in %1.").arg(folder.path()), 15000);
+    const QDir black(folder.filePath(QStringLiteral("Cook, Glen/Black Company, The")));
+    for (const char *extension : { "epub", "azw3", "jpg", "opf" })
+        QVERIFY2(QFileInfo::exists(black.filePath(QStringLiteral("Black Company, The - Glen Cook.%1").arg(QLatin1String(extension)))),
+                 extension);
+    QVERIFY(QFileInfo::exists(folder.filePath(QStringLiteral("Vian, Boris/Écume des jours, L'/Écume des jours, L' - Boris Vian.epub"))));
+
+    // Le Petit Prince has no file.
+    const QVariant prince = QVariantList{ 6 };
+    QMetaObject::invokeMethod(m_window, "saveToDisk", Q_ARG(QVariant, prince));
+    QMetaObject::invokeMethod(dialog, "chosen", Q_ARG(QString, folder.path()));
+    QTRY_VERIFY_WITH_TIMEOUT(text("keyHints").startsWith(QStringLiteral("1 book could not be saved to disk; the first: Le Petit Prince")),
+                             15000);
 }
 
 // The books' text, in the index Calibre keeps of it: without one, the page

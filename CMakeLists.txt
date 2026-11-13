@@ -152,6 +152,10 @@ qt_add_library(cousoir_core STATIC
     metadata_download.cpp
     metadata_download.h
     mobi_book.cpp
+    new_library.cpp
+    new_library.h
+    save_to_disk.cpp
+    save_to_disk.h
     mobi_book.h
     mobi_format.cpp
     mobi_format.h
@@ -205,7 +209,7 @@ target_include_directories(cousoir_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 qt_add_resources(cousoir_core "core_resources"
     PREFIX "/cousoir"
     BASE assets
-    FILES assets/kobo/kobo.js
+    FILES assets/kobo/kobo.js assets/calibre/new_library.sql
 )
 target_link_libraries(cousoir_core
     PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Xml libzip::zip ${COUSOIR_SQLITE} ${COUSOIR_MTP}

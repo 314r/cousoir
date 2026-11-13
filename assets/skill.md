@@ -27,6 +27,10 @@ cousoir-cli kobo-highlights /run/media/$USER/KOBOeReader   # a Kobo's highlights
 cousoir-cli search-text --json 'jazz AND cocktail'   # books whose text has the words: id, format, passage
 ```
 
+`cousoir-cli new-library FOLDER` makes an empty library as Calibre makes one;
+`cousoir-cli export FOLDER 12 15` (or `all`) saves books to disk as Calibre's
+Save to disk does.
+
 `search-text` reads Calibre's full text index; `cousoir-cli index-text`
 makes it and indexes the books (it writes, so the rules of `apply` hold).
 

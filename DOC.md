@@ -42,6 +42,14 @@ cousoir --library PATH      # opens that library
 cousoir --show ID           # shows the library's book of that id
 ```
 
+**A new library.** Without Calibre, or for a library of its own, "New
+library…" on the welcome screen or in Ctrl+K makes one in an empty folder
+picked, and opens it: its metadata.db as Calibre 9.17 makes one, written
+from Calibre's own by `tools/oracle/new_library_sql.py`, with a library id
+of its own. Calibre opens it as one of its own, adding its notes folder
+then; the golden test has Calibre check it against a library it makes, list
+the book Cousoir added and add another.
+
 The desktop entry declares EPUB, MOBI and AZW3 files, so a file manager
 offers Cousoir for them, and has an "Add books" action. A Cousoir that does
 not answer within a few seconds is reported, never doubled. On Hyprland the
@@ -429,6 +437,19 @@ list's order, or after the series' last book, as Calibre's numbering does;
 the rating, publisher, languages and publication date replace each book's.
 Apply saves it all in one change; Undo puts the books back as they were
 before it, in the fields it could change.
+
+## Saving to disk
+
+"Save to disk…" in a book's menu, or in Ctrl+K for the books selected,
+copies them out of the library into a folder picked, as Calibre's Save to
+disk does, with Calibre's options for it (Preferences > Saving books to
+disk): each book's files under the path its template makes, by default
+`{author_sort}/{title}/{title} - {authors}`, the cover as a `.jpg` and its
+metadata as an `.opf` beside them; names cleaned as Calibre cleans them,
+or made ASCII when Calibre is set to. A book without the formats asked for
+is said not saved. The golden test compares what Calibre and Cousoir save of
+the fixture library, file by file. Unlike Calibre, Cousoir copies the files
+as they are: it does not write the library's metadata into them.
 
 ## Adding and removing books
 
@@ -1320,10 +1341,17 @@ cousoir-cli kepubify BOOK.epub BOOK.kepub
 cousoir-cli azw3 BOOK.epub BOOK.azw3
 cousoir-cli epub BOOK.azw3 BOOK.epub
 cousoir-cli kobo-highlights [--library PATH] KOBO|KoboReader.sqlite
+cousoir-cli new-library FOLDER
+cousoir-cli export [--library PATH] FOLDER ID…|all
 cousoir-cli index-text [--library PATH] [--force] [--json]
 cousoir-cli search-text [--library PATH] [--limit N] [--json] WORDS…
 cousoir-cli skill [install]
 ```
+
+`new-library` makes a new, empty library in a folder, empty or not there
+yet, as the welcome screen does (see [Starting Cousoir](#starting-cousoir)).
+`export` saves books out of the library as "Save to disk…" does (see
+[Saving to disk](#saving-to-disk)), and exits with 1 when one could not be.
 
 `index-text` indexes the books' text into Calibre's full text index, as
 the Books' text page does (see [Searching the books' text](#searching-the-books-text)):
