@@ -89,6 +89,15 @@ Rectangle {
             page.failed(error)
     }
 
+    // The details' first field takes the focus, for F6.
+    readonly property Item detailsPane: details
+
+    function focusDetails() {
+        const first = details.nextItemInFocusChain(true)
+        if (first)
+            first.forceActiveFocus(Qt.TabFocusReason)
+    }
+
     function finishEditing() {
         details.finishEditing()
         if (page.editingDescription)

@@ -874,7 +874,11 @@ An EPUB shows a screen at a time: the arrows, Space, Page Up and Page
 Down, the wheel or a click on either side of the page turn the pages, Home
 and End go to the ends of the chapter, the next and previous chapters
 follow: the next one is made ready while the last pages of one are read, so
-that its first page shows at once, with no blank between. T shows the table of contents beside the pages, the section being
+that its first page shows at once, with no blank between. Ctrl+Page Down and
+Ctrl+Page Up go to the next and the previous chapter, and Ctrl+G to a place
+by how far into the book it is, in %. The letters that act on the page (T,
+H, N, L, R) are read by their key, so they work whatever the keyboard's
+layout. T shows the table of contents beside the pages, the section being
 read in bold. Links within the book go to their page; others open in the
 browser. F11 reads full screen, the toolbar showing with the mouse at the
 top of the screen or after a click in the middle of the page. Esc leaves
@@ -985,7 +989,8 @@ with the Kobo's name (see [Kobo](#kobo)).
 A highlight clicked brings the same bar: its colour changed, its note
 written or changed (N), its text copied, or the highlight removed (Del),
 which Cousoir writes as the viewer does, as whose it was, so that the
-programs that have it forget it too and a Kobo does not bring it back. A
+programs that have it forget it too and a Kobo does not bring it back;
+Ctrl+Z puts the one removed last back, with its colour and its note. A
 note is written in a box over the page, saved with Ctrl+Enter or Save; a
 highlight with a note has a dotted line under it. The highlights button
 beside Contents lists the book's highlights in its order, under their
@@ -1389,7 +1394,7 @@ neither in the library nor on the Kobo.
 | Ctrl+G | Show the books as covers or as a table |
 | Esc, Alt+Left | Back up one level |
 | Ctrl+F | Search |
-| Ctrl+K | Find a book, author, series, tag, publisher, section or action by a few letters |
+| Ctrl+K | Find a book, author, series, tag, publisher, section or action by a few letters; and sort the list, or show or hide a column, by "sort", "show" or "hide" |
 | F5, Ctrl+R | Reload the library, or read the reader again |
 | Ctrl+I | Show or hide the book details pane, or the pane editing several books |
 | Enter, Tab, Esc | Save, save and move on, or revert a field |
@@ -1402,6 +1407,7 @@ neither in the library nor on the Kobo.
 | Ctrl+U | Show the book's highlights as Markdown, or as a page again, in Highlights |
 | Ctrl+Z | Undo the last change to several books, or every change to the open book, asked first; a field's own typing while editing it |
 | Ctrl++, Ctrl+-, Ctrl+0 | Text size |
+| F6, Shift+F6 | Move between the sidebar, the list or the book, and the book's details |
 | ? | Show or hide every shortcut of the window, the reader's in the reader |
 | Q, Ctrl+Q | Quit, asked first while books are being converted, sent or added |
 

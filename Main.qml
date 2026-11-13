@@ -209,6 +209,31 @@ ThemedWindow {
         searchField.selectAll()
     }
 
+    // The areas F6 goes round, the focus moving to the next one: the
+    // sidebar, the list or the book, the details beside a book.
+    function cycleFocus(step) {
+        const areas = ["sidebar", "main"]
+        if (session.bookOpen && detailsVisible)
+            areas.push("details")
+        const inside = container => {
+            for (let item = window.activeFocusItem; item; item = item.parent) {
+                if (item === container)
+                    return true
+            }
+            return false
+        }
+        const at = inside(sidebar) ? 0 : areas.length === 3 && inside(bookPage.detailsPane) ? 2 : 1
+        const next = areas[(at + step + areas.length) % areas.length]
+        if (next === "sidebar")
+            sidebar.focusCurrent()
+        else if (next === "details")
+            bookPage.focusDetails()
+        else if (session.bookOpen)
+            bookPage.forceActiveFocus(Qt.TabFocusReason)
+        else
+            focusCurrentList()
+    }
+
     function focusCurrentList() {
         if (facetShown)
             facetPage.focusList(0)
@@ -453,6 +478,7 @@ ThemedWindow {
                 row("Ctrl+I", qsTr("Show or hide the details pane")),
                 row("F5, Ctrl+R", qsTr("Reload the library, or read the reader again")),
                 row("Ctrl++, Ctrl+-, Ctrl+0", qsTr("Text size")),
+                row("F6, Shift+F6", qsTr("Move between the sidebar, the list and the details")),
                 row("?", qsTr("Show or hide these shortcuts")),
                 row("Q, Ctrl+Q", qsTr("Quit"))
             ] },
@@ -602,6 +628,22 @@ ThemedWindow {
         add("reload", qsTr("Reload the library"), "Ctrl+R", "refresh", true)
         add("settings", qsTr("Settings"), "", "settings", true)
         add("shortcuts", qsTr("Keyboard shortcuts"), "?", "info", true)
+        // The list's sort and columns, as a header's click and menu make
+        // them.
+        if (booksShown) {
+            for (const column of library.availableColumns) {
+                add("sort:" + column.key, qsTr("Sort by “%1”").arg(column.title),
+                    library.sortOption === column.key ? qsTr("Z to A next") : "", "list", true)
+                if (column.key !== "title")
+                    add((column.shown ? "hideColumn:" : "showColumn:") + column.key,
+                        column.shown ? qsTr("Hide the “%1” column").arg(column.title)
+                                     : qsTr("Show the “%1” column").arg(column.title), "", "list", !layoutSettings.gridMode)
+            }
+        }
+        if (facetShown) {
+            add("facetSort:name", qsTr("Sort by name"), "", "list", true)
+            add("facetSort:count", qsTr("Sort by number of books"), "", "list", true)
+        }
         add("messages", qsTr("Messages"), "", "info", messages.length > 0)
         for (const mode of availableThemeModes()) {
             const titles = { system: qsTr("System theme"), light: qsTr("Light theme"), dark: qsTr("Dark theme"),
@@ -671,6 +713,14 @@ ThemedWindow {
             reload()
         } else if (hit.key === "settings") {
             openSettings("")
+        } else if (hit.key.startsWith("sort:")) {
+            library.sortBy(hit.key.slice(5))
+        } else if (hit.key.startsWith("showColumn:")) {
+            library.columns = library.columns.concat([hit.key.slice(11)])
+        } else if (hit.key.startsWith("hideColumn:")) {
+            library.columns = library.columns.filter(key => key !== hit.key.slice(11))
+        } else if (hit.key.startsWith("facetSort:")) {
+            facetPage.sortBy(hit.key.slice(10))
         } else if (hit.key === "messages") {
             showMessages()
         } else if (hit.key === "shortcuts") {
@@ -1325,6 +1375,19 @@ ThemedWindow {
         id: shortcutsOverlay
 
         sections: window.shortcutSections()
+        onClosed: window.focusCurrentList()
+    }
+
+    // F6 and Shift+F6: from the sidebar to the list, to the details, and
+    // round.
+    Shortcut {
+        sequence: "F6"
+        onActivated: window.cycleFocus(1)
+    }
+
+    Shortcut {
+        sequence: "Shift+F6"
+        onActivated: window.cycleFocus(-1)
     }
 
     MessagesPopup {

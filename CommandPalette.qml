@@ -137,6 +137,9 @@ Popup {
                 readonly property bool isCurrent: index === palette.current
 
                 objectName: "paletteHit" + index
+                Accessible.role: Accessible.ListItem
+                Accessible.name: [modelData.title || "", palette.kindText(modelData)].filter(text => text).join(", ")
+                Accessible.selected: row.isCurrent
                 radius: Theme.smallRadius
                 width: list.width
                 height: Theme.rowHeight

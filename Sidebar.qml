@@ -58,6 +58,23 @@ Item {
         return items.find(item => item.key === key) || items[0]
     }
 
+    // The section shown takes the focus, for F6.
+    function focusCurrent() {
+        const find = item => {
+            if (item.objectName === "sidebar_" + sidebar.currentKey)
+                return item
+            for (const child of item.children) {
+                const found = find(child)
+                if (found)
+                    return found
+            }
+            return null
+        }
+        const item = find(column)
+        if (item)
+            item.forceActiveFocus(Qt.TabFocusReason)
+    }
+
     function step(delta) {
         const index = items.findIndex(item => item.key === currentKey)
         focusFollows = true

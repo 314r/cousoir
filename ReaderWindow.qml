@@ -250,6 +250,8 @@ ThemedWindow {
                 row("Ctrl+F", qsTr("Search the book")),
                 row("F3, Shift+F3", qsTr("Go to the next or the previous place found")),
                 row("Ctrl+D", qsTr("Bookmark the page, or remove its bookmark")),
+                row("Ctrl+PgDown, Ctrl+PgUp", qsTr("Next or previous chapter")),
+                row("Ctrl+G", qsTr("Go to a place, by how far into the book")),
                 row("R", qsTr("Read aloud, or stop")),
                 row("F11", qsTr("Full screen")),
                 row("Ctrl++, Ctrl+-, Ctrl+0", qsTr("Text size")),
@@ -262,6 +264,7 @@ ThemedWindow {
                 row("N", qsTr("Write a note on the selection or the highlight")),
                 row("L", qsTr("Look the selection up")),
                 row("Del", qsTr("Remove the highlight")),
+                row("Ctrl+Z", qsTr("Put back the highlight removed")),
                 row("Ctrl+Enter", qsTr("Save the note"))
             ] }
         ]
@@ -557,7 +560,8 @@ ThemedWindow {
         highlightRect = null
         markSearch()
         markSpoken()
-        if (!searchField.activeFocus)
+        // The page takes the focus, unless a field or a box has it.
+        if (!searchField.activeFocus && !goToBox.opened)
             view.forceActiveFocus()
     }
 
@@ -569,6 +573,31 @@ ThemedWindow {
     function previous() {
         view.runJavaScript("window.cousoir.previous()")
         view.forceActiveFocus()
+    }
+
+    // The highlight removed last, back in its place with its colour and
+    // its note.
+    function undoRemoval() {
+        const removed = removedHighlight
+        if (!removed)
+            return
+        removedHighlight = null
+        const uuid = bookReader.addHighlight(removed.spineIndex, removed.start, removed.end, removed.text || "",
+                                             removed.which || "yellow")
+        if (!uuid)
+            return
+        if (removed.notes)
+            bookReader.setHighlightNotes(uuid, removed.notes)
+        if (removed.spineIndex === spineIndex)
+            applyHighlights([{ uuid: uuid, start: removed.start, end: removed.end, which: removed.which || "yellow" }])
+        highlightsShown += 1
+    }
+
+    // The next or the previous chapter, from its start.
+    function stepChapter(delta) {
+        const index = delta > 0 ? after(spineIndex) : spreadStart(spineIndex - 1)
+        if (index >= 0 && index < bookReader.spine.length)
+            jump(index, "start")
     }
 
     // Somewhere in the book, by how far into it, from 0 to 1.
@@ -679,9 +708,13 @@ ThemedWindow {
         })
     }
 
+    // The highlight removed last, which Ctrl+Z puts back.
+    property var removedHighlight: null
+
     function removeChosenHighlight() {
         if (!chosenHighlight)
             return
+        removedHighlight = highlightOf(chosenHighlight)
         bookReader.removeHighlight(chosenHighlight)
         view.runJavaScript("window.cousoir.removeHighlight(" + JSON.stringify(chosenHighlight) + ")")
         chosenHighlight = ""
@@ -976,6 +1009,29 @@ ThemedWindow {
     }
 
     Shortcut {
+        sequences: ["Ctrl+PgDown"]
+        onActivated: readerWindow.stepChapter(1)
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+PgUp"]
+        onActivated: readerWindow.stepChapter(-1)
+    }
+
+    // Somewhere by how far into the book, typed.
+    Shortcut {
+        sequence: "Ctrl+G"
+        onActivated: goToBox.ask()
+    }
+
+    // A field's own undo first.
+    Shortcut {
+        sequences: [StandardKey.Undo]
+        enabled: !readerWindow.editingText && readerWindow.removedHighlight !== null
+        onActivated: readerWindow.undoRemoval()
+    }
+
+    Shortcut {
         sequences: [StandardKey.Back]
         onActivated: readerWindow.goBack()
     }
@@ -1241,6 +1297,8 @@ ThemedWindow {
                             selected: readerWindow.sidebar === "highlights"
                             text: bookReader.highlights.length
                             tip: qsTr("Highlights and notes")
+                            // Its name, not only its count.
+                            Accessible.name: qsTr("Highlights and notes: %1").arg(text)
                             icon.source: "assets/icons/highlighter.svg"
                             onClicked: readerWindow.sidebar = "highlights"
                         }
@@ -1252,6 +1310,7 @@ ThemedWindow {
                             selected: readerWindow.sidebar === "bookmarks"
                             text: bookReader.bookmarks.length
                             tip: qsTr("Bookmarks")
+                            Accessible.name: qsTr("Bookmarks: %1").arg(text)
                             icon.source: "assets/icons/bookmark.svg"
                             onClicked: readerWindow.sidebar = "bookmarks"
                         }
@@ -1510,7 +1569,7 @@ ThemedWindow {
                                         iconOnly: true
                                         implicitWidth: Theme.rowHeight * 0.8
                                         implicitHeight: Theme.rowHeight * 0.8
-                                        opacity: mark.hovered || hovered ? 1 : 0
+                                        opacity: mark.hovered || hovered || visualFocus ? 1 : 0
                                         text: mark.modelData.notes ? qsTr("Change the note") : qsTr("Write a note")
                                         icon.source: "assets/icons/note.svg"
                                         onClicked: readerWindow.editNote(mark.modelData.uuid)
@@ -1619,7 +1678,7 @@ ThemedWindow {
                                     iconOnly: true
                                     implicitWidth: Theme.rowHeight * 0.8
                                     implicitHeight: Theme.rowHeight * 0.8
-                                    opacity: bookmark.hovered || hovered ? 1 : 0
+                                    opacity: bookmark.hovered || hovered || visualFocus ? 1 : 0
                                     text: qsTr("Rename")
                                     icon.source: "assets/icons/note.svg"
                                     onClicked: bookmarkList.renaming = bookmark.modelData.title
@@ -1631,7 +1690,7 @@ ThemedWindow {
                                     iconOnly: true
                                     implicitWidth: Theme.rowHeight * 0.8
                                     implicitHeight: Theme.rowHeight * 0.8
-                                    opacity: bookmark.hovered || hovered ? 1 : 0
+                                    opacity: bookmark.hovered || hovered || visualFocus ? 1 : 0
                                     text: qsTr("Remove")
                                     icon.source: "assets/icons/trash.svg"
                                     onClicked: bookReader.removeBookmark(bookmark.modelData.title)
@@ -1881,19 +1940,22 @@ ThemedWindow {
                             }
                             if (event.ctrl || event.alt)
                                 return
-                            if ((event.key === "h" || event.key === "H") && readerWindow.hasSelection)
+                            // A letter by its key, wherever the keyboard's
+                            // layout puts it: H is H on a Russian keyboard.
+                            const letter = l => event.code === "Key" + l.toUpperCase() || event.key.toLowerCase() === l
+                            if (letter("h") && readerWindow.hasSelection)
                                 readerWindow.highlightSelection()
-                            else if ((event.key === "n" || event.key === "N") && readerWindow.chosenHighlight)
+                            else if (letter("n") && readerWindow.chosenHighlight)
                                 readerWindow.editNote(readerWindow.chosenHighlight)
-                            else if ((event.key === "n" || event.key === "N") && readerWindow.hasSelection)
+                            else if (letter("n") && readerWindow.hasSelection)
                                 readerWindow.noteSelection()
-                            else if (event.key === "r" || event.key === "R")
+                            else if (letter("r"))
                                 readerWindow.toggleSpeech()
-                            else if ((event.key === "l" || event.key === "L") && readerWindow.hasSelection)
+                            else if (letter("l") && readerWindow.hasSelection)
                                 readerWindow.lookUpSelection()
                             else if (event.key === "Delete" && readerWindow.chosenHighlight)
                                 readerWindow.removeChosenHighlight()
-                            else if (event.key === "t" || event.key === "T")
+                            else if (letter("t"))
                                 readerWindow.tocVisible = !readerWindow.tocVisible
                             else if (event.key === "?")
                                 shortcutsOverlay.toggle()
@@ -2640,6 +2702,72 @@ ThemedWindow {
 
         sections: readerWindow.shortcutSections()
         onClosed: view.forceActiveFocus()
+    }
+
+    // Ctrl+G: somewhere by how far into the book, from 0 to 100 %.
+    Popup {
+        id: goToBox
+        objectName: "readerGoTo"
+
+        function ask() {
+            goToField.text = String(Math.round(readerWindow.bookFraction * 100))
+            open()
+        }
+
+        function go() {
+            const percent = Number(goToField.text.replace(",", ".").replace("%", "").trim())
+            if (isNaN(percent))
+                return
+            close()
+            readerWindow.goToBookFraction(Math.max(0, Math.min(100, percent)) / 100)
+        }
+
+        parent: Overlay.overlay
+        x: Math.round((parent.width - width) / 2)
+        y: Math.round(parent.height * 0.2)
+        width: Math.round(32 * Theme.charWidth)
+        modal: true
+        focus: true
+        padding: Theme.panePadding
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        // Once open: a field takes the focus only then.
+        onOpened: {
+            goToField.forceActiveFocus(Qt.PopupFocusReason)
+            goToField.selectAll()
+        }
+        onClosed: view.forceActiveFocus()
+
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0, 0, 0, 0.35)
+        }
+
+        background: Rectangle {
+            radius: Theme.radius
+            color: Theme.canvas
+            border.width: 1
+            border.color: Theme.controlBorder
+        }
+
+        contentItem: ColumnLayout {
+            spacing: Theme.gutter
+
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Go to, in % of the book")
+                color: Theme.textMuted
+            }
+
+            FormField {
+                id: goToField
+                objectName: "readerGoToField"
+
+                Layout.fillWidth: true
+                inputMethodHints: Qt.ImhFormattedNumbersOnly
+                Accessible.name: qsTr("Go to, in % of the book")
+                Keys.onReturnPressed: goToBox.go()
+                Keys.onEnterPressed: goToBox.go()
+            }
+        }
     }
 
     Popup {
