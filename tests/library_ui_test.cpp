@@ -2367,7 +2367,8 @@ void LibraryUiTest::revertsBookChanges()
     QTest::keyClick(m_window, Qt::Key_Return);
     waitForSave();
     QTRY_VERIFY(control("revertChangesButton")->isVisible());
-    QCOMPARE(library()->property("currentBook").toMap().value(QStringLiteral("series")).toString(), QString());
+    // Both edits saved, the second maybe after the first.
+    QTRY_COMPARE(library()->property("currentBook").toMap().value(QStringLiteral("series")).toString(), QString());
 
     // Asked first; Esc keeps the changes.
     click("revertChangesButton");
