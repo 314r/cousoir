@@ -342,6 +342,13 @@ Rectangle {
                 sortOption: page.library.sortOption
                 selectionCount: page.selectedCount
                 selectable: true
+                // A book dragged out, or the books selected with it: a file
+                // of each for the desktop.
+                dragUrls: function(index) {
+                    const books = page.library.books
+                    const ids = books.isSelected(index) && books.selectedCount > 1 ? books.selectedIds : [books.idAt(index)]
+                    return page.library.dragUrls(ids)
+                }
                 Accessible.name: qsTr("Books")
                 onActivated: function(index) { page.activate(index) }
                 onSortRequested: function(sort) { page.sortBy(sort) }

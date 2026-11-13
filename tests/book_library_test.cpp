@@ -92,6 +92,7 @@ private slots:
     void undoesOnlyBulkEdits();
     void undoesEachBookChanges();
     void createsLibraries();
+    void dragsFilesOut();
     void browsesSections();
     void filtersByItem();
     void describesCurrentBook();
@@ -720,6 +721,20 @@ void BookLibraryTest::createsLibraries()
              QString());
     QTRY_COMPARE_WITH_TIMEOUT(library->data().books.size(), 1, 15000);
     QCOMPARE(library->data().books.first().title, QStringLiteral("Le Vicomte de Bragelonne: Tome premier"));
+}
+
+// What a drag out of the list carries: a file of each book, its EPUB before
+// its AZW3 as Calibre orders input formats; none for a book without files.
+void BookLibraryTest::dragsFilesOut()
+{
+    auto library = open();
+    QVERIFY(library);
+    const QStringList urls = library->dragUrls({ 2, 1, 6, 5 });
+    QCOMPARE(urls.size(), 3);
+    QVERIFY(urls.at(0).endsWith(QStringLiteral("The%20Black%20Company%20-%20Glen%20Cook.epub")));
+    QVERIFY(urls.at(1).startsWith(QStringLiteral("file:///")));
+    QVERIFY(QUrl(urls.at(1)).toLocalFile().endsWith(QStringLiteral("L'Ecume des jours - Boris Vian.epub")));
+    QVERIFY(QUrl(urls.at(2)).toLocalFile().endsWith(QStringLiteral(".pdf")));
 }
 
 void BookLibraryTest::editsBooks()
