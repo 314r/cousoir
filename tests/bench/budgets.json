@@ -1,0 +1,20 @@
+{
+  "comment": "cousoir-benchmark --ui on the 50,000-book library of cousoir-test-tool make-library, offscreen, on the computer Cousoir is made on: about 1.6 times what it measured in November 2026, so that a regression shows and a busy moment does not. tools/bench_budget.sh runs it: COUSOIR_BENCH=1 ctest -L bench.",
+  "milliseconds": {
+    "load": 1700,
+    "check": 1400,
+    "search, per letter": 40,
+    "search, slowest letter": 50,
+    "sort by authors": 80,
+    "section authors": 20,
+    "open a book": 5,
+    "edit saved": 700,
+    "second edit saved": 600,
+    "ui: first frame with the books": 1800,
+    "ui: search, per letter": 60,
+    "ui: search, slowest letter": 100,
+    "ui: sort by authors": 120,
+    "ui: open a book": 50
+  },
+  "peak memory MB": 850
+}

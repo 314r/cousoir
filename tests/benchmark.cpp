@@ -15,6 +15,8 @@
 //   tools/sandbox.sh build/cousoir-benchmark --screenshot shot.png --search tag:sf LIBRARY
 
 #include <QCommandLineParser>
+#include <QJsonObject>
+#include <QJsonDocument>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
@@ -63,8 +65,19 @@ QTextStream &out()
     return stream;
 }
 
+// Each step's time in milliseconds, by its name without its counts, for
+// the budgets.
+QHash<QString, double> &measured()
+{
+    static QHash<QString, double> steps;
+    return steps;
+}
+
 void report(const QString &step, qint64 nanoseconds)
 {
+    // "load (50000 books)" as "load"; a save's own steps, indented, aside.
+    if (!step.startsWith(u' '))
+        measured().insert(step.section(QStringLiteral(" ("), 0, 0), double(nanoseconds) / 1e6);
     out() << qSetFieldWidth(44) << Qt::left << step << qSetFieldWidth(10) << Qt::right
           << QString::number(double(nanoseconds) / 1e6, 'f', 1) << qSetFieldWidth(0) << " ms" << Qt::endl;
 }
@@ -534,6 +547,10 @@ int main(int argc, char *argv[])
     QCommandLineParser parser;
     parser.addPositionalArgument(QStringLiteral("library"), QStringLiteral("The library to measure; edited."));
     parser.addOption({ QStringLiteral("ui"), QStringLiteral("Measure the whole window too.") });
+    parser.addOption({ QStringLiteral("budget"),
+                       QStringLiteral("Fail past the budgets of a JSON file: { milliseconds: { step: ms }, "
+                                      "\"peak memory MB\": mb }."),
+                       QStringLiteral("file") });
     parser.addOption({ QStringLiteral("screenshot"), QStringLiteral("Draw the window to a PNG file instead."),
                        QStringLiteral("file") });
     parser.addOption({ QStringLiteral("size"), QStringLiteral("The window's size, 1240x820."), QStringLiteral("WxH") });
@@ -605,12 +622,41 @@ int main(int argc, char *argv[])
     if (status == 0 && parser.isSet(QStringLiteral("ui")))
         status = benchmarkUi(path);
     // The most memory the process held, from the kernel's count.
+    double peakMegabytes = 0;
     QFile memory(QStringLiteral("/proc/self/status"));
     if (memory.open(QIODevice::ReadOnly)) {
         for (const QByteArray &line : memory.readAll().split('\n')) {
-            if (line.startsWith("VmHWM:"))
+            if (line.startsWith("VmHWM:")) {
                 out() << "peak memory: " << line.mid(6).trimmed() << Qt::endl;
+                peakMegabytes = line.mid(6).trimmed().split(' ').value(0).toDouble() / 1024;
+            }
         }
+    }
+    // Past a budget, or a step budgeted and no longer measured: a failure.
+    if (status == 0 && parser.isSet(QStringLiteral("budget"))) {
+        QFile file(parser.value(QStringLiteral("budget")));
+        if (!file.open(QIODevice::ReadOnly)) {
+            out() << "cannot read " << file.fileName() << Qt::endl;
+            return 1;
+        }
+        const QJsonObject budgets = QJsonDocument::fromJson(file.readAll()).object();
+        const QJsonObject steps = budgets.value(QLatin1String("milliseconds")).toObject();
+        for (auto it = steps.begin(); it != steps.end(); ++it) {
+            if (!measured().contains(it.key())) {
+                out() << "not measured: " << it.key() << Qt::endl;
+                status = 1;
+            } else if (measured().value(it.key()) > it.value().toDouble()) {
+                out() << "over budget: " << it.key() << ", " << measured().value(it.key()) << " ms for "
+                      << it.value().toDouble() << Qt::endl;
+                status = 1;
+            }
+        }
+        const double peakBudget = budgets.value(QLatin1String("peak memory MB")).toDouble();
+        if (peakBudget > 0 && peakMegabytes > peakBudget) {
+            out() << "over budget: peak memory, " << peakMegabytes << " MB for " << peakBudget << Qt::endl;
+            status = 1;
+        }
+        out() << (status == 0 ? "within the budgets" : "past the budgets") << Qt::endl;
     }
     return status;
 }

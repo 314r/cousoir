@@ -579,6 +579,10 @@ if(BUILD_TESTING)
         cousoir_models cousoir_uiplugin Qt6::Qml Qt6::QuickControls2 Qt6::QuickTest Qt6::Svg Qt6::Test
     )
     cousoir_configure_test_executable(cousoir-benchmark)
+    # Cousoir's times and memory on 50,000 books against tests/bench/budgets.json,
+    # only when asked: COUSOIR_BENCH=1 ctest -L bench.
+    add_test(NAME bench_50k COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/tools/bench_budget.sh" "${CMAKE_BINARY_DIR}")
+    set_tests_properties(bench_50k PROPERTIES LABELS bench SKIP_RETURN_CODE 77 TIMEOUT 900)
 
     # Compares cousoir-cli list with calibredb's own output on copies of the
     # libraries; skipped without Calibre.
