@@ -100,6 +100,12 @@ FocusScope {
 
     // A label, its field, and × to clear the value for every book when it
     // can be.
+    // The labels' width, in characters: the longest in the language shown.
+    readonly property int labelChars: Math.min(18, Math.max(11, ...[
+        qsTr("Authors"), qsTr("Series", "field"), qsTr("Add tags"), qsTr("Remove tags"), qsTr("Rating"),
+        qsTr("Publisher"), qsTr("Languages"), qsTr("Published")
+    ].map(text => text.length)))
+
     component BulkRow: RowLayout {
         id: row
 
@@ -116,7 +122,7 @@ FocusScope {
         spacing: Theme.rowPadding
 
         Label {
-            Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+            Layout.preferredWidth: Math.round(pane.labelChars * Theme.charWidth)
             Layout.minimumWidth: Layout.preferredWidth
             text: row.label
             color: Theme.textMuted
@@ -211,7 +217,7 @@ FocusScope {
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: Math.round(11 * Theme.charWidth) + Theme.rowPadding
+                Layout.leftMargin: Math.round(pane.labelChars * Theme.charWidth) + Theme.rowPadding
                 visible: seriesField.text.trim().length > 0 && !seriesRow.cleared
                 spacing: Theme.rowPadding
 

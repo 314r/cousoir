@@ -1723,7 +1723,22 @@ ThemedWindow {
             spacing: 0
 
             Rectangle {
+                id: toolbar
                 objectName: "toolbar"
+
+                // The book's text buttons, as wide as their words in the
+                // language shown: icons alone when the toolbar has no room
+                // for them beside the breadcrumb and the other buttons.
+                readonly property real bookButtonsWidth: (window.library.canRevert ? [qsTr("Revert changes")] : [])
+                    .concat([qsTr("Read"), qsTr("Open in reader")])
+                    .reduce((sum, text) => sum + toolbarMetrics.advanceWidth(text) + 2 * Theme.controlInset
+                            + Theme.iconSize + 2 * Theme.gutter, 0)
+                readonly property bool compact: width < bookButtonsWidth + 6 * Theme.rowHeight + 28 * Theme.charWidth
+
+                FontMetrics {
+                    id: toolbarMetrics
+                    font: window.font
+                }
 
                 Layout.fillWidth: true
                 implicitHeight: Theme.toolbarHeight
@@ -1836,6 +1851,8 @@ ThemedWindow {
 
                         visible: session.bookOpen && window.library.canRevert && !bookPage.confirmingRevert
                         variant: "outline"
+                        iconOnly: toolbar.compact
+                        icon.source: toolbar.compact ? "assets/icons/refresh.svg" : ""
                         text: qsTr("Revert changes")
                         tip: qsTr("Undo every change since you opened the book")
                         // Out of any field first, so Enter and Esc answer.
@@ -1905,6 +1922,7 @@ ThemedWindow {
                         // those Calibre makes readable too.
                         enabled: window.book.id > 0 && window.library.readableFormat(window.book.id) !== ""
                         variant: "outline"
+                        iconOnly: toolbar.compact
                         text: qsTr("Read")
                         tip: qsTr("Read in Cousoir (Ctrl+Shift+O)")
                         icon.source: "assets/icons/book.svg"
@@ -1917,6 +1935,7 @@ ThemedWindow {
                         visible: session.bookOpen && !bookPage.confirmingRevert
                         enabled: (window.book.formats || []).some(format => !format.missing)
                         variant: "outline"
+                        iconOnly: toolbar.compact
                         text: qsTr("Open in reader")
                         tip: qsTr("Open in reader (Ctrl+O)")
                         icon.source: "assets/icons/external.svg"
