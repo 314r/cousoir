@@ -133,6 +133,8 @@ private slots:
     void followsOmarchy();
     void keepsMessages();
     void remembersTheSession();
+    void sortsAndShowsColumnsFromCommands();
+    void readsFromTheKeyboard();
     void editsDetailsInPlace();
     void revertsBookChanges();
     void keepsWhatIsTyped();
@@ -2846,6 +2848,105 @@ void LibraryUiTest::keepsMessages()
     QTest::keyClick(m_window, Qt::Key_Escape);
     QTRY_VERIFY(!popup->property("opened").toBool());
     QTRY_VERIFY(!control("messagesButton")->isVisible());
+}
+
+// Ctrl+K sorts the list and shows or hides its columns, as the headers'
+// clicks and menu do, for a keyboard alone.
+void LibraryUiTest::sortsAndShowsColumnsFromCommands()
+{
+    QVariant returned;
+    QMetaObject::invokeMethod(m_window, "paletteCommands", Q_RETURN_ARG(QVariant, returned));
+    const auto has = [&returned](const QString &key) {
+        for (const QVariant &command : returned.toList()) {
+            if (command.toMap().value(QStringLiteral("key")).toString() == key)
+                return true;
+        }
+        return false;
+    };
+    QVERIFY(has(QStringLiteral("sort:authors")));
+    QVERIFY(has(QStringLiteral("hideColumn:authors")));
+    QVERIFY(!has(QStringLiteral("hideColumn:title")));
+    const auto run = [this](const QString &key) {
+        const QVariantMap hit{ { QStringLiteral("kind"), QStringLiteral("action") }, { QStringLiteral("key"), key } };
+        QMetaObject::invokeMethod(m_window, "runPaletteHit", Q_ARG(QVariant, hit));
+    };
+    run(QStringLiteral("sort:authors"));
+    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("authors"));
+    run(QStringLiteral("sort:authors"));
+    QTRY_COMPARE(library()->property("sortOption").toString(), QStringLiteral("authorsDesc"));
+    run(QStringLiteral("hideColumn:authors"));
+    QTRY_VERIFY(!library()->property("columns").toStringList().contains(QStringLiteral("authors")));
+    run(QStringLiteral("showColumn:authors"));
+    QTRY_VERIFY(library()->property("columns").toStringList().contains(QStringLiteral("authors")));
+}
+
+// The reader from the keyboard: chapter by chapter, by how far into the
+// book, and a highlight removed put back.
+void LibraryUiTest::readsFromTheKeyboard()
+{
+#ifndef COUSOIR_READER
+    QSKIP("Built without Qt WebEngine");
+#else
+    QQuickWindow *reader = readNewBook(QStringLiteral(COUSOIR_TEST_DATA_DIR "/reader/voyage.epub"), QStringLiteral("The Voyage"));
+    QVERIFY(reader);
+    reader->requestActivate();
+    QVERIFY(QTest::qWaitForWindowActive(reader));
+    QObject *bookReader = reader->property("reader").value<QObject *>();
+    QObject *view = reader->findChild<QObject *>(QStringLiteral("readerView"));
+    QVERIFY(bookReader && view);
+    QTRY_VERIFY_WITH_TIMEOUT(!reader->property("position").toString().isEmpty(), 20000);
+    QCOMPARE(reader->property("spineIndex").toInt(), 0);
+    QTest::keySequence(reader, QKeySequence(QStringLiteral("Ctrl+PgDown")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("page").toInt() == 0, 20000);
+    QTest::keySequence(reader, QKeySequence(QStringLiteral("Ctrl+PgUp")));
+    QTRY_COMPARE_WITH_TIMEOUT(reader->property("spineIndex").toInt(), 0, 20000);
+
+    // Ctrl+G, then how far in.
+    QTest::keySequence(reader, QKeySequence(QStringLiteral("Ctrl+G")));
+    QObject *goTo = reader->findChild<QObject *>(QStringLiteral("readerGoTo"));
+    QVERIFY(goTo);
+    QTRY_VERIFY(goTo->property("opened").toBool());
+    QQuickItem *goToField = nullptr;
+    QTRY_VERIFY((goToField = visualDescendants(reader->contentItem(), QStringLiteral("readerGoToField")).value(0))
+                || (goToField = reader->findChild<QQuickItem *>(QStringLiteral("readerGoToField"))));
+    QTRY_VERIFY(goToField->hasActiveFocus());
+    QTest::keySequence(reader, QKeySequence(QKeySequence::SelectAll));
+    for (const char digit : { '1', '0', '0' })
+        QTest::keyClick(reader, digit);
+    QTest::keyClick(reader, Qt::Key_Return);
+    QTRY_VERIFY(!goTo->property("opened").toBool());
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() > 1, 20000);
+
+    // A highlight removed, then put back with its colour and note.
+    QMetaObject::invokeMethod(reader, "load", Q_ARG(QVariant, 1), Q_ARG(QVariant, QStringLiteral("start")));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("spineIndex").toInt() == 1
+                                 && reader->property("position").toString().startsWith(QLatin1String("epubcfi(/4/")),
+                             20000);
+    QVERIFY(QMetaObject::invokeMethod(view, "runJavaScript", Q_ARG(QString, QStringLiteral(
+        "const p = document.querySelector('p'); const r = document.createRange();"
+        "r.setStart(p.firstChild, 0); r.setEnd(p.firstChild, 22);"
+        "getSelection().removeAllRanges(); getSelection().addRange(r);"))));
+    QTRY_VERIFY_WITH_TIMEOUT(reader->property("hasSelection").toBool(), 10000);
+    QMetaObject::invokeMethod(reader, "highlightSelection", Q_ARG(QVariant, QStringLiteral("blue")));
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
+    const QString uuid = bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("uuid")).toString();
+    QMetaObject::invokeMethod(bookReader, "setHighlightNotes", Q_ARG(QString, uuid), Q_ARG(QString, QStringLiteral("Kept.")));
+    QTRY_COMPARE(bookReader->property("highlights").toList().first().toMap().value(QStringLiteral("notes")).toString(),
+                 QStringLiteral("Kept."));
+    reader->setProperty("chosenHighlight", uuid);
+    QMetaObject::invokeMethod(reader, "removeChosenHighlight");
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 0);
+    QTest::keySequence(reader, QKeySequence(QKeySequence::Undo));
+    QTRY_COMPARE(bookReader->property("highlights").toList().size(), 1);
+    const QVariantMap back = bookReader->property("highlights").toList().first().toMap();
+    QCOMPARE(back.value(QStringLiteral("which")).toString(), QStringLiteral("blue"));
+    QCOMPARE(back.value(QStringLiteral("notes")).toString(), QStringLiteral("Kept."));
+    // The page answers the highlight put back first: its answer coming
+    // after the test's engine is gone would crash WebEngine.
+    QTest::qWait(500);
+    reader->close();
+#endif
 }
 
 // The section and the window's size come back as they were left.

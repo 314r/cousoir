@@ -1128,5 +1128,17 @@
   "trash|hint": "corbeille",
   "open|hint": "ouvrir",
   "list|hint": "liste",
-  "covers|hint": "couvertures"
+  "covers|hint": "couvertures",
+  "Sort by “%1”": "Trier par « %1 »",
+  "Z to A next": "Z à A ensuite",
+  "Hide the “%1” column": "Masquer la colonne « %1 »",
+  "Show the “%1” column": "Afficher la colonne « %1 »",
+  "Sort by name": "Trier par nom",
+  "Sort by number of books": "Trier par nombre de livres",
+  "Next or previous chapter": "Chapitre suivant ou précédent",
+  "Go to a place, by how far into the book": "Aller à un endroit, selon l’avancée dans le livre",
+  "Put back the highlight removed": "Remettre le surlignement retiré",
+  "Highlights and notes: %1": "Surlignements et notes : %1",
+  "Bookmarks: %1": "Signets : %1",
+  "Go to, in % of the book": "Aller à, en % du livre"
 }

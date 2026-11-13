@@ -602,6 +602,22 @@ ThemedWindow {
         add("reload", qsTr("Reload the library"), "Ctrl+R", "refresh", true)
         add("settings", qsTr("Settings"), "", "settings", true)
         add("shortcuts", qsTr("Keyboard shortcuts"), "?", "info", true)
+        // The list's sort and columns, as a header's click and menu make
+        // them.
+        if (booksShown) {
+            for (const column of library.availableColumns) {
+                add("sort:" + column.key, qsTr("Sort by “%1”").arg(column.title),
+                    library.sortOption === column.key ? qsTr("Z to A next") : "", "list", true)
+                if (column.key !== "title")
+                    add((column.shown ? "hideColumn:" : "showColumn:") + column.key,
+                        column.shown ? qsTr("Hide the “%1” column").arg(column.title)
+                                     : qsTr("Show the “%1” column").arg(column.title), "", "list", !layoutSettings.gridMode)
+            }
+        }
+        if (facetShown) {
+            add("facetSort:name", qsTr("Sort by name"), "", "list", true)
+            add("facetSort:count", qsTr("Sort by number of books"), "", "list", true)
+        }
         add("messages", qsTr("Messages"), "", "info", messages.length > 0)
         for (const mode of availableThemeModes()) {
             const titles = { system: qsTr("System theme"), light: qsTr("Light theme"), dark: qsTr("Dark theme"),
@@ -671,6 +687,14 @@ ThemedWindow {
             reload()
         } else if (hit.key === "settings") {
             openSettings("")
+        } else if (hit.key.startsWith("sort:")) {
+            library.sortBy(hit.key.slice(5))
+        } else if (hit.key.startsWith("showColumn:")) {
+            library.columns = library.columns.concat([hit.key.slice(11)])
+        } else if (hit.key.startsWith("hideColumn:")) {
+            library.columns = library.columns.filter(key => key !== hit.key.slice(11))
+        } else if (hit.key.startsWith("facetSort:")) {
+            facetPage.sortBy(hit.key.slice(10))
         } else if (hit.key === "messages") {
             showMessages()
         } else if (hit.key === "shortcuts") {

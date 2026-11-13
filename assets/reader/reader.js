@@ -1029,7 +1029,7 @@
     document.addEventListener('keydown', event => {
         const key = event.key;
         if (event.ctrlKey || event.altKey || event.metaKey) {
-            post({ event: 'key', key: key, ctrl: event.ctrlKey, alt: event.altKey, shift: event.shiftKey });
+            post({ event: 'key', key: key, code: event.code, ctrl: event.ctrlKey, alt: event.altKey, shift: event.shiftKey });
             return;
         }
         const on = leftward() ? 'ArrowLeft' : 'ArrowRight';
@@ -1045,7 +1045,7 @@
         else if (key === 'End')
             goToEnd();
         else {
-            post({ event: 'key', key: key, ctrl: false, alt: false, shift: event.shiftKey });
+            post({ event: 'key', key: key, code: event.code, ctrl: false, alt: false, shift: event.shiftKey });
             return;
         }
         event.preventDefault();
