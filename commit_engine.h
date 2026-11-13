@@ -64,6 +64,9 @@ struct Request
     QList<QPair<QString, QString>> removedAnnotationUsers;
     // Notes on items, written first, in the library's notes.db.
     QList<CalibreNotes::Change> notes;
+    // Calibre's preferences of the library, each key with its value as
+    // JSON, written after the rest.
+    QList<QPair<QString, QString>> preferences;
     // The software writing the metadata.opf files: name and version, and the
     // short name it files under.
     QString producer;
@@ -90,7 +93,8 @@ struct Request
     {
         return !formatCopies.isEmpty() || !formatRemovals.isEmpty() || !trash.isEmpty() || !restorations.isEmpty()
             || !newBooks.isEmpty() || !newFormats.isEmpty() || !conversionOptions.isEmpty() || !readPositions.isEmpty()
-            || !annotations.isEmpty() || (merges && (!deviceAnnotations.isEmpty() || !removedAnnotationUsers.isEmpty()));
+            || !annotations.isEmpty() || !preferences.isEmpty()
+            || (merges && (!deviceAnnotations.isEmpty() || !removedAnnotationUsers.isEmpty()));
     }
 };
 
@@ -127,6 +131,11 @@ struct Result
 };
 
 Result commit(const Request &request);
+
+// Runs `work` under Calibre's lock as this process's only writer to the
+// library: saves wait for it, and it for them. False, without running it,
+// while a Calibre program holds the lock.
+bool withLibraryLock(const std::function<void()> &work);
 
 // Undoes or finishes a change a crash interrupted, from the journal in the
 // cache folder. `done` says what was done; empty when there was nothing.

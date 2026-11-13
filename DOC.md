@@ -263,20 +263,34 @@ Cousoir departs from Calibre's search in a few places:
 
 ## Searching the books' text
 
-When Calibre's full text search is turned on for a library (Preferences >
-Searching in Calibre), Calibre keeps the text of its books in
-`full-text-search.db` beside `metadata.db`. Books' text, in the sidebar,
-searches that index: each book whose text has the words, once, with the
-passage around them, the words in bold. Words are found by their stems
-("run" finds "running") and without their accents, with Calibre's tokenizer
-and its query language: `"quoted words"`, `and`, `or`, `not`, `word*`. The
-page says how many formats are indexed and how many Calibre still has to
-index. Enter or a double click reads the book, its search open on the words
-found in it.
+Books' text, in the sidebar, searches the text of the library's books in
+the index Calibre keeps of it, `full-text-search.db` beside `metadata.db`,
+when its full text search is on: each book whose text has the words, once,
+with the passage around them, the words in bold. Words are found by their
+stems ("run" finds "running") and as written, without their accents, with
+Calibre's tokenizer and its query language: `"quoted words"`, `and`, `or`,
+`not`, `word*`. Enter or a double click reads the book, its search open on
+the words found in it.
 
-The index is only read, and while Calibre writes to it Cousoir sees it as
-it was. Without one, the page says how to have Calibre make it; Cousoir
-does not index books itself yet.
+**Indexing.** A library without an index offers to make one: Cousoir makes
+it as Calibre does, turns Calibre's full text search on (Preferences >
+Searching in Calibre) and indexes the books itself, in the background, the
+page saying how far it is. It reads the text as Calibre's indexing workers
+do, page after page of EPUBs, KEPUBs and Kindle books, and PDFs through
+Poppler's `pdftotext` when it is installed, and keeps each format's text,
+size and hash as Calibre keeps them; the test suite checks the text of
+twenty-two book files against Calibre's. Other formats, DOCX or FB2 for
+instance, are left to Calibre, which indexes them at its next start, and
+the page counts them as waiting. Each save of Cousoir's keeps the index in
+step as Calibre's own triggers do: a format added or replaced waits to be
+indexed, and Cousoir indexes it; a format or a book gone takes its text
+with it. Text goes in a few formats at a time under Calibre's lock, so a
+save waits for it a moment at most; while Calibre is open, Cousoir leaves
+the indexing to it.
+
+The golden test has Cousoir index a library, change formats and index
+again, then has Calibre check the index, search it, change formats and
+index them with its own workers: each finds what the other indexed.
 
 ## Editing
 
@@ -1272,8 +1286,20 @@ cousoir-cli kepubify BOOK.epub BOOK.kepub
 cousoir-cli azw3 BOOK.epub BOOK.azw3
 cousoir-cli epub BOOK.azw3 BOOK.epub
 cousoir-cli kobo-highlights [--library PATH] KOBO|KoboReader.sqlite
+cousoir-cli index-text [--library PATH] [--force] [--json]
+cousoir-cli search-text [--library PATH] [--limit N] [--json] WORDS…
 cousoir-cli skill [install]
 ```
+
+`index-text` indexes the books' text into Calibre's full text index, as
+the Books' text page does (see [Searching the books' text](#searching-the-books-text)):
+it makes the index and turns Calibre's full text search on when the library
+has none, then reads every format waiting that Cousoir reads, and says how
+many went in and how many are left to Calibre. It writes, so it refuses as
+`apply` does. `search-text` prints the books whose text has the words, by
+that index and its query language, best first: the book's id, the format
+and the passage, the words found between `**`; with `--json`, a list of
+`{ book, format, snippet }`. It exits with 1 when nothing matches.
 
 `kepubify` and `azw3` make a KEPUB and an AZW3 of an EPUB as Cousoir does
 without Calibre (see [Converting books](#converting-books)), with the

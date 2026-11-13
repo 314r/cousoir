@@ -7,7 +7,10 @@
 #include <QJsonDocument>
 #include <QTemporaryDir>
 
+#include "book_text_index.h"
+#include "book_text_search.h"
 #include "calibre_db.h"
+#include "calibre_fts.h"
 #include "calibre_lock.h"
 #include "commit_engine.h"
 #include "field_writers.h"
@@ -90,6 +93,7 @@ private slots:
     void addsCustomValues();
     void undoesFailedOperations();
     void copiesFormatsBeforeTrash();
+    void followsTheTextIndex();
     void recoversInterruptedCopy();
     void mergesReaderHighlights();
 
@@ -742,6 +746,73 @@ void CommitEngineTest::undoesFailedOperations()
     QVERIFY2(result.error.contains(QStringLiteral("no longer in the library")), qPrintable(result.error));
     QCOMPARE(tree(m_library), before);
     QCOMPARE(value(QStringLiteral("SELECT count(*) FROM books")).toInt(), 6);
+}
+
+// Calibre's full text index, while its search is on, as Calibre's
+// triggers keep it: a book gone takes its texts, a format added waits to be
+// indexed; while it is off, nothing.
+void CommitEngineTest::followsTheTextIndex()
+{
+    const QString language = QStringLiteral("fr");
+    QString error;
+    QVERIFY2(BookTextIndex::create(m_library, {}, language, &error), qPrintable(error));
+    QVERIFY2(BookTextIndex::store(m_library,
+                                  { { 2, QStringLiteral("EPUB"), 1483, QStringLiteral("a"), QStringLiteral("There were prodigies."), {} },
+                                    { 2, QStringLiteral("AZW3"), 11180, QStringLiteral("b"), QStringLiteral("And portents."), {} },
+                                    { 1, QStringLiteral("EPUB"), 1509, QStringLiteral("c"), QStringLiteral("Colin."), {} } },
+                                  language, &error),
+             qPrintable(error));
+    const auto setSearch = [this](bool on) {
+        SqliteDb db;
+        QString error;
+        QVERIFY2(db.open(QDir(m_library).filePath(QStringLiteral("metadata.db")), SqliteDb::Mode::ReadWrite, &error)
+                     && db.run(QStringLiteral("INSERT OR REPLACE INTO preferences(key, val) VALUES ('fts_enabled', ?)"),
+                               { on ? QStringLiteral("true") : QStringLiteral("false") }, &error),
+                 qPrintable(error));
+    };
+    const auto index = [this](const QString &sql) {
+        SqliteDb db;
+        db.open(BookTextSearch::indexPath(m_library), SqliteDb::Mode::ReadOnly, nullptr);
+        QStringList rows;
+        for (const QVariantList &row : db.rows(sql))
+            rows.append(row.value(0).toString() + u' ' + row.value(1).toString());
+        return rows;
+    };
+    const auto jobs = [&] { return index(QStringLiteral("SELECT book, format FROM dirtied_formats ORDER BY id")); };
+    const auto texts = [&] { return index(QStringLiteral("SELECT book, format FROM books_text ORDER BY book, format")); };
+
+    // Off: the index is left as it is.
+    setSearch(false);
+    CommitEngine::Request copy;
+    copy.formatCopies = { { 2, 4 } };
+    const CommitEngine::Result copied = commit(copy);
+    QVERIFY2(copied.ok, qPrintable(copied.error));
+    QVERIFY(jobs().isEmpty());
+
+    setSearch(true);
+    CommitEngine::Request request;
+    request.formatCopies = { { 2, 3 } };
+    request.trash = { 2 };
+    const CommitEngine::Result result = commit(request);
+    QVERIFY2(result.ok, qPrintable(result.error));
+    QCOMPARE(texts(), QStringList{ QStringLiteral("1 EPUB") });
+    QCOMPARE(jobs(), QStringList{ QStringLiteral("3 AZW3") });
+    QVERIFY(BookTextSearch::find(m_library, QStringLiteral("prodigies"), true, language, 10, &error).isEmpty());
+
+    // A format gone takes its text and stops waiting.
+    CommitEngine::Request removal;
+    removal.formatRemovals = { { 1, { QStringLiteral("EPUB") } }, { 3, { QStringLiteral("AZW3") } } };
+    const CommitEngine::Result removed = commit(removal);
+    QVERIFY2(removed.ok, qPrintable(removed.error));
+    QVERIFY(texts().isEmpty());
+    QVERIFY(jobs().isEmpty());
+    SqliteDb db;
+    QVERIFY2(db.open(BookTextSearch::indexPath(m_library), SqliteDb::Mode::ReadWrite, &error)
+                 && CalibreFts::registerTokenizers(db.handle(), language, &error),
+             qPrintable(error));
+    for (const char *table : { "books_fts", "books_fts_stemmed" })
+        QVERIFY2(db.exec(QStringLiteral("INSERT INTO %1(%1) VALUES('integrity-check')").arg(QLatin1String(table)), &error),
+                 qPrintable(error));
 }
 
 void CommitEngineTest::copiesFormatsBeforeTrash()

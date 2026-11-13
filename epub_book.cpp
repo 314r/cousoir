@@ -112,17 +112,29 @@ bool EpubBook::load(QString *error)
             m_sizes.insert(QString::fromUtf8(stat.name), qint64(stat.size));
     }
 
-    // META-INF/container.xml names the package.
+    // META-INF/container.xml names the package: the first there is, as
+    // Calibre's find_opf() takes it, else any in the book.
     QString package;
     QXmlStreamReader container(read(QStringLiteral("META-INF/container.xml")));
     while (!container.atEnd() && package.isEmpty()) {
         if (container.readNext() == QXmlStreamReader::StartElement && container.name() == QLatin1String("rootfile")) {
             const QString type = attribute(container, "media-type");
-            if (type.isEmpty() || type == QLatin1String("application/oebps-package+xml"))
-                package = attribute(container, "full-path");
+            const QString path = attribute(container, "full-path");
+            if ((type.isEmpty() || type == QLatin1String("application/oebps-package+xml")) && contains(path))
+                package = path;
         }
     }
-    if (package.isEmpty() || !contains(package)) {
+    if (package.isEmpty()) {
+        QStringList names = m_sizes.keys();
+        names.sort();
+        for (const QString &name : std::as_const(names)) {
+            if (name.endsWith(QLatin1String(".opf"), Qt::CaseInsensitive)) {
+                package = name;
+                break;
+            }
+        }
+    }
+    if (package.isEmpty()) {
         *error = QObject::tr("%1 has no package to read.").arg(QFileInfo(m_path).fileName());
         return false;
     }

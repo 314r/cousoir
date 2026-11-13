@@ -1,10 +1,12 @@
 #include <QtTest>
 
+#include <QCryptographicHash>
 #include <QJsonArray>
 #include <QTemporaryDir>
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "book_text_index.h"
 #include "book_text_search.h"
 #include "calibre_fts.h"
 #include "sqlite_db.h"
@@ -20,6 +22,9 @@ class CalibreFtsTest : public QObject
 
 private slots:
     void searchesTheBooksText();
+    void extractsAsCalibre_data();
+    void extractsAsCalibre();
+    void keepsTheIndexAsCalibre();
     void tokenizesAsCalibre_data();
     void tokenizesAsCalibre();
 };
@@ -108,6 +113,117 @@ void CalibreFtsTest::searchesTheBooksText()
     // A query FTS5 cannot read says why.
     QVERIFY(BookTextSearch::find(library.path(), QStringLiteral("\"unclosed"), true, QStringLiteral("en"), 10, &error).isEmpty());
     QVERIFY(!error.isEmpty());
+}
+
+// Each book file's text as Calibre's indexing workers extract it
+// (tools/oracle/book_text_oracle.py): Cousoir's the same, or the file left
+// to Calibre.
+void CalibreFtsTest::extractsAsCalibre_data()
+{
+    QTest::addColumn<QString>("file");
+    QTest::addColumn<QString>("expected");
+    const QJsonObject texts = QJsonDocument::fromJson(readAll(QStringLiteral(COUSOIR_TEST_DATA_DIR "/oracle/book_text.json")))
+                                  .object()
+                                  .value(QLatin1String("texts"))
+                                  .toObject();
+    QVERIFY(!texts.isEmpty());
+    for (auto it = texts.begin(); it != texts.end(); ++it)
+        QTest::newRow(qPrintable(it.key())) << it.key() << it.value().toString();
+}
+
+void CalibreFtsTest::extractsAsCalibre()
+{
+    QFETCH(QString, file);
+    QFETCH(QString, expected);
+    const BookTextIndex::Extraction extraction
+        = BookTextIndex::extract(QStringLiteral(COUSOIR_TEST_DATA_DIR "/") + file, QFileInfo(file).suffix());
+    QVERIFY(extraction.supported);
+    QCOMPARE(extraction.error, QString());
+    QCOMPARE(extraction.text, expected);
+}
+
+// The index made, filled and kept in step as Calibre does: its rows, the
+// formats waiting, and FTS5's own check of its tables.
+void CalibreFtsTest::keepsTheIndexAsCalibre()
+{
+    QTemporaryDir library;
+    QString error;
+    const QString language = QStringLiteral("en");
+    QVERIFY2(BookTextIndex::create(library.path(), { { 1, QStringLiteral("epub") }, { 2, QStringLiteral("AZW3") }, { 2, QStringLiteral("EPUB") } },
+                                   language, &error),
+             qPrintable(error));
+    QVERIFY(!BookTextIndex::create(library.path(), {}, language, &error));
+    const auto jobs = [&] {
+        QStringList list;
+        for (const BookTextIndex::Job &job : BookTextIndex::waiting(library.path(), nullptr))
+            list.append(QString::number(job.book) + u' ' + job.format);
+        return list;
+    };
+    QCOMPARE(jobs(), (QStringList{ QStringLiteral("1 EPUB"), QStringLiteral("2 AZW3"), QStringLiteral("2 EPUB") }));
+    QCOMPARE(BookTextSearch::status(library.path()).pending, 3);
+
+    const QString text = QStringLiteral("Colin aimait la musique de Duke Ellington. 𝄞");
+    QVERIFY2(BookTextIndex::store(library.path(),
+                                  { { 1, QStringLiteral("EPUB"), 1509, QStringLiteral("aaa"), text, {} },
+                                    { 2, QStringLiteral("AZW3"), 11180, QStringLiteral("bbb"), {}, {} },
+                                    { 2, QStringLiteral("EPUB"), 1483, QStringLiteral("ccc"), {}, QStringLiteral("Not a book") } },
+                                  language, &error),
+             qPrintable(error));
+    QVERIFY(jobs().isEmpty());
+    SqliteDb db;
+    QVERIFY2(db.open(BookTextSearch::indexPath(library.path()), SqliteDb::Mode::ReadWrite, &error)
+                 && CalibreFts::registerTokenizers(db.handle(), language, &error),
+             qPrintable(error));
+    const auto rows = [&db] {
+        return db.rows(QStringLiteral("SELECT book, format, format_size, format_hash, searchable_text, text_size, text_hash, "
+                                      "err_msg, typeof(timestamp) FROM books_text ORDER BY book, format"));
+    };
+    QList<QVariantList> stored = rows();
+    QCOMPARE(stored.size(), 2);
+    // Its length in code points, as Python counts them; SHA-1 of its UTF-8.
+    QCOMPARE(stored.at(0), (QVariantList{ 1, QStringLiteral("EPUB"), 1509, QStringLiteral("aaa"), text, 44,
+                                          QString::fromLatin1(QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha1).toHex()),
+                                          QString(), QStringLiteral("real") }));
+    QCOMPARE(stored.at(1), (QVariantList{ 2, QStringLiteral("EPUB"), 1483, QStringLiteral("ccc"), QString(), 0, QString(),
+                                          QStringLiteral("Not a book"), QStringLiteral("real") }));
+    QVERIFY(BookTextIndex::current(library.path(), { 1, QStringLiteral("EPUB") }, 1509, QStringLiteral("aaa")));
+    QVERIFY(!BookTextIndex::current(library.path(), { 1, QStringLiteral("EPUB") }, 1510, QStringLiteral("aaa")));
+    QCOMPARE(BookTextSearch::find(library.path(), QStringLiteral("ellington"), true, language, 10, &error).size(), 1);
+
+    // The same text again is not stored again, its file's hash with it.
+    QVERIFY(BookTextIndex::follow(library.path(), { { BookTextIndex::FormatChange::Kind::FormatChanged, 1, QStringLiteral("EPUB") } },
+                                  language, &error));
+    QCOMPARE(jobs(), QStringList{ QStringLiteral("1 EPUB") });
+    QVERIFY(BookTextIndex::store(library.path(), { { 1, QStringLiteral("EPUB"), 1600, QStringLiteral("ddd"), text, {} } }, language, &error));
+    QVERIFY(jobs().isEmpty());
+    QCOMPARE(rows().at(0).at(3).toString(), QStringLiteral("aaa"));
+    // Another text replaces it, in the index too.
+    QVERIFY(BookTextIndex::store(library.path(), { { 1, QStringLiteral("EPUB"), 1600, QStringLiteral("ddd"), QStringLiteral("Le pianocktail."), {} } },
+                                 language, &error));
+    QCOMPARE(rows().at(0).at(4).toString(), QStringLiteral("Le pianocktail."));
+    QVERIFY(BookTextSearch::find(library.path(), QStringLiteral("ellington"), true, language, 10, &error).isEmpty());
+    QCOMPARE(BookTextSearch::find(library.path(), QStringLiteral("pianocktail"), true, language, 10, &error).size(), 1);
+
+    // As Calibre's triggers: a format gone takes its text, a book gone all
+    // of its own, a format added or changed waits.
+    QVERIFY2(BookTextIndex::follow(library.path(),
+                                   { { BookTextIndex::FormatChange::Kind::FormatRemoved, 1, QStringLiteral("EPUB") },
+                                     { BookTextIndex::FormatChange::Kind::FormatChanged, 3, QStringLiteral("PDF") },
+                                     { BookTextIndex::FormatChange::Kind::FormatChanged, 2, QStringLiteral("AZW3") },
+                                     { BookTextIndex::FormatChange::Kind::BookRemoved, 2, {} } },
+                                   language, &error),
+             qPrintable(error));
+    QVERIFY(rows().isEmpty());
+    QCOMPARE(jobs(), QStringList{ QStringLiteral("3 PDF") });
+    QVERIFY(BookTextSearch::find(library.path(), QStringLiteral("pianocktail"), true, language, 10, &error).isEmpty());
+    for (const char *table : { "books_fts", "books_fts_stemmed" })
+        QVERIFY2(db.exec(QStringLiteral("INSERT INTO %1(%1) VALUES('integrity-check')").arg(QLatin1String(table)), &error),
+                 qPrintable(error));
+    QCOMPARE(db.value(QStringLiteral("PRAGMA user_version")).toInt(), 1);
+    // Nothing to follow in a library without an index.
+    QTemporaryDir other;
+    QVERIFY(BookTextIndex::follow(other.path(), { { BookTextIndex::FormatChange::Kind::BookRemoved, 1, {} } }, language, &error));
+    QVERIFY(!QFileInfo::exists(BookTextSearch::indexPath(other.path())));
 }
 
 QTEST_GUILESS_MAIN(CalibreFtsTest)

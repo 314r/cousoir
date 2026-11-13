@@ -569,6 +569,39 @@ JSON
 
 notes
 
+# The books' text indexed by cousoir-cli into Calibre's full text index, a
+# format changed and indexed again, then checked, searched, changed and
+# indexed further by Calibre itself (tools/oracle/text_index_check.py):
+# each finds what the other indexed, and FTS5 finds the index sound.
+text_index() {
+    local library="$work/text-library"
+    rm -rf "$library"
+    cp -a --reflink=auto "$root/tests/data/library" "$library"
+    cp "$root/tests/data/reader/notes.epub" "$work/notes.epub"
+    cat > "$work/text-ops.json" <<'JSON'
+[{"addFormat": {"book": 6, "file": "notes.epub"}},
+ {"removeFormats": {"book": 2, "formats": ["AZW3"]}}]
+JSON
+    if ! "$cli" index-text --library "$library" > "$work/text.log" 2>&1 \
+        || ! "$cli" apply --library "$library" "$work/text-ops.json" >> "$work/text.log" 2>&1 \
+        || ! "$cli" index-text --library "$library" >> "$work/text.log" 2>&1; then
+        echo "text index: cousoir-cli failed:"
+        tail -5 "$work/text.log"
+        status=1
+        return 0
+    fi
+    if oracle "$root/tools/oracle/text_index_check.py" -- "$library" "$(realpath "$cli")" "$root/tests/data" \
+        > "$work/text-check.txt"; then
+        echo "text index: Calibre and Cousoir each find what the other indexed"
+    else
+        echo "text index: Calibre and Cousoir's full text index differ:"
+        cat "$work/text-check.txt"
+        status=1
+    fi
+}
+
+text_index
+
 # A Kobo's highlights of The Voyage, synced into a copy of the library by
 # cousoir-cli: Calibre lists, searches and changes them, and a second sync
 # leaves what it changed.

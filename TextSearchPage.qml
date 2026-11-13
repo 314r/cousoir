@@ -7,9 +7,9 @@ import QtQuick.Layouts
 import Cousoir
 
 // The books' text searched, in the index Calibre keeps of it when its full
-// text search is turned on: each book whose text has the words, with the
-// passage around them. Enter reads the book, searching it for the words
-// found.
+// text search is on, which Cousoir also makes and fills: each book whose
+// text has the words, with the passage around them. Enter reads the book,
+// searching it for the words found.
 Rectangle {
     id: page
 
@@ -18,6 +18,8 @@ Rectangle {
     property string error: ""
     property string query: ""
     property var index: ({})
+    readonly property BookTextIndexer indexer: page.library.textIndexer
+    readonly property bool indexed: page.index.exists === true && page.index.enabled === true
 
     signal readRequested(int bookId, string query)
 
@@ -25,6 +27,15 @@ Rectangle {
 
     function refresh() {
         page.index = page.library.textIndex()
+        // Text gone in shows in a search made again.
+        if (page.query.trim())
+            page.search(page.query)
+    }
+
+    function startIndexing() {
+        const error = page.library.indexBooksText()
+        page.error = error
+        page.refresh()
     }
 
     function search(text) {
@@ -69,6 +80,20 @@ Rectangle {
             refresh()
     }
 
+    Connections {
+        target: page.library
+
+        function onTextIndexChanged() {
+            if (page.visible)
+                page.refresh()
+        }
+
+        function onSaved() {
+            if (page.visible)
+                page.index = page.library.textIndex()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.pagePadding
@@ -98,15 +123,29 @@ Rectangle {
             objectName: "textIndexStatus"
 
             Layout.fillWidth: true
-            text: page.index.exists !== true
-                ? qsTr("Calibre has not indexed the text of this library's books. Turn full text searching on in Calibre, under Preferences > Searching, and its index is searched here.")
-                : page.error ? page.error
+            text: page.error ? page.error
+                : page.indexer.running
+                    ? qsTr("Indexing the books' text: %1 of %2.").arg(page.indexer.done).arg(page.indexer.total)
+                : !page.indexed
+                    ? (page.index.exists === true
+                        ? qsTr("Calibre's full text search is off for this library: its index is no longer kept up to date.")
+                        : qsTr("The text of this library's books is not indexed yet. Cousoir indexes it as Calibre does with its full text search on, and Calibre then keeps the index too."))
                 : page.index.pending > 0
-                    ? qsTr("%1 Calibre still has %n formats to index.", "", page.index.pending).arg(qsTr("%n formats indexed.", "", page.index.indexed))
+                    ? qsTr("%1 %n formats still wait to be indexed.", "", page.index.pending).arg(qsTr("%n formats indexed.", "", page.index.indexed))
                     : qsTr("%n formats indexed.", "", page.index.indexed)
             color: page.error ? Theme.danger : Theme.textMuted
             font.pointSize: Theme.fontPointSizeCaption
             wrapMode: Text.Wrap
+        }
+
+        FlatButton {
+            objectName: "indexBooksText"
+
+            visible: !page.indexed && !page.indexer.running
+            enabled: page.library.writable
+            variant: "outline"
+            text: qsTr("Index the books' text")
+            onClicked: page.startIndexing()
         }
 
         Item {

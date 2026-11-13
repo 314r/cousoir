@@ -18,6 +18,9 @@ public:
         // nothing is written beside the file, which must not change while
         // the connection is open.
         Immutable,
+        // Read-only, with SQLite's locks: a file another connection
+        // writes to is read whole, waiting for the writer a few seconds.
+        ReadOnly,
         ReadWrite,
     };
 

@@ -36,6 +36,7 @@
 #include <numeric>
 
 #include "book_import.h"
+#include "book_text_index.h"
 #include "book_text_search.h"
 #ifdef COUSOIR_READER
 #include "book_reader.h"
@@ -266,6 +267,11 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
     connect(&m_watcher, &QFileSystemWatcher::fileChanged, &m_changeTimer, qOverload<>(&QTimer::start));
     connect(&m_loadWatcher, &QFutureWatcher<LoadResult>::finished, this, &BookLibrary::finishLoad);
     connect(&m_commitWatcher, &QFutureWatcher<CommitResult>::finished, this, &BookLibrary::finishCommit);
+    connect(&m_textIndexer, &BookTextIndexer::finished, this, [this] {
+        emit textIndexChanged();
+        if (std::exchange(m_textIndexAgain, false))
+            startTextIndexing();
+    });
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::finished, this, &BookLibrary::finishImport);
     connect(&m_importWatcher, &QFutureWatcher<ImportResult>::progressValueChanged, this, &BookLibrary::importChanged);
     connect(&m_checkWatcher, &QFutureWatcher<LibraryCheck::Findings>::finished, this, &BookLibrary::finishCheck);
@@ -277,6 +283,7 @@ BookLibrary::BookLibrary(const QString &libraryPath, const CalibreConfig &config
 
 BookLibrary::~BookLibrary()
 {
+    m_textIndexer.stop();
     m_checkWatcher.cancel();
     m_checkWatcher.waitForFinished();
     m_loadWatcher.waitForFinished();
@@ -319,6 +326,7 @@ void BookLibrary::setLibraryPath(const QString &path)
         return;
     m_libraryPath = cleaned;
     emit libraryPathChanged();
+    m_textIndexer.stop();
     m_data = {};
     m_index = {};
     m_sorted.clear();
@@ -1068,6 +1076,7 @@ void BookLibrary::finishLoad()
     }
     // Edits made while it loaded.
     startCommit();
+    startTextIndexing();
 }
 
 BookLibrary::BookIndex BookLibrary::indexBooks(const LibraryData &data, const CalibreConfig &config,
@@ -1370,6 +1379,7 @@ void BookLibrary::setWritable(bool writable)
         return;
     m_writable = writable;
     emit writableChanged();
+    startTextIndexing();
 }
 
 bool BookLibrary::saving() const
@@ -1897,8 +1907,65 @@ QVariantMap BookLibrary::textIndex() const
 {
     const BookTextSearch::Status status = BookTextSearch::status(m_libraryPath);
     return { { QStringLiteral("exists"), status.exists },
+             { QStringLiteral("enabled"), m_data.preferences.value(QStringLiteral("fts_enabled")) == QLatin1String("true") },
              { QStringLiteral("indexed"), status.indexed },
              { QStringLiteral("pending"), status.pending } };
+}
+
+QString BookLibrary::indexBooksText()
+{
+    if (!m_loaded || !m_writable)
+        return tr("The library cannot be changed right now.");
+    if (!BookTextSearch::status(m_libraryPath).exists) {
+        // Every format waiting, as Calibre's first indexing leaves them.
+        QList<BookTextIndex::Job> formats;
+        for (const Book &book : std::as_const(m_data.books)) {
+            for (const BookFormat &format : book.formats)
+                formats.append({ book.id, format.format });
+        }
+        QString error;
+        bool made = false;
+        const QString language = effectiveConfig().interfaceLanguage;
+        if (!CommitEngine::withLibraryLock(
+                [&] { made = BookTextIndex::create(m_libraryPath, formats, language, &error); }))
+            return tr("Calibre is open on this computer: close it to change the library.");
+        if (!made)
+            return error;
+        emit textIndexChanged();
+    }
+    if (m_data.preferences.value(QStringLiteral("fts_enabled")) != QLatin1String("true")) {
+        // Calibre's own switch, which its next start follows: its saves then
+        // keep the index too. The save starts the indexing.
+        CommitEngine::Request request;
+        request.preferences = { { QStringLiteral("fts_enabled"), QStringLiteral("true") } };
+        return queueChange(request);
+    }
+    startTextIndexing();
+    return {};
+}
+
+BookTextIndexer *BookLibrary::textIndexer()
+{
+    return &m_textIndexer;
+}
+
+void BookLibrary::startTextIndexing()
+{
+    if (!m_loaded || !m_writable || m_textIndexer.running()
+        || m_data.preferences.value(QStringLiteral("fts_enabled")) != QLatin1String("true"))
+        return;
+    QList<BookTextIndex::Task> tasks;
+    for (const BookTextIndex::Job &job : BookTextIndex::waiting(m_libraryPath, nullptr)) {
+        BookTextIndex::Task task{ job.book, job.format, {} };
+        if (const Book *book = findBook(job.book)) {
+            for (const BookFormat &format : book->formats) {
+                if (format.format.compare(job.format, Qt::CaseInsensitive) == 0 && QFileInfo::exists(format.file))
+                    task.path = format.file;
+            }
+        }
+        tasks.append(task);
+    }
+    m_textIndexer.start(m_libraryPath, effectiveConfig().interfaceLanguage, tasks);
 }
 
 QVariantMap BookLibrary::searchBooksText(const QString &query) const
@@ -2126,6 +2193,12 @@ void BookLibrary::finishCommit()
         }
         emit saved();
         emit changeFinished(committed.id, true, {});
+        if (result.written) {
+            if (m_textIndexer.running())
+                m_textIndexAgain = true;
+            else
+                startTextIndexing();
+        }
         if (!result.added.isEmpty()) {
             QVariantList added;
             for (const int id : result.added)

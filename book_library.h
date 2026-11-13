@@ -15,6 +15,7 @@
 #include "book.h"
 #include "book_edit.h"
 #include "book_list_model.h"
+#include "book_text_indexer.h"
 #include "book_sort.h"
 #include "book_operations.h"
 #include "calibre_config.h"
@@ -56,6 +57,9 @@ class BookLibrary : public QObject
     // The books listed: those of the section or the filter that the search
     // finds, in the sort order.
     Q_PROPERTY(BookListModel *books READ books CONSTANT)
+    // Cousoir's indexing of the books' text, while Calibre's full text
+    // search is on.
+    Q_PROPERTY(BookTextIndexer *textIndexer READ textIndexer CONSTANT)
     // The items of a browse section: { id, name, count }.
     Q_PROPERTY(QVariantList facetRows READ facetRows NOTIFY facetRowsChanged)
     Q_PROPERTY(int facetCount READ facetCount NOTIFY facetRowsChanged)
@@ -163,6 +167,7 @@ public:
     Q_INVOKABLE QString setFilterNote(const QString &text);
     int scopeCount() const;
     BookListModel *books();
+    BookTextIndexer *textIndexer();
     QVariantList facetRows() const;
     int facetCount() const;
     QString searchText() const;
@@ -235,8 +240,12 @@ public:
     // The format Cousoir's reader reads the book in: EPUB, KEPUB, a Kindle
     // book (AZW3, MOBI, AZW), then PDF; empty for none.
     Q_INVOKABLE QString readableFormat(int bookId) const;
-    // Calibre's index of the books' text: { exists, indexed, pending }.
+    // Calibre's index of the books' text: { exists, enabled, indexed,
+    // pending }, `enabled` when Calibre's full text search is on.
     Q_INVOKABLE QVariantMap textIndex() const;
+    // Turns Calibre's full text search on, making its index when the library
+    // has none, and indexes the books' text; an error, or empty.
+    Q_INVOKABLE QString indexBooksText();
     // The library's books whose text has what `query` asks, best first, as
     // Calibre's full text search finds them: { rows: [{ bookId, title,
     // authors, format, snippet }], error }, the words found in the snippet
@@ -371,6 +380,8 @@ signals:
     void loadFailed(const QString &message);
     void writableChanged();
     void savingChanged();
+    // The index of the books' text was made, or text went in.
+    void textIndexChanged();
     void canRevertChanged();
     void bulkUndoChanged();
     void publishedKeyChanged();
@@ -452,6 +463,9 @@ private:
     // A change other than an edit, saved after the ones before it.
     QString queueChange(const CommitEngine::Request &change);
     // The changes waiting, dropped: each told unsaved.
+    // Indexes the formats waiting in the index of the books' text, while
+    // Calibre's full text search is on and the library can be changed.
+    void startTextIndexing();
     void dropPending(const QString &error);
     void finishImport();
     // find_identical_books(): the books with the authors and the title, as
@@ -548,6 +562,9 @@ private:
     QString m_filterKind;
     int m_filterId = 0;
     BookListModel m_bookList;
+    BookTextIndexer m_textIndexer;
+    // A save changed the formats while the indexer ran: it runs again.
+    bool m_textIndexAgain = false;
     int m_scopeCount = 0;
     QVariantList m_facetRows;
     QString m_searchText;

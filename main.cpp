@@ -10,6 +10,7 @@
 
 #include "app_instance.h"
 #include "book_library.h"
+#include "book_text_indexer.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
 #include "metadata_downloader.h"
@@ -82,6 +83,7 @@ int main(int argc, char *argv[])
     qmlRegisterType<MetadataDownloader>("Cousoir", 1, 0, "MetadataDownloader");
     qmlRegisterType<DeviceLibrary>("Cousoir", 1, 0, "DeviceLibrary");
     qmlRegisterType<HighlightBrowser>("Cousoir", 1, 0, "HighlightBrowser");
+    qmlRegisterUncreatableType<BookTextIndexer>("Cousoir", 1, 0, "BookTextIndexer", QStringLiteral("The library's own"));
     qmlRegisterType<HighlightDocument>("Cousoir", 1, 0, "HighlightDocument");
     qmlRegisterType<HighlightSync>("Cousoir", 1, 0, "HighlightSync");
 #ifdef COUSOIR_READER

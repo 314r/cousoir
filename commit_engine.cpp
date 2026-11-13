@@ -18,6 +18,7 @@
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QMutex>
 #include <QObject>
 #include <QPainter>
 #include <QRandomGenerator>
@@ -30,6 +31,7 @@
 #endif
 
 #include "book_operations.h"
+#include "book_text_index.h"
 #include "calibre_db.h"
 #include "calibre_lock.h"
 #include "calibre_template.h"
@@ -216,6 +218,8 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     const QString libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
     const bool incremental = request.base && request.base->source == before && request.base->libraryPath == libraryPath
         && CalibreDb::trackChanges(db, nullptr);
+    // The formats added, changed and gone, for Calibre's full text index.
+    const bool formatsTracked = BookTextIndex::trackFormats(db, nullptr);
     // The library as the database now holds it, `extra` read again too.
     const auto readCurrent = [&](LibraryData *current, const QSet<int> &extra, QSet<int> *changed, bool *whole) {
         *whole = true;
@@ -327,6 +331,11 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         if (!BookOperations::setAnnotation(db, bookId, annotation, &error))
             return undo(error);
     }
+    // DBPrefs.set().
+    for (const auto &[key, value] : request.preferences) {
+        if (!db.run(QStringLiteral("INSERT OR REPLACE INTO preferences (key,val) VALUES (?,?)"), { key, value }, &error))
+            return undo(error);
+    }
     // Worked out on the database as it is now, so that a change brought
     // meanwhile is merged with too.
     int merged = 0;
@@ -366,6 +375,11 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     }
 
     lap("check the database");
+    // What Calibre's triggers would have done to its full text index, done
+    // once the database is published: only while its search is on.
+    const QList<BookTextIndex::FormatChange> formatChanges = formatsTracked && BookTextIndex::enabled(db)
+        ? BookTextIndex::formatChanges(db)
+        : QList<BookTextIndex::FormatChange>();
     // The library as written, for the covers and metadata.opf files; the
     // dates of the books added and restored as Calibre holds them then.
     LibraryData data;
@@ -473,6 +487,12 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     FileTransaction::sync(request.libraryPath);
     files.finish();
     lap("publish the database");
+    // A failure leaves the index behind the library, as it was before
+    // Cousoir followed it: the save itself is done.
+    QString indexError;
+    if (!BookTextIndex::follow(request.libraryPath, formatChanges, request.config.interfaceLanguage, &indexError))
+        qWarning("Calibre's full text index was not brought up to date: %s", qPrintable(indexError));
+    lap("follow the full text index");
 
     // The copy is now what the library reads from.
     const QString snapshot = QDir(request.cacheFolder).filePath(QStringLiteral("snapshot.db"));
@@ -499,8 +519,31 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
 
 namespace CommitEngine {
 
+namespace {
+
+// Held by whatever in this process writes to the library under Calibre's
+// lock, which a second holder in the same process could not take.
+QMutex &libraryWriters()
+{
+    static QMutex mutex;
+    return mutex;
+}
+
+} // namespace
+
+bool withLibraryLock(const std::function<void()> &work)
+{
+    const QMutexLocker writing(&libraryWriters());
+    CalibreLock lock;
+    if (!lock.acquire())
+        return false;
+    work();
+    return true;
+}
+
 Result commit(const Request &request)
 {
+    const QMutexLocker writing(&libraryWriters());
     Result result;
     // The lock first: what a crash left is put right only while nothing
     // else may be writing to the library. Without it the attempt refuses,
@@ -528,6 +571,7 @@ bool recover(const QString &libraryPath, const QString &cacheFolder, QString *do
         *waiting = false;
     if (!QFileInfo::exists(journalPath(cacheFolder)))
         return true;
+    const QMutexLocker writing(&libraryWriters());
     CalibreLock lock;
     if (!lock.acquire()) {
         if (waiting)
