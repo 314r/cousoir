@@ -32,7 +32,7 @@ endif()
 # libmtp, to reach a Kindle Paperwhite; without it, Cousoir sees no MTP device.
 # Qt WebEngine, to read books in Cousoir; without it, there is no reader.
 # Qt TextToSpeech, to read them aloud.
-find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick TextToSpeech)
+find_package(Qt6 6.9 QUIET OPTIONAL_COMPONENTS WebEngineQuick PdfQuick ShaderTools TextToSpeech)
 find_package(PkgConfig)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIBMTP IMPORTED_TARGET libmtp)
@@ -317,8 +317,12 @@ set(COUSOIR_QML_FILES
 if(TARGET Qt6::WebEngineQuick)
     list(APPEND COUSOIR_QML_FILES ReaderWindow.qml)
 endif()
-# Qt Pdf, to read PDFs in the reader.
+# Qt Pdf, to read PDFs in the reader; Qt Shader Tools to build the shader
+# that shows its pages in the theme's colours.
 if(TARGET Qt6::WebEngineQuick AND TARGET Qt6::PdfQuick)
+    if(NOT TARGET Qt6::ShaderTools)
+        message(FATAL_ERROR "The PDF reader needs Qt Shader Tools (qt6-shadertools) to build.")
+    endif()
     list(APPEND COUSOIR_QML_FILES PdfReaderWindow.qml)
 endif()
 
@@ -386,6 +390,12 @@ qt_add_qml_module(cousoir_ui
     RESOURCES
         ${COUSOIR_ICON_FILES}
 )
+if(TARGET Qt6::WebEngineQuick AND TARGET Qt6::PdfQuick)
+    qt_add_shaders(cousoir_ui "cousoir_shaders"
+        PREFIX "/qt/qml/Cousoir"
+        FILES shaders/themed_pages.frag
+    )
+endif()
 target_link_libraries(cousoir_ui
     PRIVATE
         cousoir_models
