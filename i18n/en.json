@@ -59,6 +59,10 @@
     "one": "Calibre deletes books from the trash after %n day.",
     "other": "Calibre deletes books from the trash after %n days."
   },
+  "Messages: %n errors not seen": {
+    "one": "Messages: %n error not seen",
+    "other": "Messages: %n errors not seen"
+  },
   "Restore from the Trash to undo; Calibre deletes what is there after %n days.": {
     "one": "Restore from the Trash to undo; Calibre deletes what is there after %n day.",
     "other": "Restore from the Trash to undo; Calibre deletes what is there after %n days."

@@ -48,6 +48,17 @@ not answer within a few seconds is reported, never doubled. On Hyprland the
 window is given the focus through `hyprctl`, Wayland letting a window take
 it only when the compositor agrees.
 
+## Messages
+
+What Cousoir has to say goes to the status line: what was done, for a few
+seconds, and what went wrong, in the danger colour, until the next message,
+another section or a click. Each one is kept for the session: the Messages
+button in the status bar, red with errors not seen yet, or Messages in
+Ctrl+K, lists them newest first, to read one the status line cut short or to
+copy them. A conversion or a transfer that ends while Cousoir is not in
+front shows on the desktop too. Adding books shows its progress with a Stop
+button, as converting and sending do.
+
 ## Interface
 
 The interface follows the Omarchy style: the system monospace font, hairline

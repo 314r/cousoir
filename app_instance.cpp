@@ -1,6 +1,11 @@
 #include "app_instance.h"
 
 #include <QCommandLineParser>
+#ifdef Q_OS_LINUX
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#endif
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
@@ -167,6 +172,23 @@ void AppInstance::focusWindow() const
     QObject::connect(lua, &QProcess::errorOccurred, lua, &QObject::deleteLater);
     lua->setProcessChannelMode(QProcess::MergedChannels);
     lua->start(hyprctl, { QStringLiteral("dispatch"), QStringLiteral("hl.dsp.focus({ window = \"%1\" })").arg(window) });
+}
+
+void AppInstance::notify(const QString &summary, const QString &body) const
+{
+#ifdef Q_OS_LINUX
+    // org.freedesktop.Notifications, which Omarchy's shell shows.
+    QDBusMessage message = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("/org/freedesktop/Notifications"),
+        QStringLiteral("org.freedesktop.Notifications"), QStringLiteral("Notify"));
+    message << QStringLiteral("Cousoir") << 0u << QStringLiteral("io.github._314r.cousoir") << summary << body
+            << QStringList() << QVariantMap{ { QStringLiteral("desktop-entry"), QStringLiteral("io.github._314r.cousoir") } }
+            << -1;
+    QDBusConnection::sessionBus().asyncCall(message);
+#else
+    Q_UNUSED(summary);
+    Q_UNUSED(body);
+#endif
 }
 
 bool AppInstance::listen(const QString &name)

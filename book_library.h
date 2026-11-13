@@ -304,6 +304,8 @@ public:
     // addDuplicates(). Returns an error message, empty once the files are
     // being read.
     Q_INVOKABLE QString addBooks(const QVariantList &urls);
+    // Stops reading the files being added; none of them is added.
+    Q_INVOKABLE void cancelImport();
     Q_INVOKABLE void addDuplicates(bool add);
     // The file as the book's format of its extension, replacing the book's
     // file of that format. Same returns as updateBook().

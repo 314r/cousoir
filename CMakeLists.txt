@@ -289,6 +289,7 @@ set(COUSOIR_QML_FILES
     LibrarySettingsPage.qml
     ListTable.qml
     Main.qml
+    MessagesPopup.qml
     MetaRow.qml
     MetadataDownloadDialog.qml
     NotePanel.qml

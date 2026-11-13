@@ -2144,6 +2144,8 @@ QString BookLibrary::addBooks(const QVariantList &urls)
         ImportResult result;
         promise.setProgressRange(0, int(files.size()));
         for (qsizetype index = 0; index < files.size(); ++index) {
+            if (promise.isCanceled())
+                return;
             NewBook book;
             book.files = { files.at(index) };
             QString warning;
@@ -2157,6 +2159,11 @@ QString BookLibrary::addBooks(const QVariantList &urls)
     }));
     emit importChanged();
     return {};
+}
+
+void BookLibrary::cancelImport()
+{
+    m_importWatcher.cancel();
 }
 
 void BookLibrary::finishImport()

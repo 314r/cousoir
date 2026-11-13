@@ -1015,5 +1015,16 @@
   "Only the library's books are read in Cousoir.": "Seuls les livres de la bibliothèque se lisent dans Cousoir.",
   "Cousoir is running but does not answer; close it and try again.": "Cousoir est ouvert mais ne répond pas ; fermez-le et réessayez.",
   "Add": "Ajouter",
-  "Cannot copy %1 to %2: %3": "Impossible de copier %1 vers %2 : %3"
+  "Cannot copy %1 to %2: %3": "Impossible de copier %1 vers %2 : %3",
+  "Messages": "Messages",
+  "Cousoir: something went wrong": "Cousoir : un problème est survenu",
+  "Stop adding": "Arrêter l’ajout",
+  "Stop adding books": "Arrêter l’ajout des livres",
+  "Messages: %n errors not seen": {
+    "one": "Messages : %n erreur non lue",
+    "other": "Messages : %n erreurs non lues"
+  },
+  "No messages yet.": "Aucun message pour l’instant.",
+  "Clear": "Effacer",
+  "Close": "Fermer"
 }

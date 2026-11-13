@@ -49,6 +49,9 @@ public:
     // Asks the compositor to give this process's window the focus, on
     // Hyprland; elsewhere the window's own request is all there is.
     Q_INVOKABLE void focusWindow() const;
+    // A notification on the desktop, for work that ends while Cousoir is
+    // not in front: a conversion, a book sent.
+    Q_INVOKABLE void notify(const QString &summary, const QString &body) const;
 
 signals:
     // A launch's command line, as Invocation::toMap() has it.

@@ -34,6 +34,10 @@ ThemedWindow {
     // A message to show in place of the key hints for a while: an error,
     // unless noticeIsError says otherwise.
     property string notice: ""
+    // Every message of the session, oldest first: { text, error, time }.
+    property var messages: []
+    // The errors not seen yet in the messages.
+    property int unreadErrors: 0
     property bool noticeIsError: true
     // Books being converted to be sent: { bookId, root }.
     property var pendingSends: []
@@ -595,6 +599,7 @@ ThemedWindow {
         add("reload", qsTr("Reload the library"), "Ctrl+R", "refresh", true)
         add("settings", qsTr("Settings"), "", "settings", true)
         add("shortcuts", qsTr("Keyboard shortcuts"), "?", "info", true)
+        add("messages", qsTr("Messages"), "", "info", messages.length > 0)
         for (const mode of availableThemeModes()) {
             const titles = { system: qsTr("System theme"), light: qsTr("Light theme"), dark: qsTr("Dark theme"),
                              omarchy: qsTr("Omarchy theme") }
@@ -663,6 +668,8 @@ ThemedWindow {
             reload()
         } else if (hit.key === "settings") {
             openSettings("")
+        } else if (hit.key === "messages") {
+            showMessages()
         } else if (hit.key === "shortcuts") {
             shortcutsOverlay.open()
         } else if (hit.key.startsWith("theme:")) {
@@ -693,10 +700,28 @@ ThemedWindow {
         downloadDialog.start(window.book.id, window.book.title || "")
     }
 
-    function showNotice(message, isError = true) {
+    // A message on the status line, kept with the session's. An error stays
+    // until the next message, another section or a click; the rest go after
+    // a few seconds. With `desktop`, for work ending while Cousoir is not in
+    // front, the desktop shows it too.
+    function showNotice(message, isError = true, desktop = false) {
         notice = message
         noticeIsError = isError
-        noticeTimer.restart()
+        messages = messages.concat([{ text: message, error: isError, time: new Date() }]).slice(-200)
+        if (isError) {
+            unreadErrors += 1
+            noticeTimer.stop()
+        } else {
+            noticeTimer.restart()
+        }
+        if (desktop && !window.active && typeof appInstance !== "undefined")
+            appInstance.notify(isError ? qsTr("Cousoir: something went wrong") : qsTr("Cousoir"), message)
+    }
+
+    function showMessages() {
+        unreadErrors = 0
+        notice = ""
+        messagesPopup.open()
     }
 
     function toggleDetails() {
@@ -910,11 +935,11 @@ ThemedWindow {
         target: window.conversions
 
         function onConverted(bookId, title, format) {
-            window.showNotice(qsTr("“%1” converted to %2.").arg(title).arg(format), false)
+            window.showNotice(qsTr("“%1” converted to %2.").arg(title).arg(format), false, true)
         }
 
         function onFailed(message) {
-            window.showNotice(message)
+            window.showNotice(message, true, true)
         }
 
         function onJobsChanged() {
@@ -927,7 +952,7 @@ ThemedWindow {
 
         function onSent(titles, name) {
             window.showNotice(titles.length === 1 ? qsTr("“%1” sent to %2.").arg(titles[0]).arg(name)
-                                                  : qsTr("%1 books sent to %2.").arg(titles.length).arg(name), false)
+                                                  : qsTr("%1 books sent to %2.").arg(titles.length).arg(name), false, true)
         }
 
         function onEjected(name) {
@@ -938,11 +963,11 @@ ThemedWindow {
             window.showNotice(skipped.length === 0 ? message
                                                    : skipped.length === 1 ? qsTr("%1 Left out: %2.").arg(message).arg(skipped[0])
                                                    : qsTr("%1 Left out: %2, and %3 more.").arg(message).arg(skipped[0]).arg(skipped.length - 1),
-                              false)
+                              false, true)
         }
 
         function onFailed(message) {
-            window.showNotice(message)
+            window.showNotice(message, true, true)
         }
 
         // A reader unplugged takes its page with it.
@@ -1248,6 +1273,14 @@ ThemedWindow {
         sections: window.shortcutSections()
     }
 
+    MessagesPopup {
+        id: messagesPopup
+
+        messages: window.messages
+        onCleared: window.messages = []
+        onClosed: window.focusCurrentList()
+    }
+
     ConfirmDialog {
         id: addFilesDialog
         objectName: "addFilesDialog"
@@ -1418,6 +1451,8 @@ ThemedWindow {
         readonly property real stateWidth: Math.min((writeState.visible ? writeState.implicitWidth + Theme.gutter : 0)
             + (stopConversions.visible ? stopConversions.width + Theme.gutter : 0)
             + (stopSending.visible ? stopSending.width + Theme.gutter : 0)
+            + (stopAdding.visible ? stopAdding.width + Theme.gutter : 0)
+            + (messagesButton.visible ? messagesButton.width + Theme.gutter : 0)
             + (detailsToggle.visible ? detailsToggle.width : 0), width * 0.45)
         readonly property real sideWidth: Math.max(countWidth, stateWidth)
         // Equal sides keep the hints centered while 40 characters of them
@@ -1459,6 +1494,18 @@ ThemedWindow {
                 font.pointSize: Theme.fontPointSizeCaption
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
+
+                // A message cut short is read whole among the messages.
+                HoverHandler {
+                    id: hintsHover
+                }
+                TapHandler {
+                    enabled: window.notice !== ""
+                    onTapped: window.showMessages()
+                }
+                ToolTip.visible: window.notice !== "" && hintsHover.hovered && truncated
+                ToolTip.delay: 400
+                ToolTip.text: window.notice
             }
 
             RowLayout {
@@ -1519,6 +1566,30 @@ ThemedWindow {
                         : qsTr("Stop the %1 conversions").arg(window.conversions.jobs.length)
                     icon.source: "assets/icons/close.svg"
                     onClicked: window.conversions.cancel(0)
+                }
+
+                StatusButton {
+                    id: stopAdding
+                    objectName: "stopAdding"
+
+                    visible: window.library.importing
+                    text: qsTr("Stop adding")
+                    tip: qsTr("Stop adding books")
+                    icon.source: "assets/icons/close.svg"
+                    onClicked: window.library.cancelImport()
+                }
+
+                StatusButton {
+                    id: messagesButton
+                    objectName: "messagesButton"
+
+                    visible: window.messages.length > 0
+                    text: qsTr("Messages")
+                    tip: window.unreadErrors > 0 ? qsTr("Messages: %n errors not seen", "", window.unreadErrors)
+                                                 : qsTr("Messages")
+                    icon.source: "assets/icons/info.svg"
+                    icon.color: window.unreadErrors > 0 ? Theme.danger : Theme.textMuted
+                    onClicked: window.showMessages()
                 }
 
                 StatusButton {
