@@ -560,6 +560,7 @@ private:
     void keepOriginal(const Book &book);
     CalibreConfig effectiveConfig() const;
     void watchLibrary();
+    void releaseFreedMemory();
     void reloadIfChanged();
     void rebuildRows();
     void rebuildFacetRows();

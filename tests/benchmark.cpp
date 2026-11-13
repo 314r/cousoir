@@ -82,6 +82,28 @@ void report(const QString &step, qint64 nanoseconds)
           << QString::number(double(nanoseconds) / 1e6, 'f', 1) << qSetFieldWidth(0) << " ms" << Qt::endl;
 }
 
+// The memory the process holds now and the most it held, in MB, from the
+// kernel's count: after a step, to see which one makes the peak.
+void reportMemory(const QString &after)
+{
+    QFile status(QStringLiteral("/proc/self/status"));
+    if (!status.open(QIODevice::ReadOnly))
+        return;
+    // Of the memory held, what the program made (anonymous) and the
+    // libraries and files it maps.
+    QHash<QByteArray, double> megabytes;
+    for (const QByteArray &line : status.readAll().split('\n')) {
+        const qsizetype colon = line.indexOf(':');
+        if (colon > 0)
+            megabytes.insert(line.left(colon), line.mid(colon + 1).trimmed().split(' ').value(0).toDouble() / 1024);
+    }
+    out() << qSetFieldWidth(44) << Qt::left << QStringLiteral("  memory after ") + after << qSetFieldWidth(10)
+          << Qt::right << QString::number(megabytes.value("VmRSS"), 'f', 0) << qSetFieldWidth(0) << " MB ("
+          << QString::number(megabytes.value("RssAnon"), 'f', 0) << " made, "
+          << QString::number(megabytes.value("RssFile"), 'f', 0) << " mapped), peak "
+          << QString::number(megabytes.value("VmHWM"), 'f', 0) << " MB" << Qt::endl;
+}
+
 // Waits for `signal` up to a minute; false when it did not come.
 template<typename Object, typename Signal>
 bool waitFor(Object *object, Signal signal)
@@ -102,11 +124,13 @@ int benchmarkModel(const QString &path)
         return 1;
     }
     report(QStringLiteral("load (%1 books)").arg(library.scopeCount()), timer.nsecsElapsed());
+    reportMemory(QStringLiteral("load"));
     timer.restart();
     if (library.checking() && !waitFor(&library, &BookLibrary::checkingChanged))
         out() << "the check did not end" << Qt::endl;
     report(QStringLiteral("check (%1 findings)").arg(library.check().value(QStringLiteral("count")).toInt()),
            timer.nsecsElapsed());
+    reportMemory(QStringLiteral("the check"));
 
     const QString typed = QStringLiteral("montagne mer");
     qint64 slowest = 0;
@@ -154,6 +178,7 @@ int benchmarkModel(const QString &path)
     timer.restart();
     library.setSection(QStringLiteral("books"));
     report(QStringLiteral("back to the books"), timer.nsecsElapsed());
+    reportMemory(QStringLiteral("the sections"));
 
     const int bookId = library.books()->idAt(library.books()->count() / 2);
     timer.restart();
@@ -178,6 +203,7 @@ int benchmarkModel(const QString &path)
     report(QStringLiteral("edit saved"), timer.nsecsElapsed());
     for (const auto &[step, nanoseconds] : library.saveTimings())
         report(QStringLiteral("  ") + step, nanoseconds);
+    reportMemory(QStringLiteral("an edit saved"));
 
     // A second edit: no backup this time, the session having made its own.
     timer.restart();
@@ -192,6 +218,7 @@ int benchmarkModel(const QString &path)
     if (library.loading() && !waitFor(&library, &BookLibrary::loadingChanged))
         out() << "the reload did not end" << Qt::endl;
     report(QStringLiteral("edit saved and reloaded"), timer.nsecsElapsed());
+    reportMemory(QStringLiteral("a reload"));
     return 0;
 }
 
@@ -266,6 +293,7 @@ int benchmarkUi(const QString &path)
     QObject *library = window->property("library").value<QObject *>();
     drawn(window);
     report(QStringLiteral("ui: first frame with the books"), timer.nsecsElapsed());
+    reportMemory(QStringLiteral("the first frame"));
 
     QTest::keyClick(window, Qt::Key_F, Qt::ControlModifier);
     drawn(window);
@@ -329,6 +357,7 @@ int benchmarkUi(const QString &path)
     QTest::keyClick(window, Qt::Key_Escape);
     drawn(window);
     report(QStringLiteral("ui: close it"), timer.nsecsElapsed());
+    reportMemory(QStringLiteral("the interface's steps"));
     return 0;
 }
 

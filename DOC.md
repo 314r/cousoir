@@ -1951,7 +1951,17 @@ QT_QPA_PLATFORM=offscreen tools/sandbox.sh build/cousoir-benchmark --ui build/sa
 
 The `sync` first: a save ends by flushing the library's folder to the disk,
 which on btrfs also writes whatever the copy left pending. The benchmark
-prints each step of two saves, the first with its backup.
+prints each step of two saves, the first with its backup, and the memory
+held after the main steps: what Cousoir made, what it maps (its libraries,
+fonts and the graphics driver) and the peak so far.
+
+Where the memory goes, as measured in November 2026: about 150 MB whatever
+the library's size (Qt, QML, the graphics driver; Qt WebEngine itself only
+about 7 MB until a book is read), then about 5 KB a book. Descriptions are
+the largest part of that, a third: the HTML and its folded copy for
+searching, which a plain search reads too. After a load or a save,
+`malloc_trim` hands back what the library before it held, which the worker
+threads' arenas would keep: 50 MB less at 50,000 books.
 
 `--budget FILE` makes it fail past the times and the peak memory of a JSON
 file, or when a step budgeted is no longer measured. `tests/bench/budgets.json`
