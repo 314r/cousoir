@@ -32,8 +32,9 @@ double progress(const QByteArray &line);
 std::optional<int> run(const QString &program, const QStringList &arguments, const QProcessEnvironment &environment,
                        const std::function<void(double)> &progress, QString *error);
 
-// Stops a job's process and those it started, its process group: asked
-// first, killed after 3 s.
+// Stops a job's process and those it started, its process group, without
+// waiting for them: asked at once, killed after 3 s if they still run, and
+// when Cousoir quits. The process is then the stopper's, which deletes it.
 void stopProcessGroup(QProcess *process);
 // The job folders in `base` a crash or a kill left behind, a day old:
 // younger ones may be another Cousoir's on the same library.

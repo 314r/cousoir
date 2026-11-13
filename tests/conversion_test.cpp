@@ -1,6 +1,9 @@
 #include <QtTest>
 
+#include <QElapsedTimer>
 #include <QJsonDocument>
+#include <QPointer>
+#include <QProcess>
 #include <QJsonObject>
 #include <QTemporaryDir>
 
@@ -81,6 +84,7 @@ private slots:
                  qPrintable(error));
     }
 
+    void stopsJobsWithoutWaiting();
     void offersCalibresInputFormats()
     {
         QCOMPARE(Conversion::outputFormats(), QStringList({ QStringLiteral("KEPUB"), QStringLiteral("AZW3"), QStringLiteral("EPUB") }));
@@ -364,6 +368,23 @@ private slots:
         QVERIFY(entries(outcome.file).contains(QStringLiteral("mimetype")));
     }
 };
+
+// A job stopped is not waited for: one that ignores the request to stop is
+// killed a few seconds later, with what it started.
+void ConversionTest::stopsJobsWithoutWaiting()
+{
+    auto *process = new QProcess;
+    process->setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession);
+    process->start(QStringLiteral("/bin/sh"), { QStringLiteral("-c"), QStringLiteral("trap '' TERM; sleep 60 & wait") });
+    QVERIFY(process->waitForStarted());
+    QPointer<QProcess> watched(process);
+    QElapsedTimer clock;
+    clock.start();
+    CalibreJob::stopProcessGroup(process);
+    QVERIFY(clock.elapsed() < 200);
+    QVERIFY(watched);
+    QTRY_VERIFY_WITH_TIMEOUT(!watched, 6000);
+}
 
 QTEST_GUILESS_MAIN(ConversionTest)
 #include "conversion_test.moc"
