@@ -163,7 +163,7 @@ QString dayText(const QString &written)
         return written.left(10);
     if (date.timeSpec() == Qt::LocalTime && !written.endsWith(u'Z') && !written.contains(u'+'))
         date.setTimeZone(QTimeZone::UTC);
-    return date.toLocalTime().toString(QStringLiteral("yyyy-MM-dd"));
+    return BookDisplay::date(date);
 }
 
 // Time spent reading: hours and minutes, or minutes.
@@ -438,7 +438,7 @@ QVariantList DeviceLibrary::reading(int bookId) const
             { QStringLiteral("name"), name },
             { QStringLiteral("format"), format },
             { QStringLiteral("connected"), !seen.isValid() },
-            { QStringLiteral("seen"), seen.isValid() ? seen.toLocalTime().toString(QStringLiteral("yyyy-MM-dd")) : QString() },
+            { QStringLiteral("seen"), seen.isValid() ? BookDisplay::date(seen) : QString() },
             { QStringLiteral("status"), reading.status },
             { QStringLiteral("percent"), reading.percent.value_or(-1) },
             { QStringLiteral("state"), stateText(reading) },

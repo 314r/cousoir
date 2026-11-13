@@ -17,8 +17,14 @@ namespace BookDisplay {
 QString series(const Book &book);
 // rating_to_stars(): two ratings make a star, an odd rating ends in a half.
 QString rating(int rating);
-// The local date, "2015-07-07"; empty for Calibre's undefined date.
+// The language's short date with two-digit days and months and the year
+// whole, "07/24/2015" in English, "24/07/2015" in French: as wide for every
+// date, so that a column's dates line up. Sorting is by the dates, not this.
+QString shortDatePattern();
+// The local date in that pattern; empty for Calibre's undefined date.
 QString date(const QDateTime &date);
+// The local date and time, the time as the language writes it short.
+QString dateTime(const QDateTime &date);
 // A publication date as Calibre shows it, its month: "Apr 2015"; empty for
 // Calibre's undefined date.
 QString monthYear(const QDateTime &date);

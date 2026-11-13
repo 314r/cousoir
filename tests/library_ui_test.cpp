@@ -2617,7 +2617,9 @@ void LibraryUiTest::editsCustomColumns()
     retype("field_#started", QStringLiteral("2020-01-01"));
     QTest::keyClick(m_window, Qt::Key_Return);
     waitForSave();
-    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QStringLiteral("2020-01-01"));
+    // Shown in the language's order, edited as typed.
+    QTRY_COMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("editText")).toString(), QStringLiteral("2020-01-01"));
+    QCOMPARE(custom(QStringLiteral("#started")).value(QStringLiteral("text")).toString(), QStringLiteral("01/01/2020"));
     click("revertChangesButton");
     QTRY_VERIFY(control("confirmRevertButton") && control("confirmRevertButton")->isVisible());
     click("confirmRevertButton");
@@ -3308,7 +3310,7 @@ void LibraryUiTest::showsReading()
 
     library()->setProperty("currentBookId", 1);
     QTRY_VERIFY(control("readingState") && control("readingState")->isVisible());
-    QVERIFY2(text("readingState").startsWith(QStringLiteral("43 % read  ·  last read 2026-10-2")),
+    QVERIFY2(text("readingState").startsWith(QStringLiteral("43 % read  ·  last read 10/2")),
              qPrintable(text("readingState")));
     QVERIFY(text("readingState").endsWith(QStringLiteral("1 h 30 min  ·  6 notes")));
     QStringList annotations;
@@ -3346,7 +3348,7 @@ void LibraryUiTest::showsReading()
     QTRY_VERIFY(control("bookPage") && control("bookPage")->isVisible());
     QTRY_VERIFY(control("readingState") && control("readingState")->isVisible());
     QVERIFY2(text("readingState").startsWith(QStringLiteral("Seen %1  ·  43 % read")
-                                                 .arg(QDate::currentDate().toString(Qt::ISODate))),
+                                                 .arg(QDate::currentDate().toString(QStringLiteral("MM/dd/yyyy")))),
              qPrintable(text("readingState")));
     devices->setVolumeProvider([] { return QList<Volume>(); }, 2000);
 }

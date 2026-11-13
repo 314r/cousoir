@@ -1130,7 +1130,9 @@ both set it; small marks (a tick, a scroll bar, a header's hover) stop at
 Language, the code on the first line of `~/.config/omarchy/language`, and
 English until one is picked; a change is followed at once, the library read
 again so that its dates, sizes and messages follow too. Dates and numbers
-take the formats Omarchy gives that language (`formatLocale` in
+take the formats Omarchy gives that language, the lists' dates in its short
+order with two-digit days and months, "07/24/2015" in English and
+"24/07/2015" in French, as wide for every date (`formatLocale` in
 `$OMARCHY_PATH/default/i18n/locales.json`); without a language picked they
 keep the system's. Away from Omarchy (no `~/.config/omarchy`), the language
 is the first of the system's that Cousoir has a catalog for.

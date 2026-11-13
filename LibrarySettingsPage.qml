@@ -301,7 +301,7 @@ Item {
                     }
 
                     Label {
-                        text: Qt.formatDate(conflictRow.modelData.modified, "yyyy-MM-dd")
+                        text: conflictRow.modelData.modified.toLocaleDateString(Qt.locale(), Locale.ShortFormat)
                         color: Theme.textMuted
                         font.pointSize: Theme.fontPointSizeCaption
                     }
