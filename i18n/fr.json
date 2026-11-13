@@ -1141,5 +1141,17 @@
   "Highlights and notes: %1": "Surlignements et notes : %1",
   "Bookmarks: %1": "Signets : %1",
   "Go to, in % of the book": "Aller à, en % du livre",
-  "Move between the sidebar, the list and the details": "Passer de la barre latérale à la liste et aux détails"
+  "Move between the sidebar, the list and the details": "Passer de la barre latérale à la liste et aux détails",
+  "Cannot save %1: %2": "Impossible d’enregistrer %1 : %2",
+  "Search the highlights": "Rechercher dans les surlignements",
+  "All colours": "Toutes les couleurs",
+  "Yellow": "Jaune",
+  "Green": "Vert",
+  "Blue": "Bleu",
+  "Red": "Rouge",
+  "Purple": "Violet",
+  "Colour": "Couleur",
+  "Save the highlights of every book shown…": "Enregistrer les surlignements de tous les livres affichés…",
+  "Save the highlights": "Enregistrer les surlignements",
+  "Highlights saved": "Surlignements enregistrés"
 }

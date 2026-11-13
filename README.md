@@ -89,8 +89,9 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   database kept each time.
 - 🔎 **All your highlights in one place.** The books you highlighted in
   Cousoir's reader, Calibre's viewer or on your Kobo, each one's highlights
-  and notes typeset as a page by chapter, as kbextract2 shows them, and
-  copied as Markdown, Obsidian Markdown or plain text.
+  and notes typeset as a page by chapter, as kbextract2 shows them, found
+  by their words or their colour, and copied or saved as Markdown, Obsidian
+  Markdown or plain text, a book or all of them.
 - 🖍️ **Your Kobo's highlights, at their place in your books.** Plug it in:
   its highlights and notes go into the library, each where you made it in
   the book, for Calibre's search and Cousoir's reader, and those you delete

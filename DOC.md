@@ -1081,9 +1081,14 @@ highlights. A database found in a Kobo's `.kobo` folder is that Kobo's;
 else one whose highlights a Kobo met already has, and otherwise its
 folder's.
 
-Like kbextract2, the section has no search, filter or export, and leaves
-the bookmarks out. Calibre's annotations browser still searches them all,
-and Cousoir's reader lists a book's highlights beside its page.
+The field above the books finds the highlights by their words, in their
+text or their note, as Calibre's "Browse annotations" finds them, through
+Calibre's full text index, by their stems; a Kobo's that the library does
+not have, by the words they contain. The choice beside it keeps one of
+Calibre's colours. "Save the highlights of every book shown…", in the
+section's menu, writes them all to one Markdown file, each book under its
+title and authors. The bookmarks are left out, as kbextract2 leaves them;
+Cousoir's reader lists a book's beside its page.
 
 ## Settings
 

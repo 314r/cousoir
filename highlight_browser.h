@@ -44,6 +44,13 @@ class HighlightBrowser : public QObject
     // Whether it is shown: while it is not, a change of the library is only
     // noted, and the highlights are read again once it is.
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
+    // Words the highlights shown have, in their text or their note, found
+    // as Calibre's "Browse annotations" finds them, by their stems; empty
+    // for all.
+    Q_PROPERTY(QString search READ search WRITE setSearch NOTIFY filterChanged)
+    // One of Calibre's colours the highlights shown have, "yellow"; empty
+    // for all.
+    Q_PROPERTY(QString colour READ colour WRITE setColour NOTIFY filterChanged)
 
 public:
     explicit HighlightBrowser(QObject *parent = nullptr);
@@ -60,14 +67,24 @@ public:
     QString error() const;
     bool active() const { return m_active; }
     void setActive(bool active);
+    QString search() const { return m_search; }
+    void setSearch(const QString &search);
+    QString colour() const { return m_colour; }
+    void setColour(const QString &colour);
 
     // The highlights of the book of `key`, the current one's when empty, as
     // kbextract2 writes them: "markdown", "obsidian" or "plain".
     Q_INVOKABLE QString formatted(const QString &format, const QString &key = {}) const;
     Q_INVOKABLE void copy(const QString &text) const;
+    // Every book shown, one after the other, as formatted() writes each.
+    Q_INVOKABLE QString formattedAll(const QString &format) const;
+    // `text` saved to `file`, replacing it in one step; the error, empty
+    // when saved.
+    Q_INVOKABLE QString save(const QUrl &file, const QString &text) const;
 
 signals:
     void activeChanged();
+    void filterChanged();
     void libraryChanged();
     void syncChanged();
     void booksChanged();
@@ -99,6 +116,8 @@ private:
     QVariantList m_books;
     QString m_current;
     bool m_active = true;
+    QString m_search;
+    QString m_colour;
     // A change came while it was not shown.
     bool m_stale = false;
     QVariantMap m_document;

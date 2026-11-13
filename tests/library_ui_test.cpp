@@ -144,6 +144,7 @@ private slots:
     void editsDescription();
     void keepsNotes();
     void browsesHighlights();
+    void searchesAndSavesHighlights();
     void editsCustomColumns();
     void changesCovers();
     void movesBooksToTrashAndBack();
@@ -2359,6 +2360,61 @@ void LibraryUiTest::keepsNotes()
     QDir(CalibreDb::notesFolder(m_libraryPath)).removeRecursively();
     QMetaObject::invokeMethod(library(), "reload");
     QTRY_VERIFY(!control("notePane")->isVisible());
+}
+
+// The highlights found by their words, by their colour, and saved, every
+// book shown, as Markdown.
+void LibraryUiTest::searchesAndSavesHighlights()
+{
+    const QString database = QDir(m_libraryPath).filePath(QStringLiteral("metadata.db"));
+    QVERIFY(QFile::remove(database));
+    QVERIFY(QFile::copy(QStringLiteral(COUSOIR_TEST_DATA_DIR "/annotations/metadata.db"), database));
+    QFile(database).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    QMetaObject::invokeMethod(library(), "reload");
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool() && !library()->property("loading").toBool(), 15000);
+    click("sidebar_highlights");
+    QQuickItem *page = control("highlightsPage");
+    QTRY_VERIFY(page && page->isVisible());
+    auto *browser = page->property("browser").value<HighlightBrowser *>();
+    QTRY_COMPARE(browser->count(), 7);
+    const auto titles = [browser] {
+        QStringList list;
+        for (const QVariant &book : browser->books())
+            list.append(book.toMap().value(QStringLiteral("title")).toString());
+        return list;
+    };
+
+    // Words, in the text or the note, as Calibre's full text index finds
+    // them: "read" in a highlight of The Black Company and in a note.
+    QQuickItem *search = control("highlightSearch");
+    QVERIFY(search);
+    search->forceActiveFocus();
+    for (const QChar character : QStringLiteral("read"))
+        QTest::keyClick(m_window, character.toLatin1());
+    QTRY_COMPARE(titles(), QStringList{ QStringLiteral("The Black Company") });
+    QVERIFY(browser->count() < 7);
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_COMPARE(browser->count(), 7);
+    browser->setSearch(QStringLiteral("Ellington"));
+    QTRY_COMPARE(titles(), QStringList{ QStringLiteral("L'Écume des jours") });
+    browser->setSearch({});
+    QTRY_COMPARE(browser->count(), 7);
+
+    // A colour: the red alone.
+    browser->setColour(QStringLiteral("red"));
+    QTRY_COMPARE(titles(), QStringList{ QStringLiteral("The Black Company") });
+    QCOMPARE(browser->count(), 1);
+    browser->setColour({});
+    QTRY_COMPARE(browser->count(), 7);
+
+    // Every book shown in one file.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(QStringLiteral("Highlights.md"));
+    QCOMPARE(browser->save(QUrl::fromLocalFile(file), browser->formattedAll(QStringLiteral("markdown"))), QString());
+    const QString saved = QString::fromUtf8(readAll(file));
+    QVERIFY(saved.contains(QStringLiteral("The Black Company")));
+    QVERIFY(saved.contains(QStringLiteral("Good Omens")));
+    QVERIFY(saved.contains(QStringLiteral("Le jazz, toujours.")));
 }
 
 void LibraryUiTest::browsesHighlights()

@@ -2,8 +2,11 @@
 
 #include <QClipboard>
 #include <QCollator>
+#include <QDir>
 #include <QGuiApplication>
+#include <QSaveFile>
 #include <QScopeGuard>
+#include <QUrl>
 
 #include "book.h"
 #include "book_library.h"
@@ -127,6 +130,48 @@ void HighlightBrowser::setActive(bool active)
         refresh();
 }
 
+void HighlightBrowser::setSearch(const QString &search)
+{
+    if (m_search == search)
+        return;
+    m_search = search;
+    emit filterChanged();
+    refresh();
+}
+
+void HighlightBrowser::setColour(const QString &colour)
+{
+    if (m_colour == colour)
+        return;
+    m_colour = colour;
+    emit filterChanged();
+    refresh();
+}
+
+QString HighlightBrowser::formattedAll(const QString &format) const
+{
+    // Each book under its title and authors: a book's own text has
+    // neither, its page showing them.
+    const bool plain = format == QLatin1String("plain");
+    QStringList books;
+    for (const Group &group : m_groups) {
+        QString head = plain ? group.title : QStringLiteral("# ") + group.title;
+        if (!group.authors.isEmpty())
+            head += QStringLiteral("\n\n") + group.authors.join(QStringLiteral(" & "));
+        books.append(head + QStringLiteral("\n\n") + formatted(format, group.key));
+    }
+    return books.join(QStringLiteral("\n\n"));
+}
+
+QString HighlightBrowser::save(const QUrl &file, const QString &text) const
+{
+    const QString path = file.isLocalFile() ? file.toLocalFile() : file.toString();
+    QSaveFile out(path);
+    if (!out.open(QIODevice::WriteOnly) || out.write(text.toUtf8()) < 0 || !out.commit())
+        return tr("Cannot save %1: %2").arg(QDir::toNativeSeparators(path), out.errorString());
+    return {};
+}
+
 void HighlightBrowser::refresh()
 {
     // Every highlight of the library is read: not for a page not shown.
@@ -160,6 +205,7 @@ void HighlightBrowser::refresh()
     AnnotationSearch::Query query;
     query.type = QStringLiteral("highlight");
     query.all = true;
+    query.text = m_search.trimmed();
     const QList<AnnotationSearch::Hit> hits = AnnotationSearch::find(db, query, &error);
     if (!error.isEmpty()) {
         m_error = error;
@@ -167,9 +213,14 @@ void HighlightBrowser::refresh()
     }
     const LibraryData &data = m_library->data();
     // Only the library's books: a book gone keeps no highlights to show.
+    // In the colour asked for, if one is.
+    const auto colourOf = [](const PythonJson::Value &annotation) {
+        const PythonJson::Value *style = annotation.find(QStringLiteral("style"));
+        return style ? style->text(QStringLiteral("which")) : QString();
+    };
     QList<AnnotationSearch::Hit> kept;
     for (const AnnotationSearch::Hit &hit : hits) {
-        if (data.book(hit.bookId))
+        if (data.book(hit.bookId) && (m_colour.isEmpty() || colourOf(hit.annotation) == m_colour))
             kept.append(hit);
     }
     QHash<int, qsizetype> groupOf;
@@ -189,9 +240,16 @@ void HighlightBrowser::refresh()
     QList<Group> koboOnly;
     for (const QString &device : std::as_const(devices)) {
         for (const KoboSync::Left &book : left.value(device)) {
+            // Words found in their text or note; none in a colour, the
+            // Kobo's being its own.
             QList<KoboHighlights::Highlight> shown;
+            const QStringList words = m_search.simplified().split(u' ', Qt::SkipEmptyParts);
             for (const KoboHighlights::Highlight &highlight : book.book.highlights) {
-                if (!highlight.hidden)
+                const QString said = highlight.text + u' ' + highlight.note;
+                const bool found = std::all_of(words.cbegin(), words.cend(), [&said](const QString &word) {
+                    return said.contains(word, Qt::CaseInsensitive);
+                });
+                if (!highlight.hidden && found && m_colour.isEmpty())
                     shown.append(highlight);
             }
             if (shown.isEmpty())
