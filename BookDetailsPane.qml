@@ -18,6 +18,14 @@ FocusScope {
     required property BookLibrary library
     property ConversionService conversions: null
     property var book: ({})
+    // The labels' width, in characters: the longest of the built-in ones in
+    // the language shown, and of the custom columns' names, up to 18; a
+    // name longer is cut, whole in its tooltip.
+    readonly property int labelChars: Math.min(18, Math.max(11, ...[
+        qsTr("Title"), qsTr("Title sort"), qsTr("Authors"), qsTr("Author sort"), qsTr("Series", "field"),
+        qsTr("Number"), qsTr("Tags"), qsTr("Rating"), qsTr("Publisher"), qsTr("Languages"), qsTr("Published"),
+        qsTr("Identifiers"), qsTr("Added"), qsTr("Modified")
+    ].concat((book.custom || []).map(field => field.name || "")).map(text => text.length)))
     readonly property bool editable: library.writable && (book.id || 0) > 0
     // A field has the focus.
     readonly property bool editing: activeFocus && Window.activeFocusItem?.detailField === true
@@ -32,7 +40,7 @@ FocusScope {
         { key: "authors", label: qsTr("Authors"), value: (book.authors || []).join(" & ") },
         { key: "authorSort", label: qsTr("Author sort"),
           value: book.authorSort !== (book.authors || []).join(" & ") ? book.authorSort || "" : "" },
-        { key: "series", label: qsTr("Series"), value: book.seriesText || "" },
+        { key: "series", label: qsTr("Series", "field"), value: book.seriesText || "" },
         { key: "tags", label: qsTr("Tags"), value: (book.tags || []).join(", ") },
         { key: "rating", label: qsTr("Rating"), value: book.rating || "" },
         { key: "publisher", label: qsTr("Publisher"), value: book.publisher || "" },
@@ -61,7 +69,7 @@ FocusScope {
 
     // A rating from 0 to 10 as stars, two per star.
     function ratingLabel(rating) {
-        return rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+        return rating === 0 ? qsTr("None", "rating") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
     }
 
     function open(format) {
@@ -170,11 +178,20 @@ FocusScope {
         spacing: Theme.rowPadding
 
         Label {
-            Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+            id: detailLabel
+
+            Layout.preferredWidth: Math.round(pane.labelChars * Theme.charWidth)
             Layout.minimumWidth: Layout.preferredWidth
             text: detail.label
             color: Theme.textMuted
             elide: Text.ElideRight
+
+            HoverHandler {
+                id: detailLabelHover
+            }
+            ToolTip.visible: detailLabel.truncated && detailLabelHover.hovered
+            ToolTip.delay: 400
+            ToolTip.text: detail.label
         }
 
         FormField {
@@ -231,7 +248,7 @@ FocusScope {
         spacing: Theme.rowPadding
 
         Label {
-            Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+            Layout.preferredWidth: Math.round(pane.labelChars * Theme.charWidth)
             Layout.minimumWidth: Layout.preferredWidth
             text: choiceRow.field.name || ""
             color: Theme.textMuted
@@ -289,6 +306,7 @@ FocusScope {
                     model: pane.facts
 
                     delegate: MetaRow {
+                        labelChars: pane.labelChars
                         required property var modelData
 
                         objectName: "fact_" + modelData.key
@@ -302,6 +320,7 @@ FocusScope {
                     model: pane.book.identifiers || []
 
                     delegate: MetaRow {
+                        labelChars: pane.labelChars
                         required property var modelData
 
                         objectName: "identifier_" + modelData.type
@@ -315,6 +334,7 @@ FocusScope {
                     model: pane.book.custom || []
 
                     delegate: MetaRow {
+                        labelChars: pane.labelChars
                         required property var modelData
 
                         objectName: "fact_" + modelData.key
@@ -362,7 +382,7 @@ FocusScope {
 
                 DetailField {
                     key: "series"
-                    label: qsTr("Series")
+                    label: qsTr("Series", "field")
                     value: pane.book.series || ""
                 }
 
@@ -386,7 +406,7 @@ FocusScope {
                     spacing: Theme.rowPadding
 
                     Label {
-                        Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+                        Layout.preferredWidth: Math.round(pane.labelChars * Theme.charWidth)
                         text: qsTr("Rating")
                         color: Theme.textMuted
                     }
@@ -491,6 +511,7 @@ FocusScope {
                             id: computedField
 
                             MetaRow {
+                                labelChars: pane.labelChars
                                 objectName: "field_" + customField.modelData
                                 label: customField.field.name || ""
                                 value: customField.field.text || ""
@@ -527,12 +548,14 @@ FocusScope {
                 }
 
                 MetaRow {
+                    labelChars: pane.labelChars
                     Layout.topMargin: Math.round(Theme.gutter / 2)
                     label: qsTr("Added")
                     value: pane.book.added || ""
                 }
 
                 MetaRow {
+                    labelChars: pane.labelChars
                     label: qsTr("Modified")
                     value: pane.book.modified || ""
                 }

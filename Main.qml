@@ -271,7 +271,7 @@ ThemedWindow {
                                        && (bookRow(id)?.formats || "").split(", ").includes(format)).length
         convertManyDialog.bookIds = bookIds
         convertManyDialog.format = format
-        convertManyDialog.title = qsTr("Convert %1 books to %2?").arg(bookIds.length).arg(format)
+        convertManyDialog.title = qsTr("Convert %n books to %1?", "", bookIds.length).arg(format)
         convertManyDialog.message = having > 0
             ? qsTr("%1 of them have a %2 file already, which the new one replaces.").arg(having).arg(format)
             : conversions.calibre ? qsTr("Calibre converts them one after the other, each with its own settings.")
@@ -357,8 +357,7 @@ ThemedWindow {
             convertAndSendDialog.bookIds = convertible
             convertAndSendDialog.root = target
             convertAndSendDialog.format = format
-            convertAndSendDialog.title = qsTr("Convert %1 books to %2 for %3?").arg(convertible.length).arg(format)
-                .arg(device.name)
+            convertAndSendDialog.title = qsTr("Convert %n books to %1 for %2?", "", convertible.length).arg(format).arg(device.name)
             convertAndSendDialog.message = (conversions.calibre ? qsTr("%1 reads none of their formats. Calibre converts them first, then they are sent.")
                                                                 : qsTr("%1 reads none of their formats. Cousoir converts them first, then they are sent."))
                 .arg(device.name)
@@ -502,7 +501,7 @@ ThemedWindow {
             return
         trashDialog.bookIds = bookIds
         trashDialog.title = bookIds.length === 1 ? qsTr("Move “%1” to the trash?").arg(row.title)
-                                                 : qsTr("Move %1 books to the trash?").arg(bookIds.length)
+                                                 : qsTr("Move %n books to the trash?", "", bookIds.length)
         trashDialog.message = bookIds.length === 1
             ? qsTr("Its files go to the library's trash, where Cousoir and Calibre can restore it.")
             : qsTr("Their files go to the library's trash, where Cousoir and Calibre can restore them.")
@@ -576,12 +575,12 @@ ThemedWindow {
         add("reader", qsTr("Open in reader"), "Ctrl+O", "external", currentBookId() > 0)
         add("download", qsTr("Download metadata and covers"), "", "globe",
             session.bookOpen && library.writable)
-        add("kepub", books > 1 ? qsTr("Convert %1 books to KEPUB").arg(books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
+        add("kepub", books > 1 ? qsTr("Convert %n books to KEPUB", "", books) : qsTr("Convert to KEPUB"), "Ctrl+Shift+K",
             "refresh", books > 0 && library.writable)
-        add("azw3", books > 1 ? qsTr("Convert %1 books to AZW3").arg(books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
+        add("azw3", books > 1 ? qsTr("Convert %n books to AZW3", "", books) : qsTr("Convert to AZW3"), "Ctrl+Shift+A",
             "refresh", books > 0 && library.writable)
         for (const device of devices.devices) {
-            add("send:" + device.root, books > 1 ? qsTr("Send %1 books to %2").arg(books).arg(device.name)
+            add("send:" + device.root, books > 1 ? qsTr("Send %n books to %1", "", books).arg(device.name)
                                                  : qsTr("Send to %1").arg(device.name),
                 device === devices.devices[0] ? "Ctrl+D" : "", "ereader",
                 books > 0 && devices.writable)
@@ -589,7 +588,7 @@ ThemedWindow {
                 device.kind === "kobo" && devices.writable && !devices.syncing)
             add("eject:" + device.root, qsTr("Eject %1").arg(device.name), "", "eject", device.ejectable === true)
         }
-        add("trash", books > 1 ? qsTr("Move %1 books to the trash").arg(books) : qsTr("Move to the trash"), "Del",
+        add("trash", books > 1 ? qsTr("Move %n books to the trash", "", books) : qsTr("Move to the trash"), "Del",
             "trash", books > 0 && library.writable)
         add("grid", layoutSettings.gridMode ? qsTr("Show the list") : qsTr("Show the covers"), "Ctrl+G",
             layoutSettings.gridMode ? "list" : "grid", booksShown)
@@ -744,15 +743,15 @@ ThemedWindow {
         const narrowed = shown !== total
         switch (key) {
         case "authors":
-            return narrowed ? qsTr("%1 of %2 authors").arg(shown).arg(total) : qsTr("%n authors", "", total)
+            return narrowed ? qsTr("%1 of %n authors", "", total).arg(shown) : qsTr("%n authors", "", total)
         case "series":
-            return narrowed ? qsTr("%1 of %2 series").arg(shown).arg(total) : qsTr("%n series", "", total)
+            return narrowed ? qsTr("%1 of %n series", "", total).arg(shown) : qsTr("%n series", "", total)
         case "tags":
-            return narrowed ? qsTr("%1 of %2 tags").arg(shown).arg(total) : qsTr("%n tags", "", total)
+            return narrowed ? qsTr("%1 of %n tags", "", total).arg(shown) : qsTr("%n tags", "", total)
         case "languages":
-            return narrowed ? qsTr("%1 of %2 languages").arg(shown).arg(total) : qsTr("%n languages", "", total)
+            return narrowed ? qsTr("%1 of %n languages", "", total).arg(shown) : qsTr("%n languages", "", total)
         case "publishers":
-            return narrowed ? qsTr("%1 of %2 publishers").arg(shown).arg(total) : qsTr("%n publishers", "", total)
+            return narrowed ? qsTr("%1 of %n publishers", "", total).arg(shown) : qsTr("%n publishers", "", total)
         }
         return ""
     }
@@ -779,13 +778,14 @@ ThemedWindow {
             return facets
         const shown = library.books.count
         const total = library.scopeCount
-        const selected = library.books.selectedCount > 1 ? qsTr("%1 selected · ").arg(library.books.selectedCount) : ""
-        if (shown !== total)
-            return selected + qsTr("%1 of %2 books").arg(shown).arg(total)
-        return selected + qsTr("%n books", "", total)
+        const parts = library.books.selectedCount > 1 ? [qsTr("%n selected", "", library.books.selectedCount)] : []
+        parts.push(shown !== total ? qsTr("%1 of %n books", "", total).arg(shown) : qsTr("%n books", "", total))
+        return parts.join(" · ")
     }
 
-    function hintText() {
+    // What the status bar says when there is no message: work under way,
+    // else the keys of the moment that fit in `available` pixels.
+    function hintText(available) {
         if (library.importing)
             return qsTr("Reading %1 of %2 files…").arg(library.importDone).arg(library.importTotal)
         if (conversions.busy) {
@@ -794,53 +794,94 @@ ThemedWindow {
             return (job.running ? qsTr("Converting “%1” to %2 · %3%").arg(job.title).arg(job.format)
                                       .arg(Math.round(job.progress * 100))
                                 : qsTr("Converting “%1” to %2 after the changes…").arg(job.title).arg(job.format))
-                + (waiting > 0 ? " " + qsTr("(%1 more waiting)").arg(waiting) : "")
+                + (waiting > 0 ? " " + qsTr("(%n more waiting)", "", waiting) : "")
         }
         if (devices.busy) {
             const job = devices.jobs[0]
-            const what = job.titles.length === 1 ? qsTr("“%1”").arg(job.titles[0])
-                                                 : qsTr("%1 books").arg(job.titles.length)
+            const one = job.titles.length === 1
+            const percent = Math.round(job.progress * 100)
             const waiting = devices.jobs.length - 1
-            return (job.running ? qsTr("Sending %1 to %2 · %3%").arg(what).arg(job.name).arg(Math.round(job.progress * 100))
-                                : qsTr("Sending %1 to %2 after the changes…").arg(what).arg(job.name))
-                + (waiting > 0 ? " " + qsTr("(%1 more waiting)").arg(waiting) : "")
+            return (job.running
+                    ? (one ? qsTr("Sending “%1” to %2 · %3%").arg(job.titles[0]).arg(job.name).arg(percent)
+                           : qsTr("Sending %n books to %1 · %2%", "", job.titles.length).arg(job.name).arg(percent))
+                    : (one ? qsTr("Sending “%1” to %2 after the changes…").arg(job.titles[0]).arg(job.name)
+                           : qsTr("Sending %n books to %1 after the changes…", "", job.titles.length).arg(job.name)))
+                + (waiting > 0 ? " " + qsTr("(%n more waiting)", "", waiting) : "")
         }
         if (library.saving)
             return qsTr("Saving…")
+        return hintLine(available)
+    }
+
+    // The keys of the moment and what they do, in the order shown, each with
+    // its rank: the line too narrow, the highest rank goes first.
+    function hints() {
+        const h = (keys, action, rank = 1) => ({ keys: keys, action: action, rank: rank })
+        const move = h("↑↓", qsTr("move", "hint"), 3)
+        const reload = h("F5", qsTr("reload", "hint"), 3)
+        const search = h("Ctrl+F", qsTr("search", "hint"), 2)
+        const find = h("Ctrl+K", qsTr("find", "hint"), 2)
         if (session.bookOpen && bookPage.confirmingRevert)
-            return qsTr("Enter revert · Esc keep")
+            return [h("Enter", qsTr("revert", "hint")), h("Esc", qsTr("keep", "hint"))]
         if (session.bookOpen && bookPage.editingDescription)
-            return qsTr("Ctrl+Enter save · Esc cancel")
+            return [h("Ctrl+Enter", qsTr("save", "hint")), h("Esc", qsTr("cancel", "hint"))]
         if (session.bookOpen && bookPage.editing)
-            return qsTr("Enter save · Esc revert · Tab next field")
-        if (session.bookOpen && library.writable && devices.devices.length > 0)
-            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+D send · Ctrl+I details")
-        if (session.bookOpen && library.writable)
-            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+V paste cover · Ctrl+I details")
-        if (session.bookOpen)
-            return qsTr("Esc back · Ctrl+O open in reader · Ctrl+I details")
+            return [h("Enter", qsTr("save", "hint")), h("Esc", qsTr("revert", "hint")), h("Tab", qsTr("next field", "hint"), 2)]
+        if (session.bookOpen) {
+            const list = [h("Esc", qsTr("back", "hint")), h("Ctrl+O", qsTr("open in reader", "hint"), 2)]
+            if (library.writable && devices.devices.length > 0)
+                list.push(h("Ctrl+D", qsTr("send", "hint"), 3))
+            else if (library.writable)
+                list.push(h("Ctrl+V", qsTr("paste cover", "hint"), 4))
+            list.push(h("Ctrl+I", qsTr("details", "hint"), 3))
+            return list
+        }
         if (trashShown)
-            return library.trashEntries.length > 0 ? qsTr("↑↓ move · Enter restore") : qsTr("F5 reload")
+            return library.trashEntries.length > 0 ? [move, h("Enter", qsTr("restore", "hint"))] : [reload]
         if (checkShown)
-            return (library.check.count || 0) > 0 ? qsTr("↑↓ move · Enter actions · F5 check again")
-                                                  : qsTr("F5 check again")
-        if (deviceShown)
-            return devices.rows.length === 0 ? qsTr("F5 read again")
-                : devices.writable ? qsTr("↑↓ move · Enter show in library · Del remove from %1").arg(devices.current.name)
-                : qsTr("↑↓ move · Enter show in library")
+            return (library.check.count || 0) > 0
+                ? [move, h("Enter", qsTr("actions", "hint")), h("F5", qsTr("check again", "hint"), 3)]
+                : [h("F5", qsTr("check again", "hint"))]
+        if (deviceShown) {
+            if (devices.rows.length === 0)
+                return [h("F5", qsTr("read again", "hint"))]
+            const list = [move, h("Enter", qsTr("show in library", "hint"))]
+            if (devices.writable)
+                list.push(h("Del", qsTr("remove from %1", "hint").arg(devices.current.name), 2))
+            return list
+        }
         if (facetShown)
-            return library.facetRows.length > 0 ? qsTr("↑↓ move · Enter show books · Ctrl+F search · Ctrl+K find")
-                                                : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
+            return library.facetRows.length > 0 ? [move, h("Enter", qsTr("show books", "hint")), search, find]
+                                                : [search, find, reload]
         if (library.books.count === 0)
-            return session.filterOpen ? qsTr("Esc back · F5 reload") : qsTr("Ctrl+F search · Ctrl+K find · F5 reload")
-        if (editingMany)
-            return qsTr("Esc one book · Shift+↑↓ more · Ctrl+A all") + (library.writable ? qsTr(" · Del trash") : "")
-                + (devices.devices.length > 0 ? qsTr(" · Ctrl+D send") : "")
-        const back = session.filterOpen ? qsTr("Esc back · ") : ""
-        const trash = library.writable ? qsTr(" · Del trash") : ""
-        return back + qsTr("↑↓ move · Enter open · Ctrl+O read · Ctrl+G %1").arg(layoutSettings.gridMode ? qsTr("list")
-                                                                                                   : qsTr("covers"))
-            + trash
+            return session.filterOpen ? [h("Esc", qsTr("back", "hint")), reload] : [search, find, reload]
+        if (editingMany) {
+            const list = [h("Esc", qsTr("one book", "hint")), h("Shift+↑↓", qsTr("more", "hint"), 2),
+                          h("Ctrl+A", qsTr("all", "hint"), 3)]
+            if (library.writable)
+                list.push(h("Del", qsTr("trash", "hint"), 2))
+            if (devices.devices.length > 0)
+                list.push(h("Ctrl+D", qsTr("send", "hint"), 3))
+            return list
+        }
+        const list = session.filterOpen ? [h("Esc", qsTr("back", "hint"))] : []
+        list.push(move, h("Enter", qsTr("open", "hint")), h("Ctrl+O", qsTr("open in reader", "hint"), 4),
+                  h("Ctrl+G", layoutSettings.gridMode ? qsTr("list", "hint") : qsTr("covers", "hint"), 3))
+        if (library.writable)
+            list.push(h("Del", qsTr("trash", "hint"), 2))
+        return list
+    }
+
+    // The hints that fit in `available` pixels of the status bar.
+    function hintLine(available) {
+        let items = hints()
+        const line = list => list.map(item => qsTr("%1 %2", "hint").arg(item.keys).arg(item.action)).join(" · ")
+        while (items.length > 1 && hintMetrics.advanceWidth(line(items)) > available) {
+            const ranks = items.map(item => item.rank)
+            const dropped = ranks.lastIndexOf(Math.max(...ranks))
+            items = items.slice(0, dropped).concat(items.slice(dropped + 1))
+        }
+        return line(items)
     }
 
     // An icon button of the status bar.
@@ -899,7 +940,7 @@ ThemedWindow {
             const one = titles.length === 1
             const shown = titles.slice(0, 4).map(title => "“" + title + "”").join(", ")
             duplicatesDialog.title = one ? qsTr("“%1” is already in the library").arg(titles[0])
-                                         : qsTr("%1 of these books are already in the library").arg(titles.length)
+                                         : qsTr("%n of these books are already in the library", "", titles.length)
             duplicatesDialog.message = (one ? "" : titles.length > 4 ? qsTr("%1 and %2 more.").arg(shown).arg(titles.length - 4)
                                                                      : shown + ".")
                 + (total > titles.length ? (one ? "" : " ")
@@ -956,7 +997,7 @@ ThemedWindow {
 
         function onSent(titles, name) {
             window.showNotice(titles.length === 1 ? qsTr("“%1” sent to %2.").arg(titles[0]).arg(name)
-                                                  : qsTr("%1 books sent to %2.").arg(titles.length).arg(name), false, true)
+                                                  : qsTr("%n books sent to %1.", "", titles.length).arg(name), false, true)
         }
 
         function onEjected(name) {
@@ -1507,10 +1548,16 @@ ThemedWindow {
             }
 
             Label {
+                id: keyHintsLabel
                 objectName: "keyHints"
 
                 Layout.fillWidth: true
-                text: window.notice || window.hintText()
+                text: window.notice || window.hintText(width)
+
+                FontMetrics {
+                    id: hintMetrics
+                    font: keyHintsLabel.font
+                }
                 color: window.notice && window.noticeIsError ? Theme.danger : window.notice ? Theme.text : Theme.textMuted
                 font.pointSize: Theme.fontPointSizeCaption
                 horizontalAlignment: Text.AlignHCenter
@@ -1583,8 +1630,7 @@ ThemedWindow {
 
                     visible: window.conversions.busy
                     text: qsTr("Stop converting")
-                    tip: window.conversions.jobs.length === 1 ? qsTr("Stop the conversion")
-                        : qsTr("Stop the %1 conversions").arg(window.conversions.jobs.length)
+                    tip: qsTr("Stop the %n conversions", "", window.conversions.jobs.length)
                     icon.source: "assets/icons/close.svg"
                     onClicked: window.conversions.cancel(0)
                 }
@@ -1619,8 +1665,7 @@ ThemedWindow {
 
                     visible: window.devices.busy
                     text: qsTr("Stop sending")
-                    tip: window.devices.jobs.length === 1 ? qsTr("Stop sending")
-                        : qsTr("Stop the %1 sendings").arg(window.devices.jobs.length)
+                    tip: qsTr("Stop the %n sendings", "", window.devices.jobs.length)
                     icon.source: "assets/icons/close.svg"
                     onClicked: window.devices.cancel(0)
                 }
@@ -1678,7 +1723,22 @@ ThemedWindow {
             spacing: 0
 
             Rectangle {
+                id: toolbar
                 objectName: "toolbar"
+
+                // The book's text buttons, as wide as their words in the
+                // language shown: icons alone when the toolbar has no room
+                // for them beside the breadcrumb and the other buttons.
+                readonly property real bookButtonsWidth: (window.library.canRevert ? [qsTr("Revert changes")] : [])
+                    .concat([qsTr("Read"), qsTr("Open in reader")])
+                    .reduce((sum, text) => sum + toolbarMetrics.advanceWidth(text) + 2 * Theme.controlInset
+                            + Theme.iconSize + 2 * Theme.gutter, 0)
+                readonly property bool compact: width < bookButtonsWidth + 6 * Theme.rowHeight + 28 * Theme.charWidth
+
+                FontMetrics {
+                    id: toolbarMetrics
+                    font: window.font
+                }
 
                 Layout.fillWidth: true
                 implicitHeight: Theme.toolbarHeight
@@ -1791,6 +1851,8 @@ ThemedWindow {
 
                         visible: session.bookOpen && window.library.canRevert && !bookPage.confirmingRevert
                         variant: "outline"
+                        iconOnly: toolbar.compact
+                        icon.source: toolbar.compact ? "assets/icons/refresh.svg" : ""
                         text: qsTr("Revert changes")
                         tip: qsTr("Undo every change since you opened the book")
                         // Out of any field first, so Enter and Esc answer.
@@ -1860,6 +1922,7 @@ ThemedWindow {
                         // those Calibre makes readable too.
                         enabled: window.book.id > 0 && window.library.readableFormat(window.book.id) !== ""
                         variant: "outline"
+                        iconOnly: toolbar.compact
                         text: qsTr("Read")
                         tip: qsTr("Read in Cousoir (Ctrl+Shift+O)")
                         icon.source: "assets/icons/book.svg"
@@ -1872,6 +1935,7 @@ ThemedWindow {
                         visible: session.bookOpen && !bookPage.confirmingRevert
                         enabled: (window.book.formats || []).some(format => !format.missing)
                         variant: "outline"
+                        iconOnly: toolbar.compact
                         text: qsTr("Open in reader")
                         tip: qsTr("Open in reader (Ctrl+O)")
                         icon.source: "assets/icons/external.svg"
@@ -1969,8 +2033,10 @@ ThemedWindow {
                         Layout.preferredWidth: Math.round(280 * Theme.spacingScale)
                         Layout.maximumWidth: Math.round(280 * Theme.spacingScale)
                         Layout.minimumWidth: Math.round(120 * Theme.spacingScale)
-                        placeholderText: window.facetShown ? qsTr("Search %1").arg(sidebar.current.title.toLowerCase())
-                            : qsTr("Search, as in Calibre")
+                        placeholderText: !window.facetShown ? qsTr("Search, as in Calibre")
+                            : ({ authors: qsTr("Search authors"), series: qsTr("Search series"), tags: qsTr("Search tags"),
+                                 languages: qsTr("Search languages"), publishers: qsTr("Search publishers") })[window.section]
+                              || qsTr("Search")
                         text: window.library.searchText
 
                         onTextEdited: window.library.searchText = text

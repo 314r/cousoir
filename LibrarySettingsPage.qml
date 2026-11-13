@@ -79,7 +79,7 @@ Item {
                 objectName: "libraryPathLabel"
 
                 Layout.fillWidth: true
-                text: libraryPage.library.libraryPath || qsTr("None")
+                text: libraryPage.library.libraryPath || qsTr("None", "library")
                 font.weight: Font.Bold
                 wrapMode: Text.WrapAnywhere
             }
@@ -301,7 +301,7 @@ Item {
                     }
 
                     Label {
-                        text: Qt.formatDate(conflictRow.modelData.modified, "yyyy-MM-dd")
+                        text: conflictRow.modelData.modified.toLocaleDateString(Qt.locale(), Locale.ShortFormat)
                         color: Theme.textMuted
                         font.pointSize: Theme.fontPointSizeCaption
                     }

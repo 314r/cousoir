@@ -124,8 +124,7 @@ QCollator listCollator()
 
 QString localDateTime(const QDateTime &date)
 {
-    return CalibreDb::isUndefinedDate(date) ? QString()
-                                            : date.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"));
+    return BookDisplay::dateTime(date);
 }
 
 // A book identifier's label and, where there is one, its page.
@@ -1446,8 +1445,11 @@ QVariantList BookLibrary::customFields(const Book &book) const
             text = value.value.toBool() ? tr("Yes") : tr("No");
             editText = value.value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
         } else if (type == QLatin1String("datetime")) {
+            // Shown in the language's order, edited as an ISO date, which
+            // every language types alike.
             text = BookDisplay::date(value.value.toDateTime());
-            editText = text;
+            editText = CalibreDb::isUndefinedDate(value.value.toDateTime())
+                ? QString() : value.value.toDateTime().toLocalTime().date().toString(Qt::ISODate);
         } else if (type == QLatin1String("float")) {
             text = PythonJson::floatRepr(value.value.toDouble());
             editText = text;
@@ -2477,7 +2479,7 @@ void BookLibrary::rebuildCheck()
                 { QStringLiteral("title"), book->title },
                 { QStringLiteral("authors"), book->authors.join(QStringLiteral(" & ")) },
                 { QStringLiteral("formats"), present(*book) },
-                { QStringLiteral("added"), QLocale().toString(book->timestamp.toLocalTime().date(), QLocale::ShortFormat) },
+                { QStringLiteral("added"), BookDisplay::date(book->timestamp) },
                 { QStringLiteral("cover"), book->coverFile.isEmpty()
                       ? QString() : CoverCache::url(coverKey, book->id, book->coverModified) },
                 { QStringLiteral("gains"), gains },

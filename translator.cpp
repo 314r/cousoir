@@ -138,10 +138,19 @@ QLocale Translator::formatLocale(const QString &language)
     return QLocale(language);
 }
 
-QString Translator::translate(const char *, const char *sourceText, const char *, int n) const
+QString Translator::translate(const char *, const char *sourceText, const char *disambiguation, int n) const
 {
+    // A word of two meanings has a key for each, "Read|column" for
+    // qsTr("Read", "column"), and the word alone serves the meaning a
+    // catalog does not tell apart. The context, the file's name, is left
+    // out: a file renamed keeps its words.
+    const QString source = QString::fromUtf8(sourceText);
+    QJsonValue value;
+    if (disambiguation && *disambiguation)
+        value = m_strings.value(source + u'|' + QString::fromUtf8(disambiguation));
+    if (value.isUndefined() || value.isNull())
+        value = m_strings.value(source);
     // A null string tells Qt there is no translation: it shows the English.
-    const QJsonValue value = m_strings.value(QString::fromUtf8(sourceText));
     if (value.isString())
         return value.toString();
     if (value.isObject()) {

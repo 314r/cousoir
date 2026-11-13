@@ -77,8 +77,11 @@ Item {
         return !column.chars || table.shownColumns.indexOf(column.key) >= 0
     }
 
+    // At least as wide as its title in the language shown, with the sort's
+    // arrow.
     function columnWidth(column) {
-        return column.chars ? Math.ceil(column.chars * Theme.captionCharWidth) + 1 : 1
+        return column.chars ? Math.ceil(Math.max(column.chars, (column.title || "").length + 2) * Theme.captionCharWidth) + 1
+                            : 1
     }
 
     function cellText(row, column) {

@@ -18,11 +18,21 @@ RowLayout {
     spacing: Theme.rowPadding
 
     Label {
+        id: rowLabel
+
         Layout.preferredWidth: Math.round(metaRow.labelChars * Theme.charWidth)
         Layout.alignment: Qt.AlignTop
         text: metaRow.label
         color: Theme.textMuted
         elide: Text.ElideRight
+
+        // A label cut short is read whole in its tooltip.
+        HoverHandler {
+            id: rowLabelHover
+        }
+        ToolTip.visible: rowLabel.truncated && rowLabelHover.hovered
+        ToolTip.delay: 400
+        ToolTip.text: metaRow.label
     }
 
     Label {

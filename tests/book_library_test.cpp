@@ -1659,7 +1659,8 @@ void BookLibraryTest::readsKindleClippings()
     const QVariantList notes = reading.first().toMap().value(QStringLiteral("notes")).toList();
     QCOMPARE(notes.size(), 4);
     QCOMPARE(notes.first().toMap().value(QStringLiteral("position")).toString(), QStringLiteral("page 12, location 170-172"));
-    QCOMPARE(notes.first().toMap().value(QStringLiteral("created")).toString(), QStringLiteral("2024-03-03"));
+    // In the language's order, English here.
+    QCOMPARE(notes.first().toMap().value(QStringLiteral("created")).toString(), QStringLiteral("03/03/2024"));
     QVERIFY(reading.first().toMap().value(QStringLiteral("markdown")).toString().contains(QStringLiteral("Le ton du livre")));
     // A book no longer on the Kindle keeps its notes.
     QCOMPARE(devices.reading(6).size(), 1);
@@ -1897,7 +1898,7 @@ void BookLibraryTest::syncsReadingWithAKobo()
     QCOMPARE(devices.syncReading(kobo.path()), QString());
     QVERIFY(syncedReading.wait(15000));
     QCOMPARE(syncedReading.first().first().toString(),
-             QStringLiteral("Kobo eReader has where you stopped in 1 book and 1 highlight now. Eject it to read on."));
+             QStringLiteral("Kobo eReader has your place in 1 book now. And 1 highlight. Eject it to read on."));
     {
         SqliteDb db;
         QVERIFY(db.open(database, SqliteDb::Mode::Immutable, &error));

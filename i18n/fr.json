@@ -36,7 +36,7 @@
   "Author sort": "Tri par auteur",
   "Series": "Séries",
   "Tags": "Étiquettes",
-  "Rating": "Note",
+  "Rating": "Évaluation",
   "Publisher": "Éditeur",
   "Languages": "Langues",
   "Published": "Publié",
@@ -164,12 +164,8 @@
   "Hide this column": "Masquer cette colonne",
   "Show “%1”": "Afficher « %1 »",
   "Open": "Ouvrir",
-  "Convert %1 books to KEPUB": "Convertir %1 livres en KEPUB",
   "Convert to KEPUB": "Convertir en KEPUB",
-  "Convert %1 books to AZW3": "Convertir %1 livres en AZW3",
   "Convert to AZW3": "Convertir en AZW3",
-  "Send %1 books to %2": "Envoyer %1 livres vers %2",
-  "Move %1 books to Trash": "Mettre %1 livres à la corbeille",
   "Cousoir cannot run the saved search “%1”": "Cousoir ne peut pas exécuter la recherche enregistrée « %1 »",
   "Calibre's search cannot read “%1”": "La recherche de Calibre ne peut pas lire « %1 »",
   "No books here": "Aucun livre ici",
@@ -187,10 +183,7 @@
   "Reload": "Recharger",
   "Choose folder…": "Choisir un dossier…",
   "Keep": "Conserver",
-  "Keep %1": "Conserver le champ « %1 »",
-  "Clear %1 for all": "Effacer le champ « %1 » pour tous",
   "Cleared for all": "Effacé pour tous",
-  "%1 books": "%1 livres",
   "A value filled in goes to every book; one left empty keeps each book's own.": "Une valeur renseignée s’applique à tous les livres ; un champ laissé vide conserve celle de chaque livre.",
   "Each at 1": "Chacun à 1",
   "Numbered from": "Numérotés à partir de",
@@ -200,9 +193,7 @@
   "Remove tags": "Retirer des étiquettes",
   "Every tag": "Toutes les étiquettes",
   "Keep, or YYYY-MM-DD": "Conserver, ou AAAA-MM-JJ",
-  "Apply to %1 books": "Appliquer aux %1 livres",
   "Undo": "Annuler",
-  "Put the %1 books of the last change back as they were": "Remettre les %1 livres de la dernière modification dans leur état précédent",
   "Extra characters at end of search": "Caractères en trop à la fin de la recherche",
   "missing )": ") manquante",
   "Invalid syntax. Expected a lookup name or a word": "Syntaxe invalide. Un nom de champ ou un mot était attendu",
@@ -238,15 +229,8 @@
   "Remove missing entries": "Retirer les entrées manquantes",
   "Open book": "Ouvrir le livre",
   "Ignore": "Ignorer",
-  "Keep “%1” and move the other copy to the Trash?": "Conserver « %1 » et mettre l’autre copie à la corbeille ?",
-  "Keep “%1” and move the %2 other copies to the Trash?": "Conserver « %1 » et mettre les %2 autres copies à la corbeille ?",
   "The %1 file it lacks is copied to it first.": "Le fichier %1 qui lui manque y est d’abord copié.",
   "The %1 files it lacks are copied to it first.": "Les fichiers %1 qui lui manquent y sont d’abord copiés.",
-  "Use “%1” on 1 book?": "Utiliser « %1 » pour 1 livre ?",
-  "Use “%1” on %2 books?": "Utiliser « %1 » pour %2 livres ?",
-  "%1 replaced, and the books' folders move to match. This cannot be undone here: edit the books' authors again to change them back.": "%1, et les dossiers des livres sont déplacés en conséquence. Cette opération ne peut pas être annulée ici : modifiez à nouveau les auteurs des livres pour revenir en arrière.",
-  "“%1” is": "« %1 » est remplacé",
-  "%1 are": "%1 sont remplacés",
   "Remove the missing %1 entry of “%2”?": "Retirer l’entrée %1 manquante de « %2 » ?",
   "Remove the missing %1 entries of “%2”?": "Retirer les entrées %1 manquantes de « %2 » ?",
   "Checking the library…": "Vérification de la bibliothèque…",
@@ -307,8 +291,6 @@
   "“%1” was bought from Kobo: remove it on the Kobo.": "« %1 » a été acheté chez Kobo : retirez-le sur la Kobo.",
   "The Kobo is no longer connected.": "La Kobo n’est plus connectée.",
   "%1 already has your reading.": "%1 a déjà votre lecture.",
-  "%1 has %2 now. Eject it to read on.": "%1 a reçu %2. Éjectez la liseuse pour poursuivre votre lecture.",
-  "%1 has %2 and %3 now. Eject it to read on.": "%1 a reçu %2 et %3. Éjectez la liseuse pour poursuivre votre lecture.",
   "%1 needs no ejecting: unplug it once nothing is being sent to it.": "Inutile d’éjecter %1 : débranchez l’appareil dès que plus rien ne lui est envoyé.",
   "Kindle": "Kindle",
   "%1 is no longer connected; “%2” was not sent.": "%1 n’est plus connecté ; « %2 » n’a pas été envoyé.",
@@ -318,7 +300,7 @@
   "%1 is no longer connected.": "%1 n’est plus connecté.",
   "“%1” was not sent to %2: it has none of the formats %2 reads.": "« %1 » n’a pas été envoyé vers %2 : il n’a aucun des formats que %2 lit.",
   "Format": "Format",
-  "Read": "Lecture",
+  "Read": "Lire",
   "Notes": "Notes",
   "Library": "Bibliothèque",
   "Bought": "Acheté",
@@ -419,19 +401,16 @@
   "%1 — Cousoir": "%1 — Cousoir",
   "Convert “%1” to %2 again?": "Convertir à nouveau « %1 » en %2 ?",
   "Its %1 file is replaced by the new one.": "Son fichier %1 est remplacé par le nouveau.",
-  "Convert %1 books to %2?": "Convertir %1 livres en %2 ?",
   "%1 of them have a %2 file already, which the new one replaces.": "Livres ayant déjà un fichier %2, que le nouveau remplace : %1.",
   "Calibre converts them one after the other, each with its own settings.": "Calibre les convertit l’un après l’autre, chacun avec ses propres réglages.",
   "Cousoir converts them one after the other.": "Cousoir les convertit l’un après l’autre.",
   "Convert “%1” to %2 for %3?": "Convertir « %1 » en %2 pour %3 ?",
   "%1 reads none of its formats. Calibre converts it first, then it is sent.": "%1 ne lit aucun de ses formats. Calibre le convertit d’abord, puis il est envoyé.",
   "%1 reads none of its formats. Cousoir converts it first, then it is sent.": "%1 ne lit aucun de ses formats. Cousoir le convertit d’abord, puis il est envoyé.",
-  "Convert %1 books to %2 for %3?": "Convertir %1 livres en %2 pour %3 ?",
   "%1 reads none of their formats. Calibre converts them first, then they are sent.": "%1 ne lit aucun de leurs formats. Calibre les convertit d’abord, puis ils sont envoyés.",
   "%1 reads none of their formats. Cousoir converts them first, then they are sent.": "%1 ne lit aucun de leurs formats. Cousoir les convertit d’abord, puis ils sont envoyés.",
   "Remove “%1” from %2?": "Retirer « %1 » de %2 ?",
   "Move “%1” to the trash?": "Mettre « %1 » à la corbeille ?",
-  "Move %1 books to the trash?": "Mettre %1 livres à la corbeille ?",
   "Its files go to the library's trash, where Cousoir and Calibre can restore it.": "Ses fichiers vont dans la corbeille de la bibliothèque, d’où Cousoir et Calibre peuvent le restaurer.",
   "Their files go to the library's trash, where Cousoir and Calibre can restore them.": "Leurs fichiers vont dans la corbeille de la bibliothèque, d’où Cousoir et Calibre peuvent les restaurer.",
   "This book has no EPUB, Kindle book or PDF to read.": "Ce livre n’a ni EPUB, ni livre Kindle, ni PDF à lire.",
@@ -441,7 +420,6 @@
   "Download metadata and covers": "Télécharger les métadonnées et les couvertures",
   "Sync reading with %1": "Synchroniser la lecture avec %1",
   "Eject %1": "Éjecter %1",
-  "Move %1 books to the trash": "Mettre %1 livres à la corbeille",
   "Move to the trash": "Mettre à la corbeille",
   "Show the list": "Afficher la liste",
   "Show the covers": "Afficher les couvertures",
@@ -462,49 +440,17 @@
   "Copy the book's highlights as %1": "Copier les surlignements du livre en %1",
   "Show the highlights as Markdown": "Afficher les surlignements en Markdown",
   "Take %1's highlights out of the library": "Retirer de la bibliothèque les surlignements de %1",
-  "%1 of %2 authors": "%1 sur %2 auteurs",
-  "%1 of %2 series": "%1 sur %2 séries",
-  "%1 of %2 tags": "%1 sur %2 étiquettes",
-  "%1 of %2 languages": "%1 sur %2 langues",
-  "%1 of %2 publishers": "%1 sur %2 éditeurs",
   "Checking…": "Vérification…",
   "%1 free": "%1 libres",
-  "%1 selected · ": "%1 sélectionnés · ",
-  "%1 of %2 books": "%1 sur %2 livres",
   "Reading %1 of %2 files…": "Lecture du fichier %1 sur %2…",
   "Converting “%1” to %2 · %3%": "Conversion de « %1 » en %2 · %3 %",
   "Converting “%1” to %2 after the changes…": "Conversion de « %1 » en %2 après les modifications…",
-  "(%1 more waiting)": "(+%1 en attente)",
   "“%1”": "« %1 »",
-  "Sending %1 to %2 · %3%": "Envoi de %1 vers %2 · %3 %",
-  "Sending %1 to %2 after the changes…": "Envoi de %1 vers %2 après les modifications…",
   "Saving…": "Enregistrement…",
-  "Enter revert · Esc keep": "Enter tout annuler · Esc conserver",
-  "Ctrl+Enter save · Esc cancel": "Ctrl+Enter enregistrer · Esc annuler",
-  "Enter save · Esc revert · Tab next field": "Enter enregistrer · Esc rétablir · Tab champ suivant",
-  "Esc back · Ctrl+O open in reader · Ctrl+D send · Ctrl+I details": "Esc retour · Ctrl+O application de lecture · Ctrl+D envoyer · Ctrl+I détails",
-  "Esc back · Ctrl+O open in reader · Ctrl+V paste cover · Ctrl+I details": "Esc retour · Ctrl+O application de lecture · Ctrl+V coller la couverture · Ctrl+I détails",
-  "Esc back · Ctrl+O open in reader · Ctrl+I details": "Esc retour · Ctrl+O application de lecture · Ctrl+I détails",
-  "↑↓ move · Enter restore": "↑↓ déplacer · Enter restaurer",
-  "F5 reload": "F5 recharger",
-  "↑↓ move · Enter actions · F5 check again": "↑↓ déplacer · Enter actions · F5 vérifier à nouveau",
-  "F5 check again": "F5 vérifier à nouveau",
-  "F5 read again": "F5 relire",
-  "↑↓ move · Enter show in library · Del remove from %1": "↑↓ déplacer · Enter afficher dans la bibliothèque · Del retirer de %1",
-  "↑↓ move · Enter show in library": "↑↓ déplacer · Enter afficher dans la bibliothèque",
-  "↑↓ move · Enter show books · Ctrl+F search · Ctrl+K find": "↑↓ déplacer · Enter afficher les livres · Ctrl+F rechercher · Ctrl+K trouver",
-  "Ctrl+F search · Ctrl+K find · F5 reload": "Ctrl+F rechercher · Ctrl+K trouver · F5 recharger",
-  "Esc back · F5 reload": "Esc retour · F5 recharger",
-  "Esc one book · Shift+↑↓ more · Ctrl+A all": "Esc un seul livre · Shift+↑↓ davantage · Ctrl+A tout",
-  " · Del trash": " · Del corbeille",
-  " · Ctrl+D send": " · Ctrl+D envoyer",
-  "Esc back · ": "Esc retour · ",
-  "↑↓ move · Enter open · Ctrl+O read · Ctrl+G %1": "↑↓ déplacer · Enter ouvrir · Ctrl+O application de lecture · Ctrl+G %1",
   "list": "liste",
   "covers": "couvertures",
   "Cousoir %1.": "Cousoir %1.",
   "“%1” is already in the library": "« %1 » est déjà dans la bibliothèque",
-  "%1 of these books are already in the library": "%1 de ces livres sont déjà dans la bibliothèque",
   "%1 and %2 more.": "%1 et %2 de plus.",
   "Add it anyway": "L’ajouter quand même",
   "Add them anyway": "Les ajouter quand même",
@@ -513,7 +459,6 @@
   "Cousoir cannot narrow the books to “%1”, so all show: %2": "Cousoir ne peut pas restreindre les livres à « %1 », tous sont donc affichés : %2",
   "“%1” converted to %2.": "« %1 » converti en %2.",
   "“%1” sent to %2.": "« %1 » envoyé vers %2.",
-  "%1 books sent to %2.": "%1 livres envoyés vers %2.",
   "%1 can be unplugged.": "Vous pouvez débrancher %1.",
   "%1 Left out: %2.": "%1 Laissé de côté : %2.",
   "%1 Left out: %2, and %3 more.": "%1 Laissé de côté : %2, et %3 de plus.",
@@ -523,10 +468,7 @@
   "Convert and send": "Convertir et envoyer",
   "Its file is deleted from the device. The library keeps the book.": "Son fichier est supprimé de l’appareil. La bibliothèque conserve le livre.",
   "Stop converting": "Arrêter la conversion",
-  "Stop the conversion": "Arrêter la conversion",
-  "Stop the %1 conversions": "Arrêter les %1 conversions",
   "Stop sending": "Arrêter l’envoi",
-  "Stop the %1 sendings": "Arrêter les %1 envois",
   "Hide details": "Masquer les détails",
   "Show details": "Afficher les détails",
   "Details (Ctrl+I)": "Détails (Ctrl+I)",
@@ -550,7 +492,6 @@
   "%1 (Ctrl+G)": "%1 (Ctrl+G)",
   "All books": "Tous les livres",
   "Virtual library": "Bibliothèque virtuelle",
-  "Search %1": "Rechercher parmi les %1",
   "Search, as in Calibre": "Rechercher, comme dans Calibre",
   "Read the device again": "Relire l’appareil",
   "Reload library": "Recharger la bibliothèque",
@@ -760,7 +701,6 @@
   "Cannot delete a file on the device: %1": "Impossible de supprimer un fichier sur l’appareil : %1",
   "Cousoir was built without libmtp, which reaches MTP devices.": "Cousoir a été compilé sans libmtp, qui donne accès aux appareils MTP.",
   "The OPF cannot be read: %1": "Impossible de lire l’OPF : %1",
-  "1 book": "1 livre",
   "Cousoir needs Calibre or poppler's pdfinfo to read PDF files.": "Cousoir a besoin de Calibre ou de pdfinfo (poppler) pour lire les fichiers PDF.",
   "pdfinfo could not read %1.": "pdfinfo n’a pas pu lire %1.",
   "“%1” has none of the formats the device reads.": "« %1 » n’a aucun des formats que l’appareil lit.",
@@ -888,10 +828,6 @@
   "%n books": {
     "one": "%n livre",
     "other": "%n livres"
-  },
-  "where you stopped in %n books": {
-    "one": "votre position de lecture dans %n livre",
-    "other": "vos positions de lecture dans %n livres"
   },
   "%n highlights": {
     "one": "%n surlignement",
@@ -1026,5 +962,171 @@
   },
   "No messages yet.": "Aucun message pour l’instant.",
   "Clear": "Effacer",
-  "Close": "Fermer"
+  "Close": "Fermer",
+  "Read|column": "Lu",
+  "Series|field": "Série",
+  "None|rating": "Aucune",
+  "None|library": "Aucune",
+  "Library|column": "Bibliothèque",
+  "Convert %n books to KEPUB": {
+    "one": "Convertir %n livre en KEPUB",
+    "other": "Convertir %n livres en KEPUB"
+  },
+  "Convert %n books to AZW3": {
+    "one": "Convertir %n livre en AZW3",
+    "other": "Convertir %n livres en AZW3"
+  },
+  "Send %n books to %1": {
+    "one": "Envoyer %n livre vers %1",
+    "other": "Envoyer %n livres vers %1"
+  },
+  "Move %n books to the trash": {
+    "one": "Mettre %n livre à la corbeille",
+    "other": "Mettre %n livres à la corbeille"
+  },
+  "Clear the series for all": "Effacer la série de tous",
+  "Keep the series": "Garder la série",
+  "Remove all tags from all": "Retirer toutes les étiquettes de tous",
+  "Keep the tags": "Garder les étiquettes",
+  "Clear the publisher for all": "Effacer l’éditeur de tous",
+  "Keep the publisher": "Garder l’éditeur",
+  "Clear the languages for all": "Effacer les langues de tous",
+  "Keep the languages": "Garder les langues",
+  "Clear the publication date for all": "Effacer la date de publication de tous",
+  "Keep the publication date": "Garder la date de publication",
+  "Apply to %n books": {
+    "one": "Appliquer à %n livre",
+    "other": "Appliquer à %n livres"
+  },
+  "Put the %n books of the last change back as they were": {
+    "one": "Remettre le livre de la dernière modification comme il était",
+    "other": "Remettre les %n livres de la dernière modification comme ils étaient"
+  },
+  "Keep “%1” and move the %n other copies to the trash?": {
+    "one": "Garder « %1 » et mettre l’autre exemplaire à la corbeille ?",
+    "other": "Garder « %1 » et mettre les %n autres exemplaires à la corbeille ?"
+  },
+  "Use “%1” on %n books?": {
+    "one": "Utiliser « %1 » pour %n livre ?",
+    "other": "Utiliser « %1 » pour %n livres ?"
+  },
+  "“%1” is replaced, and the books' folders move to match.": "« %1 » est remplacé, et les dossiers des livres sont déplacés en conséquence.",
+  "These names are replaced, and the books' folders move to match: %1.": "Ces noms sont remplacés, et les dossiers des livres sont déplacés en conséquence : %1.",
+  "This cannot be undone here: edit the books' authors again to change them back.": "Impossible d’annuler ici : modifiez de nouveau les auteurs des livres pour revenir en arrière.",
+  "%1 has your place in %n books now.": {
+    "one": "%1 a maintenant votre position dans %n livre.",
+    "other": "%1 a maintenant votre position dans %n livres."
+  },
+  "And %n highlights.": {
+    "one": "Et %n surlignement.",
+    "other": "Et %n surlignements."
+  },
+  "%1 has %n highlights now.": {
+    "one": "%1 a maintenant %n surlignement.",
+    "other": "%1 a maintenant %n surlignements."
+  },
+  "Eject it to read on.": "Éjectez-la pour poursuivre votre lecture.",
+  "Convert %n books to %1?": {
+    "one": "Convertir %n livre en %1 ?",
+    "other": "Convertir %n livres en %1 ?"
+  },
+  "Convert %n books to %1 for %2?": {
+    "one": "Convertir %n livre en %1 pour %2 ?",
+    "other": "Convertir %n livres en %1 pour %2 ?"
+  },
+  "Move %n books to the trash?": {
+    "one": "Mettre %n livre à la corbeille ?",
+    "other": "Mettre %n livres à la corbeille ?"
+  },
+  "%1 of %n authors": {
+    "one": "%1 sur %n auteur",
+    "other": "%1 sur %n auteurs"
+  },
+  "%1 of %n series": {
+    "one": "%1 sur %n série",
+    "other": "%1 sur %n séries"
+  },
+  "%1 of %n tags": {
+    "one": "%1 sur %n étiquette",
+    "other": "%1 sur %n étiquettes"
+  },
+  "%1 of %n languages": {
+    "one": "%1 sur %n langue",
+    "other": "%1 sur %n langues"
+  },
+  "%1 of %n publishers": {
+    "one": "%1 sur %n éditeur",
+    "other": "%1 sur %n éditeurs"
+  },
+  "%n selected": {
+    "one": "%n sélectionné",
+    "other": "%n sélectionnés"
+  },
+  "%1 of %n books": {
+    "one": "%1 sur %n livre",
+    "other": "%1 sur %n livres"
+  },
+  "(%n more waiting)": {
+    "one": "(+%n en attente)",
+    "other": "(+%n en attente)"
+  },
+  "Sending “%1” to %2 · %3%": "Envoi de « %1 » vers %2 · %3 %",
+  "Sending %n books to %1 · %2%": {
+    "one": "Envoi de %n livre vers %1 · %2 %",
+    "other": "Envoi de %n livres vers %1 · %2 %"
+  },
+  "Sending “%1” to %2 after the changes…": "Envoi de « %1 » vers %2 après les modifications…",
+  "Sending %n books to %1 after the changes…": {
+    "one": "Envoi de %n livre vers %1 après les modifications…",
+    "other": "Envoi de %n livres vers %1 après les modifications…"
+  },
+  "%n of these books are already in the library": {
+    "one": "%n de ces livres est déjà dans la bibliothèque",
+    "other": "%n de ces livres sont déjà dans la bibliothèque"
+  },
+  "%n books sent to %1.": {
+    "one": "%n livre envoyé vers %1.",
+    "other": "%n livres envoyés vers %1."
+  },
+  "Stop the %n conversions": {
+    "one": "Arrêter la conversion",
+    "other": "Arrêter les %n conversions"
+  },
+  "Stop the %n sendings": {
+    "one": "Arrêter l’envoi",
+    "other": "Arrêter les %n envois"
+  },
+  "Search authors": "Rechercher parmi les auteurs",
+  "Search series": "Rechercher parmi les séries",
+  "Search tags": "Rechercher parmi les étiquettes",
+  "Search languages": "Rechercher parmi les langues",
+  "Search publishers": "Rechercher parmi les éditeurs",
+  "move|hint": "déplacer",
+  "reload|hint": "recharger",
+  "search|hint": "rechercher",
+  "find|hint": "trouver",
+  "revert|hint": "rétablir",
+  "keep|hint": "garder",
+  "save|hint": "enregistrer",
+  "cancel|hint": "annuler",
+  "next field|hint": "champ suivant",
+  "back|hint": "retour",
+  "open in reader|hint": "application de lecture",
+  "send|hint": "envoyer",
+  "paste cover|hint": "coller la couverture",
+  "details|hint": "détails",
+  "restore|hint": "restaurer",
+  "actions|hint": "actions",
+  "check again|hint": "vérifier à nouveau",
+  "read again|hint": "relire",
+  "show in library|hint": "voir dans la bibliothèque",
+  "remove from %1|hint": "retirer de %1",
+  "show books|hint": "voir les livres",
+  "one book|hint": "un livre",
+  "more|hint": "plus",
+  "all|hint": "tous",
+  "trash|hint": "corbeille",
+  "open|hint": "ouvrir",
+  "list|hint": "liste",
+  "covers|hint": "couvertures"
 }

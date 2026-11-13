@@ -107,9 +107,7 @@ Rectangle {
         const others = row.books.filter(other => other.id !== book.id)
         keepDialog.keepId = book.id
         keepDialog.otherIds = others.map(other => other.id)
-        keepDialog.title = others.length === 1
-            ? qsTr("Keep “%1” and move the other copy to the Trash?").arg(book.title)
-            : qsTr("Keep “%1” and move the %2 other copies to the Trash?").arg(book.title).arg(others.length)
+        keepDialog.title = qsTr("Keep “%1” and move the %n other copies to the trash?", "", others.length).arg(book.title)
         const copied = book.gains.length === 0 ? ""
             : (book.gains.length === 1 ? qsTr("The %1 file it lacks is copied to it first.").arg(book.gains[0])
                                        : qsTr("The %1 files it lacks are copied to it first.").arg(book.gains.join(", ")))
@@ -124,11 +122,12 @@ Rectangle {
         const books = others.reduce((count, other) => count + other.count, 0)
         mergeDialog.authorIds = row.ids
         mergeDialog.keepId = author.id
-        mergeDialog.title = books === 1 ? qsTr("Use “%1” on 1 book?").arg(author.name)
-                                        : qsTr("Use “%1” on %2 books?").arg(author.name).arg(books)
-        mergeDialog.message = qsTr("%1 replaced, and the books' folders move to match. This cannot be undone here: edit the books' authors again to change them back.")
-            .arg(others.length === 1 ? qsTr("“%1” is").arg(others[0].name)
-                                     : qsTr("%1 are").arg(others.map(other => "“" + other.name + "”").join(", ")))
+        mergeDialog.title = qsTr("Use “%1” on %n books?", "", books).arg(author.name)
+        mergeDialog.message = (others.length === 1
+            ? qsTr("“%1” is replaced, and the books' folders move to match.").arg(others[0].name)
+            : qsTr("These names are replaced, and the books' folders move to match: %1.")
+                  .arg(others.map(other => qsTr("“%1”").arg(other.name)).join(", ")))
+            + " " + qsTr("This cannot be undone here: edit the books' authors again to change them back.")
         mergeDialog.ask()
     }
 

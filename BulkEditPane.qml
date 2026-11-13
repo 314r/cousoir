@@ -22,7 +22,7 @@ FocusScope {
     readonly property var ratingChoices: [{ value: -1, label: qsTr("Keep") }].concat(
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(rating => ({
             value: rating,
-            label: rating === 0 ? qsTr("None") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
+            label: rating === 0 ? qsTr("None", "rating") : "★".repeat(Math.floor(rating / 2)) + (rating % 2 ? "½" : "")
         })))
 
     signal failed(string message)
@@ -100,11 +100,21 @@ FocusScope {
 
     // A label, its field, and × to clear the value for every book when it
     // can be.
+    // The labels' width, in characters: the longest in the language shown.
+    readonly property int labelChars: Math.min(18, Math.max(11, ...[
+        qsTr("Authors"), qsTr("Series", "field"), qsTr("Add tags"), qsTr("Remove tags"), qsTr("Rating"),
+        qsTr("Publisher"), qsTr("Languages"), qsTr("Published")
+    ].map(text => text.length)))
+
     component BulkRow: RowLayout {
         id: row
 
         property string label
         property bool clearable: false
+        // What the clear button says, whole: a label put inside a sentence
+        // would not read right in every language.
+        property string clearText
+        property string keepText
         property bool cleared: false
         default property alias content: slot.data
 
@@ -112,7 +122,7 @@ FocusScope {
         spacing: Theme.rowPadding
 
         Label {
-            Layout.preferredWidth: Math.round(11 * Theme.charWidth)
+            Layout.preferredWidth: Math.round(pane.labelChars * Theme.charWidth)
             Layout.minimumWidth: Layout.preferredWidth
             text: row.label
             color: Theme.textMuted
@@ -132,8 +142,7 @@ FocusScope {
             iconOnly: true
             selected: row.cleared
             enabled: pane.editable
-            text: row.cleared ? qsTr("Keep %1").arg(row.label.toLowerCase())
-                              : qsTr("Clear %1 for all").arg(row.label.toLowerCase())
+            text: row.cleared ? row.keepText : row.clearText
             icon.source: "assets/icons/close.svg"
             icon.color: row.cleared ? Theme.danger : Theme.textMuted
             onClicked: row.cleared = !row.cleared
@@ -168,7 +177,7 @@ FocusScope {
                 objectName: "bulkTitle"
 
                 Layout.fillWidth: true
-                text: qsTr("%1 books").arg(pane.bookIds.length)
+                text: qsTr("%n books", "", pane.bookIds.length)
             }
 
             Label {
@@ -194,8 +203,10 @@ FocusScope {
             BulkRow {
                 id: seriesRow
 
-                label: qsTr("Series")
+                label: qsTr("Series", "field")
                 clearable: true
+                clearText: qsTr("Clear the series for all")
+                keepText: qsTr("Keep the series")
 
                 BulkField {
                     id: seriesField
@@ -206,7 +217,7 @@ FocusScope {
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.leftMargin: Math.round(11 * Theme.charWidth) + Theme.rowPadding
+                Layout.leftMargin: Math.round(pane.labelChars * Theme.charWidth) + Theme.rowPadding
                 visible: seriesField.text.trim().length > 0 && !seriesRow.cleared
                 spacing: Theme.rowPadding
 
@@ -255,6 +266,8 @@ FocusScope {
 
                 label: qsTr("Remove tags")
                 clearable: true
+                clearText: qsTr("Remove all tags from all")
+                keepText: qsTr("Keep the tags")
 
                 BulkField {
                     id: removeTagsField
@@ -284,6 +297,8 @@ FocusScope {
 
                 label: qsTr("Publisher")
                 clearable: true
+                clearText: qsTr("Clear the publisher for all")
+                keepText: qsTr("Keep the publisher")
 
                 BulkField {
                     id: publisherField
@@ -297,6 +312,8 @@ FocusScope {
 
                 label: qsTr("Languages")
                 clearable: true
+                clearText: qsTr("Clear the languages for all")
+                keepText: qsTr("Keep the languages")
 
                 BulkField {
                     id: languagesField
@@ -310,6 +327,8 @@ FocusScope {
 
                 label: qsTr("Published")
                 clearable: true
+                clearText: qsTr("Clear the publication date for all")
+                keepText: qsTr("Keep the publication date")
 
                 BulkField {
                     id: pubdateField
@@ -329,7 +348,7 @@ FocusScope {
                     objectName: "bulkApplyButton"
 
                     variant: "primary"
-                    text: qsTr("Apply to %1 books").arg(pane.bookIds.length)
+                    text: qsTr("Apply to %n books", "", pane.bookIds.length)
                     enabled: pane.editable && pane.valid && Object.keys(pane.changes()).length > 0
                     onClicked: pane.apply()
                 }
@@ -341,7 +360,7 @@ FocusScope {
                     enabled: pane.library.writable && !pane.library.saving
                     variant: "outline"
                     text: qsTr("Undo")
-                    tip: qsTr("Put the %1 books of the last change back as they were").arg(pane.library.bulkUndoCount)
+                    tip: qsTr("Put the %n books of the last change back as they were", "", pane.library.bulkUndoCount)
                     onClicked: pane.library.undoBulkEdit()
                 }
 

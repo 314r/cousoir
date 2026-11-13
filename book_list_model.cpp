@@ -9,6 +9,7 @@
 #include "book_list_model.h"
 
 #include <QLocale>
+#include <QRegularExpression>
 
 
 #include "calibre_db.h"
@@ -30,9 +31,36 @@ QString rating(int rating)
     return QString(rating / 2, u'★') + (rating % 2 ? QStringLiteral("½") : QString());
 }
 
+QString shortDatePattern()
+{
+    const QLocale locale;
+    static thread_local QString name;
+    static thread_local QString pattern;
+    if (name != locale.name() || pattern.isEmpty()) {
+        static const QRegularExpression day(QStringLiteral("(?<![dMy])d(?!d)"));
+        static const QRegularExpression month(QStringLiteral("(?<![dMy])M(?!M)"));
+        static const QRegularExpression year(QStringLiteral("(?<!y)yy(?!y)"));
+        name = locale.name();
+        pattern = locale.dateFormat(QLocale::ShortFormat)
+                      .replace(day, QStringLiteral("dd"))
+                      .replace(month, QStringLiteral("MM"))
+                      .replace(year, QStringLiteral("yyyy"));
+    }
+    return pattern;
+}
+
 QString date(const QDateTime &date)
 {
-    return CalibreDb::isUndefinedDate(date) ? QString() : date.toLocalTime().date().toString(Qt::ISODate);
+    return CalibreDb::isUndefinedDate(date) ? QString() : QLocale().toString(date.toLocalTime().date(), shortDatePattern());
+}
+
+QString dateTime(const QDateTime &date)
+{
+    if (CalibreDb::isUndefinedDate(date))
+        return {};
+    const QLocale locale;
+    const QDateTime local = date.toLocalTime();
+    return locale.toString(local.date(), shortDatePattern()) + u' ' + locale.toString(local.time(), QLocale::ShortFormat);
 }
 
 QString monthYear(const QDateTime &date)
