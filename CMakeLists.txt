@@ -211,6 +211,8 @@ target_include_directories(cousoir_core PRIVATE ${STEMMER_INCLUDE_DIR} ${XXHASH_
 
 # The models QML uses on top of it, and the system's theme and appearance.
 qt_add_library(cousoir_models STATIC
+    app_instance.cpp
+    app_instance.h
     book_library.cpp
     book_library.h
     book_list_model.cpp
@@ -287,6 +289,7 @@ set(COUSOIR_QML_FILES
     LibrarySettingsPage.qml
     ListTable.qml
     Main.qml
+    MessagesPopup.qml
     MetaRow.qml
     MetadataDownloadDialog.qml
     NotePanel.qml

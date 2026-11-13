@@ -27,6 +27,46 @@ The project structure, theming (system, light, dark and Omarchy) and Settings
 window come from the JolieBulle Qt port, which took them from kbextract; the
 Omarchy theming is derived from bjarneo's omadji.
 
+## Starting Cousoir
+
+There is one Cousoir a session. Launched again, from the app launcher or a
+file manager, it hands what it was asked for to the one running, whose
+window comes forward, and ends:
+
+```bash
+cousoir                     # shows the window
+cousoir BOOK.epub…          # reads the books, those of the library;
+                            # the others it offers to add
+cousoir --add [BOOK…]       # adds the books, or opens the file chooser
+cousoir --library PATH      # opens that library
+cousoir --show ID           # shows the library's book of that id
+```
+
+The desktop entry declares EPUB, MOBI and AZW3 files, so a file manager
+offers Cousoir for them, and has an "Add books" action. A Cousoir that does
+not answer within a few seconds is reported, never doubled. On Hyprland the
+window is given the focus through `hyprctl`, Wayland letting a window take
+it only when the compositor agrees.
+
+## What Cousoir remembers
+
+The window's size and the section shown, but a reader's or a saved
+search's, which may be gone; the reader's size, whether its sidebar shows
+and which of its lists, the contents, highlights or bookmarks; the PDF
+reader's size and zoom. The details pane shows beside a book from 960 pixels
+of window at the normal text size, and from more with larger text.
+
+## Messages
+
+What Cousoir has to say goes to the status line: what was done, for a few
+seconds, and what went wrong, in the danger colour, until the next message,
+another section or a click. Each one is kept for the session: the Messages
+button in the status bar, red with errors not seen yet, or Messages in
+Ctrl+K, lists them newest first, to read one the status line cut short or to
+copy them. A conversion or a transfer that ends while Cousoir is not in
+front shows on the desktop too. Adding books shows its progress with a Stop
+button, as converting and sending do.
+
 ## Interface
 
 The interface follows the Omarchy style: the system monospace font, hairline

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import QtCore
 import QtQuick
 import QtQuick.Controls.Basic
 import QtQuick.Layouts
@@ -25,6 +26,7 @@ ThemedWindow {
             return false
         }
         document.source = bookReader.fileUrl
+        view.renderScale = pdfSettings.renderScale
         show()
         raise()
         requestActivate()
@@ -36,15 +38,27 @@ ThemedWindow {
     // shortcuts stay its own.
     transientParent: null
     visible: false
-    width: 900
-    height: 1000
+    // As the reader was left, its zoom too.
+    width: pdfSettings.windowWidth
+    height: pdfSettings.windowHeight
     minimumWidth: 480
     minimumHeight: 400
     title: bookReader.title || document.title || qsTr("Reader")
 
     onClosing: {
+        pdfSettings.windowWidth = width
+        pdfSettings.windowHeight = height
+        pdfSettings.renderScale = view.renderScale
         bookReader.savePage(view.currentPage, document.pageCount)
         bookReader.close()
+    }
+
+    Settings {
+        id: pdfSettings
+        category: "PdfReader"
+        property int windowWidth: 900
+        property int windowHeight: 1000
+        property real renderScale: 1
     }
 
     BookReader {

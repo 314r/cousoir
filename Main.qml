@@ -10,7 +10,8 @@ ThemedWindow {
     id: window
 
     // The details pane hides on narrow windows unless the toggle forces it.
-    readonly property bool wide: width >= 960
+    // At the text size chosen: larger text needs a wider window for both.
+    readonly property bool wide: width >= Math.round(960 * Theme.spacingScale)
     property bool detailsForced: false
     readonly property bool detailsVisible: layoutSettings.showDetails && (wide || detailsForced)
     readonly property var book: library.currentBook
@@ -34,6 +35,10 @@ ThemedWindow {
     // A message to show in place of the key hints for a while: an error,
     // unless noticeIsError says otherwise.
     property string notice: ""
+    // Every message of the session, oldest first: { text, error, time }.
+    property var messages: []
+    // The errors not seen yet in the messages.
+    property int unreadErrors: 0
     property bool noticeIsError: true
     // Books being converted to be sent: { bookId, root }.
     property var pendingSends: []
@@ -42,8 +47,9 @@ ThemedWindow {
     property bool quitConfirmed: false
 
     visible: true
-    width: 1240
-    height: 820
+    // As the window was left.
+    width: windowSettings.width
+    height: windowSettings.height
     minimumWidth: 720
     minimumHeight: 480
     title: session.bookOpen && book.title ? qsTr("%1 — Cousoir").arg(book.title)
@@ -111,6 +117,50 @@ ThemedWindow {
         settingsWindow.show()
         settingsWindow.raise()
         settingsWindow.requestActivate()
+    }
+
+    // What a launch of Cousoir asked for, this one's or one after, which
+    // hands it over: a book to show, files to read or add, another library.
+    // Kept until the library is loaded.
+    property var pendingInvocation: null
+
+    function handleInvocation(invocation, forwarded) {
+        if (forwarded) {
+            window.show()
+            window.raise()
+            window.requestActivate()
+            appInstance.focusWindow()
+            // Another library, unless a change is being saved to this one.
+            if (invocation.library && invocation.library !== library.libraryPath && !library.saving)
+                librarySettings.path = invocation.library
+        }
+        if (!library.loaded || (invocation.library && invocation.library !== library.libraryPath)) {
+            pendingInvocation = invocation
+            return
+        }
+        pendingInvocation = null
+        if (invocation.show > 0)
+            openBook(invocation.show)
+        // The library's own files are read; the others offered to add.
+        const outside = []
+        for (const file of invocation.files) {
+            const bookId = library.bookOfFile(file)
+            if (bookId > 0)
+                readBookOf(bookId)
+            else
+                outside.push(file)
+        }
+        if (invocation.add.length > 0)
+            addBooks(invocation.add)
+        else if (invocation.addAsked)
+            addBooksDialog.open()
+        if (outside.length > 0) {
+            addFilesDialog.files = outside
+            addFilesDialog.title = outside.length === 1
+                ? qsTr("Add “%1” to the library?").arg(outside[0].split("/").pop())
+                : qsTr("Add %n books to the library?", "", outside.length)
+            addFilesDialog.ask()
+        }
     }
 
     function openBook(bookId) {
@@ -377,6 +427,8 @@ ThemedWindow {
             return
         }
         bookPage.finishEditing()
+        windowSettings.width = window.width
+        windowSettings.height = window.height
         // The readers close first, so that the place and the highlights of
         // the book being read are handed to the library before it goes.
         if (readerLoader.item)
@@ -551,6 +603,7 @@ ThemedWindow {
         add("reload", qsTr("Reload the library"), "Ctrl+R", "refresh", true)
         add("settings", qsTr("Settings"), "", "settings", true)
         add("shortcuts", qsTr("Keyboard shortcuts"), "?", "info", true)
+        add("messages", qsTr("Messages"), "", "info", messages.length > 0)
         for (const mode of availableThemeModes()) {
             const titles = { system: qsTr("System theme"), light: qsTr("Light theme"), dark: qsTr("Dark theme"),
                              omarchy: qsTr("Omarchy theme") }
@@ -619,6 +672,8 @@ ThemedWindow {
             reload()
         } else if (hit.key === "settings") {
             openSettings("")
+        } else if (hit.key === "messages") {
+            showMessages()
         } else if (hit.key === "shortcuts") {
             shortcutsOverlay.open()
         } else if (hit.key.startsWith("theme:")) {
@@ -649,10 +704,28 @@ ThemedWindow {
         downloadDialog.start(window.book.id, window.book.title || "")
     }
 
-    function showNotice(message, isError = true) {
+    // A message on the status line, kept with the session's. An error stays
+    // until the next message, another section or a click; the rest go after
+    // a few seconds. With `desktop`, for work ending while Cousoir is not in
+    // front, the desktop shows it too.
+    function showNotice(message, isError = true, desktop = false) {
         notice = message
         noticeIsError = isError
-        noticeTimer.restart()
+        messages = messages.concat([{ text: message, error: isError, time: new Date() }]).slice(-200)
+        if (isError) {
+            unreadErrors += 1
+            noticeTimer.stop()
+        } else {
+            noticeTimer.restart()
+        }
+        if (desktop && !window.active && typeof appInstance !== "undefined")
+            appInstance.notify(isError ? qsTr("Cousoir: something went wrong") : qsTr("Cousoir"), message)
+    }
+
+    function showMessages() {
+        unreadErrors = 0
+        notice = ""
+        messagesPopup.open()
     }
 
     function toggleDetails() {
@@ -866,11 +939,11 @@ ThemedWindow {
         target: window.conversions
 
         function onConverted(bookId, title, format) {
-            window.showNotice(qsTr("“%1” converted to %2.").arg(title).arg(format), false)
+            window.showNotice(qsTr("“%1” converted to %2.").arg(title).arg(format), false, true)
         }
 
         function onFailed(message) {
-            window.showNotice(message)
+            window.showNotice(message, true, true)
         }
 
         function onJobsChanged() {
@@ -883,7 +956,7 @@ ThemedWindow {
 
         function onSent(titles, name) {
             window.showNotice(titles.length === 1 ? qsTr("“%1” sent to %2.").arg(titles[0]).arg(name)
-                                                  : qsTr("%1 books sent to %2.").arg(titles.length).arg(name), false)
+                                                  : qsTr("%1 books sent to %2.").arg(titles.length).arg(name), false, true)
         }
 
         function onEjected(name) {
@@ -894,11 +967,11 @@ ThemedWindow {
             window.showNotice(skipped.length === 0 ? message
                                                    : skipped.length === 1 ? qsTr("%1 Left out: %2.").arg(message).arg(skipped[0])
                                                    : qsTr("%1 Left out: %2, and %3 more.").arg(message).arg(skipped[0]).arg(skipped.length - 1),
-                              false)
+                              false, true)
         }
 
         function onFailed(message) {
-            window.showNotice(message)
+            window.showNotice(message, true, true)
         }
 
         // A reader unplugged takes its page with it.
@@ -927,6 +1000,15 @@ ThemedWindow {
         // system's elsewhere.
         property string colorMode: ""
         property int textScalePercent: 100
+    }
+
+    // The window's size and the section shown, as they were left.
+    Settings {
+        id: windowSettings
+        category: "Window"
+        property int width: 1240
+        property int height: 820
+        property string section: "books"
     }
 
     Settings {
@@ -1204,6 +1286,42 @@ ThemedWindow {
         sections: window.shortcutSections()
     }
 
+    MessagesPopup {
+        id: messagesPopup
+
+        messages: window.messages
+        onCleared: window.messages = []
+        onClosed: window.focusCurrentList()
+    }
+
+    ConfirmDialog {
+        id: addFilesDialog
+        objectName: "addFilesDialog"
+
+        property var files: []
+
+        message: qsTr("Only the library's books are read in Cousoir.")
+        acceptText: qsTr("Add")
+        onAccepted: window.addBooks(files)
+    }
+
+    Connections {
+        // None in the tests, which run the window alone.
+        target: typeof appInstance !== "undefined" ? appInstance : null
+        ignoreUnknownSignals: true
+        function onInvoked(invocation) {
+            window.handleInvocation(invocation, true)
+        }
+    }
+
+    Connections {
+        target: window.library
+        function onLibraryChanged() {
+            if (window.pendingInvocation && window.library.loaded)
+                window.handleInvocation(window.pendingInvocation, false)
+        }
+    }
+
     ConfirmDialog {
         id: quitDialog
         objectName: "quitDialog"
@@ -1306,11 +1424,19 @@ ThemedWindow {
         applyOmarchyTheme()
         applyThemeMode()
         setTextScalePercent(appearanceSettings.textScalePercent)
+        // The section left last time, the library's own.
+        if (windowSettings.section !== "books" && windowSettings.section !== section)
+            section = windowSettings.section
         booksPage.focusList()
+        if (typeof startupInvocation !== "undefined")
+            handleInvocation(startupInvocation, false)
     }
 
     onSectionChanged: {
         notice = ""
+        // A reader or a saved search may be gone next time.
+        if (!section.startsWith("device:") && !section.startsWith("search:"))
+            windowSettings.section = section
         session.closeBook()
         // From the section itself: deviceSection may not have followed yet.
         if (section.startsWith("device:"))
@@ -1331,6 +1457,8 @@ ThemedWindow {
             quitDialog.ask()
             return
         }
+        windowSettings.width = window.width
+        windowSettings.height = window.height
         // A field being edited saves before the window goes.
         bookPage.finishEditing()
         settingsWindow.close()
@@ -1344,6 +1472,8 @@ ThemedWindow {
         readonly property real stateWidth: Math.min((writeState.visible ? writeState.implicitWidth + Theme.gutter : 0)
             + (stopConversions.visible ? stopConversions.width + Theme.gutter : 0)
             + (stopSending.visible ? stopSending.width + Theme.gutter : 0)
+            + (stopAdding.visible ? stopAdding.width + Theme.gutter : 0)
+            + (messagesButton.visible ? messagesButton.width + Theme.gutter : 0)
             + (detailsToggle.visible ? detailsToggle.width : 0), width * 0.45)
         readonly property real sideWidth: Math.max(countWidth, stateWidth)
         // Equal sides keep the hints centered while 40 characters of them
@@ -1385,6 +1515,18 @@ ThemedWindow {
                 font.pointSize: Theme.fontPointSizeCaption
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
+
+                // A message cut short is read whole among the messages.
+                HoverHandler {
+                    id: hintsHover
+                }
+                TapHandler {
+                    enabled: window.notice !== ""
+                    onTapped: window.showMessages()
+                }
+                ToolTip.visible: window.notice !== "" && hintsHover.hovered && truncated
+                ToolTip.delay: 400
+                ToolTip.text: window.notice
             }
 
             RowLayout {
@@ -1445,6 +1587,30 @@ ThemedWindow {
                         : qsTr("Stop the %1 conversions").arg(window.conversions.jobs.length)
                     icon.source: "assets/icons/close.svg"
                     onClicked: window.conversions.cancel(0)
+                }
+
+                StatusButton {
+                    id: stopAdding
+                    objectName: "stopAdding"
+
+                    visible: window.library.importing
+                    text: qsTr("Stop adding")
+                    tip: qsTr("Stop adding books")
+                    icon.source: "assets/icons/close.svg"
+                    onClicked: window.library.cancelImport()
+                }
+
+                StatusButton {
+                    id: messagesButton
+                    objectName: "messagesButton"
+
+                    visible: window.messages.length > 0
+                    text: qsTr("Messages")
+                    tip: window.unreadErrors > 0 ? qsTr("Messages: %n errors not seen", "", window.unreadErrors)
+                                                 : qsTr("Messages")
+                    icon.source: "assets/icons/info.svg"
+                    icon.color: window.unreadErrors > 0 ? Theme.danger : Theme.textMuted
+                    onClicked: window.showMessages()
                 }
 
                 StatusButton {

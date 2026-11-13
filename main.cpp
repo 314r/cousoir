@@ -1,9 +1,14 @@
+#include <QFile>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QQmlExtensionPlugin>
 #include <QQuickWindow>
 
+#include <cstdio>
+
+#include "app_instance.h"
 #include "book_library.h"
 #include "concurrency_guard.h"
 #include "conversion_service.h"
@@ -46,6 +51,31 @@ int main(int argc, char *argv[])
     app.setDesktopFileName(QStringLiteral("io.github._314r.cousoir"));
     app.setWindowIcon(QIcon(QStringLiteral(":/qt/qml/Cousoir/assets/icons/hicolor/cousoir-256.png")));
 
+    // One Cousoir a session: a second launch hands what it was asked to the
+    // first, whose window comes forward, and ends.
+    AppInstance::Invocation invocation;
+    QString error;
+    if (!AppInstance::parse(app.arguments(), &invocation, &error)) {
+        std::fprintf(stderr, "%s\n", qPrintable(error));
+        return 2;
+    }
+    AppInstance instance;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        const AppInstance::Forward forwarded = AppInstance::forward(invocation);
+        if (forwarded == AppInstance::Forward::Taken)
+            return 0;
+        if (forwarded == AppInstance::Forward::NotAnswering) {
+            std::fprintf(stderr, "%s\n", qPrintable(QCoreApplication::translate(
+                                     "main", "Cousoir is running but does not answer; close it and try again.")));
+            return 1;
+        }
+        // Two launches at once: the one that could not listen hands over.
+        if (instance.listen())
+            break;
+    }
+    if (!invocation.library.isEmpty())
+        qputenv("COUSOIR_LIBRARY_PATH", QFile::encodeName(invocation.library));
+
     qmlRegisterType<BookLibrary>("Cousoir", 1, 0, "BookLibrary");
     qmlRegisterType<ConcurrencyGuard>("Cousoir", 1, 0, "ConcurrencyGuard");
     qmlRegisterType<ConversionService>("Cousoir", 1, 0, "ConversionService");
@@ -67,6 +97,8 @@ int main(int argc, char *argv[])
     app.installTranslator(&translator);
 
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("appInstance"), &instance);
+    engine.rootContext()->setContextProperty(QStringLiteral("startupInvocation"), invocation.toMap());
     QObject::connect(&translator, &Translator::changed, &engine, [&engine] {
         engine.retranslate();
         // What the library worded or formatted is read again.

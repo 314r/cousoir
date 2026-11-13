@@ -32,12 +32,12 @@ ThemedWindow {
     // How the page shown is laid out: "1" or "2" columns a screen, or
     // "scroll".
     property string shownLayout: ""
-    property bool tocVisible: false
+    property bool tocVisible: readerSettings.sidebarShown
     // Said a moment in place of the title: the Kobo the book opened where
     // it stopped.
     property string arrival: ""
     // The sidebar's list: "toc", "highlights" or "search".
-    property string sidebar: "toc"
+    property string sidebar: readerSettings.sidebarList
     property bool hasSelection: false
     // The highlights shown on the page.
     property int highlightsShown: 0
@@ -816,14 +816,23 @@ ThemedWindow {
     // shortcuts, Ctrl+F among them, stay its own.
     transientParent: null
     visible: false
-    width: 900
-    height: 1000
+    // As the reader was left.
+    width: readerSettings.windowWidth
+    height: readerSettings.windowHeight
     minimumWidth: 480
     minimumHeight: 400
     title: bookReader.title || qsTr("Reader")
     color: pageBackground
 
     onClosing: {
+        if (!fullScreen) {
+            readerSettings.windowWidth = width
+            readerSettings.windowHeight = height
+        }
+        // The sidebar's lists that need no search or word of the book.
+        if (sidebar === "toc" || sidebar === "highlights" || sidebar === "bookmarks")
+            readerSettings.sidebarList = sidebar
+        readerSettings.sidebarShown = tocVisible
         save()
         dropSpare()
         spareView.stop()
@@ -852,6 +861,10 @@ ThemedWindow {
     Settings {
         id: readerSettings
         category: "Reader"
+        property int windowWidth: 900
+        property int windowHeight: 1000
+        property string sidebarList: "toc"
+        property bool sidebarShown: false
         property real zoom: 1
         // Empty for the book's own, "serif", "sans-serif" or a family.
         property string fontFamily: ""

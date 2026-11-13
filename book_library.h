@@ -235,6 +235,8 @@ public:
     // The format Cousoir's reader reads the book in: EPUB, KEPUB, a Kindle
     // book (AZW3, MOBI, AZW), then PDF; empty for none.
     Q_INVOKABLE QString readableFormat(int bookId) const;
+    // The book a file of the library's is a format of; 0 for a file of none.
+    Q_INVOKABLE int bookOfFile(const QString &path) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in
     // the book and the highlights made or removed there, as Calibre keeps its
     // viewer's. The change's id, which changeFinished() tells; 0 for nothing
@@ -302,6 +304,8 @@ public:
     // addDuplicates(). Returns an error message, empty once the files are
     // being read.
     Q_INVOKABLE QString addBooks(const QVariantList &urls);
+    // Stops reading the files being added; none of them is added.
+    Q_INVOKABLE void cancelImport();
     Q_INVOKABLE void addDuplicates(bool add);
     // The file as the book's format of its extension, replacing the book's
     // file of that format. Same returns as updateBook().

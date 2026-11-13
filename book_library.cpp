@@ -1889,6 +1889,18 @@ QString BookLibrary::queueEdit(const BookEdit &edit)
     return {};
 }
 
+int BookLibrary::bookOfFile(const QString &path) const
+{
+    const QString wanted = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+    for (const Book &book : m_data.books) {
+        for (const BookFormat &format : book.formats) {
+            if (!format.file.isEmpty() && QDir::cleanPath(format.file) == wanted)
+                return book.id;
+        }
+    }
+    return 0;
+}
+
 QString BookLibrary::readableFormat(int bookId) const
 {
     const Book *book = findBook(bookId);
@@ -2132,6 +2144,8 @@ QString BookLibrary::addBooks(const QVariantList &urls)
         ImportResult result;
         promise.setProgressRange(0, int(files.size()));
         for (qsizetype index = 0; index < files.size(); ++index) {
+            if (promise.isCanceled())
+                return;
             NewBook book;
             book.files = { files.at(index) };
             QString warning;
@@ -2145,6 +2159,11 @@ QString BookLibrary::addBooks(const QVariantList &urls)
     }));
     emit importChanged();
     return {};
+}
+
+void BookLibrary::cancelImport()
+{
+    m_importWatcher.cancel();
 }
 
 void BookLibrary::finishImport()

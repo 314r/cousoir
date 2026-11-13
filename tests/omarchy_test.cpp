@@ -3,6 +3,10 @@
 #include <QGuiApplication>
 #include <QTemporaryDir>
 
+#include <optional>
+#include <thread>
+
+#include "app_instance.h"
 #include "omarchy_theme.h"
 #include "portal_file_chooser.h"
 #include "test_support.h"
@@ -106,6 +110,8 @@ class OmarchyTest : public QObject
 private slots:
     void cleanup();
     void readsQtFilters();
+    void readsTheCommandLine();
+    void handsALaunchToTheFirst();
     void asksThePortalForFiles();
     void speaksEnglishUntilALanguageIsPicked();
     void followsTheLanguageFile();
@@ -123,6 +129,55 @@ void OmarchyTest::cleanup()
 {
     QLocale::setDefault(QLocale::system());
     QGuiApplication::setLayoutDirection(Qt::LeftToRight);
+}
+
+void OmarchyTest::readsTheCommandLine()
+{
+    AppInstance::Invocation invocation;
+    QString error;
+    QVERIFY(AppInstance::parse({ QStringLiteral("cousoir"), QStringLiteral("a.epub"),
+                                 QStringLiteral("file:///books/Mood%20Indigo.epub") },
+                               &invocation, &error));
+    QCOMPARE(invocation.files, (QStringList{ QDir::current().absoluteFilePath(QStringLiteral("a.epub")),
+                                            QStringLiteral("/books/Mood Indigo.epub") }));
+    QVERIFY(!invocation.addAsked);
+
+    QVERIFY(AppInstance::parse({ QStringLiteral("cousoir"), QStringLiteral("--add") }, &invocation, &error));
+    QVERIFY(invocation.addAsked);
+    QVERIFY(invocation.add.isEmpty());
+    QVERIFY(AppInstance::parse({ QStringLiteral("cousoir"), QStringLiteral("--library"), QStringLiteral("/lib/"),
+                                 QStringLiteral("--show"), QStringLiteral("12") },
+                               &invocation, &error));
+    QCOMPARE(invocation.library, QStringLiteral("/lib"));
+    QCOMPARE(invocation.show, 12);
+    QVERIFY(!AppInstance::parse({ QStringLiteral("cousoir"), QStringLiteral("--colour") }, &invocation, &error));
+    QVERIFY(!error.isEmpty());
+
+    const AppInstance::Invocation decoded = AppInstance::Invocation::decode(invocation.encode());
+    QCOMPARE(decoded.toMap(), invocation.toMap());
+}
+
+// A second launch hands its command line to the first, which takes it.
+void OmarchyTest::handsALaunchToTheFirst()
+{
+    const QString name = QStringLiteral("cousoir-test-%1").arg(QCoreApplication::applicationPid());
+    AppInstance::Invocation invocation;
+    invocation.files = { QStringLiteral("/books/a.epub") };
+    QCOMPARE(AppInstance::forward(invocation, name), AppInstance::Forward::NoInstance);
+
+    AppInstance first;
+    QVERIFY(first.listen(name));
+    AppInstance second;
+    QVERIFY(!second.listen(name));
+    QSignalSpy invoked(&first, &AppInstance::invoked);
+    // The second waits for the first's answer, which its event loop gives.
+    std::optional<AppInstance::Forward> forwarded;
+    std::thread launch([&] { forwarded = AppInstance::forward(invocation, name); });
+    QTRY_COMPARE(invoked.count(), 1);
+    launch.join();
+    QCOMPARE(forwarded, AppInstance::Forward::Taken);
+    QCOMPARE(invoked.first().first().toMap().value(QStringLiteral("files")).toStringList(),
+             QStringList{ QStringLiteral("/books/a.epub") });
 }
 
 void OmarchyTest::readsQtFilters()

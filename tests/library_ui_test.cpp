@@ -131,6 +131,8 @@ private slots:
     void missingLibraryShowsError();
     void welcomesWithoutLibrary();
     void followsOmarchy();
+    void keepsMessages();
+    void remembersTheSession();
     void editsDetailsInPlace();
     void revertsBookChanges();
     void keepsWhatIsTyped();
@@ -2814,6 +2816,51 @@ void LibraryUiTest::followsOmarchy()
     QVERIFY(loadUi());
     QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
     QTRY_COMPARE(radius(), 6.0);
+}
+
+// Messages are kept for the session: an error stays on the status line,
+// and the messages' panel lists them all, for one cut short or to copy.
+void LibraryUiTest::keepsMessages()
+{
+    QVERIFY(!control("messagesButton")->isVisible());
+    QMetaObject::invokeMethod(m_window, "showNotice", Q_ARG(QVariant, QStringLiteral("The library cannot be read.")),
+                              Q_ARG(QVariant, true), Q_ARG(QVariant, false));
+    QCOMPARE(text("keyHints"), QStringLiteral("The library cannot be read."));
+    QTRY_VERIFY(control("messagesButton")->isVisible());
+    QCOMPARE(m_window->property("unreadErrors").toInt(), 1);
+    QMetaObject::invokeMethod(m_window, "showNotice", Q_ARG(QVariant, QStringLiteral("“Good Omens” converted to KEPUB.")),
+                              Q_ARG(QVariant, false), Q_ARG(QVariant, false));
+    click("messagesButton");
+    QObject *popup = object("messagesPopup");
+    QVERIFY(popup);
+    QTRY_VERIFY(popup->property("opened").toBool());
+    QCOMPARE(m_window->property("unreadErrors").toInt(), 0);
+    QCOMPARE(popup->property("messages").toList().size(), 2);
+    // Newest first, as text one can select and copy.
+    const QString plain = popup->property("plainText").toString();
+    QVERIFY(plain.indexOf(QStringLiteral("converted")) < plain.indexOf(QStringLiteral("cannot be read")));
+    click("messagesClear");
+    QTRY_COMPARE(popup->property("messages").toList().size(), 0);
+    QTest::keyClick(m_window, Qt::Key_Escape);
+    QTRY_VERIFY(!popup->property("opened").toBool());
+    QTRY_VERIFY(!control("messagesButton")->isVisible());
+}
+
+// The section and the window's size come back as they were left.
+void LibraryUiTest::remembersTheSession()
+{
+    m_window->setProperty("section", QStringLiteral("authors"));
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Window/section")).toString(), QStringLiteral("authors"));
+    m_window->resize(1000, 700);
+    m_window->close();
+    QTRY_COMPARE(QSettings().value(QStringLiteral("Window/width")).toInt(), 1000);
+    m_engine.reset();
+    QVERIFY(loadUi());
+    QTRY_VERIFY_WITH_TIMEOUT(library()->property("loaded").toBool(), 10000);
+    QCOMPARE(m_window->property("section").toString(), QStringLiteral("authors"));
+    // A reader's section is not: it may be unplugged next time.
+    m_window->setProperty("section", QStringLiteral("device:/media/kobo"));
+    QCOMPARE(QSettings().value(QStringLiteral("Window/section")).toString(), QStringLiteral("authors"));
 }
 
 void LibraryUiTest::movesBooksToTrashAndBack()
