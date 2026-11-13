@@ -82,7 +82,8 @@ then send your books to a Kobo or a Kindle. Calibre stays in charge, and both al
   side as the book pairs them, right to left for manga; and PDFs.
   Your place and your highlights are kept
   where Calibre's viewer keeps its own: each opens where the other stopped
-  and shows the other's highlights.
+  and shows the other's highlights. Continue reading lists the books you
+  are in, how far and since when, and a Progress column sorts by it.
 - 🔁 **Read on, Kobo or computer.** Press Sync reading on your Kobo's page:
   ejected, it opens the book at the sentence you stopped at in Cousoir, with
   your highlights and notes. Plug it back in and its own place comes home,

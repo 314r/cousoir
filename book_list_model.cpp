@@ -8,6 +8,7 @@
 
 #include "book_list_model.h"
 
+#include <QCoreApplication>
 #include <QLocale>
 #include <QRegularExpression>
 
@@ -47,6 +48,11 @@ QString shortDatePattern()
                       .replace(year, QStringLiteral("yyyy"));
     }
     return pattern;
+}
+
+QString progress(double fraction)
+{
+    return QCoreApplication::translate("BookDisplay", "%1%").arg(qRound(fraction * 100));
 }
 
 QString date(const QDateTime &date)
@@ -169,6 +175,10 @@ QString field(const Book &book, const QString &key, const QList<CustomColumn> &c
     }
     if (key == QLatin1String("pages"))
         return book.pages > 0 ? QString::number(book.pages) : QString();
+    if (key == QLatin1String("progress"))
+        return book.readEpoch > 0 ? progress(book.readFraction) : QString();
+    if (key == QLatin1String("last_read"))
+        return book.readEpoch > 0 ? date(QDateTime::fromMSecsSinceEpoch(qint64(book.readEpoch * 1000))) : QString();
     if (key == QLatin1String("id"))
         return QString::number(book.id);
     if (key == QLatin1String("path"))

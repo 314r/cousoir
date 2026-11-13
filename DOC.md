@@ -95,7 +95,10 @@ compares 90 sorts with Calibre's on three libraries.
 A right click on a header shows, hides or moves its column and sorts by it;
 any of Calibre's columns can show: title, authors, series, rating, tags,
 publisher, published, added, modified, size, languages, formats,
-identifiers, pages, id, path and the library's custom columns. The columns
+identifiers, pages, id, path and the library's custom columns; and two of
+Cousoir's own, Progress, how far the book was read, and Last read, when,
+from the place read last of those its readers keep (Cousoir's reader,
+Calibre's viewer, a Kobo synced). The columns
 and the sort are kept for each library; the first time, they are those
 Calibre's list last had for it, if Calibre saved them. Columns leave a narrow
 window from the right. The search, Ctrl+F, is Calibre's: see
@@ -903,6 +906,11 @@ Cousoir departs from Calibre here:
 
 ## Reading in Cousoir
 
+Continue reading, in the sidebar, lists the books read, the last read
+first, each with its cover, how far it was read and when, from the places
+their readers keep in the library: Cousoir's reader, Calibre's viewer and
+the Kobos synced. Enter or a double click reads the book where it was left.
+
 Read on the book's page, Ctrl+Shift+O, or "Read in Cousoir" in Ctrl+K opens
 the book in Cousoir's reader: its EPUB (or KEPUB), else its Kindle book (AZW3,
 MOBI, AZW), else its PDF, else, when Calibre is installed, another of its
@@ -1059,8 +1067,9 @@ pen, removed with the bin; a bookmark renamed is written removed under its
 old title and added under the new one, as the library keeps them by title.
 
 A PDF shows a page after the other, fitted to the window's width or to the
-whole page, or zoomed with Ctrl++ and Ctrl+-; the zoom stays as it was left
-for the next PDF, and a fit follows the window's size. Its page is kept.
+whole page, or zoomed with Ctrl++ and Ctrl+-; each PDF keeps its own, and
+one opened for the first time takes the last used. A fit follows the
+window's size. Its page is kept.
 T shows its outline beside the pages, its sections under their chapters,
 each with its page; Ctrl+F searches its text, the places found listed with
 the words around them, the first from the page read on shown, F3 and

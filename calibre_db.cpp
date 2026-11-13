@@ -815,6 +815,16 @@ bool readRows(SqliteDb &db, LibraryData *data, const QString &interfaceLanguage,
     for (Book &book : books) {
         std::sort(book.formats.begin(), book.formats.end(),
                   [](const BookFormat &a, const BookFormat &b) { return a.format < b.format; });
+        // The place read last, whoever read it.
+        const auto positions = data->readPositions.constFind(book.id);
+        if (positions == data->readPositions.cend())
+            continue;
+        for (const ReadPosition &position : *positions) {
+            if (position.epoch > book.readEpoch) {
+                book.readEpoch = position.epoch;
+                book.readFraction = std::clamp(position.fraction, 0.0, 1.0);
+            }
+        }
     }
 
     if (!readCustomValues(db, books, bookWithId, &data->customColumns, only, error))
@@ -1070,6 +1080,8 @@ QString firstDifference(const LibraryData &a, const LibraryData &b)
         COUSOIR_COMPARE(uuid)
         COUSOIR_COMPARE(hasCover)
         COUSOIR_COMPARE(pages)
+        COUSOIR_COMPARE(readEpoch)
+        COUSOIR_COMPARE(readFraction)
         COUSOIR_COMPARE(comments)
         COUSOIR_COMPARE(formats)
         COUSOIR_COMPARE(conversionOptions)

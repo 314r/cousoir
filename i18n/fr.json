@@ -1238,5 +1238,18 @@
   "Places found": "Endroits trouvés",
   "Go to page, of %1": "Aller à la page, sur %1",
   "Go to page": "Aller à la page",
-  "Back to the pages, leave full screen, then close the book": "Retour aux pages, quitter le plein écran, puis fermer le livre"
+  "Back to the pages, leave full screen, then close the book": "Retour aux pages, quitter le plein écran, puis fermer le livre",
+  "%1%": "%1 %",
+  "Progress": "Avancement",
+  "Last read": "Dernière lecture",
+  "Today": "Aujourd’hui",
+  "Yesterday": "Hier",
+  "%n days ago": {
+    "one": "Il y a %n jour",
+    "other": "Il y a %n jours"
+  },
+  "Books read": "Livres lus",
+  "%1 read": "Lu à %1",
+  "No book has been read yet. A book read in Cousoir, in Calibre's viewer or on a Kobo shows here, where it was left.": "Aucun livre n’a encore été lu. Un livre lu dans Cousoir, dans la visionneuse de Calibre ou sur une Kobo apparaît ici, là où il a été laissé.",
+  "Continue reading": "Reprendre la lecture"
 }

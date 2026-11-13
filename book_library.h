@@ -251,6 +251,10 @@ public:
     // authors, format, snippet }], error }, the words found in the snippet
     // between \x1d marks.
     Q_INVOKABLE QVariantMap searchBooksText(const QString &query) const;
+    // The books read, the last read first, from the places their readers
+    // keep: { bookId, title, authors, cover, fraction, progress, when,
+    // finished }; `when` as "Today", "Yesterday", "3 days ago" or a date.
+    Q_INVOKABLE QVariantList readingRows() const;
     // The book a file of the library's is a format of; 0 for a file of none.
     Q_INVOKABLE int bookOfFile(const QString &path) const;
     // Keeps in the library, in one change, where Cousoir's reader stopped in

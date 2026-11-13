@@ -309,6 +309,7 @@ set(COUSOIR_QML_FILES
     Sidebar.qml
     SidebarItem.qml
     Theme.qml
+    ReadingPage.qml
     TextSearchPage.qml
     ThemedWindow.qml
     ThinScrollBar.qml

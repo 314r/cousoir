@@ -21,6 +21,7 @@ Item {
     readonly property var places: [
         { title: qsTr("Library"), items: [
             { key: "books", title: qsTr("Books"), icon: "book" },
+            { key: "reading", title: qsTr("Continue reading"), icon: "skip-forward" },
             { key: "trash", title: qsTr("Trash"), icon: "trash" },
             { key: "check", title: qsTr("Check"), icon: "check" },
             { key: "highlights", title: qsTr("Highlights"), icon: "highlighter" },

@@ -438,6 +438,13 @@ std::optional<Keys> Sorter::Private::make(const QString &field) const
     }
     if (field == QLatin1String("pages"))
         return numberKeys([](const Book &book) { return book.pages >= 0 ? std::optional(double(book.pages)) : std::nullopt; });
+    // Cousoir's own: how far it was read, and when.
+    if (field == QLatin1String("progress"))
+        return numberKeys([](const Book &book) {
+            return book.readEpoch > 0 ? std::optional(book.readFraction) : std::nullopt;
+        });
+    if (field == QLatin1String("last_read"))
+        return dateKeys([](const Book &book) { return qint64(book.readEpoch); });
     if (field == QLatin1String("id"))
         return numberKeys([](const Book &book) { return std::optional(double(book.id)); });
     if (field == QLatin1String("path"))
@@ -503,7 +510,7 @@ QStringList fields(const LibraryData &data)
 
 bool sortable(const LibraryData &data, const QString &field)
 {
-    return fields(data).contains(field);
+    return fields(data).contains(field) || field == QLatin1String("progress") || field == QLatin1String("last_read");
 }
 
 QList<Level> addToHistory(const QList<Level> &history, const Level &level, int maximum)
