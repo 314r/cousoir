@@ -1914,6 +1914,16 @@ The `sync` first: a save ends by flushing the library's folder to the disk,
 which on btrfs also writes whatever the copy left pending. The benchmark
 prints each step of two saves, the first with its backup.
 
+`--budget FILE` makes it fail past the times and the peak memory of a JSON
+file, or when a step budgeted is no longer measured. `tests/bench/budgets.json`
+holds about 1.6 times what Cousoir measured at 50,000 books on the computer
+it is made on; `tools/bench_budget.sh` runs it on a fresh copy, as an opt-in
+test:
+
+```bash
+COUSOIR_BENCH=1 tools/sandbox.sh ctest --test-dir build -L bench
+```
+
 A save reads again only the books it changed: temporary triggers on the
 working copy note them, the library the window holds keeps the others, and
 the search index folds again only those. With `COUSOIR_VERIFY_COMMITS=1`,

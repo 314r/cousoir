@@ -20,31 +20,29 @@ struct Library
 QMutex registryMutex;
 QHash<QString, Library> registry;
 
-class CoverResponse : public QQuickImageResponse, public QRunnable
+// Reads a cover on the pool's thread and says what it read. Apart from the
+// response, as in Qt's image provider example: the engine may delete a
+// response no longer wanted, scrolled away, while its cover is still being
+// read, and the reading must then not touch it.
+class CoverLoader : public QObject, public QRunnable
 {
+    Q_OBJECT
+
 public:
-    CoverResponse(const QString &id, const QSize &requestedSize)
+    CoverLoader(const QString &id, const QSize &requestedSize)
         : m_id(id)
         , m_requestedSize(requestedSize)
     {
-        setAutoDelete(false);
-    }
-
-    QQuickTextureFactory *textureFactory() const override
-    {
-        return QQuickTextureFactory::textureFactoryForImage(m_image);
-    }
-
-    QString errorString() const override
-    {
-        return m_error;
     }
 
     void run() override
     {
         load();
-        emit finished();
+        emit done(m_image, m_error);
     }
+
+signals:
+    void done(const QImage &image, const QString &error);
 
 private:
     void load()
@@ -115,6 +113,37 @@ private:
     QString m_error;
 };
 
+class CoverResponse : public QQuickImageResponse
+{
+public:
+    CoverResponse(const QString &id, const QSize &requestedSize, QThreadPool *pool)
+    {
+        auto *loader = new CoverLoader(id, requestedSize);
+        // Queued: the loader says it on the pool's thread, and a response
+        // deleted meanwhile is no longer connected.
+        connect(loader, &CoverLoader::done, this, [this](const QImage &image, const QString &error) {
+            m_image = image;
+            m_error = error;
+            emit finished();
+        }, Qt::QueuedConnection);
+        pool->start(loader);
+    }
+
+    QQuickTextureFactory *textureFactory() const override
+    {
+        return QQuickTextureFactory::textureFactoryForImage(m_image);
+    }
+
+    QString errorString() const override
+    {
+        return m_error;
+    }
+
+private:
+    QImage m_image;
+    QString m_error;
+};
+
 } // namespace
 
 void CoverCache::setCovers(const QString &key, const QString &thumbnailFolder, const QHash<int, Cover> &covers)
@@ -130,7 +159,7 @@ QString CoverCache::url(const QString &key, int bookId, qint64 modifiedMs)
 
 QQuickImageResponse *CoverCache::requestImageResponse(const QString &id, const QSize &requestedSize)
 {
-    auto *response = new CoverResponse(id, requestedSize);
-    m_pool.start(response);
-    return response;
+    return new CoverResponse(id, requestedSize, &m_pool);
 }
+
+#include "cover_cache.moc"
