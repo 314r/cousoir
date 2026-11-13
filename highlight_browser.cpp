@@ -117,8 +117,23 @@ QString HighlightBrowser::error() const
     return m_error;
 }
 
+void HighlightBrowser::setActive(bool active)
+{
+    if (m_active == active)
+        return;
+    m_active = active;
+    emit activeChanged();
+    if (m_active && std::exchange(m_stale, false))
+        refresh();
+}
+
 void HighlightBrowser::refresh()
 {
+    // Every highlight of the library is read: not for a page not shown.
+    if (!m_active) {
+        m_stale = true;
+        return;
+    }
     m_groups.clear();
     m_books.clear();
     m_count = 0;

@@ -149,6 +149,10 @@ public:
     // and Calibre's configuration folder. In QStandardPaths' test mode, there
     // are no volumes or Kindles until a test gives some.
     void setVolumeProvider(VolumeProvider provider, int intervalMs);
+    // The mounts of /proc/self/mountinfo whose file system a reader's
+    // storage can have: FAT, exFAT and FUSE's block devices. Network shares
+    // and the rest are left out without being asked anything.
+    static QList<Volume> removableMounts(const QByteArray &mountInfo);
     void setKindleProvider(KindleProvider provider);
     // For the tests: a Kobo sent to by Cousoir alone, even with Calibre.
     void setNative(bool native);

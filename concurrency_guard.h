@@ -188,6 +188,11 @@ private:
     // The status the last stateChanged() went out with.
     QString m_reportedDropboxStatus;
     QVariantList m_conflicts;
+    // The conflict copies at the library's root, and when the root last
+    // changed as they were listed: listed again only when it changes, a new
+    // file there changing it. A library's root holds a folder per author.
+    QStringList m_conflictFiles;
+    qint64 m_rootModifiedMs = -1;
     Sharing m_found;
     QString m_sharingChoice;
     QTimer m_timer;

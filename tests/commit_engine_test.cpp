@@ -83,6 +83,8 @@ private slots:
     void rebasesOnConcurrentChange();
     void recoversInterruptedChange();
     void finishesPublishedChange();
+    void finishesPublishedChangeByItsHash();
+    void copiesFilesWhole();
     void leavesTheJournalWhileTheLibraryIsHeld();
     void addsAndTrashesBooks();
     void addsCustomValues();
@@ -487,6 +489,61 @@ void CommitEngineTest::recoversInterruptedChange()
     QVERIFY(!QFileInfo::exists(journal));
 }
 
+// The journal of this version notes the database by its XXH3 hash.
+void CommitEngineTest::finishesPublishedChangeByItsHash()
+{
+    const QString journal = QDir(m_cache).filePath(QStringLiteral("ops.journal"));
+    const QString database = QDir(m_library).filePath(QStringLiteral("metadata.db"));
+    const QString opf = QDir(m_library).filePath(QStringLiteral("Boris Vian/L'Ecume des jours (1)/metadata.opf"));
+    const QString hash = FileTransaction::contentHash(database);
+    QVERIFY(hash.startsWith(QStringLiteral("xxh3:")));
+    QCOMPARE(hash.size(), 5 + 32);
+    {
+        FileTransaction files(journal);
+        QString error;
+        QVERIFY(files.write(opf, "<new/>", &error));
+        QVERIFY(files.aboutToPublish(hash, &error));
+        files.abandon();
+    }
+    QString done;
+    QString error;
+    QVERIFY(CommitEngine::recover(m_library, m_cache, &done, &error));
+    QVERIFY(done.contains(QStringLiteral("finished")));
+    QCOMPARE(readAll(opf), QByteArray("<new/>"));
+
+    // Another database than the one noted: the change is undone.
+    {
+        FileTransaction files(journal);
+        QVERIFY(files.write(opf, "<other/>", &error));
+        QVERIFY(files.aboutToPublish(QStringLiteral("xxh3:00000000000000000000000000000000"), &error));
+        files.abandon();
+    }
+    QVERIFY(CommitEngine::recover(m_library, m_cache, &done, &error));
+    QVERIFY(done.contains(QStringLiteral("undid")));
+    QCOMPARE(readAll(opf), QByteArray("<new/>"));
+}
+
+void CommitEngineTest::copiesFilesWhole()
+{
+    const QString database = QDir(m_library).filePath(QStringLiteral("metadata.db"));
+    const QString copy = QDir(m_cache).filePath(QStringLiteral("copy.db"));
+    QVERIFY(writeAll(copy, QByteArray(3 << 20, 'x')));
+    QString error;
+    QString hash;
+    QVERIFY2(FileTransaction::copyFile(database, copy, FileTransaction::Copy::ThroughMemory, true, &error, &hash),
+             qPrintable(error));
+    QCOMPARE(readAll(copy), readAll(database));
+    QCOMPARE(hash, FileTransaction::contentHash(database));
+    QVERIFY(writeAll(copy, QByteArray(3 << 20, 'x')));
+    QVERIFY2(FileTransaction::copyFile(database, copy, FileTransaction::Copy::SharingBlocks, true, &error, &hash),
+             qPrintable(error));
+    QCOMPARE(readAll(copy), readAll(database));
+    QCOMPARE(hash, FileTransaction::contentHash(database));
+    QVERIFY(!FileTransaction::copyFile(QDir(m_cache).filePath(QStringLiteral("missing.db")), copy,
+                                       FileTransaction::Copy::ThroughMemory, false, &error));
+    QVERIFY(!error.isEmpty());
+}
+
 // Calibre open, or another Cousoir in the middle of the change the journal
 // is of: nothing in the library moves until the lock is free.
 void CommitEngineTest::leavesTheJournalWhileTheLibraryIsHeld()
@@ -540,7 +597,9 @@ void CommitEngineTest::finishesPublishedChange()
         QString error;
         QVERIFY(files.write(opf, "<new/>", &error));
         const QByteArray database = readAll(QDir(m_library).filePath(QStringLiteral("metadata.db")));
-        QVERIFY(files.aboutToPublish(QCryptographicHash::hash(database, QCryptographicHash::Sha256), &error));
+        // As a Cousoir before 2026-11-13 noted it.
+        QVERIFY(files.aboutToPublish(QString::fromLatin1(QCryptographicHash::hash(database, QCryptographicHash::Sha256).toHex()),
+                                     &error));
         files.abandon();
     }
     QString done;

@@ -53,6 +53,21 @@ bool removable(const QStorageInfo &storage)
 QList<Volume> mountedVolumes()
 {
     QList<Volume> volumes;
+#ifdef Q_OS_LINUX
+    // The mounts as the kernel lists them, their file systems told without
+    // asking any: Qt's list asks each one its size, which a network share
+    // that stopped answering would never give back. Only those that may be
+    // a reader's are asked.
+    QFile mounts(QStringLiteral("/proc/self/mountinfo"));
+    if (mounts.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        for (const Volume &candidate : DeviceLibrary::removableMounts(mounts.readAll())) {
+            const QStorageInfo storage(candidate.root);
+            if (storage.isValid() && storage.isReady())
+                volumes.append({ storage.rootPath(), candidate.node });
+        }
+        return volumes;
+    }
+#endif
     for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
         if (storage.isValid() && storage.isReady() && removable(storage))
             volumes.append({ storage.rootPath(), QString::fromLocal8Bit(storage.device()) });
@@ -262,6 +277,39 @@ DeviceLibrary::~DeviceLibrary()
     if (m_copy)
         m_copy->waitForFinished();
     m_kindlePool.waitForDone();
+}
+
+QList<Volume> DeviceLibrary::removableMounts(const QByteArray &mountInfo)
+{
+    static const QList<QByteArray> types{ "vfat", "msdos", "fat", "exfat", "fuseblk" };
+    // "\\040" for a space, as the kernel escapes the paths.
+    const auto unescape = [](const QByteArray &path) {
+        QByteArray result;
+        for (qsizetype i = 0; i < path.size(); ++i) {
+            if (path.at(i) == '\\' && i + 3 < path.size()) {
+                bool ok = false;
+                const int code = path.mid(i + 1, 3).toInt(&ok, 8);
+                if (ok) {
+                    result.append(char(code));
+                    i += 3;
+                    continue;
+                }
+            }
+            result.append(path.at(i));
+        }
+        return QString::fromLocal8Bit(result);
+    };
+    QList<Volume> volumes;
+    for (const QByteArray &line : mountInfo.split('\n')) {
+        // id parent major:minor root mount-point options [optional…] - type source super-options
+        const QList<QByteArray> fields = line.split(' ');
+        const qsizetype separator = fields.indexOf("-");
+        if (fields.size() < 5 || separator < 5 || separator + 2 >= fields.size()
+            || !types.contains(fields.at(separator + 1).toLower()))
+            continue;
+        volumes.append({ unescape(fields.at(4)), unescape(fields.at(separator + 2)) });
+    }
+    return volumes;
 }
 
 BookLibrary *DeviceLibrary::library() const

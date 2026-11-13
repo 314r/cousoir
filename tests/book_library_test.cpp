@@ -6,6 +6,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSettings>
+#include <QRandomGenerator>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -100,6 +102,7 @@ private slots:
     void editsBooks();
     void keepsCompositesOfOtherBooks();
     void savesWhatWaitsWhenClosed();
+    void readsAgainOnlyWhatChanged();
     void followsSortsLikeCalibre();
     void refusesWhileReadOnly();
     void revertsCurrentBook();
@@ -112,6 +115,7 @@ private slots:
     void downloadsFromOpenLibrary();
     void sendsToKobos();
     void sendsToKobosWithoutCalibre();
+    void findsReadersAmongTheMounts();
     void sendsToKindles();
     void readsKindleClippings();
     void syncsKoboHighlights();
@@ -672,6 +676,83 @@ void BookLibraryTest::editsBooks()
     QVERIFY(!library->updateBook(2, { { QStringLiteral("pubdate"), QStringLiteral("someday") } }).isEmpty());
     QVERIFY(!library->updateBook(2, { { QStringLiteral("colour"), QStringLiteral("red") } }).isEmpty());
     QVERIFY(!library->updateBook(99, { { QStringLiteral("title"), QStringLiteral("X") } }).isEmpty());
+}
+
+// A save reads again only the books it changed. With COUSOIR_VERIFY_COMMITS,
+// which ctest sets, each save also reads the library whole and fails if the
+// two differ: many changes of every kind, made in a random order, the same
+// for each run, must leave none failed. Renaming an author by changing its
+// case changes the other books of that author too.
+void BookLibraryTest::readsAgainOnlyWhatChanged()
+{
+    qputenv("COUSOIR_VERIFY_COMMITS", "1");
+    const auto unset = qScopeGuard([] { qunsetenv("COUSOIR_VERIFY_COMMITS"); });
+    QTemporaryDir copy;
+    QVERIFY(copyTree(QStringLiteral(COUSOIR_TEST_DATA_DIR "/library-custom"), copy.path()));
+    auto library = open(copy.path());
+    QVERIFY(library);
+    library->setWritable(true);
+    QSignalSpy failed(library.get(), &BookLibrary::saveFailed);
+
+    QRandomGenerator random(20261113);
+    const auto pick = [&random](const QStringList &values) { return values.at(random.bounded(values.size())); };
+    const QList<QPair<QString, QStringList>> fields = {
+        { QStringLiteral("title"), { QStringLiteral("Mood Indigo"), QStringLiteral("l'écume des jours"), QStringLiteral("Zazie") } },
+        { QStringLiteral("authors"), { QStringLiteral("boris vian"), QStringLiteral("Glen Cook & Boris Vian"),
+                                       QStringLiteral("Raymond Queneau"), QStringLiteral("GLEN COOK") } },
+        { QStringLiteral("tags"), { QStringLiteral("Roman, Jazz"), QStringLiteral("fantasy"), QString(), QStringLiteral("SF, Classique") } },
+        { QStringLiteral("series"), { QStringLiteral("The Black Company"), QStringLiteral("Contes"), QString() } },
+        { QStringLiteral("seriesIndex"), { QStringLiteral("2"), QStringLiteral("1.5") } },
+        { QStringLiteral("publisher"), { QStringLiteral("Folio"), QStringLiteral("folio"), QStringLiteral("Tor"), QString() } },
+        { QStringLiteral("rating"), { QStringLiteral("0"), QStringLiteral("4"), QStringLiteral("10") } },
+        { QStringLiteral("languages"), { QStringLiteral("fra"), QStringLiteral("eng, fra"), QString() } },
+        { QStringLiteral("comments"), { QStringLiteral("<p>Un\n\n  deux</p>"), QString() } },
+        { QStringLiteral("#genre"), { QStringLiteral("SF, Polar"), QStringLiteral("sf"), QString() } },
+        { QStringLiteral("#note"), { QStringLiteral("Bien"), QString() } },
+        { QStringLiteral("#read"), { QStringLiteral("true"), QStringLiteral("false") } },
+        { QStringLiteral("#myrating"), { QStringLiteral("6"), QStringLiteral("0") } },
+        { QStringLiteral("#pagecount"), { QStringLiteral("320"), QString() } },
+        { QStringLiteral("#price"), { QStringLiteral("12.5"), QString() } },
+        { QStringLiteral("#started"), { QStringLiteral("2020-01-02"), QString() } },
+        { QStringLiteral("#review"), { QStringLiteral("<p>Fort</p>"), QString() } },
+        { QStringLiteral("#saga"), { QStringLiteral("Cycle"), QString() } },
+    };
+    QList<int> trashed;
+    int changes = 0;
+    for (int step = 0; step < 60; ++step) {
+        const QList<int> ids = [&library] {
+            QList<int> list;
+            for (int row = 0; row < library->books()->count(); ++row)
+                list.append(library->books()->idAt(row));
+            return list;
+        }();
+        QVERIFY(!ids.isEmpty());
+        const int id = ids.at(random.bounded(ids.size()));
+        const int action = random.bounded(10);
+        QString error;
+        if (action < 6) {
+            const auto &[field, values] = fields.at(random.bounded(fields.size()));
+            error = library->updateBook(id, { { field, pick(values) } });
+        } else if (action < 8 && ids.size() > 1) {
+            const int other = ids.at((ids.indexOf(id) + 1) % ids.size());
+            error = library->updateBooks({ id, other }, random.bounded(2) ? QVariantMap{ { QStringLiteral("publisher"), pick({ QStringLiteral("Denoël"), QStringLiteral("denoël") }) } }
+                                                                          : QVariantMap{ { QStringLiteral("tags"), pick({ QStringLiteral("Lu"), QStringLiteral("lu, Prêté") }) } });
+        } else if (action == 8 && ids.size() > 3) {
+            error = library->moveToTrash({ id });
+            if (error.isEmpty())
+                trashed.append(id);
+        } else if (!trashed.isEmpty()) {
+            error = library->restoreFromTrash(trashed.takeFirst());
+        } else {
+            continue;
+        }
+        if (!error.isEmpty())
+            continue;
+        ++changes;
+        QVERIFY(waitForSave(library.get()));
+        QVERIFY2(failed.isEmpty(), qPrintable(QStringLiteral("step %1: %2").arg(step).arg(failed.value(0).value(0).toString())));
+    }
+    QVERIFY(changes > 40);
 }
 
 // Quitting while a save runs: the changes waiting behind it are written
@@ -1308,6 +1389,25 @@ void BookLibraryTest::convertsWithoutCalibre()
 // Without Calibre, Cousoir sends to a Kobo itself: the EPUB as a KEPUB at
 // the driver's place, the book in metadata.calibre, and the Kobo's list
 // with it, matched with the library's book.
+// The mounts a reader may be: FAT and exFAT ones only, network shares left
+// out unasked, spaces in their paths as the kernel escapes them.
+void BookLibraryTest::findsReadersAmongTheMounts()
+{
+    const QByteArray mountInfo =
+        "22 1 0:21 / /proc rw,nosuid shared:5 - proc proc rw\n"
+        "61 25 0:52 / /mnt/share rw,relatime shared:40 - nfs4 server:/export rw,vers=4.2\n"
+        "70 25 8:17 / /run/media/reader/KOBOeReader rw,nosuid shared:44 - vfat /dev/sdb1 rw,uid=1000\n"
+        "71 25 8:33 / /run/media/reader/My\\040Kindle rw,nosuid shared:45 - exfat /dev/sdc1 rw\n"
+        "72 25 8:49 / /run/media/reader/ntfs rw shared:46 master:1 - fuseblk /dev/sdd1 rw\n"
+        "broken line\n";
+    const QList<Volume> volumes = DeviceLibrary::removableMounts(mountInfo);
+    QCOMPARE(volumes.size(), 3);
+    QCOMPARE(volumes.at(0).root, QStringLiteral("/run/media/reader/KOBOeReader"));
+    QCOMPARE(volumes.at(0).node, QStringLiteral("/dev/sdb1"));
+    QCOMPARE(volumes.at(1).root, QStringLiteral("/run/media/reader/My Kindle"));
+    QCOMPARE(volumes.at(2).node, QStringLiteral("/dev/sdd1"));
+}
+
 void BookLibraryTest::sendsToKobosWithoutCalibre()
 {
     auto library = open();

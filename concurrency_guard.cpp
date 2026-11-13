@@ -83,6 +83,7 @@ void ConcurrencyGuard::setLibraryPath(const QString &path)
     if (m_libraryPath == cleaned)
         return;
     m_libraryPath = cleaned;
+    m_rootModifiedMs = -1;
     m_dropboxStatus.clear();
     dropDropboxRequest();
     QString choice;
@@ -520,7 +521,15 @@ void ConcurrencyGuard::evaluate()
     QVariantList conflicts;
     bool unseenConflict = false;
     if (!m_libraryPath.isEmpty()) {
-        for (const QString &file : conflictCopies(m_libraryPath)) {
+        const qint64 rootModifiedMs = QFileInfo(m_libraryPath).fileTime(QFileDevice::FileModificationTime).toMSecsSinceEpoch();
+        // Listed again too while the root changed lately: a network folder
+        // keeps its times to the second or two, and a file added in the same
+        // moment as the last listing would not change it.
+        if (rootModifiedMs != m_rootModifiedMs || QDateTime::currentMSecsSinceEpoch() - rootModifiedMs < 5000) {
+            m_rootModifiedMs = rootModifiedMs;
+            m_conflictFiles = conflictCopies(m_libraryPath);
+        }
+        for (const QString &file : std::as_const(m_conflictFiles)) {
             const QFileInfo info(library.filePath(file));
             const qint64 modifiedMs = info.fileTime(QFileDevice::FileModificationTime).toMSecsSinceEpoch();
             const bool isDatabase = file.startsWith(QLatin1String("metadata")) && file.endsWith(QLatin1String(".db"));

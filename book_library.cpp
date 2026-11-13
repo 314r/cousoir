@@ -12,6 +12,7 @@
 #include <QBuffer>
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QDesktopServices>
 #include <QGuiApplication>
 #include <QImage>
@@ -1069,11 +1070,14 @@ void BookLibrary::finishLoad()
 }
 
 BookLibrary::BookIndex BookLibrary::indexBooks(const LibraryData &data, const CalibreConfig &config,
-                                               const QStringList &sortFields)
+                                               const QStringList &sortFields, const CalibreSearch::Index *previous,
+                                               const QSet<int> &changed)
 {
     BookIndex index;
-    index.search = CalibreSearch::Index(data, CalibreSearch::Preferences::fromRows(data.preferences), config.tweaks,
-                                        config.interfaceLanguage);
+    const CalibreSearch::Preferences preferences = CalibreSearch::Preferences::fromRows(data.preferences);
+    index.search = previous ? CalibreSearch::Index(*previous, data, changed, preferences, config.tweaks,
+                                                   config.interfaceLanguage)
+                            : CalibreSearch::Index(data, preferences, config.tweaks, config.interfaceLanguage);
     const auto sorter = std::make_shared<BookSort::Sorter>(data, config);
     sorter->prepare(sortFields);
     index.sorter = sorter;
@@ -1997,12 +2001,31 @@ void BookLibrary::startCommit()
         emit saveFailed(tr("The library cannot be changed right now."));
         return;
     }
-    const CommitEngine::Request request = prepared(m_pending.takeFirst());
+    CommitEngine::Request request = prepared(m_pending.takeFirst());
+    // The library as shown: the save reads again only what it changes.
+    if (m_loaded && m_data.libraryPath == QDir::cleanPath(QFileInfo(m_libraryPath).absoluteFilePath()))
+        request.base = m_data;
     const QStringList sortFields = this->sortFields();
-    m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields] {
+    // The index of the library as shown, for a save that reads again only
+    // the books it changes.
+    const CalibreSearch::Index previous = m_index.search;
+    m_commitWatcher.setFuture(QtConcurrent::run([request, sortFields, previous] {
         CommitResult committed{ CommitEngine::commit(request), {}, request.bulkEdits, request.id };
-        if (committed.result.ok && committed.result.written)
-            committed.index = indexBooks(committed.result.data, request.config, sortFields);
+        CommitEngine::Result &result = committed.result;
+        if (result.ok && result.written) {
+            QElapsedTimer clock;
+            clock.start();
+            committed.index = indexBooks(result.data, request.config, sortFields,
+                                         result.incremental ? &previous : nullptr, result.changed);
+            result.timings.append({ QStringLiteral("index the books"), clock.nsecsElapsed() });
+            if (request.verify && result.incremental
+                && !committed.index.search.sameAs(indexBooks(result.data, request.config, {}).search)) {
+                // Saved, but the window would search another library: it
+                // reads the library again.
+                result.ok = false;
+                result.error = QStringLiteral("The search index made again in part differs from the index made whole.");
+            }
+        }
         return committed;
     }));
     // The files move meanwhile: the check waits for the library saved.
@@ -2043,7 +2066,11 @@ void BookLibrary::finishCommit()
         if (result.written) {
             m_loaded = true;
             m_lastError.clear();
+            QElapsedTimer clock;
+            clock.start();
             applyData(result.data, std::move(committed.index));
+            m_saveTimings = result.timings;
+            m_saveTimings.append({ QStringLiteral("show it (the window's thread)"), clock.nsecsElapsed() });
             if (!committed.bulkEdits.isEmpty())
                 keepBulkUndo(committed.bulkEdits, result.bulkBefore);
             m_publishedKey = ConcurrencyGuard::changeKey(QDir(m_libraryPath).filePath(QStringLiteral("metadata.db")));

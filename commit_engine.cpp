@@ -12,6 +12,7 @@
 #include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
@@ -161,25 +162,36 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         result->notesWritten = true;
     }
 
+    QElapsedTimer clock;
+    clock.start();
+    const auto lap = [&](const char *step) {
+        result->timings.append({ QString::fromLatin1(step), clock.nsecsElapsed() });
+        clock.restart();
+    };
+
+    // The working copy, a chunk at a time, read at once after; scratch,
+    // rewritten by each attempt and read by no recovery, it need not reach
+    // the disk. The backup before the session's first change, kept and not
+    // read, shares its blocks where the file system can.
     const FileIdentity before = CalibreDb::identify(database);
-    const QByteArray original = readFile(database, &error);
-    if (original.isEmpty() || CalibreDb::identify(database) != before)
-        return fail(error.isEmpty() ? QObject::tr("The library changed while it was read. Try again.") : error);
+    QDir().mkpath(request.cacheFolder);
+    QFile::remove(work + QStringLiteral("-journal"));
+    if (!FileTransaction::copyFile(database, work, FileTransaction::Copy::ThroughMemory, false, &error))
+        return fail(error);
+    if (CalibreDb::identify(database) != before)
+        return fail(QObject::tr("The library changed while it was read. Try again."));
+    lap("copy the database");
 
     if (backup && !request.backupFolder.isEmpty()) {
         QDir().mkpath(request.backupFolder);
         const QString copy = QDir(request.backupFolder).filePath(
             QStringLiteral("metadata-%1.db").arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz"))));
-        if (!FileTransaction::writeDurably(copy, original, &error))
+        if (!FileTransaction::copyFile(work, copy, FileTransaction::Copy::SharingBlocks, true, &error))
             return fail(error);
         result->backup = copy;
         pruneBackups(request.backupFolder);
     }
-
-    QDir().mkpath(request.cacheFolder);
-    QFile::remove(work + QStringLiteral("-journal"));
-    if (!FileTransaction::writeDurably(work, original, &error))
-        return fail(error);
+    lap("back it up");
 
     SqliteDb db;
     if (!db.open(work, SqliteDb::Mode::ReadWrite, &error)
@@ -199,6 +211,25 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     context.now = now;
     context.notes = readNotes(request.libraryPath, request.cacheFolder);
 
+    // The books it changes noted as it goes, to read only those again, when
+    // the library the window holds is of the database as it was copied.
+    const QString libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
+    const bool incremental = request.base && request.base->source == before && request.base->libraryPath == libraryPath
+        && CalibreDb::trackChanges(db, nullptr);
+    // The library as the database now holds it, `extra` read again too.
+    const auto readCurrent = [&](LibraryData *current, const QSet<int> &extra, QSet<int> *changed, bool *whole) {
+        *whole = true;
+        if (!incremental) {
+            current->libraryPath = libraryPath;
+            return CalibreDb::readLibrary(db, current, request.config.interfaceLanguage, &error);
+        }
+        *current = *request.base;
+        *changed = CalibreDb::changedBooks(db) + extra;
+        return CalibreDb::refreshLibrary(db, current, *changed, request.config.interfaceLanguage,
+                                         CalibreDb::changedTables(db).contains(QStringLiteral("annotations")), whole,
+                                         &error);
+    };
+    lap("open it, check its structure");
     FileTransaction files(journalPath(request.cacheFolder));
     FieldWriters::Result state;
     QSet<int> moved;
@@ -224,8 +255,9 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     }
     for (const BulkEdit &bulk : request.bulkEdits) {
         LibraryData current;
-        current.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-        if (!CalibreDb::readLibrary(db, &current, request.config.interfaceLanguage, &error))
+        QSet<int> changed;
+        bool whole = true;
+        if (!readCurrent(&current, QSet<int>(bulk.bookIds.cbegin(), bulk.bookIds.cend()), &changed, &whole))
             return undo(error);
         for (const int id : bulk.bookIds) {
             const Book *book = current.book(id);
@@ -260,8 +292,9 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     LibraryData trashed;
     if (!request.trash.isEmpty()) {
         // The books as they are now, for their metadata.opf.
-        trashed.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-        if (!CalibreDb::readLibrary(db, &trashed, request.config.interfaceLanguage, &error))
+        QSet<int> changed;
+        bool whole = true;
+        if (!readCurrent(&trashed, QSet<int>(request.trash.cbegin(), request.trash.cend()), &changed, &whole))
             return undo(error);
         withComposites(&trashed, request.config.interfaceLanguage,
                        QSet<int>(request.trash.cbegin(), request.trash.cend()));
@@ -324,6 +357,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
     if (!FieldWriters::markDirtied(db, dirtied, now, &error) || !FieldWriters::touch(db, touched, now, &error)
         || !db.exec(QStringLiteral("COMMIT"), &error))
         return undo(error);
+    lap("apply the changes");
     const QString check = db.value(QStringLiteral("PRAGMA quick_check")).toString();
     const bool keysOk = !db.value(QStringLiteral("SELECT count(*) FROM pragma_foreign_key_check")).toLongLong();
     if (check != QLatin1String("ok") || !keysOk) {
@@ -331,15 +365,41 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         return fail(QObject::tr("The changed database fails its checks (%1); nothing was written.").arg(check));
     }
 
+    lap("check the database");
     // The library as written, for the covers and metadata.opf files; the
     // dates of the books added and restored as Calibre holds them then.
     LibraryData data;
-    data.libraryPath = QDir::cleanPath(QFileInfo(request.libraryPath).absoluteFilePath());
-    if (!CalibreDb::readLibrary(db, &data, request.config.interfaceLanguage, &error)) {
+    QSet<int> changed;
+    bool whole = true;
+    if (!readCurrent(&data, {}, &changed, &whole)) {
         files.rollback(nullptr);
         return fail(error);
     }
+    // The books read again come without their files.
+    if (!whole)
+        CalibreDb::findFiles(&data, &changed);
     withComposites(&data, request.config.interfaceLanguage, dirtied);
+    if (request.verify && !whole) {
+        // What the books changed and those kept make must be the library
+        // read whole, as a load would read it now.
+        LibraryData read;
+        read.libraryPath = libraryPath;
+        if (!CalibreDb::readLibrary(db, &read, request.config.interfaceLanguage, &error)) {
+            files.rollback(nullptr);
+            return fail(error);
+        }
+        CalibreDb::findFiles(&read);
+        CalibreTemplate::computeComposites(&read, request.config.interfaceLanguage);
+        LibraryData refreshed = data;
+        CalibreTemplate::computeComposites(&refreshed, request.config.interfaceLanguage, &changed);
+        const QString difference = CalibreDb::firstDifference(refreshed, read);
+        if (!difference.isEmpty()) {
+            files.rollback(nullptr);
+            return fail(QStringLiteral("The library read again in part differs from the library read whole: %1")
+                            .arg(difference));
+        }
+    }
+    lap("read the library back");
     QHash<int, Opf::ExactDates> exactDates;
     for (const int id : done.added + done.restored) {
         SqliteStatement dates(db, QStringLiteral("SELECT pubdate, timestamp FROM books WHERE id=?"));
@@ -349,6 +409,7 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
                                     OpfReader::parseDate(dates.text(1), true).value_or(CalibreDate()) });
         }
     }
+    const bool annotationsChanged = whole || CalibreDb::changedTables(db).contains(QStringLiteral("annotations"));
     db.close();
 
     for (const BookEdit &edit : request.edits) {
@@ -382,13 +443,16 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         }
     }
 
+    lap("write the metadata.opf files");
     // Publishing: the copy goes beside metadata.db, then over it, unless
     // metadata.db changed meanwhile.
-    const QByteArray written = readFile(work, &error);
-    const QByteArray sha256 = QCryptographicHash::hash(written, QCryptographicHash::Sha256);
+    // Hashed as it is copied, for the journal.
+    QString hash;
     const QString incoming = library.filePath(QStringLiteral(".~cousoir-%1-metadata.db")
                                                   .arg(QRandomGenerator::global()->generate(), 0, 16));
-    if (written.isEmpty() || !files.addScratch(incoming, &error) || !FileTransaction::writeDurably(incoming, written, &error)) {
+    if (!files.addScratch(incoming, &error)
+        || !FileTransaction::copyFile(work, incoming, FileTransaction::Copy::ThroughMemory, true, &error, &hash)
+        || hash.isEmpty()) {
         files.rollback(nullptr);
         return fail(error);
     }
@@ -401,24 +465,29 @@ bool attempt(const Request &request, CalibreLock &lock, Result *result, bool bac
         *retry = true;
         return fail(QObject::tr("The library changed while it was being saved."));
     }
-    if (!files.aboutToPublish(sha256, &error)
+    if (!files.aboutToPublish(hash, &error)
         || std::rename(QFile::encodeName(incoming).constData(), QFile::encodeName(database).constData()) != 0) {
         files.rollback(nullptr);
         return fail(error.isEmpty() ? QObject::tr("Cannot replace %1.").arg(database) : error);
     }
     FileTransaction::sync(request.libraryPath);
     files.finish();
+    lap("publish the database");
 
     // The copy is now what the library reads from.
     const QString snapshot = QDir(request.cacheFolder).filePath(QStringLiteral("snapshot.db"));
     // In one step: the window may be reading it.
     result->snapshotStale = std::rename(QFile::encodeName(work).constData(), QFile::encodeName(snapshot).constData()) != 0;
     data.source = CalibreDb::identify(database);
-    CalibreDb::findFiles(&data);
-    // The composite columns of every book, as a load makes them: this is
-    // the library the window shows from now on, and so far only the books
-    // whose metadata.opf was written had theirs.
-    CalibreTemplate::computeComposites(&data, request.config.interfaceLanguage);
+    // The files and the composite columns of every book, as a load makes
+    // them: this is the library the window shows from now on. Read again
+    // in part, only the books changed: the others keep theirs.
+    CalibreDb::findFiles(&data, whole ? nullptr : &changed);
+    CalibreTemplate::computeComposites(&data, request.config.interfaceLanguage, whole ? nullptr : &changed);
+    result->changed = changed;
+    result->incremental = !whole;
+    result->annotationsChanged = annotationsChanged;
+    lap("find the files, compute the composites");
     result->data = data;
     result->written = true;
     result->dirtied = dirtied;

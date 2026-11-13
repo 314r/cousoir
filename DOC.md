@@ -1730,7 +1730,19 @@ QT_QPA_PLATFORM=offscreen tools/sandbox.sh build/cousoir-benchmark --ui build/sa
 ```
 
 The `sync` first: a save ends by flushing the library's folder to the disk,
-which on btrfs also writes whatever the copy left pending.
+which on btrfs also writes whatever the copy left pending. The benchmark
+prints each step of two saves, the first with its backup.
+
+A save reads again only the books it changed: temporary triggers on the
+working copy note them, the library the window holds keeps the others, and
+the search index folds again only those. With `COUSOIR_VERIFY_COMMITS=1`,
+which ctest sets for `book_library_tests` and the window's tests, each save
+also reads the library whole and indexes it whole, and fails, naming the
+first difference, if the two differ; `readsAgainOnlyWhatChanged` makes
+sixty random changes so. Measured at 50,000 books on 2026-11-13: a save in
+320 ms (1,140 before), the window's sorts in 28 ms, 428 MB of memory in
+use. WebEngine, linked but unused until a book is read, accounts for about
+21 MB of the 148 MB a small library takes.
 
 ## License
 

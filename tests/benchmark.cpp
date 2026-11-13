@@ -161,6 +161,19 @@ int benchmarkModel(const QString &path)
     }
     report(QStringLiteral("edit queued"), queued);
     report(QStringLiteral("edit saved"), timer.nsecsElapsed());
+    for (const auto &[step, nanoseconds] : library.saveTimings())
+        report(QStringLiteral("  ") + step, nanoseconds);
+
+    // A second edit: no backup this time, the session having made its own.
+    timer.restart();
+    if (!library.updateBook(bookId, { { QStringLiteral("tags"), QStringLiteral("Benchmark, Again") } }).isEmpty()
+        || !saved.wait(60000)) {
+        out() << "the second edit was not saved" << Qt::endl;
+        return 1;
+    }
+    report(QStringLiteral("second edit saved"), timer.nsecsElapsed());
+    for (const auto &[step, nanoseconds] : library.saveTimings())
+        report(QStringLiteral("  ") + step, nanoseconds);
     if (library.loading() && !waitFor(&library, &BookLibrary::loadingChanged))
         out() << "the reload did not end" << Qt::endl;
     report(QStringLiteral("edit saved and reloaded"), timer.nsecsElapsed());

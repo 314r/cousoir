@@ -205,6 +205,9 @@ public:
     bool canRevert() const;
     int bulkUndoCount() const;
     QString publishedKey() const;
+    // How long each step of the last save took, in nanoseconds: the commit's
+    // own steps, then the index and what the window's thread did after.
+    QList<std::pair<QString, qint64>> saveTimings() const { return m_saveTimings; }
     QString calibreLanguage() const;
     void setCalibreLanguage(const QString &language);
     QString interfaceLanguage() const;
@@ -451,7 +454,10 @@ private:
     // The undo of a bulk edit just saved: the fields it set, before and
     // after, by book.
     void keepBulkUndo(const QList<BulkEdit> &bulkEdits, const QList<Book> &before);
-    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config, const QStringList &sortFields);
+    // With `previous`, the search index of the library before a change,
+    // only the books in `changed` are indexed again.
+    static BookIndex indexBooks(const LibraryData &data, const CalibreConfig &config, const QStringList &sortFields,
+                                const CalibreSearch::Index *previous = nullptr, const QSet<int> &changed = {});
     // The fields of the sort history, whose keys a load makes.
     QStringList sortFields() const;
     // The columns and sort kept for the library, else Calibre's.
@@ -556,6 +562,7 @@ private:
     QDateTime m_checkedAt;
     QVariantMap m_check;
     bool m_backedUp = false;
+    QList<std::pair<QString, qint64>> m_saveTimings;
     QString m_publishedKey;
     QString m_calibreLanguage;
     // The books of the last bulk edit, in the fields it set.

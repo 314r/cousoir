@@ -43,10 +43,12 @@ public:
 
     // Puts every file back, in reverse order.
     bool rollback(QString *error);
-    // Notes in the journal that the database whose SHA-256 is `sha256` is
-    // about to replace the library's: from then on a recovery finishes the
-    // change if the library's database has that hash.
-    bool aboutToPublish(const QByteArray &sha256, QString *error);
+    // Notes in the journal that the database whose contentHash() is `hash`
+    // is about to replace the library's: from then on a recovery finishes the
+    // change if the library's database has that hash. A journal of an
+    // earlier Cousoir has the SHA-256 in hexadecimal, which recover() reads
+    // too.
+    bool aboutToPublish(const QString &hash, QString *error);
     // Makes the change final: kept files and empty folders go, and the
     // journal.
     void finish();
@@ -65,6 +67,20 @@ public:
     static bool writeDurably(const QString &path, const QByteArray &contents, QString *error);
     // Flushes a file, or a folder's entries, to the disk.
     static void sync(const QString &path);
+    // How a file is copied. Through memory, a chunk at a time, leaves the
+    // copy in the system's cache, for a copy read at once after. Sharing
+    // its blocks, where the file system can, as btrfs and XFS do, is
+    // instant but leaves nothing in the cache, so reading the copy then
+    // goes to the disk: for a copy kept and not read, a backup.
+    enum class Copy { ThroughMemory, SharingBlocks };
+    // Copies the file `from` to `to`, replacing it. With `durable`, flushed
+    // to the disk before it returns. Through memory, `hash` is set to the
+    // contentHash() of what was copied.
+    static bool copyFile(const QString &from, const QString &to, Copy how, bool durable, QString *error,
+                         QString *hash = nullptr);
+    // "xxh3:" and the XXH3-128 hash of the file's contents, in hexadecimal;
+    // empty when it cannot be read.
+    static QString contentHash(const QString &path);
 
 private:
     struct Step

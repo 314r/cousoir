@@ -23,6 +23,8 @@ Rectangle {
     readonly property HighlightBrowser browser: HighlightBrowser {
         library: page.library
         sync: page.sync
+        // Read again when shown, not at each save while hidden.
+        active: page.visible
     }
     readonly property HighlightDocument builder: HighlightDocument {
         textDocument: documentView.textDocument

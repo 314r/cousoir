@@ -41,6 +41,9 @@ class HighlightBrowser : public QObject
     Q_PROPERTY(int count READ count NOTIFY booksChanged)
     // Why there are none: a copy of the database that cannot be read.
     Q_PROPERTY(QString error READ error NOTIFY booksChanged)
+    // Whether it is shown: while it is not, a change of the library is only
+    // noted, and the highlights are read again once it is.
+    Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
 
 public:
     explicit HighlightBrowser(QObject *parent = nullptr);
@@ -55,6 +58,8 @@ public:
     QVariantMap document() const;
     int count() const;
     QString error() const;
+    bool active() const { return m_active; }
+    void setActive(bool active);
 
     // The highlights of the book of `key`, the current one's when empty, as
     // kbextract2 writes them: "markdown", "obsidian" or "plain".
@@ -62,6 +67,7 @@ public:
     Q_INVOKABLE void copy(const QString &text) const;
 
 signals:
+    void activeChanged();
     void libraryChanged();
     void syncChanged();
     void booksChanged();
@@ -92,6 +98,9 @@ private:
     QList<Group> m_groups;
     QVariantList m_books;
     QString m_current;
+    bool m_active = true;
+    // A change came while it was not shown.
+    bool m_stale = false;
     QVariantMap m_document;
     int m_count = 0;
     QString m_error;
